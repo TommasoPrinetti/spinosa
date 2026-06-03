@@ -1,9 +1,9 @@
 ---
 type: zone_configuration
-agent: startup_agent
-created: 2026-06-03
+agent: setup_cli
+created: 2026-05-26
 updated: 2026-06-03
-setup_status: zone_started
+setup_status: cli_started
 ---
 
 # Zone Configuration
@@ -13,7 +13,7 @@ Agents read this before major work.
 ```yaml
 zone_type: research_framework
 research_mode: evolving_complex_corpus
-root_vault_path: "/Users/tommasoprinetti/Library/CloudStorage/GoogleDrive-tommaso.prinetti@sciencespo.fr/.shortcut-targets-by-id/1P14RD4yjJ7e6dP5xt71IVDEtfZiQuukc/EL2MP/EVOLUTION - ROOTVAULT"
+root_vault_path: "[path]"
 root_vault_mode: protected_append_only
 
 source_policy: internal_first
@@ -25,19 +25,20 @@ external_logs:
   - 03_logs/source_intake_log.md
 
 claim_standard: source_link_required
-l2_policy: checker_required
+l2_policy: verifier_required
 
 protected_paths:
-  - "/Users/tommasoprinetti/Library/CloudStorage/GoogleDrive-tommaso.prinetti@sciencespo.fr/.shortcut-targets-by-id/1P14RD4yjJ7e6dP5xt71IVDEtfZiQuukc/EL2MP/EVOLUTION - ROOTVAULT"
+  - "[path]"
   - INFORMATIONS.md
 
 stale_after_days: 30
-preferred_llm_cli: "OpenCode"
+preferred_llm_cli: "[cli]"
 ```
 
 ## Notes
-- Startup translated the CLI setup draft and inferred working scope from the active raw corpus.
-- The Root Vault remains immutable original storage; normal source-grounded work starts from raw/.
+
+- This is a framework template. `bash .bin/onboard.sh` fills project-specific values.
+- Root Vault files remain immutable original storage. Normal source-grounded work starts from `raw/` after onboarding.
 - External source policy stays `no` until the researcher explicitly requests external intake.
-- `raw/INDEX.md` remains a source document and does not override the live corpus coverage calculated in `zone_index.md`.
-- When setup_status is `zone_started`, the dictionary, raw copy headers, navigation maps, concept maps, and retrieval tests have been completed for the current corpus snapshot.
+- When setup_status reaches `zone_started`, the startup workflow has built the master dictionary, generated YAML headers, created detailed maps in `maps/`, and passed validation.
+- This file never grants permission to edit the Root Vault.

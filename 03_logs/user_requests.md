@@ -15,4 +15,4 @@ updated: 2026-06-03
 Short routing log for user prompts. Log the request before deciding whether to answer directly or route through sub-agents.
 
 | Date | Request summary | Route | Status | Output |
-|---|---|---|---|---|---|
+|---|---|---|---|---|

@@ -109,7 +109,7 @@ Required for direct quotes:
 | Root Vault | Read-only |
 | `INFORMATIONS.md` | Project scope: title, sources, methods, outputs; editable during initial setup |
 | `00_system/` | Architecture, instructions, templates |
-| `raw/` | Raw copies, source pointer records, central maps, dictionary, concept maps |
+| `raw/` | Raw copies, central maps, dictionary, concept maps; legacy source pointer records may exist |
 | `03_logs/` | Request log, source intake, external queries |
 | `05_agent_reports/` | Writer reports, Verifier notes, maintenance reports |
 | `.trash/` | Retired files; moved here, never deleted |

@@ -6,29 +6,41 @@ connects_to:
   - 00_system/instructions/CONFIGURATION.md
   - INFORMATIONS.md
 created: 2026-05-26
-updated: 2026-06-02
+updated: 2026-06-03
 ---
 
-# LLM Zone Framework
+# Pilosa Framework
 
-Research workspace with agent-driven source indexing, verification, and synthesis.
+Research workspace with agent-driven source indexing, verification, and synthesis. This root file is the concise router; detailed orchestration lives in `.agents/skills/orchestrator-dispatch/SKILL.md` and native agent definitions.
 
 ## Setup
 
-Place source files in `raw/` (text) or add `.pointer.md` records for binary files (PDFs, images, audio). Run `bash .bin/onboard.sh` to configure, then tell the orchestrator agent to "start the Zone" to build the dictionary, headers, and navigation maps.
+Place source files in the Root Vault and run `bash .bin/onboard.sh` to configure. Onboarding copies text/native files and PDFs into `raw/`, skips images/video/audio, then the orchestrator agent starts the Zone to build the dictionary, headers, and navigation maps.
 
-## Sub-agent pipeline
+## Orchestrator Contract
+
+Use `pilosa-orchestrator` for any source-grounded or Zone-maintenance request. The orchestrator must:
+
+1. Read `00_system/instructions/CONFIGURATION.md`, `INFORMATIONS.md`, and `00_system/instructions/STARTUP.md` before source work.
+2. If setup is `cli_started` or placeholders remain, execute `STARTUP.md` directly. There is no Startup sub-agent.
+3. Log each request in `03_logs/user_requests.md`.
+4. Classify the request and choose a sub-agent chain using `.agents/skills/orchestrator-dispatch/SKILL.md`.
+5. Prefer native sub-agents when available; fall back to `.agents/skills/*/SKILL.md`.
+6. Require Verifier on every non-fast-path chain.
+7. Ask clarification only from the orchestrator. Sub-agents execute and never ask.
+
+## Sub-Agent Pipeline
 
 | Agent | Role | Native Agent |
 |---|---|---|
 | Orchestrator | Routes prompts, classifies, dispatches, answers fast-path | `pilosa-orchestrator` |
-| Searcher | Searches raw copies and maps for evidence | `pilosa-searcher` |
+| Searcher | Searches raw copies, maps, and dictionary for evidence | `pilosa-searcher` |
 | Writer | Synthesizes findings into reports | `pilosa-writer` |
 | Verifier | Verifies claims, quotes, and paths | `pilosa-verifier` |
 | Janitor | Audits hygiene and archives stale files | `pilosa-janitor` |
 
 Native agent definitions live in `.opencode/agents/`, `.claude/agents/`, `.codex/agents/`.
-Fallback SKILL.md files live in `.agents/skills/`.
+Fallback SKILL.md files live in `.agents/skills/`; the orchestrator may reference `orchestrator-dispatch` for chain selection.
 
 ## Per-directory rules
 
@@ -40,20 +52,23 @@ Domain-specific AGENTS.md files define local conventions. Standard coding agents
 - `.trash/AGENTS.md` — archival rules (Janitor only, user confirmation required)
 - `.bin/AGENTS.md` — script maintenance (read-only for agents)
 
-## Global rules
+## Global Rules
 
 - Raw source copies in `raw/` are read-only during normal operations.
 - The Root Vault (original source collection) is immutable — never edit.
 - External source access requires explicit researcher authorization.
-- Dictionary and map edits must be verified by Verifier.
-- Standard coding agents should not answer source-grounded questions — dispatch to sub-agents.
+- Dictionary, map, report, and source-grounded edits must be checked by Verifier.
+- Standard coding agents should not answer source-grounded questions directly. Dispatch to the orchestrator/sub-agent pipeline.
+- `.bin/onboard.sh`, `.bin/check-startup.sh`, and `00_system/instructions/STARTUP.md` stay in place.
+- No fixed set of maps is required. Startup creates as many navigation maps as the corpus needs.
+- New native agent definitions omit fixed model fields so agents inherit the active session model.
 
 ## File Map
 
 ### Root
 - `AGENTS.md` — this file (project context for standard coding agents)
 - `README.md` — project overview and development TODO
-- `CONFIGURATION.md` — operating profile
+- `00_system/instructions/CONFIGURATION.md` — operating profile
 - `INFORMATIONS.md` — research scope
 - `dictionary.md` — shared vocabulary
 - `zone_index.md` — master zone map
@@ -64,7 +79,7 @@ Domain-specific AGENTS.md files define local conventions. Standard coding agents
 - `SYSTEM_ARCHITECTURE_MAP.md` — diagrams
 
 ### `raw/`
-- Source copies and `.pointer.md` records
+- Source copies; legacy `.pointer.md` records may exist in older projects
 - `AGENTS.md` — corpus access rules
 
 ### `maps/`
@@ -91,7 +106,10 @@ Domain-specific AGENTS.md files define local conventions. Standard coding agents
 | Root Vault | Read-only |
 | `INFORMATIONS.md` | Project scope; editable during initial setup |
 | `00_system/` | Architecture, instructions, templates |
-| `raw/` | Raw copies, source pointer records, central maps, dictionary, concept maps |
+| `raw/` | Active corpus after onboarding; framework branch keeps only scaffolding |
+| `maps/` | Navigation maps generated by startup; framework branch keeps only the template |
+| `dictionary.md` | Startup-generated vocabulary; template on framework branch |
+| `zone_index.md` | Startup-generated master index; template on framework branch |
 | `03_logs/` | Request log, source intake, external queries |
 | `05_agent_reports/` | Writer reports, Verifier notes, maintenance reports |
 | `.trash/` | Retired files; moved here, never deleted |

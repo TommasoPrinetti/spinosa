@@ -33,7 +33,7 @@ git push -u origin my-project-name
 
 ### 3. Run the onboard script
 
-The script collects your project name and Root Vault path, scans the corpus, asks for consent before writing raw records, then asks which LLM CLI should receive the startup handoff. It copies text-like files unchanged into `raw/` using markdown-compatible filenames and creates pointer records for non-text files; it does not convert file contents to markdown. Startup then creates detailed Obsidian-wikilink maps in `maps/`. Optional context such as project description and artifact URLs can be inferred or added later.
+The script collects your project name and Root Vault path, scans the corpus, asks for consent before writing raw records, then asks which LLM CLI should receive the startup handoff. It copies markdown-convertible files into `raw/` with `.md` names, copies native-readable files unchanged, copies PDFs as-is, and skips images, video, and audio. Startup then creates detailed Obsidian-wikilink maps in `maps/`. Optional context such as project description and artifact URLs can be inferred or added later.
 
 ```bash
 bash .bin/onboard.sh
@@ -42,7 +42,7 @@ bash .bin/onboard.sh
 What happens:
 - Flow: project name → Root Vault path → scan summary → consent → raw record writing → CLI handoff.
 - Scan summary shows counts for text files, images, videos, audio files, PDFs, unknown files, ignored files, and byte totals by major class where available.
-- Non-text media stays in the Root Vault; onboarding creates `*.pointer.md` records so Startup and Searcher can find it.
+- Non-text media stays in the Root Vault; images, video, and audio are skipped during onboarding.
 - Startup creates `maps/` with map files that contain detailed retrieval summaries and Obsidian wikilinks into raw files.
 - TTY arrow-key picker for the CLI handoff choice (numbered fallback when piped).
 - Cursor hidden during raw record writing, restored on exit.
@@ -63,7 +63,7 @@ Open Claude Code, Codex, OpenCode, or whichever CLI you picked, point it at this
 
 1. Use the fast setup draft, treating project description and artifact URLs as optional. If they were not provided, it records that and infers working scope from the active raw corpus.
 2. Update `00_system/instructions/CONFIGURATION.md` and `INFORMATIONS.md` from `setup_status: cli_started` → `zone_started`.
-3. Build the master dictionary from `raw/`, generate YAML headers for every raw copy, account for pointer-only media, create detailed central maps in `maps/`, build concept maps, validate headers and map links, and run retrieval tests.
+3. Build the master dictionary from `raw/`, generate YAML headers for every raw copy, create detailed central maps in `maps/`, build concept maps, validate headers and map links, and run retrieval tests.
 4. Write a startup report to `05_agent_reports/`.
 
 After that, ask research questions normally. The orchestrator will route them through the right sub-agents.

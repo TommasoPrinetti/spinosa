@@ -39,30 +39,30 @@ updated: YYYY-MM-DD
 
 ## Wikilink Rules
 
-- Every raw copy or pointer record reference must use an Obsidian wikilink: `[[raw/interviews/interview_01__txt|interview_01.txt]]`
+- Every raw copy reference must use an Obsidian wikilink: `[[raw/interviews/interview_01.md|interview_01.md]]`
 - Every map-to-map reference must use a wikilink: `[[maps/folder_map]]`
 - No Root Vault paths in map entries. Use `raw/` relative paths only.
 
 ## Entry Format (Tabular)
 
-Each map entry for a raw copy or pointer record uses a wikilink heading plus a compact table:
+Each map entry for a raw copy uses a wikilink heading plus a compact table:
 
 ```markdown
-## [[raw/Ex6/CLARA_PAGE26.md|CLARA_PAGE26.md]]
+## [[raw/field_notes/session_01_notes.md|session_01_notes.md]]
 | Type | Language | People | Topics | Keywords | Caveats |
 |---|---|---|---|---|---|
-| worksheet | en | Clara | prompt design, AI evaluation | llm, prompt, task | date_inferred |
+| field_notes | en | Researcher A | observation, interview setup | site visit, method, consent | date_inferred |
 ```
 
 For large or dense files (transcripts, long reports), add a 2-3 sentence retrieval summary below the table:
 
 ```markdown
-## [[raw/Ex14/COHORT1_2025_02_03_EX14.md|COHORT1_EX14Transcript]]
+## [[raw/interviews/session_01_transcript.md|session_01_transcript.md]]
 | Type | Language | People | Topics | Keywords | Caveats |
 |---|---|---|---|---|---|
-| transcript | en | 10 speakers | imitation game, prompting | llm, chatgpt, prompt | diarization_labels |
+| transcript | en | Participant A, Participant B | interview, fieldwork | conversation, evidence, theme | diarization_labels |
 
-Session transcript from the imitation game exercise. Contains extended discussion about prompt engineering strategies and LLM evaluation criteria. Useful for tracing how students' understanding of AI capabilities evolved across the session.
+Session transcript from a fieldwork interview. Contains extended discussion of the research topic and participant observations. Useful for tracing claims back to source evidence and identifying themes for follow-up maps.
 ```
 
 ## Table Columns

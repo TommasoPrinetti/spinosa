@@ -34,7 +34,7 @@ connects_to:
 ## Method And Evidence
 - Methods: [how the project gathers, organizes, or interprets evidence]
 - Claims require source paths.
-- L2 clues require Checker verification before reporting.
+- L2 clues require Verifier checking before reporting.
 - External sources must stay labeled external unless moved into the Root Vault.
 - External source policy: [yes/no — ask only if external access is needed]
 

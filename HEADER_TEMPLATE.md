@@ -84,9 +84,9 @@ Rules:
 - `generated_by`, `generated_at`, and `processing_status` preserve provenance for generated headers.
 - Omit fields that have no value — do not write `people: []`.
 
-## Source Pointer Header
+## Legacy Source Pointer Header
 
-Required for every pointer-only record created for non-text Root Vault files. Pointer records make media retrievable without copying, editing, or interpreting the original file.
+Used only for legacy pointer-only records. New onboarding and source intake skip images, video, and audio instead of creating `.pointer.md` records.
 
 ```yaml
 ---
@@ -115,7 +115,7 @@ Rules:
 - `source` uses a relative path from the repo root.
 - `root_rel_path` preserves the source folder structure for grep and repair.
 - OCR, ASR, transcription, and image analysis statuses stay `pending` unless a later processing pass actually creates evidence.
-- Pointer records are retrieval metadata, not source interpretation.
+- Pointer records are retrieval metadata, not source interpretation. Do not create new media pointer records in normal onboarding.
 
 ## Navigation Map Header
 
@@ -144,7 +144,6 @@ updated: YYYY-MM-DD
 
 Map files must use Obsidian wikilinks for internal references:
 - `[[raw/interviews/interview_01__txt|interview_01.txt]]`
-- `[[raw/photos/photo_01__jpg.pointer|photo_01.jpg pointer]]`
 - `[[maps/concept_map]]`
 
 Map entries must use a tabular format for efficiency. Each file entry gets a wikilink heading plus a compact table:

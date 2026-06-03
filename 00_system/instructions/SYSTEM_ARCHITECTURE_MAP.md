@@ -32,7 +32,7 @@ Root Vault
         v
 LLM Zone
   writable indexed collection
-  raw copies with YAML headers, source pointer records, central maps, dictionary, concept maps, logs, reports
+  raw copies with YAML headers, central maps, dictionary, concept maps, logs, reports
         |
         | prompt pipeline searches here first for token economy
         v
@@ -71,7 +71,7 @@ The home session is the orchestrator. It is governed by `AGENTS.md` and controls
 | Stage | Owner | Function | Output |
 |---|---|---|---|
 | 0 | Home session | Log request, choose route, dispatch sub-agents, enforce stop conditions | Fast-path answer or routed sequence |
-| 1 | Searcher | Search the active raw corpus first; use Root Vault directly only for pointer-only accounting or approved recovery | Raw evidence packet |
+| 1 | Searcher | Search the active raw corpus first; use Root Vault directly only for skipped media accounting or approved recovery | Raw evidence packet |
 | 2 | Writer | Build coherent report answering the original request | ONE clean report in [[05_agent_reports/]] |
 | 3 | Verifier | Verify quotes, claims, paths, indexes | Verification status, in-place corrections |
 | 4 | Janitor | Audit repo hygiene, propose archival moves, evaluate staleness | Janitor Report with user-confirmation gate |
@@ -142,7 +142,7 @@ The setup output is not a final interpretation of the research corpus. It is the
 | [[dictionary]]              | Shared term vocabulary                                                |                                                  |
 | [[zone_index]]              | Master index                                                          |                                                  |
 | [[maps/]]                   | Central navigation layer with Obsidian wikilinks into raw files       |                                                  |
-| [[raw/]]                    | Active working corpus with raw text copies and source pointer records |                                                  |
+| [[raw/]]                    | Active working corpus with raw text/native/PDF copies; legacy pointer records may exist |                                                  |
 | [[HEADER_TEMPLATE]]         | YAML header schema                                                    |                                                  |
 | [[user_requests]]           | Request log                                                           |                                                  |
 | [[05_agent_reports/]]       | Reports, checkpoints, evidence packets, verification notes            |                                                  |

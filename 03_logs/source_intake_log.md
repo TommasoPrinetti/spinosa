@@ -17,4 +17,4 @@ updated: 2026-06-03
 All new Root Vault batches and retained external sources are registered here before mapping.
 
 | Date | Batch ID | Source type | Location | Origin | Intake status | Notes |
-|---|---|---|---|---|---|---|---|
+|---|---|---|---|---|---|---|

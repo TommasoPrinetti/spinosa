@@ -6,7 +6,7 @@ scope: [initial setup only]
 connects_to:
   - AGENTS.md
 created: 2026-05-28
-updated: 2026-06-02
+updated: 2026-06-03
 ---
 
 # STARTUP.md — Setup Translation and Indexing Protocol
@@ -21,7 +21,7 @@ Startup is the only authority that can mark setup complete. `.bin/check-startup.
 
 Translate the protected Root Vault into the first usable **LLM Zone**: a searchable, header-indexed collection of raw copies with a shared dictionary for consistent terminology. After CLI onboarding, the Root Vault is the immutable original source and [[raw/]] is the active working corpus for normal source-grounded work.
 
-The CLI onboarding script has already collected project name and Root Vault path, scanned the corpus, asked for explicit consent, copied accepted text-like files unchanged from the Root Vault into [[raw/]], and collected the preferred LLM CLI for handoff. Your job is to:
+The CLI onboarding script has already collected project name and Root Vault path, scanned the corpus, asked for explicit consent, copied accepted text-like files, native-readable files, and PDFs from the Root Vault into [[raw/]], skipped images, video, and audio, and collected the preferred LLM CLI for handoff. Your job is to:
 
 1. **Build the master dictionary and enrich the blueprint from corpus evidence**
 2. **Generate YAML headers** for every raw copy
@@ -37,10 +37,10 @@ The protocol runs in two phases: **Phase 1 (Setup Translation)** and **Phase 2 (
 
 - **Never edit, rename, reorganize, or delete Root Vault files.**
 - Treat Root Vault files as protected originals after onboarding; use [[raw/]] as the active working corpus for dictionary building, headers, maps, and normal retrieval.
-- Do not copy binary files (PDFs, images, audio, video) into the Zone — use generated **source pointer** records in [[raw/]] and account for them in the zone index as **pointer-only**.
+- Copy PDFs as-is when onboarding accepted them. Do not create pointer records for images, audio, or video; account for skipped media as Root Vault-only coverage gaps.
 - Use the dictionary for consistent terminology across all headers.
-- Preserve generated-file provenance (`generated_by`, `generated_at`, source path, and `processing_status`) on raw copy headers, source pointer records, central maps, concept maps, and zone reports.
-- Use Obsidian wikilinks for internal map references to raw copies, pointer records, dictionaries, concept maps, and other maps.
+- Preserve generated-file provenance (`generated_by`, `generated_at`, source path, and `processing_status`) on raw copy headers, central maps, concept maps, and zone reports.
+- Use Obsidian wikilinks for internal map references to raw copies, dictionaries, concept maps, and other maps.
 - Put retrieval-critical terms in **YAML frontmatter** because fast grep starts there.
 - Put interpretation and context in the body.
 - Do not ask questions directly. Produce a Disambiguation Brief only for blocking ambiguity.
@@ -89,7 +89,7 @@ Treat CLI-generated answers as a **setup draft**, not as questions to repeat. Tr
 - infer a tentative source universe, vocabulary, methods, outputs, unresolved ambiguities, and indexing target from the description, artifacts, and active raw corpus when available, and from [[raw/]] alone when description/artifacts are absent,
 - keep inferred fields explicitly marked as inferred when useful.
 
-Use shell/file tools to confirm the Root Vault path exists and is treated as **read-only**. Do not read Root Vault text directly for normal indexing when the corresponding raw copy exists; use the Root Vault only to verify protected paths and account for pointer-only or unsupported source files.
+Use shell/file tools to confirm the Root Vault path exists and is treated as **read-only**. Do not read Root Vault text directly for normal indexing when the corresponding raw copy exists; use the Root Vault only to verify protected paths and account for skipped media or unsupported source files.
 
 If artifact URLs are present, use web/MCP/browser tools **only** when `external_sources_allowed` is set to `yes`. If the policy is `no`, record URLs but do not fetch them.
 
@@ -126,16 +126,16 @@ The user's `start the Zone` prompt is already permission to run initial indexing
 
 # Phase 2 — Anchoring, Mapping, Validation
 
-## 2.1 Survey Active Corpus And Root Vault Pointers
+## 2.1 Survey Active Corpus And Root Vault Coverage
 
-Survey [[raw/]] as the active working corpus, then compare against the Root Vault for pointer-only media and coverage gaps. For each raw directory:
+Survey [[raw/]] as the active working corpus, then compare against the Root Vault for skipped media and coverage gaps. For each raw directory:
 
 1. List all files and subdirectories (skip `.DS_Store`, system files, empty dirs)
 2. Note copied text-like file types (`.md`, `.txt`, `.csv`, `.json`, etc.), count per type, approximate date range
-3. Read raw copies and source pointer records to characterize the folder's content accurately
+3. Read raw copies to characterize the folder's content accurately
 4. Record: source types, modality, names, dates, topics, keywords, machine-readability, gaps
 
-Separately account for binary or unsupported files that remain only in the Root Vault (PDFs, images, audio, video, unknown files). They should have `type: source_pointer` records in [[raw/]] with original path, media type, extension, size, processing status, and OCR/ASR/transcription/image-analysis status. They remain pointer-only until a later processing pass creates a text artifact.
+Separately account for unsupported files and skipped media that remain only in the Root Vault (images, audio, video, unknown files). Do not create `.pointer.md` records for them during startup. Record media counts, extensions, and processing gaps in `zone_index.md`, maps, and the startup report as Root Vault-only coverage.
 
 ## 2.2 Log Source Intake
 
@@ -182,12 +182,12 @@ Noise quarantine:
 
 ## 2.4 Generate Raw Copy Headers
 
-For every raw copy file in [[raw/]], generate a YAML header using the dictionary. Skip `*.pointer.md` records; they are source pointers, not raw copies. The raw copy header must contain:
+For every raw copy file in [[raw/]], generate a YAML header using the dictionary. Skip legacy `*.pointer.md` records if present; they are not raw copies. The raw copy header must contain:
 
 ```yaml
 ---
 type: raw_copy
-source: "/absolute/path/to/root_vault/[relative-path]/[filename]"
+source: "raw/[relative-path]/[filename]"
 source_type: interview | fieldnote | article | report | dataset | ...
 text_type: md | txt | rtf | csv | json | ...
 language: en | fr | pt | es | ...
@@ -244,7 +244,7 @@ Every internal map reference must use Obsidian wikilinks:
 [[folder_map]]
 ```
 
-Do not use bare internal paths in map bodies except where an absolute Root Vault source path is required for provenance.
+Do not use bare internal paths in map bodies. Bare paths are allowed only in YAML `connects_to:` fields.
 
 Each map file must include the header schema from [[HEADER_TEMPLATE]] (`type: navigation_map`):
 
@@ -268,14 +268,15 @@ updated: YYYY-MM-DD
 ---
 ```
 
-Each map entry for a raw copy or pointer record should include:
-- wikilink to the raw copy or pointer record,
-- original Root Vault source path when available,
-- retrieval summary (3–6 sentences for normal files, 2–4 paragraphs for large/dense files),
-- key topics, entities, and concepts present,
-- useful search terms,
-- metadata caveats,
-- map quality / review status.
+Each map entry for a raw copy should use this table shape:
+
+```markdown
+| Type | Language | People | Topics | Keywords | Caveats |
+|---|---|---|---|---|---|
+| [[raw/example.md|example]] | en | Name | topic | keyword | needs_review |
+```
+
+Put richer retrieval summaries and wikilinks in body text near the table. Keep Root Vault paths out of map bodies.
 
 For recurring concepts appearing in 3+ raw copies, create a concept-focused map that links each concept to its source files with definitions, aliases, confidence, and Verifier status. Use [[dictionary]] to identify cross-cutting concepts.
 
@@ -300,18 +301,17 @@ Do not guess or over-merge. A conservative unresolved entry is better than a wro
 
 Update [[zone_index]] with:
 
-- Root Vault path,
 - Raw copy coverage (how many copied text files, by type),
-- Source pointer coverage (how many pointer-only media records, by media type),
+- Skipped media coverage (how many Root Vault-only media files, by media type),
 - Central navigation maps created,
 - Dictionary status (canonical names, places, organizations, concepts),
 - Concept maps created,
-- Non-text files noted as pointer-only,
+- Non-text media noted as skipped / Root Vault-only,
 - Known gaps.
 
 Coverage counts must be exact:
 - copied text count,
-- pointer-only media count,
+- skipped media count,
 - files with valid headers,
 - central maps created,
 - concept maps created and map quality status,
@@ -323,7 +323,7 @@ Coverage counts must be exact:
 Before reporting startup complete, run validation. `.bin/check-startup.sh` may be used as a developer helper, but Startup remains responsible for judging completion.
 
 Header validation:
-- required YAML fields exist for `raw_copy`, `source_pointer`, `navigation_map`, and concept map files,
+- required YAML fields exist for `raw_copy`, `navigation_map`, and concept map files,
 - `source` paths point to existing files where expected,
 - array fields are arrays, not comma-separated strings,
 - generated files have `generated_by`, `generated_at`, and `processing_status`,
@@ -346,21 +346,21 @@ After validation passes, replace `setup_status: cli_started` with `setup_status:
 
 Onboarding rerun behavior:
 - skip existing raw text copies,
-- skip existing source pointer records,
+- skip legacy source pointer records if present,
 - leave legacy raw folder `index.md` files untouched,
 - overwrite blueprint/config only when the user confirms overwrite or passes `--force`,
 - never overwrite user-edited generated files in [[raw/]].
 
 Startup rerun behavior:
 - skip valid raw copy headers unless repair is needed,
-- update central maps when raw files, pointer records, dictionary entries, or concept maps changed,
+- update central maps when raw files, dictionary entries, or concept maps changed,
 - update dictionary rows by merging evidence, not replacing user-reviewed rows,
 - preserve `map_quality: checked` and `map_quality: human_reviewed` unless the user explicitly asks to regenerate.
 
 Recovery behavior:
 - write phase progress in the startup report or a checkpoint in [[05_agent_reports/]] when startup stops partially,
 - resume from the first incomplete phase,
-- repair missing headers, central maps, pointer records, dictionary rows, or concept maps without rerunning onboarding,
+- repair missing headers, central maps, dictionary rows, or concept maps without rerunning onboarding,
 - keep `setup_status: cli_started` until validation passes.
 
 Header worker delegation:
@@ -377,7 +377,7 @@ Write one startup report in [[05_agent_reports/]] with the following fields:
 - configuration status,
 - Root Vault path verified,
 - raw copy coverage,
-- pointer-only source coverage,
+- skipped media coverage,
 - central maps created,
 - dictionary size (names, places, organizations, concepts),
 - files with valid headers,

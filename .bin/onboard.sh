@@ -72,15 +72,26 @@ build_launch_command() {
       printf '%s\n' "$prompt"
       printf 'PILOSA_STARTUP_PROMPT\n)"\n'
       ;;
+    "Codex App")
+      printf 'codex app %s\n' "$root_cmd"
+      ;;
     "OpenCode")
       printf 'opencode --prompt "$(cat <<'\''PILOSA_STARTUP_PROMPT'\''\n'
       printf '%s\n' "$prompt"
       printf 'PILOSA_STARTUP_PROMPT\n)" %s\n' "$root_cmd"
       ;;
+    "OpenCode Desktop")
+      printf 'opencode %s\n' "$root_cmd"
+      ;;
     "Claude Code")
       printf 'cd %s && claude "$(cat <<'\''PILOSA_STARTUP_PROMPT'\''\n' "$root_cmd"
       printf '%s\n' "$prompt"
       printf 'PILOSA_STARTUP_PROMPT\n)"\n'
+      ;;
+    "Claude Code Desktop")
+      local encoded_prompt
+      encoded_prompt="$(printf '%s' "$prompt" | python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.stdin.read(), safe=""))' 2>/dev/null || printf '%s' "$prompt" | sed 's/ /%20/g; s/"/%22/g')"
+      printf 'open "claude://code/new?q=%s&folder=%s"\n' "$encoded_prompt" "$root_cmd"
       ;;
     "Kilo")
       printf 'cd %s && kilo "$(cat <<'\''PILOSA_STARTUP_PROMPT'\''\n' "$root_cmd"
@@ -105,12 +116,32 @@ run_cli_with_prompt() {
       fi
       exec codex -C "$ROOT" "$prompt"
       ;;
+    "Codex App")
+      if ! command -v codex >/dev/null 2>&1; then
+        warn "codex was not found on PATH."
+        return 1
+      fi
+      copy_to_clipboard "$prompt"
+      codex app "$ROOT" &
+      ok "Prompt copied to clipboard — paste it in the Codex app."
+      return 0
+      ;;
     "OpenCode")
       if ! command -v opencode >/dev/null 2>&1; then
         warn "opencode was not found on PATH."
         return 1
       fi
       exec opencode --prompt "$prompt" "$ROOT"
+      ;;
+    "OpenCode Desktop")
+      if ! command -v opencode >/dev/null 2>&1; then
+        warn "opencode was not found on PATH."
+        return 1
+      fi
+      copy_to_clipboard "$prompt"
+      opencode "$ROOT" &
+      ok "Prompt copied to clipboard — paste it in the OpenCode TUI."
+      return 0
       ;;
     "Claude Code")
       if ! command -v claude >/dev/null 2>&1; then
@@ -119,6 +150,18 @@ run_cli_with_prompt() {
       fi
       cd "$ROOT"
       exec claude "$prompt"
+      ;;
+    "Claude Code Desktop")
+      local encoded_prompt
+      encoded_prompt="$(printf '%s' "$prompt" | python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.stdin.read(), safe=""))' 2>/dev/null || printf '%s' "$prompt" | sed 's/ /%20/g; s/"/%22/g')"
+      if [[ "$(uname)" == "Darwin" ]]; then
+        open "claude://code/new?q=${encoded_prompt}&folder=${ROOT}"
+        ok "Opening Claude Code Desktop with pre-filled prompt."
+      else
+        copy_to_clipboard "$prompt"
+        ok "Prompt copied to clipboard — open Claude Code Desktop and paste it."
+      fi
+      return 0
       ;;
     "Kilo")
       if ! command -v kilo >/dev/null 2>&1; then
@@ -401,103 +444,6 @@ native_raw_rel_path() {
   echo "$rel_path"
 }
 
-pointer_raw_rel_path() {
-  local rel_path="$1"
-  local name dir stem ext
-  name="$(basename "$rel_path")"
-  dir="$(dirname "$rel_path")"
-
-  if [[ "$name" == *.* ]]; then
-    ext="${name##*.}"
-    ext="$(printf '%s' "$ext" | tr '[:upper:]' '[:lower:]')"
-    stem="${name%.*}"
-  else
-    ext="unknown"
-    stem="$name"
-  fi
-
-  if [[ "$dir" == "." ]]; then
-    echo "${stem}__${ext}.pointer.md"
-  else
-    echo "${dir}/${stem}__${ext}.pointer.md"
-  fi
-}
-
-source_class_media_type() {
-  case "$1" in
-    image) echo "image" ;;
-    video) echo "video" ;;
-    audio) echo "audio" ;;
-    pdf) echo "pdf" ;;
-    unknown) echo "unknown" ;;
-    *) echo "text" ;;
-  esac
-}
-
-file_extension() {
-  local path="$1" name ext
-  name="$(basename "$path")"
-  if [[ "$name" == *.* ]]; then
-    ext="${name##*.}"
-    printf '%s' "$ext" | tr '[:upper:]' '[:lower:]'
-  else
-    printf 'unknown'
-  fi
-}
-
-write_pointer_record() {
-  local src_file="$1" dest_file="$2" vault_path="$3" class="$4"
-  local rel_path ext media_type size safe_source safe_rel
-  rel_path="${src_file#"$vault_path"/}"
-  ext="$(file_extension "$src_file")"
-  media_type="$(source_class_media_type "$class")"
-  size="$(file_size_bytes "$src_file")"
-  safe_source="$(sanitize_yaml "$src_file")"
-  safe_rel="$(sanitize_yaml "$rel_path")"
-
-  cat > "$dest_file" << POINTER_EOF
----
-type: source_pointer
-role: pointer_only_source_record
-purpose: [make a non-text Root Vault source findable without copying the original media]
-scope: single_source_file
-source: "$safe_source"
-root_rel_path: "$safe_rel"
-media_type: "$media_type"
-extension: "$ext"
-size_bytes: $size
-processing_status: pointer_only_pending
-ocr_status: pending
-asr_status: pending
-transcription_status: pending
-image_analysis_status: pending
-generated_by: onboarding_cli
-generated_at: $TODAY
-created: $TODAY
-updated: $TODAY
----
-
-# Source Pointer — $rel_path
-
-This pointer record makes the original Root Vault file retrievable without copying or editing the media file.
-
-| Field | Value |
-|---|---|
-| Original source | $src_file |
-| Root-relative path | $rel_path |
-| Media type | $media_type |
-| Extension | $ext |
-| Size bytes | $size |
-| Processing status | pointer_only_pending |
-
-## Pending Processing
-- OCR: pending
-- ASR: pending
-- Transcription: pending
-- Image analysis: pending
-POINTER_EOF
-}
-
 render_copy_progress() {
   local processed="$1" total="$2" copied="$3" skipped="$4" current_file="${5:-}"
   local width=28
@@ -690,15 +636,15 @@ print_scan_summary() {
     printf '  %s│ %s%s%s\n' "${DIM}" "${RESET}" "$(format_bytes "$SCAN_BINARY_COPYABLE_BYTES")" "${DIM} PDF data${RESET}"
   fi
   if [[ "$SCAN_IMAGE_COUNT" -gt 0 ]]; then
-    printf '  %s├─%s %s pointer-only\n' "${DIM}" "${RESET}" "$(plural_count "$SCAN_IMAGE_COUNT" "image")"
+    printf '  %s├─%s %s skipped\n' "${DIM}" "${RESET}" "$(plural_count "$SCAN_IMAGE_COUNT" "image")"
     printf '  %s│ %s%s%s\n' "${DIM}" "${RESET}" "$(format_bytes "$SCAN_IMAGE_BYTES")" "${DIM} image data${RESET}"
   fi
   if [[ "$SCAN_VIDEO_COUNT" -gt 0 ]]; then
-    printf '  %s├─%s %s pointer-only\n' "${DIM}" "${RESET}" "$(plural_count "$SCAN_VIDEO_COUNT" "video")"
+    printf '  %s├─%s %s skipped\n' "${DIM}" "${RESET}" "$(plural_count "$SCAN_VIDEO_COUNT" "video")"
     printf '  %s│ %s%s%s\n' "${DIM}" "${RESET}" "$(format_bytes "$SCAN_VIDEO_BYTES")" "${DIM} video data${RESET}"
   fi
   if [[ "$SCAN_AUDIO_COUNT" -gt 0 ]]; then
-    printf '  %s├─%s %s pointer-only\n' "${DIM}" "${RESET}" "$(plural_count "$SCAN_AUDIO_COUNT" "audio file")"
+    printf '  %s├─%s %s skipped\n' "${DIM}" "${RESET}" "$(plural_count "$SCAN_AUDIO_COUNT" "audio file")"
     printf '  %s│ %s%s%s\n' "${DIM}" "${RESET}" "$(format_bytes "$SCAN_AUDIO_BYTES")" "${DIM} audio data${RESET}"
   fi
   if [[ "$SCAN_UNKNOWN_COUNT" -gt 0 ]]; then
@@ -706,12 +652,12 @@ print_scan_summary() {
     printf '  %s│ %s%s%s\n' "${DIM}" "${RESET}" "$(format_bytes "$SCAN_UNKNOWN_BYTES")" "${DIM} unknown data${RESET}"
   fi
   printf '  %s└─%s %s ignored\n' "${DIM}" "${RESET}" "$(plural_count "$SCAN_IGNORED_COUNT" "file")"
-  note "Text-like files are renamed to .md; native-readable files keep their extension; PDFs are copied as-is; unsupported media gets pointer records."
+  note "Text-like files are renamed to .md; native-readable files keep their extension; PDFs are copied as-is; images, video, and audio are skipped (no pointer records)."
   note "Startup later builds detailed Obsidian-wikilink maps in maps/."
 }
 
 print_transposition_summary() {
-  local dest_dir="$1" copied="$2" skipped="$3" native_copied="$4" native_skipped="$5" binary_copied="$6" binary_skipped="$7" pointer_count="$8" pointer_skipped="$9"
+  local dest_dir="$1" copied="$2" skipped="$3" native_copied="$4" native_skipped="$5" binary_copied="$6" binary_skipped="$7"
 
   printf '\n  %s┌─%s %sTransposition complete%s\n' "${DIM}" "${RESET}" "${BOLD}" "${RESET}"
   printf '  %s│%s %s✓%s %s written (renamed to .md)\n' "${DIM}" "${RESET}" "${G}" "${RESET}" "$(plural_count "$copied" "markdown-convertible file")"
@@ -730,12 +676,6 @@ print_transposition_summary() {
   if [[ "$binary_skipped" -gt 0 ]]; then
     printf '  %s│%s %s↷%s %s already existed\n' "${DIM}" "${RESET}" "${Y}" "${RESET}" "$(plural_count "$binary_skipped" "PDF")"
   fi
-  if [[ "$pointer_count" -gt 0 ]]; then
-    printf '  %s│%s %s✓%s %s written\n' "${DIM}" "${RESET}" "${G}" "${RESET}" "$(plural_count "$pointer_count" "pointer record")"
-  fi
-  if [[ "$pointer_skipped" -gt 0 ]]; then
-    printf '  %s│%s %s↷%s %s already existed\n' "${DIM}" "${RESET}" "${Y}" "${RESET}" "$(plural_count "$pointer_skipped" "pointer record")"
-  fi
   if [[ "$SCAN_IGNORED_COUNT" -gt 0 ]]; then
     printf '  %s│%s %s•%s %s skipped\n' "${DIM}" "${RESET}" "${DIM}" "${RESET}" "$(plural_count "$SCAN_IGNORED_COUNT" "ignored file")"
   fi
@@ -753,17 +693,15 @@ copy_root_vault() {
     return 1
   fi
 
-  local pointer_total=$(( SCAN_IMAGE_COUNT + SCAN_VIDEO_COUNT + SCAN_AUDIO_COUNT + SCAN_UNKNOWN_COUNT ))
-  printf '  %s→%s Starting transposition of %s (%s + %s + %s + %s pointer records)\n' \
+  printf '  %s→%s Starting transposition of %s (%s + %s + %s)\n' \
     "${DIM}" "${RESET}" \
     "$(plural_count "$total_files" "file")" \
     "$(plural_count "$SCAN_MARKDOWN_COUNT" "markdown-convertible")" \
     "$(plural_count "$SCAN_NATIVE_COUNT" "native-readable")" \
-    "$(plural_count "$SCAN_BINARY_COPYABLE_COUNT" "PDF")" \
-    "$(plural_count "$pointer_total" "pointer record")"
+    "$(plural_count "$SCAN_BINARY_COPYABLE_COUNT" "PDF")"
   render_copy_progress 0 "$total_files" 0 0
 
-  local copied=0 skipped=0 processed=0 pointer_count=0 pointer_skipped=0 non_text_count=0
+  local copied=0 skipped=0 processed=0
   local native_copied=0 native_skipped=0 binary_copied=0 binary_skipped=0
 
   # ── loop 1: markdown-convertible files → renamed to .md ──
@@ -847,33 +785,10 @@ copy_root_vault() {
     render_copy_progress "$processed" "$total_files" "$copied" "$skipped" "$rel_path"
   done < <(find "$vault_path" -type f -print0 2>/dev/null)
 
-  # ── loop 4: images/video/audio/unknown → pointer records ──
-  local class pointer_rel_path pointer_file pointer_parent
-  while IFS= read -r -d '' src_file; do
-    should_skip_source_file "$src_file" && continue
-    class="$(classify_source_file "$src_file")"
-    [[ "$class" == "ignored" || "$class" == "markdown" || "$class" == "native" || "$class" == "binary_copyable" ]] && continue
-    non_text_count=$((non_text_count + 1))
-
-    local rel_path="${src_file#"$vault_path"/}"
-    pointer_rel_path="$(pointer_raw_rel_path "$rel_path")"
-    pointer_file="$dest_dir/$pointer_rel_path"
-    pointer_parent="$(dirname "$pointer_file")"
-    mkdir -p "$pointer_parent"
-
-    if [[ -f "$pointer_file" ]]; then
-      pointer_skipped=$((pointer_skipped + 1))
-      continue
-    fi
-
-    write_pointer_record "$src_file" "$pointer_file" "$vault_path" "$class"
-    pointer_count=$((pointer_count + 1))
-  done < <(find "$vault_path" -type f -print0 2>/dev/null)
-
   printf '\n'
 
   printf '  %s✓%s %sRoot Vault records written to%s %s%s%s\n' "${G}${BOLD}" "${RESET}" "${BOLD}" "${RESET}" "${C}${BOLD}" "${dest_dir}" "${RESET}"
-  print_transposition_summary "$dest_dir" "$copied" "$skipped" "$native_copied" "$native_skipped" "$binary_copied" "$binary_skipped" "$pointer_count" "$pointer_skipped"
+  print_transposition_summary "$dest_dir" "$copied" "$skipped" "$native_copied" "$native_skipped" "$binary_copied" "$binary_skipped"
   return 0
 }
 
@@ -955,7 +870,7 @@ main() {
   print_step 2 4 "Root Vault"
   note "The Root Vault is the folder of your source files — PDFs, notes, transcripts, etc."
   note "Nothing in the Root Vault is moved, renamed, or edited."
-  note "Text-like files can be copied unchanged into raw/; media gets pointer records only."
+  note "Text-like files, native-readable files, and PDFs can be copied into raw/; images, video, and audio are skipped."
   note "Startup will create maps/ as the central navigation layer."
   note "Use an absolute path (drag the folder onto the terminal to paste its path)."
   root_vault_path=""
@@ -982,7 +897,7 @@ main() {
     return 1
   fi
 
-  if ! confirm "  Write raw copies and media pointer records into raw/?" "y"; then
+  if ! confirm "  Write accepted raw copies into raw/?" "y"; then
     printf '\n  %s\n\n' "${DIM}No raw copies were written. Onboarding stopped after the scan.${RESET}"
     return 0
   fi
@@ -996,7 +911,7 @@ main() {
   print_step 4 4 "Startup handoff"
   note "Choose the CLI that should receive the startup prompt."
   note "You can change this later; the prompt is the same shape."
-  preferred_cli="$(arrow_select "Preferred LLM CLI" "Claude Code" "Codex" "OpenCode" "Kilo" "Other")" || return 1
+  preferred_cli="$(arrow_select "Preferred LLM CLI" "Claude Code" "Claude Code Desktop" "Codex" "Codex App" "OpenCode" "OpenCode Desktop" "Kilo" "Other")" || return 1
   ok "CLI: ${BOLD}${preferred_cli}${RESET}"
 
   # ── ensure directories exist ──────────────────────────────────────────────
@@ -1041,7 +956,7 @@ connects_to:
 ## Method And Evidence
 - Methods: [inferred during startup]
 - Claims require source paths.
-- L2 clues require Checker verification before reporting.
+- L2 clues require Verifier checking before reporting.
 - External sources must stay labeled external unless moved into the Root Vault.
 - External source policy: no (default; ask only if external access is needed)
 
@@ -1090,7 +1005,7 @@ external_logs:
   - 03_logs/source_intake_log.md
 
 claim_standard: source_link_required
-l2_policy: checker_required
+l2_policy: verifier_required
 
 protected_paths:
   - "$safe_vault"
@@ -1102,7 +1017,7 @@ preferred_llm_cli: "$preferred_cli"
 
 ## Notes
 - This file was initialized by the CLI fast setup.
-- The CLI collected: project name, Root Vault path, and preferred LLM CLI. It scanned the Root Vault, transposed accepted files into raw/, and created source pointer records for images/video/audio.
+- The CLI collected: project name, Root Vault path, and preferred LLM CLI. It scanned the Root Vault and transposed accepted files (text, native, PDF) into raw/. Images, video, and audio were skipped.
 - After onboarding, the Root Vault remains immutable original storage. Normal source-grounded work starts from raw/.
 - During startup, project description and helpful artifact URLs are optional. If absent, the LLM CLI agent records them as not provided, keeps external_sources_allowed at its default \`no\`, and infers working scope from the raw corpus.
 - When setup_status reaches zone_started, the startup workflow has built the master dictionary, generated YAML headers, created detailed maps in maps/, and passed validation.
@@ -1138,7 +1053,7 @@ Read these files first, in this order:
 
 The setup draft already contains:
 - Project name: ${project_title}
-- Root Vault path: ${root_vault_path} (already validated, files transposed to raw/, pointer records created for images/video/audio)
+- Root Vault path: ${root_vault_path} (already validated, files transposed to raw/ — images, video, audio skipped)
 - Preferred LLM CLI: ${preferred_cli}
 
 Optional context not collected by fast setup:
@@ -1150,7 +1065,7 @@ Then execute 00_system/instructions/STARTUP.md from Phase 1.2 onwards. Specifica
 - Translate the setup draft into filled INFORMATIONS + config
 - Build the master dictionary by reading the active raw corpus in raw/
 - Generate YAML headers for every raw copy using the dictionary
-- Account for source pointer records as pointer-only media
+- Account for skipped media as Root Vault-only coverage gaps; do not create media pointer records
 - Create maps/ and write detailed Obsidian-wikilink maps that help future LLMs choose which raw files to open
 - Build concept maps from repeated themes
 - Update zone_index.md

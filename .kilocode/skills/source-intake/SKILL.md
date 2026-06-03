@@ -5,7 +5,7 @@ description: Add new source files to the Zone and log them
 
 ## Purpose
 
-Register new source files in the Zone: copy text files to `raw/`, create pointer records for binary files, add YAML headers, log intake, and update the zone index.
+Register new source files in the Zone: copy text/native files and PDFs to `raw/`, skip images/video/audio, add YAML headers, log intake, and update the zone index.
 
 ## Prerequisites
 
@@ -16,11 +16,8 @@ Register new source files in the Zone: copy text files to `raw/`, create pointer
 ## Steps
 
 1. Identify source files to add. Confirm they are not already in `raw/`.
-2. Copy text-like files unchanged from Root Vault into `raw/`.
-3. For binary files (PDFs, images, audio, video), create `.pointer.md` records in `raw/` with:
-   - Original path, media type, extension, size
-   - Processing status: pending
-   - OCR/ASR/transcription status: not started
+2. Copy text-like files, native-readable files, and PDFs from Root Vault into `raw/`.
+3. Do not create `.pointer.md` records for images, audio, or video. Leave those media files in the Root Vault and record counts / processing gaps in the intake log and `zone_index.md`.
 4. Generate YAML headers for new raw copies using `HEADER_TEMPLATE.md`:
    - Use canonical terms from `dictionary.md`.
    - Include `source:`, `generated_by:`, `generated_at:`, `processing_status:`.
@@ -36,7 +33,7 @@ Register new source files in the Zone: copy text files to `raw/`, create pointer
 - Log every intake with a traceable batch ID.
 - External sources require explicit researcher authorization before fetching.
 - Headers must use canonical dictionary terms.
-- Binary files are pointer-only until a processing pass creates text artifacts.
+- Images, audio, and video stay Root Vault-only until a later processing pass creates text artifacts.
 
 ## See also
 
