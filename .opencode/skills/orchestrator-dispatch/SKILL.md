@@ -55,7 +55,7 @@ For each sub-agent in the sequence:
 1. **Native spawn** (preferred): Spawn by name — `pilosa-searcher`, `pilosa-writer`, `pilosa-verifier`, `pilosa-janitor`. Pass: cleaned user prompt, prior sub-agent outputs, route constraints.
 2. **Fallback** (if native unavailable): Read the skill's `SKILL.md` from `.agents/skills/<skill-name>/SKILL.md`, inject into the task prompt as instructions.
 
-Native definitions live in `.opencode/agents/`, `.claude/agents/`, `.codex/agents/`. The orchestrator agent definition is at `.opencode/agents/pilosa-orchestrator.md`.
+Native definitions live in `.opencode/agents/`, `.claude/agents/`, `.codex/agents/`. The orchestrator playbook lives in `AGENTS.md`.
 
 You may pre-process the user prompt before dispatch: trim, summarize, normalize. Do not invent.
 

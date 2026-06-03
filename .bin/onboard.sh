@@ -14,7 +14,7 @@ ROOT="$(pwd)"
 TODAY="$(date +%Y-%m-%d)"
 FORCE="0"
 
-Information="$ROOT/information.md"
+Information="$ROOT/context.md"
 Config="$ROOT/system/instructions/configuration.md"
 Agents="$ROOT/AGENTS.md"
 Claude="$ROOT/CLAUDE.md"
@@ -865,7 +865,7 @@ main() {
   print_step 1 4 "Project name"
   note "This is the working title for your research framework."
   note "It appears at the top of every report and in the blueprint."
-  note "You can change it later by editing information.md."
+  note "You can change it later by editing context.md."
   project_title=""
   while [[ -z "$project_title" ]]; do
     project_title="$(ask "Project name" "" "e.g. My Research Project")"
@@ -1019,7 +1019,7 @@ l2_policy: verifier_required
 
 protected_paths:
   - "$safe_vault"
-  - information.md
+   - context.md
 
 stale_after_days: 30
 preferred_llm_cli: "$preferred_cli"
@@ -1058,7 +1058,7 @@ This is the Pilosa startup handoff. The user has completed fast CLI setup.
 Read these files first, in this order:
 1. AGENTS.md
 2. system/instructions/configuration.md
-3. information.md
+3. context.md
 4. system/instructions/startup.md
 
 The setup draft already contains:

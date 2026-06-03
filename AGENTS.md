@@ -7,36 +7,129 @@ description:
 connects_to:
   - system/instructions/startup.md
   - system/instructions/configuration.md
-  - information.md
+  - context.md
 created: 2026-05-26
 updated: 2026-06-03
 ---
 
 # Pilosa Framework
 
-Research workspace with agent-driven source indexing, verification, and synthesis. This root file is the concise router; detailed orchestration lives in `.agents/skills/orchestrator-dispatch/SKILL.md` and native agent definitions.
+Research workspace with agent-driven source indexing, verification, and synthesis. This root file IS the orchestrator — it routes every user prompt through the correct sub-agent pipeline and returns the result. Classification details live in `.agents/skills/orchestrator-dispatch/SKILL.md`.
 
 ## Setup
 
-Place source files in the Root Vault and run `bash .bin/onboard.sh` to configure. Onboarding copies text/native files and PDFs into `raw/`, skips images/video/audio and Root Vault `AGENTS.md` control files, then the orchestrator agent builds the dictionary, headers, and navigation maps.
+Place source files in the Root Vault and run `bash .bin/onboard.sh` to configure. Onboarding copies text/native files and PDFs into `raw/`, skips images/video/audio and Root Vault `AGENTS.md` control files, then the orchestrator builds the dictionary, headers, and navigation maps.
 
-## Orchestrator Contract
+## Startup Gate
 
-Use `pilosa-orchestrator` for any source-grounded or workspace-maintenance request. The orchestrator must:
+Before any source-grounded work:
 
-1. Read `system/instructions/configuration.md`, `information.md`, and `system/instructions/startup.md` before source work.
-2. If setup is `cli_started` or placeholders remain, execute `startup.md` directly. There is no Startup sub-agent.
-3. Log each request in `logs/user_requests.md`.
-4. Classify the request and choose a sub-agent chain using `.agents/skills/orchestrator-dispatch/SKILL.md`.
-5. Prefer native sub-agents when available; fall back to `.agents/skills/*/SKILL.md`.
-6. Require Verifier on every non-fast-path chain.
-7. Ask clarification only from the orchestrator. Sub-agents execute and never ask.
+1. Read `system/instructions/configuration.md`, `context.md`, and `system/instructions/startup.md`.
+2. If either has `[path]` or `[project name]`, source work is blocked until a usable setup draft is provided.
+3. If either has `setup_status: cli_started`, execute `system/instructions/startup.md` directly — do not delegate. No sub-agent can work while this status is present.
+4. If the user asks to start the workspace, follow startup.md inline. A missing project description is not a blocker; infer working scope from the raw corpus.
+5. Do not search, index, or answer from sources before the gate is satisfied.
+
+## The Loop
+
+### 1. Log
+
+Add one row to `logs/user_requests.md`:
+
+```
+| Date | Request summary | Route | Status | Output |
+```
+
+### 2. Classify
+
+Map the prompt to one class. If two apply, choose the stricter. Full classification guidance in `.agents/skills/orchestrator-dispatch/SKILL.md`.
+
+| Class | When |
+|---|---|
+| `fast_path` | Operational answer, no source search |
+| `clarify_search` | Translate terms before searching |
+| `find_material` | User asks what exists or where to look |
+| `evidence_answer` | Answer grounded in sources |
+| `synthesis_report` | Structured report / comparison / narrative |
+| `verification` | Check a quote, claim, citation, path, or report |
+| `index_maintenance` | Fix, deepen, clean, or update the workspace index |
+| `cleanup` | Tidy or audit the workspace |
+
+### 3. Choose Sequence
+
+Default shapes are guidance. You may deviate at runtime. Every non-fast-path response is a sequence (length >= 1) — you do not answer non-fast-path prompts yourself.
+
+| Class | Default | Notes |
+|---|---|---|
+| `fast_path` | (none) | Only class where you answer directly |
+| `clarify_search` | skip (or Searcher if term disambiguation needed) | Skip if question is well-formed |
+| `find_material` | Searcher -> Verifier | Verifier verifies the located path exists |
+| `evidence_answer` | Searcher -> Writer -> Verifier | Verifier mandatory |
+| `synthesis_report` | Searcher xN -> Writer -> Verifier | Parallel Searcher branches when sources are independent |
+| `verification` | Verifier | Stand-alone |
+| `index_maintenance` | Searcher (if search) -> Verifier | Stand-alone |
+| `cleanup` | Janitor | User-confirmation gate required before any move |
+
+Workspace startup is a one-time operation handled by reading `system/instructions/startup.md` directly — not through sub-agent dispatch.
+
+### 4. Dispatch
+
+For each sub-agent in the sequence, spawn it by name:
+
+- `pilosa-searcher` — searches raw corpus, maps, dictionary
+- `pilosa-writer` — synthesizes reports from evidence
+- `pilosa-verifier` — checks claims, quotes, paths against sources
+- `pilosa-janitor` — audits hygiene, proposes archival moves
+
+Pass: cleaned user prompt, prior sub-agent outputs, route constraints.
+
+You may pre-process the user prompt before dispatch: trim, summarize, normalize. Do not invent.
+
+### 5. Close
+
+- Update the log row to `done` / `blocked` / `partial`.
+- Cite created or changed files.
+- State validation performed.
+- State blockers or unchecked claims.
+
+## Verbatim Quotes
+
+Required for direct quotes:
+
+```markdown
+> **Author Name**, *Source Title* (Date, Place)
+>
+> "Text with **the important part in bold** and enough context to understand the quote without opening the source."
+```
+
+- Author in normal text. Title in italics. Date and place in parentheses. Key passage in **bold**.
+- Minimum 2 sentences or 1 full paragraph.
+- Always in a blockquote.
+
+## Stop
+
+Stop and answer when:
+
+- Fast-path answer is complete.
+- Sub-agent chain is complete (Writer produced a report and Verifier passed or corrected it).
+- Verifier completed a verification.
+- Janitor produced a report and the user confirmed.
+- A blocker prevents honest progress.
+
+Do not continue just because another specialist could add more detail.
+
+## Fallback
+
+If native sub-agent spawn fails, fall back to reading the corresponding SKILL.md from `.agents/skills/<skill-name>/SKILL.md` and injecting its content into the task prompt.
+
+## Question Tool
+
+Use the question tool to clarify scope, disambiguate, or resolve blocking uncertainties. Sub-agents never ask questions — only you do.
 
 ## Sub-Agent Pipeline
 
 | Agent | Role | Native Agent |
 |---|---|---|
-| Orchestrator | Routes prompts, classifies, dispatches, answers fast-path | `pilosa-orchestrator` |
 | Searcher | Searches raw copies, maps, and dictionary for evidence | `pilosa-searcher` |
 | Writer | Synthesizes findings into reports | `pilosa-writer` |
 | Verifier | Verifies claims, quotes, and paths | `pilosa-verifier` |
@@ -71,9 +164,9 @@ Domain-specific AGENTS.md files define local conventions. Standard coding agents
 ## File Map
 
 ### Root
-- `AGENTS.md` — this file (project context for standard coding agents)
+- `AGENTS.md` — this file (orchestrator playbook + project context)
 - `README.md` — project overview and development TODO
-- `information.md` — research scope
+- `context.md` — project context (scope, names, particularities); read by Writer, updated by startup
 - `dictionary.md` — shared vocabulary
 - `header_template.md` — canonical YAML frontmatter schema
 - `zone_index.md` — master workspace index
@@ -100,9 +193,9 @@ Domain-specific AGENTS.md files define local conventions. Standard coding agents
 - `orchestrator-dispatch/` — prompt routing and skill injection
 
 ### Native agents
-- `.opencode/agents/` — OpenCode agent definitions
-- `.claude/agents/` — Claude Code agent definitions
-- `.codex/agents/` — Codex agent definitions
+- `.opencode/agents/` — OpenCode agent definitions (Searcher, Writer, Verifier, Janitor)
+- `.claude/agents/` — Claude Code agent definitions (Searcher, Writer, Verifier, Janitor)
+- `.codex/agents/` — Codex agent definitions (Searcher, Writer, Verifier, Janitor)
 
 ### `.kilocode/skills/`
 - Skill copies for Kilo Code (same as `.agents/skills/`)
@@ -119,7 +212,7 @@ Domain-specific AGENTS.md files define local conventions. Standard coding agents
 | Path | Rule |
 |---|---|
 | Root Vault | Read-only |
-| `information.md` | Project scope; editable during initial setup |
+| `context.md` | Project context; editable during initial setup and by startup |
 | `system/` | Architecture, instructions, templates |
 | `raw/` | Active corpus after onboarding; framework branch keeps only scaffolding |
 | `maps/` | Navigation maps generated by startup; framework branch keeps only the template |
@@ -144,9 +237,10 @@ Domain-specific AGENTS.md files define local conventions. Standard coding agents
 
 | Term | Meaning |
 |---|---|
-| **Agent** | One of five sub-agents: Orchestrator, Searcher, Writer, Verifier, Janitor. Native definitions in `.opencode/agents/`, `.claude/agents/`, `.codex/agents/`. |
-| **Blueprint** | Short for `information.md`. Defines the research project scope, questions, corpus, evidence standards, and direction. |
+| **Agent** | One of four sub-agents: Searcher, Writer, Verifier, Janitor. Native definitions in `.opencode/agents/`, `.claude/agents/`, `.codex/agents/`. |
+| **Blueprint** | Short for `context.md`. Defines the research project scope, questions, corpus, evidence standards, and direction. |
 | **Configuration** | `system/instructions/configuration.md`. Operating profile: source policy, Root Vault path, evidence standards, enabled workflows, agent sequences. |
+| **Context** | `context.md`. Project context storing scope, names, particularities, relationships. Read by Writer for synthesis; updated by startup during indexing. |
 | **Dictionary** | `dictionary.md`. Shared vocabulary of canonical names, places, organizations, concepts, and domain terms. |
 | **Internal-first source policy** | Agents must not search external sources unless the researcher explicitly requests it or configuration allows logged external intake. |
 | **`.now`** | Convention: every file records `created:` at creation and `updated:` on every edit. |

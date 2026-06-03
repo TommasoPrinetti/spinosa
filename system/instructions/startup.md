@@ -56,7 +56,7 @@ Mandatory initial reads:
 
 1. `AGENTS.md`
 2. [[configuration]]
-3. [[information]]
+3. [[context]]
 4. [[header_template]]
 
 On-demand reads:
@@ -70,7 +70,7 @@ If the user already ran `bash .bin/onboard.sh`, treat its answers as the **setup
 
 ## 1.1 Inspect Setup Draft
 
-Read [[information]] and [[configuration]]. Identify filled fields, placeholders, and missing data.
+Read [[context]] and [[configuration]]. Identify filled fields, placeholders, and missing data.
 
 Create a short todo list with the CLI's todo/task tool if available. **Mandatory** when the tool exists. Minimum todo items:
 
@@ -99,7 +99,7 @@ If artifact URLs are present, use web/MCP/browser tools **only** when `external_
 
 ## 1.3 Fill Blueprint and Configuration
 
-- Fill [[information]] (project title, project description status, helpful artifact URLs or file paths status, Root Vault path, evidence standards, external source policy).
+- Fill [[context]] (project title, project description status, helpful artifact URLs or file paths status, Root Vault path, evidence standards, external source policy).
 - Fill [[configuration]] (`root_vault_path`, `root_vault_mode`, `source_policy`, `external_sources_allowed`, `preferred_llm_cli`, `claim_standard`, `l2_policy`).
 - Keep `setup_status: cli_started` until mapping, header validation, and retrieval tests have passed. Replace it with `setup_status: zone_started` in both files only at the end of Phase 2.
 
@@ -170,7 +170,7 @@ Example:
 
 Write [[dictionary]] with canonical forms, aliases, explicit source terms, inferred concepts, uncertain terms, machine artifacts, languages, and source file references. Every term that appears in more than one source file **MUST** have an alias entry so grep finds any variant in any language.
 
-Use this same pass to enrich [[information]] from raw corpus evidence:
+Use this same pass to enrich [[context]] from raw corpus evidence:
 - methods,
 - source universe,
 - recurring vocabulary,
@@ -344,7 +344,7 @@ Retrieval tests:
 
 Startup is complete **only if** required headers are valid and every applicable retrieval test passes. If a test is not applicable because no such entity exists, record `not_applicable` with the reason in the startup report.
 
-After validation passes, replace `setup_status: cli_started` with `setup_status: zone_started` in [[information]] and [[configuration]].
+After validation passes, replace `setup_status: cli_started` with `setup_status: zone_started` in [[context]] and [[configuration]].
 
 ## 2.9 Idempotency And Recovery
 

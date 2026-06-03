@@ -1,11 +1,11 @@
 ---
-type: information
-agent: startup_agent
+type: context
+agent: startup
 description:
-  - Project blueprint filled during onboarding and startup.
-  - Agents read this to understand scope, Root Vault path, evidence rules, and researcher preferences.
+  - Project context: scope, names, particularities, relationships.
+  - Read by Writer for synthesis; updated by startup during indexing.
 created: 2026-05-26
-updated: 2026-05-26
+updated: 2026-06-03
 setup_status: cli_started
 connects_to:
   - AGENTS.md
@@ -14,7 +14,7 @@ connects_to:
   - logs/user_requests.md
 ---
 
-# Information
+# Context
 
 ## Project
 - Title: [project name]

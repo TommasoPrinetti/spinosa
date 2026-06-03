@@ -28,7 +28,7 @@ required_files=(
   "AGENTS.md"
   "system/instructions/configuration.md"
   "system/instructions/startup.md"
-  "information.md"
+"context.md"
 )
 
 for file in "${required_files[@]}"; do
@@ -36,7 +36,7 @@ for file in "${required_files[@]}"; do
 done
 
 config="$(read_file "system/instructions/configuration.md")"
-blueprint="$(read_file "information.md")"
+blueprint="$(read_file "context.md")"
 startup_text="${config}
 ${blueprint}"
 

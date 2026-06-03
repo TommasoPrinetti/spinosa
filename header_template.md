@@ -74,7 +74,7 @@ updated: YYYY-MM-DD
 ```
 
 Rules:
-- `source` uses a relative path from the repo root (e.g., `raw/Ex10/...`). The Root Vault path is stored in [[information]] for re-onboarding only.
+- `source` uses a relative path from the repo root (e.g., `raw/Ex10/...`). The Root Vault path is stored in [[context]] for re-onboarding only.
 - `language` is the ISO 639-1 code of the source file's primary language (en, fr, pt, es, etc.).
 - `people`, `places`, `organizations` MUST use canonical forms from [[dictionary]].
 - `keywords` include both canonical terms and aliases in the source's language (so grep finds any variant).
@@ -164,7 +164,7 @@ For large or dense files, add a 2-3 sentence retrieval summary below the table.
 
 In body text, use Obsidian wikilinks for all internal references. Apply these rules:
 
-- Files with unique basenames use just the basename: `[[AGENTS]]`, `[[startup]]`, `[[configuration]]`, `[[header_template]]`, `[[information]]`, `[[dictionary]]`, `[[zone_index]]`
+- Files with unique basenames use just the basename: `[[AGENTS]]`, `[[startup]]`, `[[configuration]]`, `[[header_template]]`, `[[context]]`, `[[dictionary]]`, `[[zone_index]]`
 - Folders keep their full vault-relative path with trailing `/`: `[[system/]]`, `[[logs/]]`, `[[agent_reports/]]`, `[[.trash/]]`, `[[raw/]]`
 - `.md` extension is implicit (Obsidian convention)
 

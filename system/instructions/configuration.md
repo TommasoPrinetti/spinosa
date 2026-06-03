@@ -29,7 +29,7 @@ l2_policy: verifier_required
 
 protected_paths:
   - "[path]"
-  - information.md
+  - context.md
 
 stale_after_days: 30
 preferred_llm_cli: "[cli]"

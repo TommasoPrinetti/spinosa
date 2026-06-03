@@ -38,7 +38,7 @@ git checkout -b my-project-name
 git push -u origin my-project-name
 ```
 
-> Why a branch? Onboarding rewrites `system/instructions/configuration.md` and `information.md` and copies Root Vault text-like files unchanged into `raw/`. Keeping that on a project branch lets you re-onboard, re-index, or wipe the project without touching the framework.
+> Why a branch? Onboarding rewrites `system/instructions/configuration.md` and `context.md` and copies Root Vault text-like files unchanged into `raw/`. Keeping that on a project branch lets you re-onboard, re-index, or wipe the project without touching the framework.
 
 ### 3. Run the onboard script
 
@@ -71,7 +71,7 @@ On macOS you can also double-click `onboard.command`. On Windows, double-click `
 Open Claude Code, Codex, OpenCode, or whichever CLI you picked, point it at this folder, and paste the prompt. The LLM will:
 
 1. Use the fast setup draft, treating project description and artifact URLs as optional. If they were not provided, it records that and infers working scope from the active raw corpus.
-2. Update `system/instructions/configuration.md` and `information.md` from `setup_status: cli_started` → `zone_started`.
+2. Update `system/instructions/configuration.md` and `context.md` from `setup_status: cli_started` → `zone_started`.
 3. Build the master dictionary from `raw/`, generate YAML headers for every raw copy, create detailed maps in `maps/`, build maps, validate headers and map links, and run retrieval tests.
 4. Write a startup report to `agent_reports/`.
 
@@ -119,7 +119,7 @@ pilosa/
 
 ## What the Orchestrator Does
 
-Read `.opencode/agents/pilosa-orchestrator.md` for the full routing contract. Briefly:
+Read `AGENTS.md` for the full routing contract. Briefly:
 
 - **Classifies** every prompt into one of several classes (`fast_path`, `clarify_search`, `find_material`, `evidence_answer`, `synthesis_report`, `verification`, `index_maintenance`, `cleanup`).
 - **Chooses a sub-agent sequence** for non-fast-path prompts — never answers them directly.
