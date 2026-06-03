@@ -10,7 +10,7 @@ connects_to:
   - .agents/skills/zone-cleanup/SKILL.md
   - .agents/skills/orchestrator-dispatch/SKILL.md
   - 00_system/instructions/STARTUP.md
-  - 00_system/instructions/ZONE_CONFIGURATION.md
+  - 00_system/instructions/CONFIGURATION.md
   - INFORMATIONS.md
 created: 2026-05-26
 updated: 2026-06-02
@@ -22,7 +22,7 @@ Research workspace with agent-driven source indexing, verification, and synthesi
 
 ## Setup
 
-Place source files in `01_llm_zone/raw/` (text) or add `.pointer.md` records for binary files (PDFs, images, audio). Run `bash .bin/onboard.sh` to configure, then tell the orchestrator agent to "start the Zone" to build the dictionary, headers, and navigation maps.
+Place source files in `raw/` (text) or add `.pointer.md` records for binary files (PDFs, images, audio). Run `bash .bin/onboard.sh` to configure, then tell the orchestrator agent to "start the Zone" to build the dictionary, headers, and navigation maps.
 
 ## Sub-agent pipeline
 
@@ -37,7 +37,7 @@ Place source files in `01_llm_zone/raw/` (text) or add `.pointer.md` records for
 
 Domain-specific AGENTS.md files define local conventions. Standard coding agents should read the one nearest to their work:
 
-- `01_llm_zone/AGENTS.md` — corpus access, dictionary, maps, raw copy rules
+- `raw/AGENTS.md` — corpus access, dictionary, maps, raw copy rules
 - `03_logs/AGENTS.md` — append-only audit trail conventions
 - `05_agent_reports/AGENTS.md` — report writing and verification
 - `.trash/AGENTS.md` — archival rules (Cleaner only, user confirmation required)
@@ -91,7 +91,7 @@ If unavailable, ask in chat.
 
 Before any source-grounded work:
 
-1. Read [[ZONE_CONFIGURATION]], [[INFORMATIONS]], and [[STARTUP]].
+1. Read [[CONFIGURATION]], [[INFORMATIONS]], and [[STARTUP]].
 2. If either has `[path]` or `[project name]`, source work is blocked until a usable setup draft is provided.
 3. If either has `setup_status: cli_started`, execute [[STARTUP]] directly — do not delegate. No sub-agent can work while this status is present.
 4. If the user asks to start the Zone, follow [[STARTUP]] inline. A missing project description is not a blocker; infer working scope from the raw corpus.
@@ -202,7 +202,7 @@ Required for direct quotes:
 | Root Vault | Read-only |
 | [[INFORMATIONS]] | Project scope: title, sources, methods, outputs; editable during initial setup |
 | [[00_system/]] | Architecture, instructions, templates |
-| [[01_llm_zone/]] | Raw copies, source pointer records, central maps, dictionary, concept maps |
+| [[raw/]] | Raw copies, source pointer records, central maps, dictionary, concept maps |
 | [[03_logs/]] | Request log, source intake, external queries, structured needs |
 | [[05_agent_reports/]] | Packer reports, Checker notes, maintenance reports |
 | [[.trash/]] | Retired files; moved here, never deleted |
@@ -244,7 +244,7 @@ Never claim validation that was not performed.
 
 ### [[00_system/]]
 - `instructions/STARTUP.md` — setup translation + indexing protocol
-- `instructions/ZONE_CONFIGURATION.md` — operating profile
+- `instructions/CONFIGURATION.md` — operating profile
 - `instructions/SYSTEM_ARCHITECTURE_MAP.md` — diagrams
 
 ### .agents/skills/
@@ -253,12 +253,11 @@ Never claim validation that was not performed.
 - `claim-verification/SKILL.md` — claim verification
 - `zone-cleanup/SKILL.md` — hygiene audit and archival
 - `orchestrator-dispatch/SKILL.md` — prompt routing and skill injection
+### [[raw/]]
 
-### [[01_llm_zone/]]
-- `00_zone_index.md` — master zone map
-- `00_dictionary.md` — shared vocabulary
+- `zone_index.md` — master zone map
+- `dictionary.md` — shared vocabulary
 - `maps/` — central navigation maps with wikilinks into raw files
-- `01_metadata/HEADER_TEMPLATE.md` — header schema
 - `maps/MAP_TEMPLATE.md` — navigation map structure guide
 - AGENTS.md — corpus access rules for agents
 
@@ -278,8 +277,8 @@ Never claim validation that was not performed.
 | `SKILL.md` | Portable workflow skill file; injected into sub-agent task prompt by orchestrator |
 | `source search` | Navigator work |
 | `active working corpus` | [[raw/]] after onboarding; normal source-grounded work starts here, not in the Root Vault |
-| `central maps` | `01_llm_zone/maps/*.md` navigation layer that guides LLMs into raw copies with Obsidian wikilinks |
-| `navigation maps` | `01_llm_zone/maps/*.md`, created during initial setup to cover all raw files with wikilinks and retrieval descriptions |
+| `central maps` | `maps/*.md` navigation layer that guides LLMs into raw copies with Obsidian wikilinks |
+| `navigation maps` | `maps/*.md`, created during initial setup to cover all raw files with wikilinks and retrieval descriptions |
 | `concept map` | A map listing recurring concepts and their source files with definitions, aliases, and confidence |
 | `durable report` | Markdown report in [[05_agent_reports/]]; Packer work |
 | `raw evidence packet` | Navigator's handoff |
@@ -295,12 +294,12 @@ Never claim validation that was not performed.
 |---|---|
 | **Agent** | One of four active sub-agents: Navigator, Packer, Checker, Cleaner. Each has a SKILL.md in `.agents/skills/` defining its workflow. |
 | **Blueprint** | Short for [[INFORMATIONS]]. Defines the research project scope, questions, corpus, evidence standards, and direction. |
-| **Dictionary** | [[01_llm_zone/00_dictionary]]. Shared vocabulary of canonical names, places, organizations, concepts, and domain terms. |
+| **Dictionary** | [[dictionary]]. Shared vocabulary of canonical names, places, organizations, concepts, and domain terms. |
 | **Internal-first source policy** | Agents must not search external sources (web, APIs, general knowledge) unless the researcher explicitly requests it or Zone configuration allows logged external intake. |
 | **`.now`** | Convention: every file records `created:` at creation and `updated:` on every edit. Enables maintenance and stale-file checks. |
 | **Re-index** | A Navigator + Checker maintenance pass that reorganizes the Zone around a detected pattern or fixes stale navigation. |
 | **Root Vault** | The protected source collection. Never modified by agents. All raw copies link back to it. |
-| **Raw copy** | A markdown file transposed from a text-based Root Vault file into [[raw/]], carrying a [[01_llm_zone/01_metadata/HEADER_TEMPLATE\|header]] with metadata for retrieval. |
+| **Raw copy** | A markdown file transposed from a text-based Root Vault file into [[raw/]], carrying a [[HEADER_TEMPLATE|header]] with metadata for retrieval. |
 | **Source intake log** | [[03_logs/source_intake_log]]. Register of new Root Vault batches and retained external sources. |
 | **Zone** | The writable, indexed, conceptually navigable map of the Root Vault. |
-| **Zone Configuration** | [[ZONE_CONFIGURATION]]. Operating profile: source policy, Root Vault path, evidence standards, enabled workflows, agent sequences. |
+| **Zone Configuration** | [[CONFIGURATION]]. Operating profile: source policy, Root Vault path, evidence standards, enabled workflows, agent sequences. |

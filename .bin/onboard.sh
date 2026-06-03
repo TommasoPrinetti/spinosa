@@ -15,10 +15,10 @@ TODAY="$(date +%Y-%m-%d)"
 FORCE="0"
 
 Informations="$ROOT/INFORMATIONS.md"
-Config="$ROOT/00_system/instructions/ZONE_CONFIGURATION.md"
+Config="$ROOT/00_system/instructions/CONFIGURATION.md"
 Agents="$ROOT/AGENTS.md"
 Claude="$ROOT/CLAUDE.md"
-RawDir="$ROOT/01_llm_zone/raw"
+RawDir="$ROOT/raw"
 
 # text-based extensions — renamed to .md (lossless conversion)
 MARKDOWN_EXTENSIONS="txt|rtf|textile|wiki|mediawiki|dokuwiki|pmwiki|outliner|workflowy|dynalist"
@@ -707,7 +707,7 @@ print_scan_summary() {
   fi
   printf '  %s└─%s %s ignored\n' "${DIM}" "${RESET}" "$(plural_count "$SCAN_IGNORED_COUNT" "file")"
   note "Text-like files are renamed to .md; native-readable files keep their extension; PDFs are copied as-is; unsupported media gets pointer records."
-  note "Startup later builds detailed Obsidian-wikilink maps in 01_llm_zone/maps/."
+  note "Startup later builds detailed Obsidian-wikilink maps in maps/."
 }
 
 print_transposition_summary() {
@@ -955,8 +955,8 @@ main() {
   print_step 2 4 "Root Vault"
   note "The Root Vault is the folder of your source files — PDFs, notes, transcripts, etc."
   note "Nothing in the Root Vault is moved, renamed, or edited."
-  note "Text-like files can be copied unchanged into 01_llm_zone/raw/; media gets pointer records only."
-  note "Startup will create 01_llm_zone/maps/ as the central navigation layer."
+  note "Text-like files can be copied unchanged into raw/; media gets pointer records only."
+  note "Startup will create maps/ as the central navigation layer."
   note "Use an absolute path (drag the folder onto the terminal to paste its path)."
   root_vault_path=""
   while [[ -z "$root_vault_path" ]]; do
@@ -982,7 +982,7 @@ main() {
     return 1
   fi
 
-  if ! confirm "  Write raw copies and media pointer records into 01_llm_zone/raw/?" "y"; then
+  if ! confirm "  Write raw copies and media pointer records into raw/?" "y"; then
     printf '\n  %s\n\n' "${DIM}No raw copies were written. Onboarding stopped after the scan.${RESET}"
     return 0
   fi
@@ -1013,7 +1013,7 @@ updated: $TODAY
 setup_status: cli_started
 connects_to:
   - AGENTS.md
-  - 00_system/instructions/ZONE_CONFIGURATION.md
+  - 00_system/instructions/CONFIGURATION.md
   - 00_system/instructions/STARTUP.md
   - 03_logs/user_requests.md
 ---
@@ -1046,7 +1046,7 @@ connects_to:
 - External source policy: no (default; ask only if external access is needed)
 
 ## Outputs
-- Start with central maps in 01_llm_zone/maps/ and evidence-grounded answers unless the researcher requests another output.
+- Start with central maps in maps/ and evidence-grounded answers unless the researcher requests another output.
 
 ## Blind Spots
 - [identified during startup]
@@ -1082,7 +1082,7 @@ root_vault_path: "$safe_vault"
 root_vault_mode: protected_append_only
 
 source_policy: internal_first
-active_corpus_path: 01_llm_zone/raw/
+active_corpus_path: raw/
 active_corpus_policy: raw_zone_first_after_onboarding
 external_sources_allowed: no
 external_logs:
@@ -1102,10 +1102,10 @@ preferred_llm_cli: "$preferred_cli"
 
 ## Notes
 - This file was initialized by the CLI fast setup.
-- The CLI collected: project name, Root Vault path, and preferred LLM CLI. It scanned the Root Vault, transposed accepted files into 01_llm_zone/raw/, and created source pointer records for images/video/audio.
-- After onboarding, the Root Vault remains immutable original storage. Normal source-grounded work starts from 01_llm_zone/raw/.
+- The CLI collected: project name, Root Vault path, and preferred LLM CLI. It scanned the Root Vault, transposed accepted files into raw/, and created source pointer records for images/video/audio.
+- After onboarding, the Root Vault remains immutable original storage. Normal source-grounded work starts from raw/.
 - During startup, project description and helpful artifact URLs are optional. If absent, the LLM CLI agent records them as not provided, keeps external_sources_allowed at its default \`no\`, and infers working scope from the raw corpus.
-- When setup_status reaches zone_started, the startup workflow has built the master dictionary, generated YAML headers, created detailed maps in 01_llm_zone/maps/, and passed validation.
+- When setup_status reaches zone_started, the startup workflow has built the master dictionary, generated YAML headers, created detailed maps in maps/, and passed validation.
 - This file never grants permission to edit the Root Vault.
 CONFIG_EOF
 
@@ -1132,13 +1132,13 @@ This is the LLM Zone startup handoff. The user has completed fast CLI setup.
 
 Read these files first, in this order:
 1. AGENTS.md
-2. 00_system/instructions/ZONE_CONFIGURATION.md
+2. 00_system/instructions/CONFIGURATION.md
 3. INFORMATIONS.md
 4. 00_system/instructions/STARTUP.md
 
 The setup draft already contains:
 - Project name: ${project_title}
-- Root Vault path: ${root_vault_path} (already validated, files transposed to 01_llm_zone/raw/, pointer records created for images/video/audio)
+- Root Vault path: ${root_vault_path} (already validated, files transposed to raw/, pointer records created for images/video/audio)
 - Preferred LLM CLI: ${preferred_cli}
 
 Optional context not collected by fast setup:
@@ -1148,14 +1148,14 @@ Optional context not collected by fast setup:
 
 Then execute 00_system/instructions/STARTUP.md from Phase 1.2 onwards. Specifically:
 - Translate the setup draft into filled INFORMATIONS + config
-- Build the master dictionary by reading the active raw corpus in 01_llm_zone/raw/
+- Build the master dictionary by reading the active raw corpus in raw/
 - Generate YAML headers for every raw copy using the dictionary
 - Account for source pointer records as pointer-only media
-- Create 01_llm_zone/maps/ and write detailed Obsidian-wikilink maps that help future LLMs choose which raw files to open
+- Create maps/ and write detailed Obsidian-wikilink maps that help future LLMs choose which raw files to open
 - Build concept maps from repeated themes
-- Update 01_llm_zone/00_zone_index.md
+- Update zone_index.md
 - Run startup validation, then the full retrieval test suite
-- Set setup_status to zone_started in both INFORMATIONS and ZONE_CONFIGURATION
+- Set setup_status to zone_started in both INFORMATIONS and CONFIGURATION
 - Write the startup report to 05_agent_reports/
 
 Do not re-ask questions the CLI draft already answered. Do not stop after one index. Do not edit the Root Vault.

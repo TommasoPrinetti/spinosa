@@ -9,7 +9,7 @@
 
 # Pilosa
 
-Pilosa turns a protected folder of source material (the **Root Vault**) into a searchable, header-indexed, multi-agent-readable knowledge map. After onboarding, the Root Vault remains the immutable original source and `01_llm_zone/raw/` becomes the active working corpus for normal source search. A thin orchestrator (`AGENTS.md`) routes every prompt through specialist sub-agents (Navigator, Packer, Checker, Cleaner) or executes the startup workflow directly. **Checker** is mandatory on every non-fast-path route. Sub-agents never ask questions — only the orchestrator does.
+Pilosa turns a protected folder of source material (the **Root Vault**) into a searchable, header-indexed, multi-agent-readable knowledge map. After onboarding, the Root Vault remains the immutable original source and `raw/` becomes the active working corpus for normal source search. A thin orchestrator (`AGENTS.md`) routes every prompt through specialist sub-agents (Navigator, Packer, Checker, Cleaner) or executes the startup workflow directly. **Checker** is mandatory on every non-fast-path route. Sub-agents never ask questions — only the orchestrator does.
 
 ## Quick Start
 
@@ -29,11 +29,11 @@ git checkout -b my-project-name
 git push -u origin my-project-name
 ```
 
-> Why a branch? Onboarding rewrites `00_system/instructions/ZONE_CONFIGURATION.md` and `INFORMATIONS.md` and copies Root Vault text-like files unchanged into `01_llm_zone/raw/`. Keeping that on a project branch lets you re-onboard, re-index, or wipe the project without touching the framework.
+> Why a branch? Onboarding rewrites `00_system/instructions/CONFIGURATION.md` and `INFORMATIONS.md` and copies Root Vault text-like files unchanged into `raw/`. Keeping that on a project branch lets you re-onboard, re-index, or wipe the project without touching the framework.
 
 ### 3. Run the onboard script
 
-The script collects your project name and Root Vault path, scans the corpus, asks for consent before writing raw records, then asks which LLM CLI should receive the startup handoff. It copies text-like files unchanged into `01_llm_zone/raw/` using markdown-compatible filenames and creates pointer records for non-text files; it does not convert file contents to markdown. Startup then creates detailed Obsidian-wikilink maps in `01_llm_zone/maps/`. Optional context such as project description and artifact URLs can be inferred or added later.
+The script collects your project name and Root Vault path, scans the corpus, asks for consent before writing raw records, then asks which LLM CLI should receive the startup handoff. It copies text-like files unchanged into `raw/` using markdown-compatible filenames and creates pointer records for non-text files; it does not convert file contents to markdown. Startup then creates detailed Obsidian-wikilink maps in `maps/`. Optional context such as project description and artifact URLs can be inferred or added later.
 
 ```bash
 bash .bin/onboard.sh
@@ -43,7 +43,7 @@ What happens:
 - Flow: project name → Root Vault path → scan summary → consent → raw record writing → CLI handoff.
 - Scan summary shows counts for text files, images, videos, audio files, PDFs, unknown files, ignored files, and byte totals by major class where available.
 - Non-text media stays in the Root Vault; onboarding creates `*.pointer.md` records so Startup and Navigator can find it.
-- Startup creates `01_llm_zone/maps/` with map files that contain detailed retrieval summaries and Obsidian wikilinks into raw files.
+- Startup creates `maps/` with map files that contain detailed retrieval summaries and Obsidian wikilinks into raw files.
 - TTY arrow-key picker for the CLI handoff choice (numbered fallback when piped).
 - Cursor hidden during raw record writing, restored on exit.
 - Existing setup files trigger an overwrite confirmation unless you pass `--force`.
@@ -62,8 +62,8 @@ On macOS you can also double-click `onboard.command`. On Windows, double-click `
 Open Claude Code, Codex, OpenCode, or whichever CLI you picked, point it at this folder, and paste the prompt. The LLM will:
 
 1. Use the fast setup draft, treating project description and artifact URLs as optional. If they were not provided, it records that and infers working scope from the active raw corpus.
-2. Update `00_system/instructions/ZONE_CONFIGURATION.md` and `INFORMATIONS.md` from `setup_status: cli_started` → `zone_started`.
-3. Build the master dictionary from `01_llm_zone/raw/`, generate YAML headers for every raw copy, account for pointer-only media, create detailed central maps in `01_llm_zone/maps/`, build concept maps, validate headers and map links, and run retrieval tests.
+2. Update `00_system/instructions/CONFIGURATION.md` and `INFORMATIONS.md` from `setup_status: cli_started` → `zone_started`.
+3. Build the master dictionary from `raw/`, generate YAML headers for every raw copy, account for pointer-only media, create detailed central maps in `maps/`, build concept maps, validate headers and map links, and run retrieval tests.
 4. Write a startup report to `05_agent_reports/`.
 
 After that, ask research questions normally. The orchestrator will route them through the right sub-agents.
@@ -93,14 +93,12 @@ pilosa/
 ├── onboard.command              macOS launcher
 ├── onboard.cmd                  Windows launcher
 ├── 00_system/
-│   └── instructions/            AGENTS, STARTUP, ZONE_CONFIG
-├── 01_llm_zone/
-│   ├── AGENTS.md                Corpus access rules for agents
-│   ├── 00_zone_index.md         Master zone map (built at startup)
-│   ├── 00_dictionary.md         Master dictionary (built at startup)
-│   ├── maps/                    Central navigation maps with Obsidian wikilinks
-│   ├── raw/                     Active working corpus: unchanged text-like Root Vault copies
-│   └── 01_metadata/             Header schema (HEADER_TEMPLATE)
+│   └── instructions/            AGENTS, STARTUP, CONFIGURATION
+├── raw/                         Active working corpus: unchanged text-like Root Vault copies
+├── maps/                        Central navigation maps with Obsidian wikilinks
+├── dictionary.md                Master dictionary (built at startup)
+├── zone_index.md                Master zone map (built at startup)
+├── HEADER_TEMPLATE.md           Header schema for raw copies
 ├── 03_logs/                     Request log, source intake, external queries (+ AGENTS.md)
 ├── 05_agent_reports/            Packer / Checker reports (+ AGENTS.md)
 └── .trash/                      Retired files (+ AGENTS.md)

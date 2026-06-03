@@ -11,7 +11,7 @@ connects_to:
   - .agents/skills/claim-verification/SKILL.md
   - .agents/skills/zone-cleanup/SKILL.md
   - .agents/skills/orchestrator-dispatch/SKILL.md
-  - 01_llm_zone/00_zone_index.md
+  - zone_index.md
 created: 2026-05-26
 updated: 2026-06-02
 ---
@@ -132,7 +132,7 @@ The setup output is not a final interpretation of the research corpus. It is the
 | --------------------------- | --------------------------------------------------------------------- | ------------------------------------------------ |
 | `AGENTS.md`                 | Orchestrator playbook — single routing file                           |                                                  |
 | [[STARTUP]]                 | Setup translation + indexing protocol (read by orchestrator)          |                                                  |
-| [[ZONE_CONFIGURATION]]      | Operating profile                                                     |                                                  |
+| [[CONFIGURATION]]      | Operating profile                                                     |                                                  |
 | [[SYSTEM_ARCHITECTURE_MAP]] | This file — diagrams                                                  |                                                  |
 | `.agents/skills/source-intake/SKILL.md` | Source file registration                              |                                                  |
 | `.agents/skills/report-writing/SKILL.md` | Report synthesis                                     |                                                  |

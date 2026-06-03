@@ -26,4 +26,4 @@ Append-only log files that track user requests, source intake, and external sour
 
 - [[AGENTS]] — orchestrator playbook (log step in Close)
 - [[STARTUP]] — intake logging during setup
-- [[ZONE_CONFIGURATION]] — external source policy
+- [[CONFIGURATION]] — external source policy

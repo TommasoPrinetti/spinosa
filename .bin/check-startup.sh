@@ -26,7 +26,7 @@ read_file() {
 # ── read required files ─────────────────────────────────────────────────────
 required_files=(
   "AGENTS.md"
-  "00_system/instructions/ZONE_CONFIGURATION.md"
+  "00_system/instructions/CONFIGURATION.md"
   "00_system/instructions/STARTUP.md"
   "INFORMATIONS.md"
 )
@@ -35,7 +35,7 @@ for file in "${required_files[@]}"; do
   read_file "$file" > /dev/null
 done
 
-config="$(read_file "00_system/instructions/ZONE_CONFIGURATION.md")"
+config="$(read_file "00_system/instructions/CONFIGURATION.md")"
 blueprint="$(read_file "INFORMATIONS.md")"
 startup_text="${config}
 ${blueprint}"
@@ -85,8 +85,8 @@ if ! echo "$config" | grep -qE "external_sources_allowed: *(yes|no)"; then
 fi
 
 # ── validate generated raw-zone and map frontmatter ─────────────────────────
-raw_dir="$ROOT/01_llm_zone/raw"
-maps_dir="$ROOT/01_llm_zone/maps"
+raw_dir="$ROOT/raw"
+maps_dir="$ROOT/maps"
 
 frontmatter_value() {
   local file="$1" key="$2"
@@ -152,8 +152,8 @@ resolve_wikilinks() {
 
     resolved="no"
     for candidate in \
-      "$ROOT/01_llm_zone/${target}.md" \
-      "$ROOT/01_llm_zone/${target}" \
+      "$ROOT/raw/${target}.md" \
+      "$ROOT/raw/${target}" \
       "$maps_dir/${target}.md" \
       "$maps_dir/${target}" \
       "$ROOT/${target}.md" \
@@ -214,7 +214,7 @@ fi
 
 if [[ "$startup_text" == *"setup_status: zone_started"* ]]; then
   if [[ ! -d "$maps_dir" ]]; then
-    failures+=("Missing central maps directory: 01_llm_zone/maps")
+    failures+=("Missing central maps directory: maps")
   else
     while IFS= read -r -d '' map_file; do
       basename="${map_file#$maps_dir/}"

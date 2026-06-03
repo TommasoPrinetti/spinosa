@@ -25,7 +25,7 @@ The CLI onboarding script has already collected project name and Root Vault path
 
 1. **Build the master dictionary and enrich the blueprint from corpus evidence**
 2. **Generate YAML headers** for every raw copy
-3. **Create the central map folder** at `01_llm_zone/maps/`
+3. **Create the central map folder** at `maps/`
 4. **Write detailed Obsidian-wikilink maps** that guide future LLMs into raw files
 5. **Build concept maps** from repeated themes
 6. **Update the master zone map**
@@ -51,7 +51,7 @@ The protocol runs in two phases: **Phase 1 (Setup Translation)** and **Phase 2 (
 Mandatory initial reads:
 
 1. `AGENTS.md`
-2. [[ZONE_CONFIGURATION]]
+2. [[CONFIGURATION]]
 3. [[INFORMATIONS]]
 4. [[HEADER_TEMPLATE]]
 
@@ -66,7 +66,7 @@ If the user already ran `bash .bin/onboard.sh`, treat its answers as the **setup
 
 ## 1.1 Inspect Setup Draft
 
-Read [[INFORMATIONS]] and [[ZONE_CONFIGURATION]]. Identify filled fields, placeholders, and missing data.
+Read [[INFORMATIONS]] and [[CONFIGURATION]]. Identify filled fields, placeholders, and missing data.
 
 Create a short todo list with the CLI's todo/task tool if available. **Mandatory** when the tool exists. Minimum todo items:
 
@@ -96,7 +96,7 @@ If artifact URLs are present, use web/MCP/browser tools **only** when `external_
 ## 1.3 Fill Blueprint and Configuration
 
 - Fill [[INFORMATIONS]] (project title, project description status, helpful artifact URLs or file paths status, Root Vault path, evidence standards, external source policy).
-- Fill [[ZONE_CONFIGURATION]] (`root_vault_path`, `root_vault_mode`, `source_policy`, `external_sources_allowed`, `preferred_llm_cli`, `claim_standard`, `l2_policy`).
+- Fill [[CONFIGURATION]] (`root_vault_path`, `root_vault_mode`, `source_policy`, `external_sources_allowed`, `preferred_llm_cli`, `claim_standard`, `l2_policy`).
 - Keep `setup_status: cli_started` until mapping, header validation, and retrieval tests have passed. Replace it with `setup_status: zone_started` in both files only at the end of Phase 2.
 
 ## 1.4 Audit the Translation
@@ -230,7 +230,7 @@ Write the header at the top of each raw copy file. The body (original content) s
 
 ## 2.5 Create Central Navigation Maps
 
-Create `01_llm_zone/maps/`. This is the canonical LLM navigation layer.
+Create `maps/`. This is the canonical LLM navigation layer.
 
 Create as many navigation maps as needed to cover all files in [[raw/]]. Each map should address a distinct retrieval concern — corpus structure, concepts, entities, source types, unresolved items, or any other organizing axis that helps future LLMs navigate the material. There is no fixed set of required maps; create what serves the corpus.
 
@@ -253,10 +253,10 @@ Each map file must include the header schema from [[HEADER_TEMPLATE]] (`type: na
 type: navigation_map
 role: [descriptive role, e.g. folder_map, concept_map, entity_map]
 purpose: [guide future LLM retrieval into the raw corpus]
-scope: 01_llm_zone/raw/
+scope: raw/
 connects_to:
-  - 01_llm_zone/raw/
-  - 01_llm_zone/00_dictionary.md
+  - raw/
+  - dictionary.md
 map_quality: machine_generated | checked | human_reviewed
 description_depth: retrieval_oriented
 wikilink_policy: obsidian_wikilinks_required
@@ -340,7 +340,7 @@ Retrieval tests:
 
 Startup is complete **only if** required headers are valid and every applicable retrieval test passes. If a test is not applicable because no such entity exists, record `not_applicable` with the reason in the startup report.
 
-After validation passes, replace `setup_status: cli_started` with `setup_status: zone_started` in [[INFORMATIONS]] and [[ZONE_CONFIGURATION]].
+After validation passes, replace `setup_status: cli_started` with `setup_status: zone_started` in [[INFORMATIONS]] and [[CONFIGURATION]].
 
 ## 2.9 Idempotency And Recovery
 

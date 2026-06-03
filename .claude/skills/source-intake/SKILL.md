@@ -11,23 +11,23 @@ Register new source files in the Zone: copy text files to `raw/`, create pointer
 
 - Zone is initialized (`setup_status: zone_started`)
 - Source files are available (Root Vault path or external URL with researcher authorization)
-- `01_llm_zone/00_dictionary.md` exists for term consistency
+- `dictionary.md` exists for term consistency
 
 ## Steps
 
 1. Identify source files to add. Confirm they are not already in `raw/`.
-2. Copy text-like files unchanged from Root Vault into `01_llm_zone/raw/`.
+2. Copy text-like files unchanged from Root Vault into `raw/`.
 3. For binary files (PDFs, images, audio, video), create `.pointer.md` records in `raw/` with:
    - Original path, media type, extension, size
    - Processing status: pending
    - OCR/ASR/transcription status: not started
 4. Generate YAML headers for new raw copies using `HEADER_TEMPLATE.md`:
-   - Use canonical terms from `00_dictionary.md`.
+   - Use canonical terms from `dictionary.md`.
    - Include `source:`, `generated_by:`, `generated_at:`, `processing_status:`.
 5. Log the intake in `03_logs/source_intake_log.md`:
    - Date, batch ID, source type (root_vault / external), location, origin, intake status, notes.
 6. If any sources are external, also log in `03_logs/external_queries.md`.
-7. Update `01_llm_zone/00_zone_index.md` with new file references.
+7. Update `zone_index.md` with new file references.
 8. Optionally rebuild affected navigation maps if new files change retrieval coverage.
 
 ## Rules

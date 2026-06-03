@@ -10,11 +10,11 @@ Audit the LLM Zone for stale, broken, or orphaned files. Propose moves to `.tras
 ## Prerequisites
 
 - Zone is initialized (`setup_status: zone_started`)
-- `ZONE_CONFIGURATION.md` has `stale_after_days` threshold (default: 90 for reports, 30 for trash)
+- `CONFIGURATION.md` has `stale_after_days` threshold (default: 90 for reports, 30 for trash)
 
 ## Steps
 
-1. Read `ZONE_CONFIGURATION.md` for staleness thresholds.
+1. Read `CONFIGURATION.md` for staleness thresholds.
 2. Check raw copy validity:
    - For each file in `raw/`, read `source:` from YAML header.
    - If Root Vault path no longer exists, flag as `stale_source`.

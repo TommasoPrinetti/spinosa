@@ -6,7 +6,7 @@ updated: 2026-06-03
 setup_status: zone_started
 connects_to:
   - AGENTS.md
-  - 00_system/instructions/ZONE_CONFIGURATION.md
+  - 00_system/instructions/CONFIGURATION.md
   - 00_system/instructions/STARTUP.md
   - 03_logs/user_requests.md
 ---
@@ -39,7 +39,7 @@ connects_to:
 - External source policy: no (default; ask only if external access is needed)
 
 ## Outputs
-- Start with central maps in 01_llm_zone/maps/ and evidence-grounded answers unless the researcher requests another output.
+- Start with central maps in maps/ and evidence-grounded answers unless the researcher requests another output.
 
 ## Blind Spots
 - Fast setup did not include a user-written project description or artifact URLs.
