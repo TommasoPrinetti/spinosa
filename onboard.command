@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Remove macOS quarantine attribute to avoid Gatekeeper warning on fresh clone
+xattr -d com.apple.quarantine "$0" 2>/dev/null || true
+
 cd "$(dirname "$0")"
 
 if ! command -v bash >/dev/null 2>&1; then
