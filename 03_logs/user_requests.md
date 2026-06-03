@@ -16,4 +16,3 @@ Short routing log for user prompts. Log the request before deciding whether to a
 
 | Date | Request summary | Route | Status | Output |
 |---|---|---|---|---|---|
-| 2026-06-03 | Start the Zone from the completed CLI handoff for Ecologis | startup_protocol_inline | done | [[05_agent_reports/ecologis_zone_startup_report]] |
