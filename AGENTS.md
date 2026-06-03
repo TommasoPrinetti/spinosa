@@ -15,7 +15,7 @@ Research workspace with agent-driven source indexing, verification, and synthesi
 
 ## Setup
 
-Place source files in the Root Vault and run `bash .bin/onboard.sh` to configure. Onboarding copies text/native files and PDFs into `raw/`, skips images/video/audio, then the orchestrator agent starts the Zone to build the dictionary, headers, and navigation maps.
+Place source files in the Root Vault and run `bash .bin/onboard.sh` to configure. Onboarding copies text/native files and PDFs into `raw/`, skips images/video/audio and Root Vault `AGENTS.md` control files, then the orchestrator agent starts the Zone to build the dictionary, headers, and navigation maps.
 
 ## Orchestrator Contract
 
@@ -46,7 +46,6 @@ Fallback SKILL.md files live in `.agents/skills/`; the orchestrator may referenc
 
 Domain-specific AGENTS.md files define local conventions. Standard coding agents should read the one nearest to their work:
 
-- `raw/AGENTS.md` — corpus access, dictionary, maps, raw copy rules
 - `03_logs/AGENTS.md` — append-only audit trail conventions
 - `05_agent_reports/AGENTS.md` — report writing and verification
 - `.trash/AGENTS.md` — archival rules (Janitor only, user confirmation required)
@@ -62,6 +61,7 @@ Domain-specific AGENTS.md files define local conventions. Standard coding agents
 - `.bin/onboard.sh`, `.bin/check-startup.sh`, and `00_system/instructions/STARTUP.md` stay in place.
 - No fixed set of maps is required. Startup creates as many navigation maps as the corpus needs.
 - New native agent definitions omit fixed model fields so agents inherit the active session model.
+- `AGENTS.md` files are repository/control instructions, not source evidence. Onboarding must not import Root Vault `AGENTS.md` files into `raw/`.
 
 ## File Map
 
@@ -80,7 +80,6 @@ Domain-specific AGENTS.md files define local conventions. Standard coding agents
 
 ### `raw/`
 - Source copies; legacy `.pointer.md` records may exist in older projects
-- `AGENTS.md` — corpus access rules
 
 ### `maps/`
 - Navigation maps with wikilinks into raw files

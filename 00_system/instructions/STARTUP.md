@@ -21,7 +21,7 @@ Startup is the only authority that can mark setup complete. `.bin/check-startup.
 
 Translate the protected Root Vault into the first usable **LLM Zone**: a searchable, header-indexed collection of raw copies with a shared dictionary for consistent terminology. After CLI onboarding, the Root Vault is the immutable original source and [[raw/]] is the active working corpus for normal source-grounded work.
 
-The CLI onboarding script has already collected project name and Root Vault path, scanned the corpus, asked for explicit consent, copied accepted text-like files, native-readable files, and PDFs from the Root Vault into [[raw/]], skipped images, video, and audio, and collected the preferred LLM CLI for handoff. Your job is to:
+The CLI onboarding script has already collected project name and Root Vault path, scanned the corpus, asked for explicit consent, copied accepted text-like files, native-readable files, and PDFs from the Root Vault into [[raw/]], skipped images, video, audio, and Root Vault `AGENTS.md` control files, and collected the preferred LLM CLI for handoff. Your job is to:
 
 1. **Build the master dictionary and enrich the blueprint from corpus evidence**
 2. **Generate YAML headers** for every raw copy
@@ -38,6 +38,7 @@ The protocol runs in two phases: **Phase 1 (Setup Translation)** and **Phase 2 (
 - **Never edit, rename, reorganize, or delete Root Vault files.**
 - Treat Root Vault files as protected originals after onboarding; use [[raw/]] as the active working corpus for dictionary building, headers, maps, and normal retrieval.
 - Copy PDFs as-is when onboarding accepted them. Do not create pointer records for images, audio, or video; account for skipped media as Root Vault-only coverage gaps.
+- Treat every `AGENTS.md` file as repository/control instructions, not corpus evidence. Do not import, header, map, or cite Root Vault `AGENTS.md` files.
 - Use the dictionary for consistent terminology across all headers.
 - Preserve generated-file provenance (`generated_by`, `generated_at`, source path, and `processing_status`) on raw copy headers, central maps, concept maps, and zone reports.
 - Use Obsidian wikilinks for internal map references to raw copies, dictionaries, concept maps, and other maps.
@@ -130,7 +131,7 @@ The user's `start the Zone` prompt is already permission to run initial indexing
 
 Survey [[raw/]] as the active working corpus, then compare against the Root Vault for skipped media and coverage gaps. For each raw directory:
 
-1. List all files and subdirectories (skip `.DS_Store`, system files, empty dirs)
+1. List all files and subdirectories (skip `.DS_Store`, `AGENTS.md`, system files, empty dirs)
 2. Note copied text-like file types (`.md`, `.txt`, `.csv`, `.json`, etc.), count per type, approximate date range
 3. Read raw copies to characterize the folder's content accurately
 4. Record: source types, modality, names, dates, topics, keywords, machine-readability, gaps
@@ -346,6 +347,7 @@ After validation passes, replace `setup_status: cli_started` with `setup_status:
 
 Onboarding rerun behavior:
 - skip existing raw text copies,
+- skip `AGENTS.md` control files,
 - skip legacy source pointer records if present,
 - leave legacy raw folder `index.md` files untouched,
 - overwrite blueprint/config only when the user confirms overwrite or passes `--force`,

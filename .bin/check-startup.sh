@@ -174,8 +174,6 @@ if [[ -d "$raw_dir" ]]; then
   while IFS= read -r -d '' file; do
     name="$(basename "$file")"
     [[ "$name" == ".gitkeep" ]] && continue
-    [[ "${file#$raw_dir/}" == "AGENTS.md" ]] && continue
-
     first_line="$(sed -n '1p' "$file")"
     if [[ "$first_line" != "---" ]]; then
       failures+=("Missing YAML frontmatter in ${file#$ROOT/}")

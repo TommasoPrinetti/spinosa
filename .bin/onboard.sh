@@ -366,6 +366,13 @@ normalize_path_input() {
 }
 
 should_skip_source_file() {
+  local name lower_name
+  name="$(basename "$1")"
+  lower_name="$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]')"
+
+  # AGENTS.md is repository/control guidance, not research corpus.
+  [[ "$lower_name" == "agents.md" ]] && return 0
+
   case "$1" in
     */.DS_Store|*/.gitkeep|*/node_modules/*|*/.git/*) return 0 ;;
     *) return 1 ;;
@@ -652,7 +659,7 @@ print_scan_summary() {
     printf '  %s│ %s%s%s\n' "${DIM}" "${RESET}" "$(format_bytes "$SCAN_UNKNOWN_BYTES")" "${DIM} unknown data${RESET}"
   fi
   printf '  %s└─%s %s ignored\n' "${DIM}" "${RESET}" "$(plural_count "$SCAN_IGNORED_COUNT" "file")"
-  note "Text-like files are renamed to .md; native-readable files keep their extension; PDFs are copied as-is; images, video, and audio are skipped (no pointer records)."
+  note "Text-like files are renamed to .md; native-readable files keep their extension; PDFs are copied as-is; images, video, audio, and AGENTS.md control files are skipped."
   note "Startup later builds detailed Obsidian-wikilink maps in maps/."
 }
 
@@ -870,7 +877,7 @@ main() {
   print_step 2 4 "Root Vault"
   note "The Root Vault is the folder of your source files — PDFs, notes, transcripts, etc."
   note "Nothing in the Root Vault is moved, renamed, or edited."
-  note "Text-like files, native-readable files, and PDFs can be copied into raw/; images, video, and audio are skipped."
+  note "Text-like files, native-readable files, and PDFs can be copied into raw/; images, video, audio, and AGENTS.md control files are skipped."
   note "Startup will create maps/ as the central navigation layer."
   note "Use an absolute path (drag the folder onto the terminal to paste its path)."
   root_vault_path=""
@@ -1017,7 +1024,7 @@ preferred_llm_cli: "$preferred_cli"
 
 ## Notes
 - This file was initialized by the CLI fast setup.
-- The CLI collected: project name, Root Vault path, and preferred LLM CLI. It scanned the Root Vault and transposed accepted files (text, native, PDF) into raw/. Images, video, and audio were skipped.
+- The CLI collected: project name, Root Vault path, and preferred LLM CLI. It scanned the Root Vault and transposed accepted files (text, native, PDF) into raw/. Images, video, audio, and AGENTS.md control files were skipped.
 - After onboarding, the Root Vault remains immutable original storage. Normal source-grounded work starts from raw/.
 - During startup, project description and helpful artifact URLs are optional. If absent, the LLM CLI agent records them as not provided, keeps external_sources_allowed at its default \`no\`, and infers working scope from the raw corpus.
 - When setup_status reaches zone_started, the startup workflow has built the master dictionary, generated YAML headers, created detailed maps in maps/, and passed validation.
@@ -1053,7 +1060,7 @@ Read these files first, in this order:
 
 The setup draft already contains:
 - Project name: ${project_title}
-- Root Vault path: ${root_vault_path} (already validated, files transposed to raw/ — images, video, audio skipped)
+- Root Vault path: ${root_vault_path} (already validated, files transposed to raw/ — images, video, audio, and AGENTS.md skipped)
 - Preferred LLM CLI: ${preferred_cli}
 
 Optional context not collected by fast setup:

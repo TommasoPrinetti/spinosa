@@ -33,7 +33,7 @@ git push -u origin my-project-name
 
 ### 3. Run the onboard script
 
-The script collects your project name and Root Vault path, scans the corpus, asks for consent before writing raw records, then asks which LLM CLI should receive the startup handoff. It copies markdown-convertible files into `raw/` with `.md` names, copies native-readable files unchanged, copies PDFs as-is, and skips images, video, and audio. Startup then creates detailed Obsidian-wikilink maps in `maps/`. Optional context such as project description and artifact URLs can be inferred or added later.
+The script collects your project name and Root Vault path, scans the corpus, asks for consent before writing raw records, then asks which LLM CLI should receive the startup handoff. It copies markdown-convertible files into `raw/` with `.md` names, copies native-readable files unchanged, copies PDFs as-is, and skips images, video, audio, and Root Vault `AGENTS.md` control files. Startup then creates detailed Obsidian-wikilink maps in `maps/`. Optional context such as project description and artifact URLs can be inferred or added later.
 
 ```bash
 bash .bin/onboard.sh
@@ -42,7 +42,7 @@ bash .bin/onboard.sh
 What happens:
 - Flow: project name → Root Vault path → scan summary → consent → raw record writing → CLI handoff.
 - Scan summary shows counts for text files, images, videos, audio files, PDFs, unknown files, ignored files, and byte totals by major class where available.
-- Non-text media stays in the Root Vault; images, video, and audio are skipped during onboarding.
+- Non-text media stays in the Root Vault; images, video, audio, and Root Vault `AGENTS.md` control files are skipped during onboarding.
 - Startup creates `maps/` with map files that contain detailed retrieval summaries and Obsidian wikilinks into raw files.
 - TTY arrow-key picker for the CLI handoff choice (numbered fallback when piped).
 - Cursor hidden during raw record writing, restored on exit.
