@@ -28,4 +28,4 @@ updated: 2026-06-03
 
 - Raw copies use `type: raw_copy` and the schema in `header_template.md`.
 - `source:` uses a repo-relative `raw/...` path, not an absolute Root Vault path.
-- Root Vault paths belong in `context.md` for re-onboarding only.
+- Root Vault paths belong in `system/context.md` for re-onboarding only.

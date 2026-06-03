@@ -7,7 +7,7 @@ description:
 connects_to:
   - AGENTS.md
   - logs/user_requests.md
-  - system/instructions/configuration.md
+  - system/configuration.md
 created: 2026-06-03
 updated: 2026-06-03
 ---

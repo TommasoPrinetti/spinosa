@@ -15,7 +15,7 @@ TODAY="$(date +%Y-%m-%d)"
 FORCE="0"
 
 Information="$ROOT/context.md"
-Config="$ROOT/system/instructions/configuration.md"
+Config="$ROOT/system/configuration.md"
 Agents="$ROOT/AGENTS.md"
 Claude="$ROOT/CLAUDE.md"
 RawDir="$ROOT/raw"
@@ -938,8 +938,8 @@ updated: $TODAY
 setup_status: cli_started
 connects_to:
   - AGENTS.md
-  - system/instructions/configuration.md
-  - system/instructions/startup.md
+  - system/configuration.md
+  - system/startup.md
   - logs/user_requests.md
 ---
 
@@ -1057,9 +1057,9 @@ This is the Pilosa startup handoff. The user has completed fast CLI setup.
 
 Read these files first, in this order:
 1. AGENTS.md
-2. system/instructions/configuration.md
+2. system/configuration.md
 3. context.md
-4. system/instructions/startup.md
+4. system/startup.md
 
 The setup draft already contains:
 - Project name: ${project_title}
@@ -1071,7 +1071,7 @@ Optional context not collected by fast setup:
 - Helpful artifact URLs or file paths (if absent, record none provided)
 - External source policy defaults to no; ask only if external URL access is needed or the user requests external sources.
 
-Then execute system/instructions/startup.md from Phase 1.2 onwards. Specifically:
+Then execute system/startup.md from Phase 1.2 onwards. Specifically:
 - Translate the setup draft into filled information + configuration
 - Build the master dictionary by reading the active raw corpus in raw/
 - Generate YAML headers for every raw copy using the dictionary

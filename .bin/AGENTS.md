@@ -6,7 +6,7 @@ description:
   - Agents read this before inspecting or changing script behavior.
 connects_to:
   - AGENTS.md
-  - system/instructions/startup.md
+  - system/startup.md
 created: 2026-06-03
 updated: 2026-06-03
 ---

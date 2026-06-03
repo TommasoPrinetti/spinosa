@@ -8,7 +8,7 @@ description:
 scope: maps/
 connects_to:
   - header_template.md
-  - system/instructions/startup.md
+  - system/startup.md
 created: 2026-06-03
 updated: 2026-06-03
 ---

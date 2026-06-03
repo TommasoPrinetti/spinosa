@@ -38,7 +38,7 @@ git checkout -b my-project-name
 git push -u origin my-project-name
 ```
 
-> Why a branch? Onboarding rewrites `system/instructions/configuration.md` and `context.md` and copies Root Vault text-like files unchanged into `raw/`. Keeping that on a project branch lets you re-onboard, re-index, or wipe the project without touching the framework.
+> Why a branch? Onboarding rewrites `system/configuration.md` and `system/context.md` and copies Root Vault text-like files unchanged into `raw/`. Keeping that on a project branch lets you re-onboard, re-index, or wipe the project without touching the framework.
 
 ### 3. Run the onboard script
 
@@ -71,7 +71,7 @@ On macOS you can also double-click `onboard.command`. On Windows, double-click `
 Open Claude Code, Codex, OpenCode, or whichever CLI you picked, point it at this folder, and paste the prompt. The LLM will:
 
 1. Use the fast setup draft, treating project description and artifact URLs as optional. If they were not provided, it records that and infers working scope from the active raw corpus.
-2. Update `system/instructions/configuration.md` and `context.md` from `setup_status: cli_started` → `zone_started`.
+2. Update `system/configuration.md` and `system/context.md` from `setup_status: cli_started` → `zone_started`.
 3. Build the master dictionary from `raw/`, generate YAML headers for every raw copy, create detailed maps in `maps/`, build maps, validate headers and map links, and run retrieval tests.
 4. Write a startup report to `agent_reports/`.
 
@@ -105,16 +105,19 @@ pilosa/
 │   └── skills/                  Same skills, Kilo project-local
 ├── onboard.command              macOS launcher
 ├── onboard.cmd                  Windows launcher
-├── system/
-│   └── instructions/            startup, configuration, architecture map
-├── raw/                         Active working corpus: unchanged text-like Root Vault copies
-├── maps/                        Central navigation maps with Obsidian wikilinks
-├── dictionary.md                Master dictionary (built at startup)
-├── zone_index.md                Master zone map (built at startup)
-├── header_template.md           Header schema for raw copies
-├── logs/                        Request, intake, and external-access summaries (+ AGENTS.md)
-├── agent_reports/               Writer / Verifier reports (+ AGENTS.md)
-└── .trash/                      Retired files (+ AGENTS.md)
+├── system/                        Architecture, context, configuration, templates
+│   ├── context.md                 Project context (scope, names, particularities)
+│   ├── configuration.md           Operating profile
+│   ├── startup.md                 Setup translation + indexing protocol
+│   ├── dictionary.md              Shared vocabulary (built at startup)
+│   ├── header_template.md         YAML frontmatter schema
+│   ├── workspace_index.md         Master workspace index (built at startup)
+│   └── system_architecture_map.md Diagrams
+├── raw/                           Active working corpus: unchanged text-like Root Vault copies
+├── maps/                          Navigation maps with Obsidian wikilinks
+├── logs/                          Request, intake, and external-access summaries (+ AGENTS.md)
+├── agent_reports/                 Writer / Verifier reports (+ AGENTS.md)
+└── .trash/                        Retired files (+ AGENTS.md)
 ```
 
 ## What the Orchestrator Does

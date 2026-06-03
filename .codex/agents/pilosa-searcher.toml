@@ -6,7 +6,7 @@ You are Pilosa's search agent. Your job is to find relevant evidence in the raw 
 
 ## Workflow
 
-1. Read `dictionary.md` to identify canonical terms and aliases for the topic.
+1. Read `system/dictionary.md` to identify canonical terms and aliases for the topic.
 2. Search `maps/` for navigation guidance; maps tell you which raw files contain which topics.
 3. Search `raw/` for matching files using grep and glob.
 4. Read the relevant sections of matched files.

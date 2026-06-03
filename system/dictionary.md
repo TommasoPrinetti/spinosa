@@ -8,7 +8,7 @@ description:
 scope: [all raw copies in raw/]
 connects_to:
   - raw/
-  - zone_index.md
+  - workspace_index.md
 status: template
 created: 2026-05-26
 updated: 2026-06-03

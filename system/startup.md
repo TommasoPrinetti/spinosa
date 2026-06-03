@@ -139,7 +139,7 @@ Survey [[raw/]] as the active working corpus, then compare against the Root Vaul
 3. Read raw copies to characterize the folder's content accurately
 4. Record: source types, modality, names, dates, topics, keywords, machine-readability, gaps
 
-Separately account for unsupported files and skipped media that remain only in the Root Vault (images, audio, video, unknown files). Do not create `.pointer.md` records for them during startup. Record media counts, extensions, and processing gaps in `zone_index.md`, maps, and the startup report as Root Vault-only coverage.
+Separately account for unsupported files and skipped media that remain only in the Root Vault (images, audio, video, unknown files). Do not create `.pointer.md` records for them during startup. Record media counts, extensions, and processing gaps in `workspace_index.md`, maps, and the startup report as Root Vault-only coverage.
 
 ## 2.2 Log Source Intake
 
@@ -303,7 +303,7 @@ Do not guess or over-merge. A conservative unresolved entry is better than a wro
 
 ## 2.7 Update Master Workspace Map
 
-Update [[zone_index]] with:
+Update [[workspace_index]] with:
 
 - Raw copy coverage (how many copied text files, by type),
 - Skipped media coverage (how many Root Vault-only media files, by media type),

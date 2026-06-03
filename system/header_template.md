@@ -8,7 +8,7 @@ description:
 scope: [all framework markdown files]
 connects_to:
   - AGENTS.md
-  - zone_index.md
+  - workspace_index.md
   - dictionary.md
 status: active
 created: 2026-05-26
@@ -164,7 +164,7 @@ For large or dense files, add a 2-3 sentence retrieval summary below the table.
 
 In body text, use Obsidian wikilinks for all internal references. Apply these rules:
 
-- Files with unique basenames use just the basename: `[[AGENTS]]`, `[[startup]]`, `[[configuration]]`, `[[header_template]]`, `[[context]]`, `[[dictionary]]`, `[[zone_index]]`
+- Files with unique basenames use just the basename: `[[AGENTS]]`, `[[startup]]`, `[[configuration]]`, `[[header_template]]`, `[[context]]`, `[[dictionary]]`, `[[workspace_index]]`
 - Folders keep their full vault-relative path with trailing `/`: `[[system/]]`, `[[logs/]]`, `[[agent_reports/]]`, `[[.trash/]]`, `[[raw/]]`
 - `.md` extension is implicit (Obsidian convention)
 

@@ -9,8 +9,8 @@ updated: 2026-06-03
 setup_status: cli_started
 connects_to:
   - AGENTS.md
-  - system/instructions/configuration.md
-  - system/instructions/startup.md
+  - system/configuration.md
+  - system/startup.md
   - logs/user_requests.md
 ---
 

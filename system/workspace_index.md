@@ -1,5 +1,5 @@
 ---
-type: zone_index
+type: workspace_index
 role: zone_master_index
 purpose: [map the whole workspace and point to the main retrieval layers]
 description:
@@ -27,7 +27,7 @@ Keep this template empty on the framework branch. Project-specific source counts
 raw/
 maps/
 dictionary.md
-zone_index.md
+workspace_index.md
 ```
 
 ## Central Maps

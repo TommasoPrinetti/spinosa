@@ -8,13 +8,13 @@ description:
 scope: [repo-wide architecture]
 connects_to:
   - AGENTS.md
-  - system/instructions/startup.md
+  - system/startup.md
   - .agents/skills/source-intake/SKILL.md
   - .agents/skills/report-writing/SKILL.md
   - .agents/skills/claim-verification/SKILL.md
   - .agents/skills/zone-cleanup/SKILL.md
   - .agents/skills/orchestrator-dispatch/SKILL.md
-  - zone_index.md
+  - workspace_index.md
 created: 2026-05-26
 updated: 2026-06-02
 ---
@@ -143,7 +143,7 @@ The setup output is not a final interpretation of the research corpus. It is the
 | `.agents/skills/zone-cleanup/SKILL.md` | Hygiene audit and archival                            |                                                  |
 | `.agents/skills/orchestrator-dispatch/SKILL.md` | Prompt routing and skill injection         |                                                  |
 | [[dictionary]]              | Shared term vocabulary                                                |                                                  |
-| [[zone_index]]              | Master index                                                          |                                                  |
+| [[workspace_index]]              | Master index                                                          |                                                  |
 | [[maps/]]                   | Central navigation layer with Obsidian wikilinks into raw files       |                                                  |
 | [[raw/]]                    | Active working corpus with raw text/native/PDF copies; legacy pointer records may exist |                                                  |
 | [[header_template]]         | YAML header schema                                                    |                                                  |

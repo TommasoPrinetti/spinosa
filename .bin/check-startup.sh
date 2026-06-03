@@ -26,8 +26,8 @@ read_file() {
 # ── read required files ─────────────────────────────────────────────────────
 required_files=(
   "AGENTS.md"
-  "system/instructions/configuration.md"
-  "system/instructions/startup.md"
+  "system/configuration.md"
+  "system/startup.md"
 "context.md"
 )
 
@@ -35,7 +35,7 @@ for file in "${required_files[@]}"; do
   read_file "$file" > /dev/null
 done
 
-config="$(read_file "system/instructions/configuration.md")"
+config="$(read_file "system/configuration.md")"
 blueprint="$(read_file "context.md")"
 startup_text="${config}
 ${blueprint}"
