@@ -40,20 +40,22 @@ Default shapes are guidance. You may deviate at runtime. See `references/sequenc
 | `fast_path` | (none — answer directly) | — |
 | `clarify_search` | skip (or Searcher if term disambiguation needed) | `source-intake` (if needed) |
 | `find_material` | Searcher → Verifier | `source-intake` → `claim-verification` |
-| `evidence_answer` | Searcher → Writer → Verifier | `source-intake` → `report-writing` → `claim-verification` |
-| `synthesis_report` | Searcher ×N → Writer → Verifier | `source-intake` ×N → `report-writing` → `claim-verification` |
+| `evidence_answer` | Searcher + Analyst → Writer → Verifier | `source-intake` + `context-analysis` → `report-writing` → `claim-verification` |
+| `synthesis_report` | Searcher ×N + Analyst → Writer → Verifier | `source-intake` ×N + `context-analysis` → `report-writing` → `claim-verification` |
 | `verification` | Verifier | `claim-verification` |
 | `index_maintenance` | Searcher (if search) → Verifier | `source-intake` → `claim-verification` |
-| `cleanup` | Janitor | `zone-cleanup` |
+| `cleanup` | Janitor | `workspace-cleanup` |
 
-Note: workspace startup is a one-time operation handled by the orchestrator reading `system/instructions/startup.md` directly — not through a skill injection.
+Note: workspace startup is a one-time operation handled by the orchestrator reading `system/startup.md` directly — not through a skill injection.
 
 ### 4. Dispatch
 
 For each sub-agent in the sequence:
 
-1. **Native spawn** (preferred): Spawn by name — `pilosa-searcher`, `pilosa-writer`, `pilosa-verifier`, `pilosa-janitor`. Pass: cleaned user prompt, prior sub-agent outputs, route constraints.
+1. **Native spawn** (preferred): Spawn by name — `pilosa-searcher`, `pilosa-analyst`, `pilosa-writer`, `pilosa-verifier`, `pilosa-janitor`. Pass: cleaned user prompt, prior sub-agent outputs, route constraints.
 2. **Fallback** (if native unavailable): Read the skill's `SKILL.md` from `.agents/skills/<skill-name>/SKILL.md`, inject into the task prompt as instructions.
+
+Searcher and Analyst run in parallel when both are in the sequence. Writer waits for both before synthesizing.
 
 Native definitions live in `.opencode/agents/`, `.claude/agents/`, `.codex/agents/`. The orchestrator playbook lives in `AGENTS.md`.
 
@@ -81,14 +83,16 @@ See `references/skills.md` for the full role → skill mapping.
 | Role | Native Agent | Skill | What it does |
 |---|---|---|---|
 | Searcher | `pilosa-searcher` | `source-intake` | Searches raw copies and maps for evidence |
+| Analyst | `pilosa-analyst` | `context-analysis` | Provides broader contextual analysis from project context |
 | Writer | `pilosa-writer` | `report-writing` | Synthesizes findings into reports |
 | Verifier | `pilosa-verifier` | `claim-verification` | Verifies claims, quotes, and paths |
-| Janitor | `pilosa-janitor` | `zone-cleanup` | Audits hygiene and archives stale files |
+| Janitor | `pilosa-janitor` | `workspace-cleanup` | Audits hygiene and archives stale files |
 
 ## See also
 
 - `source-intake` — source file registration
+- `context-analysis` — broader contextual analysis
 - `report-writing` — report synthesis
 - `claim-verification` — claim verification
-- `zone-cleanup` — hygiene audit and archival
+- `workspace-cleanup` — hygiene audit and archival
 - `system/instructions/startup.md` — workspace initialization protocol (orchestrator reads directly)

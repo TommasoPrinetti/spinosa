@@ -5,11 +5,12 @@ description: Write synthesis reports, evidence packets, and checkpoints
 
 ## Purpose
 
-Turn retrieved material into a coherent markdown report. Separate evidence from interpretation. Cite source paths. Leave verification to the Verifier.
+Turn retrieved material and contextual analysis into a coherent markdown report. Separate evidence from interpretation. Cite source paths. Leave verification to the Verifier.
 
 ## Prerequisites
 
 - Searcher has provided an evidence packet with source paths and excerpts
+- Analyst may have provided a contextual analysis packet (when in the sequence)
 - Original user prompt is known
 
 ## Steps
@@ -52,12 +53,24 @@ status: draft
 ## Rules
 
 - Answer the original request, not a broader invented task.
-- Use only material supplied by Searcher or already in context.
+- Use only material supplied by Searcher, Analyst, or already in context.
 - Preserve every source path and locator exactly.
 - Never invent missing source support.
 - Never mark claims verified — Verifier handles that.
 - Do not include process noise or intermediate artifacts.
 - Keep concise unless the user asked for depth.
+- When Analyst provides broader context, integrate into Analysis — do not duplicate as separate section.
+
+## Formatting Standards
+
+- One H1 per report (title). H2 for sections. No H3+ unless user explicitly asks for depth.
+- Tables: consistent alignment, no empty cells, always include headers.
+- Lists: `-` not `*`. No nesting deeper than 2 levels.
+- No filler sentences. No "In this report we will..." — start with the answer.
+- Clean markdown: no trailing spaces, no blank lines inside blockquotes.
+- Maximum ~500 lines. Split into sections or checkpoint if longer.
+- Verbatim quotes in blockquotes with bold key passages.
+- Interpretation clearly labeled — never mixed with evidence sections.
 
 ## See also
 

@@ -84,7 +84,7 @@ if ! echo "$config" | grep -qE "external_sources_allowed: *(yes|no)"; then
   failures+=("external_sources_allowed is missing or invalid.")
 fi
 
-# ── validate generated raw-zone and map frontmatter ─────────────────────────
+# ── validate generated raw_copy and map frontmatter ─────────────────────────
 raw_dir="$ROOT/raw"
 maps_dir="$ROOT/maps"
 
@@ -206,7 +206,7 @@ if [[ -d "$raw_dir" ]]; then
         failures+=("Missing type in ${file#$ROOT/}")
         ;;
       *)
-        warnings+=("Unhandled raw-zone type in ${file#$ROOT/}: $file_type")
+        warnings+=("Unhandled raw_copy type in ${file#$ROOT/}: $file_type")
         ;;
     esac
   done < <(find "$raw_dir" -type f -name "*.md" -print0 2>/dev/null)

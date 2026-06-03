@@ -6,6 +6,7 @@ type: report
 created: YYYY-MM-DD
 updated: YYYY-MM-DD
 status: draft
+scope: [one-line description of what this report covers]
 ---
 
 # [Report Title]
@@ -17,7 +18,7 @@ status: draft
 [Quotes and source references using verbatim format]
 
 ## Analysis
-[Interpretation, patterns, connections]
+[Interpretation, patterns, connections — include Analyst's broader context here]
 
 ## Limitations
 [Gaps, uncertainties, what was not checked]

@@ -16,6 +16,12 @@ connects_to:
 
 # Context
 
+## What This System Is
+
+Pilosa is a search-and-find engine for large datasets and text archives. It uses a chain of specialized sub-agents — orchestrated by the main conversation — to search, synthesize, verify, and present evidence from a corpus of source documents.
+
+The system provides both direct answers grounded in sources and broader contextual perspectives on the topics being researched. Every factual claim traces back to a source path. Every report is verified before presentation.
+
 ## Project
 - Title: [project name]
 - Description: [one sentence — what the project studies or builds]

@@ -38,7 +38,7 @@ Trace every claim to its source. Confirm accuracy. Correct errors in-place. Neve
   - Minimum 2 sentences or 1 full paragraph.
   - Key passage in **bold**.
 - Do not edit Root Vault files.
-- Do not create separate checker notes when a report exists — modify the report itself.
+- Do not create separate verifier notes when a report exists — modify the report itself.
 
 ## Status meanings
 

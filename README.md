@@ -71,7 +71,7 @@ On macOS you can also double-click `onboard.command`. On Windows, double-click `
 Open Claude Code, Codex, OpenCode, or whichever CLI you picked, point it at this folder, and paste the prompt. The LLM will:
 
 1. Use the fast setup draft, treating project description and artifact URLs as optional. If they were not provided, it records that and infers working scope from the active raw corpus.
-2. Update `system/configuration.md` and `system/context.md` from `setup_status: cli_started` → `zone_started`.
+2. Update `system/configuration.md` and `system/context.md` from `setup_status: cli_started` → `workspace_started`.
 3. Build the master dictionary from `raw/`, generate YAML headers for every raw copy, create detailed maps in `maps/`, build maps, validate headers and map links, and run retrieval tests.
 4. Write a startup report to `agent_reports/`.
 
@@ -91,7 +91,7 @@ pilosa/
 │       ├── source-intake/       Add source files to the workspace
 │       ├── report-writing/      Write synthesis reports
 │       ├── claim-verification/  Verify claims and quotes
-│       ├── zone-cleanup/        Audit and archive stale files
+│       ├── workspace-cleanup/        Audit and archive stale files
 │       └── orchestrator-dispatch/ Route prompts through pipeline
 ├── .opencode/
 │   ├── agents/                  Native OpenCode agent definitions (.md)

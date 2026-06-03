@@ -1,5 +1,5 @@
 ---
-name: zone-cleanup
+name: workspace-cleanup
 description: Evaluate staleness and propose archival of old workspace files
 ---
 
@@ -9,7 +9,7 @@ Audit the workspace for stale, broken, or orphaned files. Propose moves to `.tra
 
 ## Prerequisites
 
-- workspace is initialized (`setup_status: zone_started`)
+- workspace is initialized (`setup_status: workspace_started`)
 - `system/instructions/configuration.md` has `stale_after_days` threshold (default: 30 days; reports may use a longer threshold if configured)
 
 ## Steps

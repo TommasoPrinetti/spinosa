@@ -12,7 +12,7 @@ connects_to:
   - .agents/skills/source-intake/SKILL.md
   - .agents/skills/report-writing/SKILL.md
   - .agents/skills/claim-verification/SKILL.md
-  - .agents/skills/zone-cleanup/SKILL.md
+  - .agents/skills/workspace-cleanup/SKILL.md
   - .agents/skills/orchestrator-dispatch/SKILL.md
   - workspace_index.md
 created: 2026-05-26
@@ -113,7 +113,7 @@ Phase 2 — Indexing
 Run validation and retrieval tests
   |
   v
-Mark setup_status: zone_started
+Mark setup_status: workspace_started
 ```
 
 The setup output is not a final interpretation of the research corpus. It is the first navigable, token-efficient map that later agents can search.
@@ -140,7 +140,7 @@ The setup output is not a final interpretation of the research corpus. It is the
 | `.agents/skills/source-intake/SKILL.md` | Source file registration                              |                                                  |
 | `.agents/skills/report-writing/SKILL.md` | Report synthesis                                     |                                                  |
 | `.agents/skills/claim-verification/SKILL.md` | Claim verification                               |                                                  |
-| `.agents/skills/zone-cleanup/SKILL.md` | Hygiene audit and archival                            |                                                  |
+| `.agents/skills/workspace-cleanup/SKILL.md` | Hygiene audit and archival                            |                                                  |
 | `.agents/skills/orchestrator-dispatch/SKILL.md` | Prompt routing and skill injection         |                                                  |
 | [[dictionary]]              | Shared term vocabulary                                                |                                                  |
 | [[workspace_index]]              | Master index                                                          |                                                  |

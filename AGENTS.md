@@ -64,8 +64,8 @@ Default shapes are guidance. You may deviate at runtime. Every non-fast-path res
 | `fast_path` | (none) | Only class where you answer directly |
 | `clarify_search` | skip (or Searcher if term disambiguation needed) | Skip if question is well-formed |
 | `find_material` | Searcher -> Verifier | Verifier verifies the located path exists |
-| `evidence_answer` | Searcher -> Writer -> Verifier | Verifier mandatory |
-| `synthesis_report` | Searcher xN -> Writer -> Verifier | Parallel Searcher branches when sources are independent |
+| `evidence_answer` | Searcher + Analyst -> Writer -> Verifier | Analyst runs parallel to Searcher; Writer synthesizes both |
+| `synthesis_report` | Searcher xN + Analyst -> Writer -> Verifier | Analyst provides broader context alongside evidence |
 | `verification` | Verifier | Stand-alone |
 | `index_maintenance` | Searcher (if search) -> Verifier | Stand-alone |
 | `cleanup` | Janitor | User-confirmation gate required before any move |
@@ -77,9 +77,12 @@ Workspace startup is a one-time operation handled by reading `system/startup.md`
 For each sub-agent in the sequence, spawn it by name:
 
 - `pilosa-searcher` — searches raw corpus, maps, dictionary
+- `pilosa-analyst` — provides broader contextual analysis from project context
 - `pilosa-writer` — synthesizes reports from evidence
 - `pilosa-verifier` — checks claims, quotes, paths against sources
 - `pilosa-janitor` — audits hygiene, proposes archival moves
+
+Searcher and Analyst run in parallel when both are in the sequence. Writer waits for both before synthesizing.
 
 Pass: cleaned user prompt, prior sub-agent outputs, route constraints.
 
@@ -131,6 +134,7 @@ Use the question tool to clarify scope, disambiguate, or resolve blocking uncert
 | Agent | Role | Native Agent |
 |---|---|---|
 | Searcher | Searches raw copies, maps, and dictionary for evidence | `pilosa-searcher` |
+| Analyst | Provides broader contextual analysis from project context | `pilosa-analyst` |
 | Writer | Synthesizes findings into reports | `pilosa-writer` |
 | Verifier | Verifies claims, quotes, and paths | `pilosa-verifier` |
 | Janitor | Audits hygiene and archives stale files | `pilosa-janitor` |
@@ -187,7 +191,7 @@ Domain-specific AGENTS.md files define local conventions. Standard coding agents
 - `source-intake/` — source file registration
 - `report-writing/` — report synthesis
 - `claim-verification/` — claim verification
-- `zone-cleanup/` — hygiene audit and archival
+- `workspace-cleanup/` — hygiene audit and archival
 - `orchestrator-dispatch/` — prompt routing and skill injection
 
 ### Native agents

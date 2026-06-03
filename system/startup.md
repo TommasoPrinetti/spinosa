@@ -31,7 +31,7 @@ The CLI onboarding script has already collected project name and Root Vault path
 3. **Create the map folder** at `maps/`
 4. **Write detailed Obsidian-wikilink maps** that guide future LLMs into raw files
 5. **Build maps** from repeated themes
-6. **Update the master zone map**
+6. **Update the master workspace map**
 7. **Run startup validation and retrieval tests**
 
 The protocol runs in two phases: **Phase 1 (Setup Translation)** and **Phase 2 (Anchoring, Mapping, Validation)**. The CLI handles raw record writing; you handle translation, dictionary anchoring, maps, validation, and recovery notes.
@@ -43,7 +43,7 @@ The protocol runs in two phases: **Phase 1 (Setup Translation)** and **Phase 2 (
 - Copy PDFs as-is when onboarding accepted them. Do not create pointer records for images, audio, or video; account for skipped media as Root Vault-only coverage gaps.
 - Treat every `AGENTS.md` file as repository/control instructions, not corpus evidence. Do not import, header, map, or cite Root Vault `AGENTS.md` files.
 - Use the dictionary for consistent terminology across all headers.
-- Preserve generated-file provenance (`generated_by`, `generated_at`, source path, and `processing_status`) on raw copy headers, maps, and zone reports.
+- Preserve generated-file provenance (`generated_by`, `generated_at`, source path, and `processing_status`) on raw copy headers, maps, and reports.
 - Use Obsidian wikilinks for internal map references to raw copies, dictionaries, and maps.
 - Put retrieval-critical terms in **YAML frontmatter** because fast grep starts there.
 - Put interpretation and context in the body.
@@ -101,7 +101,7 @@ If artifact URLs are present, use web/MCP/browser tools **only** when `external_
 
 - Fill [[context]] (project title, project description status, helpful artifact URLs or file paths status, Root Vault path, evidence standards, external source policy).
 - Fill [[configuration]] (`root_vault_path`, `root_vault_mode`, `source_policy`, `external_sources_allowed`, `preferred_llm_cli`, `claim_standard`, `l2_policy`).
-- Keep `setup_status: cli_started` until mapping, header validation, and retrieval tests have passed. Replace it with `setup_status: zone_started` in both files only at the end of Phase 2.
+- Keep `setup_status: cli_started` until mapping, header validation, and retrieval tests have passed. Replace it with `setup_status: workspace_started` in both files only at the end of Phase 2.
 
 ## 1.4 Audit the Translation
 
@@ -171,11 +171,14 @@ Example:
 Write [[dictionary]] with canonical forms, aliases, explicit source terms, inferred concepts, uncertain terms, machine artifacts, languages, and source file references. Every term that appears in more than one source file **MUST** have an alias entry so grep finds any variant in any language.
 
 Use this same pass to enrich [[context]] from raw corpus evidence:
-- methods,
-- source universe,
-- recurring vocabulary,
-- likely output needs,
-- unresolved ambiguities.
+
+- **Methods**: Observe what the raw copies actually contain — interviews, fieldnotes, reports, datasets, articles. Infer the research methods from the source types and content. Update the Methods field.
+- **Source universe**: List the actual source types found, their languages, and approximate date ranges. Update the Sources section.
+- **Research vocabulary**: Extract key actors, institutions, places, and concepts that appear repeatedly. Update Research Vocabulary with concrete lists instead of placeholders.
+- **Theoretical frames**: If sources reference specific theories, frameworks, or schools of thought, record them in Research Vocabulary under "Theoretical frames."
+- **Likely output needs**: Based on the corpus structure, infer what the researcher will need — comparative analyses, timeline reconstructions, entity mapping, etc. Update Outputs.
+- **Unresolved ambiguities**: Record anything that blocked indexing — unclear dates, unidentified people, conflicting terminology, ambiguous source attribution. Add to Blind Spots.
+- **Project description**: If the corpus clearly reveals what the project studies (even without a user-provided description), write a one-sentence description. Keep "not provided during fast setup" if unreliable.
 
 Keep missing project description as absent if no reliable corpus-level description can be inferred. Do not block startup for it.
 
@@ -288,7 +291,7 @@ For recurring concepts appearing in 3+ raw copies, create a concept-focused map 
 
 After reading the source files and building the dictionary, record ambiguities without stopping startup. The first startup pass should produce a usable retrieval layer even when metadata is incomplete.
 
-Record these cases in the dictionary, maps, zone map, or startup report as `unresolved` / `needs_review`:
+Record these cases in the dictionary, maps, workspace map, or startup report as `unresolved` / `needs_review`:
 
 1. **Name collisions** — If "Maria" appears in 3 sources and identity is unclear, keep distinct surface forms or mark the canonical entry `unresolved`.
 2. **Place ambiguity** — If "the village" or "the coast" is unclear, preserve the source phrase as a keyword and mark the place field `needs_review` or omit it.
@@ -309,7 +312,7 @@ Update [[workspace_index]] with:
 - Skipped media coverage (how many Root Vault-only media files, by media type),
 - Central navigation maps created,
 - Dictionary status (canonical names, places, organizations, concepts),
-- Concept maps created,
+- Navigation maps created,
 - Non-text media noted as skipped / Root Vault-only,
 - Known gaps.
 
@@ -331,7 +334,7 @@ Header validation:
 - `source` paths point to existing files where expected,
 - array fields are arrays, not comma-separated strings,
 - generated files have `generated_by`, `generated_at`, and `processing_status`,
-- malformed frontmatter is fixed or reported before `zone_started`.
+- malformed frontmatter is fixed or reported before `workspace_started`.
 
 Retrieval tests:
 
@@ -344,7 +347,7 @@ Retrieval tests:
 
 Startup is complete **only if** required headers are valid and every applicable retrieval test passes. If a test is not applicable because no such entity exists, record `not_applicable` with the reason in the startup report.
 
-After validation passes, replace `setup_status: cli_started` with `setup_status: zone_started` in [[context]] and [[configuration]].
+After validation passes, replace `setup_status: cli_started` with `setup_status: workspace_started` in [[context]] and [[configuration]].
 
 ## 2.9 Idempotency And Recovery
 
@@ -372,7 +375,7 @@ Header worker delegation:
 - Header assignment may be delegated only after the dictionary has a stable first pass.
 - Batch size: 10 to 25 raw copies per worker, adjusted downward for long files.
 - Handoff format: list raw paths, dictionary path, header schema path, required output fields, known unresolved terms, and a strict instruction to leave raw bodies unchanged.
-- Startup owns merge, conflict resolution, and validation; workers never set `setup_status: zone_started`.
+- Startup owns merge, conflict resolution, and validation; workers never set `setup_status: workspace_started`.
 
 ---
 # Startup Output

@@ -1,6 +1,6 @@
 ---
 type: workspace_index
-role: zone_master_index
+role: workspace_master_index
 purpose: [map the whole workspace and point to the main retrieval layers]
 description:
   - Master index for corpus coverage, maps, dictionary status, and known gaps.
@@ -30,7 +30,7 @@ dictionary.md
 workspace_index.md
 ```
 
-## Central Maps
+## Navigation Maps
 
 | Map | Role | Status |
 |---|---|---|
@@ -53,6 +53,6 @@ workspace_index.md
 ## Coverage Status
 
 - Files with valid raw headers: 0
-- Central maps created: 0
-- Concept maps created: 0
+- Navigation maps created: 0
+- Navigation maps created: 0
 - Known gaps: none recorded yet

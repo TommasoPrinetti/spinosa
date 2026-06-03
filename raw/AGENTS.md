@@ -6,7 +6,7 @@ description:
   - Agents read this before modifying headers or validating corpus files.
 connects_to:
   - AGENTS.md
-  - header_template.md
+  - system/header_template.md
   - maps/AGENTS.md
 created: 2026-06-03
 updated: 2026-06-03
