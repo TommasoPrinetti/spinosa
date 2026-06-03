@@ -25,7 +25,7 @@ How the workbook is reused to narrate learning, exemplary work, imitation, and l
 - Definition: How the workbook is reused to narrate learning, exemplary work, imitation, and later-stage reflection.
 - Aliases: vademecum, example, path, imitation game
 - Confidence: high
-- Checker status: pending formal claim verification; startup retrieval links generated and validated locally.
+- Verifier status: pending formal claim verification; startup retrieval links generated and validated locally.
 
 ## Source Files
 ### [[raw/.ocr-processed.log|.ocr-processed.log]]

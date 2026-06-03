@@ -33,7 +33,7 @@ Audit the LLM Zone for stale, broken, or orphaned files. Propose moves to `.tras
 7. Evaluate staleness by age:
    - Compare `updated:` date in YAML frontmatter against current date.
    - Mark files older than `stale_after_days`.
-8. Write Cleaner Report in `05_agent_reports/` with:
+8. Write Janitor Report in `05_agent_reports/` with:
    - Files checked, issues found, proposed moves with reasons.
 9. **Wait for user confirmation** before any actual moves.
 
@@ -49,4 +49,4 @@ Audit the LLM Zone for stale, broken, or orphaned files. Propose moves to `.tras
 ## See also
 
 - `source-intake` — for adding new files to the Zone
-- `orchestrator-dispatch` — Cleaner dispatch requires user-confirmation gate
+- `orchestrator-dispatch` — Janitor dispatch requires user-confirmation gate

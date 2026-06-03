@@ -1,6 +1,6 @@
 ---
 type: log
-sub_agent: Checker
+sub_agent: Verifier
 role: external_source_log
 purpose: [record external sources explicitly authorized for use]
 scope: [external source access only]

@@ -178,7 +178,7 @@ Keep missing project description as absent if no reliable corpus-level descripti
 Noise quarantine:
 - Put ASR speaker labels such as `SPEAKER_00`, diarization fragments, OCR hallucinations, timestamps, and conversion residue in `machine_artifacts`.
 - Put plausible but unverified people, places, or concepts in `uncertain_terms`.
-- Do not add machine artifacts to canonical people, organizations, places, or concepts unless Checker or source context verifies them.
+- Do not add machine artifacts to canonical people, organizations, places, or concepts unless Verifier or source context verifies them.
 
 ## 2.4 Generate Raw Copy Headers
 
@@ -277,7 +277,7 @@ Each map entry for a raw copy or pointer record should include:
 - metadata caveats,
 - map quality / review status.
 
-For recurring concepts appearing in 3+ raw copies, create a concept-focused map that links each concept to its source files with definitions, aliases, confidence, and Checker status. Use [[dictionary]] to identify cross-cutting concepts.
+For recurring concepts appearing in 3+ raw copies, create a concept-focused map that links each concept to its source files with definitions, aliases, confidence, and Verifier status. Use [[dictionary]] to identify cross-cutting concepts.
 
 ## 2.6 Record Ambiguities
 

@@ -25,7 +25,7 @@ How prompts, constraints, examples, and iterative instruction shape model output
 - Definition: How prompts, constraints, examples, and iterative instruction shape model output quality.
 - Aliases: prompt, instruction, writing instructions
 - Confidence: high
-- Checker status: pending formal claim verification; startup retrieval links generated and validated locally.
+- Verifier status: pending formal claim verification; startup retrieval links generated and validated locally.
 
 ## Source Files
 ### [[raw/.ocr-processed.log|.ocr-processed.log]]

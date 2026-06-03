@@ -27,7 +27,7 @@ status: draft
 
 Rules:
 - Answer the original request, not a broader invented task.
-- Use only material supplied by Navigator or already in context.
+- Use only material supplied by Searcher or already in context.
 - Separate completed, partial, and unresolved items if any branch failed.
 - Keep concise unless the user asked for depth.
-- Checker will verify and correct in-place — do not mark claims verified yourself.
+- Verifier will verify and correct in-place — do not mark claims verified yourself.

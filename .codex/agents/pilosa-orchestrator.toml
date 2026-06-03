@@ -1,0 +1,8 @@
+model = "gpt-5.4-mini"
+description = "Routes research prompts through the Pilosa sub-agent pipeline. Handles classification, sequence selection, dispatch, and result synthesis."
+source = "https://github.com/anomalyco/pilosa"
+
+[instructions]
+sections = ["Pilosa Orchestrator"]
+
+# This agent is read-only for research tasks and delegates to sub-agents.

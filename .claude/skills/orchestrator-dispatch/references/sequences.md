@@ -7,10 +7,10 @@ Zone startup is a one-time operation handled by the orchestrator reading `00_sys
 | Class | Default Sequence | Skill to inject |
 |---|---|---|
 | `fast_path` | (none — answer directly) | — |
-| `clarify_search` | skip (or Navigator if term disambiguation needed) | `source-intake` (if needed) |
-| `find_material` | Navigator → Checker | `source-intake` → `claim-verification` |
-| `evidence_answer` | Navigator → Packer → Checker | `source-intake` → `report-writing` → `claim-verification` |
-| `synthesis_report` | Navigator ×N → Packer → Checker | `source-intake` ×N → `report-writing` → `claim-verification` |
-| `verification` | Checker | `claim-verification` |
-| `index_maintenance` | Navigator (if search) → Checker | `source-intake` → `claim-verification` |
-| `cleanup` | Cleaner | `zone-cleanup` |
+| `clarify_search` | skip (or Searcher if term disambiguation needed) | `source-intake` (if needed) |
+| `find_material` | Searcher → Verifier | `source-intake` → `claim-verification` |
+| `evidence_answer` | Searcher → Writer → Verifier | `source-intake` → `report-writing` → `claim-verification` |
+| `synthesis_report` | Searcher ×N → Writer → Verifier | `source-intake` ×N → `report-writing` → `claim-verification` |
+| `verification` | Verifier | `claim-verification` |
+| `index_maintenance` | Searcher (if search) → Verifier | `source-intake` → `claim-verification` |
+| `cleanup` | Janitor | `zone-cleanup` |

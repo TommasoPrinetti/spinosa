@@ -1,0 +1,8 @@
+model = "gpt-5.4-mini"
+description = "Synthesizes evidence from Searcher into coherent markdown reports. Does not search or verify."
+source = "https://github.com/anomalyco/pilosa"
+
+[instructions]
+sections = ["Pilosa Writer"]
+
+# This agent synthesizes evidence into reports. It does not search or verify.

@@ -1,0 +1,8 @@
+model = "gpt-5.4-mini"
+description = "Verifies claims, quotes, and paths against original sources. Corrects errors in-place. Never creates new interpretations."
+source = "https://github.com/anomalyco/pilosa"
+
+[instructions]
+sections = ["Pilosa Verifier"]
+
+# This agent verifies claims against sources. It never creates new interpretations.

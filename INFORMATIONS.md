@@ -34,7 +34,7 @@ connects_to:
 ## Method And Evidence
 - Methods: inferred from the corpus — OCR worksheet capture, ASR transcript generation, diarization sidecars, exercise-by-exercise comparison, cohort comparison, and longitudinal reading of participant narratives.
 - Claims require source paths.
-- L2 clues require Checker verification before reporting.
+- L2 clues require Verifier verification before reporting.
 - External sources must stay labeled external unless moved into the Root Vault.
 - External source policy: no (default; ask only if external access is needed)
 

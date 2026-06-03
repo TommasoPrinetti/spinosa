@@ -25,7 +25,7 @@ How participants test model outputs, compare results, and reason about fairness 
 - Definition: How participants test model outputs, compare results, and reason about fairness or evidence.
 - Aliases: judgment, evidence, fairness, bias
 - Confidence: high
-- Checker status: pending formal claim verification; startup retrieval links generated and validated locally.
+- Verifier status: pending formal claim verification; startup retrieval links generated and validated locally.
 
 ## Source Files
 ### [[raw/.ocr-processed.log|.ocr-processed.log]]

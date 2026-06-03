@@ -9,7 +9,7 @@
 
 # Pilosa
 
-Pilosa turns a protected folder of source material (the **Root Vault**) into a searchable, header-indexed, multi-agent-readable knowledge map. After onboarding, the Root Vault remains the immutable original source and `raw/` becomes the active working corpus for normal source search. A thin orchestrator (`AGENTS.md`) routes every prompt through specialist sub-agents (Navigator, Packer, Checker, Cleaner) or executes the startup workflow directly. **Checker** is mandatory on every non-fast-path route. Sub-agents never ask questions — only the orchestrator does.
+Pilosa turns a protected folder of source material (the **Root Vault**) into a searchable, header-indexed, multi-agent-readable knowledge map. After onboarding, the Root Vault remains the immutable original source and `raw/` becomes the active working corpus for normal source search. A thin orchestrator (`AGENTS.md`) routes every prompt through specialist sub-agents (Searcher, Writer, Verifier, Janitor) or executes the startup workflow directly. **Verifier** is mandatory on every non-fast-path route. Sub-agents never ask questions — only the orchestrator does.
 
 ## Quick Start
 
@@ -42,7 +42,7 @@ bash .bin/onboard.sh
 What happens:
 - Flow: project name → Root Vault path → scan summary → consent → raw record writing → CLI handoff.
 - Scan summary shows counts for text files, images, videos, audio files, PDFs, unknown files, ignored files, and byte totals by major class where available.
-- Non-text media stays in the Root Vault; onboarding creates `*.pointer.md` records so Startup and Navigator can find it.
+- Non-text media stays in the Root Vault; onboarding creates `*.pointer.md` records so Startup and Searcher can find it.
 - Startup creates `maps/` with map files that contain detailed retrieval summaries and Obsidian wikilinks into raw files.
 - TTY arrow-key picker for the CLI handoff choice (numbered fallback when piped).
 - Cursor hidden during raw record writing, restored on exit.
@@ -72,22 +72,26 @@ After that, ask research questions normally. The orchestrator will route them th
 
 ```
 pilosa/
-├── AGENTS.md                    Orchestrator + glossary
+├── AGENTS.md                    Project context for standard coding agents
 ├── README.md                    This file
 ├── .bin/
 │   ├── onboard.sh               Mechanical setup script (zero deps)
 │   └── check-startup.sh         Developer validation helper used by Startup/checks
 ├── .agents/
-│   └── skills/                  Portable workflow skills (OpenCode + Codex)
+│   └── skills/                  Portable workflow skills (fallback)
 │       ├── source-intake/       Add source files to the Zone
 │       ├── report-writing/      Write synthesis reports
 │       ├── claim-verification/  Verify claims and quotes
 │       ├── zone-cleanup/        Audit and archive stale files
 │       └── orchestrator-dispatch/ Route prompts through pipeline
 ├── .opencode/
+│   ├── agents/                  Native OpenCode agent definitions (.md)
 │   └── skills/                  Same skills, OpenCode project-local
 ├── .claude/
+│   ├── agents/                  Native Claude Code agent definitions (.md)
 │   └── skills/                  Same skills, Claude Code project-local
+├── .codex/
+│   └── agents/                  Native Codex agent definitions (.toml)
 ├── .kilocode/
 │   └── skills/                  Same skills, Kilo project-local
 ├── onboard.command              macOS launcher
@@ -100,13 +104,13 @@ pilosa/
 ├── zone_index.md                Master zone map (built at startup)
 ├── HEADER_TEMPLATE.md           Header schema for raw copies
 ├── 03_logs/                     Request log, source intake, external queries (+ AGENTS.md)
-├── 05_agent_reports/            Packer / Checker reports (+ AGENTS.md)
+├── 05_agent_reports/            Writer / Verifier reports (+ AGENTS.md)
 └── .trash/                      Retired files (+ AGENTS.md)
 ```
 
 ## What the Orchestrator Does
 
-Read `AGENTS.md` for the full routing contract. Briefly:
+Read `.opencode/agents/pilosa-orchestrator.md` for the full routing contract. Briefly:
 
 - **Classifies** every prompt into one of several classes (`fast_path`, `clarify_search`, `find_material`, `evidence_answer`, `synthesis_report`, `verification`, `index_maintenance`, `cleanup`).
 - **Chooses a sub-agent sequence** for non-fast-path prompts — never answers them directly.
@@ -137,7 +141,7 @@ Framework improvements tracked openly:
 - [ ] Allow agents to call many sub-agents dynamically (current dispatcher is fixed-shape)
 
 ### Reporting & Output
-- [ ] Enable direct extraction from raw copies into reports (no pipe from raw copies to Packer)
+- [ ] Enable direct extraction from raw copies into reports (no pipe from raw copies to Writer)
 
 ### UX / Interaction Design
 - [ ] Create different "attitudes" / interaction modes for orchestration (single mode today)

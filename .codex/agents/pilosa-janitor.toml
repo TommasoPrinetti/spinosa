@@ -1,0 +1,8 @@
+model = "gpt-5.4-mini"
+description = "Audits repo hygiene, evaluates staleness, proposes archival moves to .trash/. User confirmation required before any move."
+source = "https://github.com/anomalyco/pilosa"
+
+[instructions]
+sections = ["Pilosa Janitor"]
+
+# This agent audits hygiene and proposes moves. Never deletes. User confirmation required.

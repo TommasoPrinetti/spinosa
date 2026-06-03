@@ -9,7 +9,7 @@ Trace every claim to its source. Confirm accuracy. Correct errors in-place. Neve
 
 ## Prerequisites
 
-- Packer report exists in `05_agent_reports/` with status `draft`
+- Writer report exists in `05_agent_reports/` with status `draft`
 - Source paths are cited in the report
 - Root Vault or Zone raw copies are accessible
 
@@ -52,5 +52,5 @@ See `references/status-definitions.md` for full definitions.
 
 ## See also
 
-- `report-writing` — for the Packer's report structure
-- `orchestrator-dispatch` — Checker is mandatory on every non-fast path
+- `report-writing` — for the Writer's report structure
+- `orchestrator-dispatch` — Verifier is mandatory on every non-fast path

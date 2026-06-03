@@ -25,7 +25,7 @@ How participants describe, picture, compare, and emotionally relate to large lan
 - Definition: How participants describe, picture, compare, and emotionally relate to large language models and AI tools.
 - Aliases: llm, ai, chatgpt, claude, mistral
 - Confidence: high
-- Checker status: pending formal claim verification; startup retrieval links generated and validated locally.
+- Verifier status: pending formal claim verification; startup retrieval links generated and validated locally.
 
 ## Source Files
 ### [[raw/.ocr-processed.log|.ocr-processed.log]]

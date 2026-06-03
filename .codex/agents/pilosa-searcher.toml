@@ -1,0 +1,8 @@
+model = "gpt-5.4-mini"
+description = "Searches raw corpus, maps, and dictionary for evidence. Read-only — never edits files."
+source = "https://github.com/anomalyco/pilosa"
+
+[instructions]
+sections = ["Pilosa Searcher"]
+
+# This agent is read-only. It searches raw/, maps/, and dictionary.md for evidence.

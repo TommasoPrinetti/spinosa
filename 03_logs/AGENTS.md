@@ -5,10 +5,10 @@ Append-only log files that track user requests, source intake, and external sour
 ## Sub-agent ownership
 
 - **Orchestrator (self)** logs user requests during the Close step of every route.
-- **Navigator** logs source intake when new files enter the Zone.
-- **Checker or any agent** that queries external sources logs to `external_queries.md` — but only after the researcher explicitly authorizes external access.
-- **Cleaner** never touches logs.
-- **Packer** never touches logs.
+- **Searcher** logs source intake when new files enter the Zone.
+- **Verifier or any agent** that queries external sources logs to `external_queries.md` — but only after the researcher explicitly authorizes external access.
+- **Janitor** never touches logs.
+- **Writer** never touches logs.
 
 ## Operations
 
@@ -19,7 +19,7 @@ Append-only log files that track user requests, source intake, and external sour
 ## Per-file rules
 
 - `user_requests.md` — written by the orchestrator. One row per user prompt. Route, status, and output recorded after completion.
-- `source_intake_log.md` — written by Navigator during intake. Record batch ID, source type (root_vault / external), origin path, and intake status.
+- `source_intake_log.md` — written by Searcher during intake. Record batch ID, source type (root_vault / external), origin path, and intake status.
 - `external_queries.md` — written by any agent that fetches external sources. Record query, source URL, reason, and whether the result was retained. No entry without prior researcher authorization.
 
 ## See also

@@ -71,13 +71,13 @@ The home session is the orchestrator. It is governed by `AGENTS.md` and controls
 | Stage | Owner | Function | Output |
 |---|---|---|---|
 | 0 | Home session | Log request, choose route, dispatch sub-agents, enforce stop conditions | Fast-path answer or routed sequence |
-| 1 | Navigator | Search the active raw corpus first; use Root Vault directly only for pointer-only accounting or approved recovery | Raw evidence packet |
-| 2 | Packer | Build coherent report answering the original request | ONE clean report in [[05_agent_reports/]] |
-| 3 | Checker | Verify quotes, claims, paths, indexes | Verification status, in-place corrections |
-| 4 | Cleaner | Audit repo hygiene, propose archival moves, evaluate staleness | Cleaner Report with user-confirmation gate |
+| 1 | Searcher | Search the active raw corpus first; use Root Vault directly only for pointer-only accounting or approved recovery | Raw evidence packet |
+| 2 | Writer | Build coherent report answering the original request | ONE clean report in [[05_agent_reports/]] |
+| 3 | Verifier | Verify quotes, claims, paths, indexes | Verification status, in-place corrections |
+| 4 | Janitor | Audit repo hygiene, propose archival moves, evaluate staleness | Janitor Report with user-confirmation gate |
 | 5 | Startup | Execute setup translation + mapping to create the first usable LLM Zone (orchestrator reads [[STARTUP]] directly) | Configuration, dictionary, headers, central maps, concept maps, startup report |
 
-The **Checker** can run alone for verification, source-path repair, or index maintenance. The **Cleaner** runs on-demand for hygiene audits. The **Startup** skill runs when the user asks to start the Zone or setup files contain placeholders. Routing decisions and default route shapes live in `AGENTS.md`; sub-agent workflows are defined in `.agents/skills/<name>/SKILL.md`.
+The **Verifier** can run alone for verification, source-path repair, or index maintenance. The **Janitor** runs on-demand for hygiene audits. The **Startup** skill runs when the user asks to start the Zone or setup files contain placeholders. Routing decisions and default route shapes live in `AGENTS.md`; sub-agent workflows are defined in `.agents/skills/<name>/SKILL.md`.
 
 ## Setup Lifecycle
 
@@ -123,8 +123,8 @@ The setup output is not a final interpretation of the research corpus. It is the
 | Raw copy with header | Indexed, searchable copy in the Zone |
 | Dictionary | Canonical vocabulary for consistent headers |
 | Concept index | Thematic retrieval and pattern layer |
-| Packer report | User-facing synthesis, not evidence by itself |
-| Checker note | Verification state for quotes and claims |
+| Writer report | User-facing synthesis, not evidence by itself |
+| Verifier note | Verification state for quotes and claims |
 
 ## Active Files
 

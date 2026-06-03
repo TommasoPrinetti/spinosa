@@ -38,25 +38,26 @@ Default shapes are guidance. You may deviate at runtime. See `references/sequenc
 | Class | Default Sequence | Skill to inject |
 |---|---|---|
 | `fast_path` | (none — answer directly) | — |
-| `clarify_search` | skip (or Navigator if term disambiguation needed) | `source-intake` (if needed) |
-| `find_material` | Navigator → Checker | `source-intake` → `claim-verification` |
-| `evidence_answer` | Navigator → Packer → Checker | `source-intake` → `report-writing` → `claim-verification` |
-| `synthesis_report` | Navigator ×N → Packer → Checker | `source-intake` ×N → `report-writing` → `claim-verification` |
-| `verification` | Checker | `claim-verification` |
-| `index_maintenance` | Navigator (if search) → Checker | `source-intake` → `claim-verification` |
-| `cleanup` | Cleaner | `zone-cleanup` |
+| `clarify_search` | skip (or Searcher if term disambiguation needed) | `source-intake` (if needed) |
+| `find_material` | Searcher → Verifier | `source-intake` → `claim-verification` |
+| `evidence_answer` | Searcher → Writer → Verifier | `source-intake` → `report-writing` → `claim-verification` |
+| `synthesis_report` | Searcher ×N → Writer → Verifier | `source-intake` ×N → `report-writing` → `claim-verification` |
+| `verification` | Verifier | `claim-verification` |
+| `index_maintenance` | Searcher (if search) → Verifier | `source-intake` → `claim-verification` |
+| `cleanup` | Janitor | `zone-cleanup` |
 
 Note: Zone startup is a one-time operation handled by the orchestrator reading `00_system/instructions/STARTUP.md` directly — not through a skill injection.
 
 ### 4. Dispatch
 
 For each sub-agent in the sequence:
-1. Read the skill's `SKILL.md` from `.agents/skills/<skill-name>/SKILL.md`.
-2. Inject the full SKILL.md content into the task prompt as instructions.
-3. Pass: cleaned user prompt, prior sub-agent outputs, route constraints.
-4. The sub-agent executes in a fresh general-agent context.
 
-The skill IS the contract. No separate AGENTS.md file exists. The sub-agent follows the injected SKILL.md instructions.
+1. **Native spawn** (preferred): Spawn by name — `pilosa-searcher`, `pilosa-writer`, `pilosa-verifier`, `pilosa-janitor`. Pass: cleaned user prompt, prior sub-agent outputs, route constraints.
+2. **Fallback** (if native unavailable): Read the skill's `SKILL.md` from `.agents/skills/<skill-name>/SKILL.md`, inject into the task prompt as instructions.
+
+Native definitions live in `.opencode/agents/`, `.claude/agents/`, `.codex/agents/`. The orchestrator agent definition is at `.opencode/agents/pilosa-orchestrator.md`.
+
+You may pre-process the user prompt before dispatch: trim, summarize, normalize. Do not invent.
 
 ### 5. Close
 
@@ -67,7 +68,7 @@ The skill IS the contract. No separate AGENTS.md file exists. The sub-agent foll
 
 ## Rules
 
-- Checker is mandatory on every non-fast path.
+- Verifier is mandatory on every non-fast path.
 - Never answer a non-fast-path question directly — always dispatch.
 - Sub-agents never ask questions — you do.
 - Never invent support. Report blockers honestly.
@@ -77,12 +78,12 @@ The skill IS the contract. No separate AGENTS.md file exists. The sub-agent foll
 
 See `references/skills.md` for the full role → skill mapping.
 
-| Role | Skill | What it does |
-|---|---|---|
-| Navigator | `source-intake` | Searches raw copies and maps for evidence |
-| Packer | `report-writing` | Synthesizes findings into reports |
-| Checker | `claim-verification` | Verifies claims, quotes, and paths |
-| Cleaner | `zone-cleanup` | Audits hygiene and archives stale files |
+| Role | Native Agent | Skill | What it does |
+|---|---|---|---|
+| Searcher | `pilosa-searcher` | `source-intake` | Searches raw copies and maps for evidence |
+| Writer | `pilosa-writer` | `report-writing` | Synthesizes findings into reports |
+| Verifier | `pilosa-verifier` | `claim-verification` | Verifies claims, quotes, and paths |
+| Janitor | `pilosa-janitor` | `zone-cleanup` | Audits hygiene and archives stale files |
 
 ## See also
 

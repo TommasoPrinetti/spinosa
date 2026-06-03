@@ -25,7 +25,7 @@ How participants surface tasks, memorable conversations, and practice situations
 - Definition: How participants surface tasks, memorable conversations, and practice situations for comparative inquiry.
 - Aliases: task, conversation
 - Confidence: high
-- Checker status: pending formal claim verification; startup retrieval links generated and validated locally.
+- Verifier status: pending formal claim verification; startup retrieval links generated and validated locally.
 
 ## Source Files
 ### [[raw/.ocr-processed.log|.ocr-processed.log]]
