@@ -38,13 +38,15 @@ Default shapes are guidance. You may deviate at runtime. See `references/sequenc
 | Class | Default Sequence | Skill to inject |
 |---|---|---|
 | `fast_path` | (none — answer directly) | — |
-| `clarify_search` | Conceptualizer | `zone-startup` (if setup) or skip |
+| `clarify_search` | skip (or Navigator if term disambiguation needed) | `source-intake` (if needed) |
 | `find_material` | Navigator → Checker | `source-intake` → `claim-verification` |
-| `evidence_answer` | Conceptualizer → Navigator → Packer → Checker | `zone-startup` → `source-intake` → `report-writing` → `claim-verification` |
+| `evidence_answer` | Navigator → Packer → Checker | `source-intake` → `report-writing` → `claim-verification` |
 | `synthesis_report` | Navigator ×N → Packer → Checker | `source-intake` ×N → `report-writing` → `claim-verification` |
 | `verification` | Checker | `claim-verification` |
-| `index_maintenance` | Conceptualizer (if unclear) → Navigator (if search) → Checker | `zone-startup` → `source-intake` → `claim-verification` |
+| `index_maintenance` | Navigator (if search) → Checker | `source-intake` → `claim-verification` |
 | `cleanup` | Cleaner | `zone-cleanup` |
+
+Note: Zone startup is a one-time operation handled by the orchestrator reading `00_system/instructions/STARTUP.md` directly — not through a skill injection.
 
 ### 4. Dispatch
 
@@ -77,7 +79,6 @@ See `references/skills.md` for the full role → skill mapping.
 
 | Role | Skill | What it does |
 |---|---|---|
-| Conceptualizer | `zone-startup` | Translates prompts into search concepts |
 | Navigator | `source-intake` | Searches raw copies and maps for evidence |
 | Packer | `report-writing` | Synthesizes findings into reports |
 | Checker | `claim-verification` | Verifies claims, quotes, and paths |
@@ -85,8 +86,8 @@ See `references/skills.md` for the full role → skill mapping.
 
 ## See also
 
-- `zone-startup` — Zone initialization workflow
 - `source-intake` — source file registration
 - `report-writing` — report synthesis
 - `claim-verification` — claim verification
 - `zone-cleanup` — hygiene audit and archival
+- `00_system/instructions/STARTUP.md` — Zone initialization protocol (orchestrator reads directly)

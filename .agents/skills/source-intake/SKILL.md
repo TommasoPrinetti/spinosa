@@ -40,5 +40,5 @@ Register new source files in the Zone: copy text files to `raw/`, create pointer
 
 ## See also
 
-- `zone-startup` — for initial Zone creation
 - `report-writing` — for using intake evidence in reports
+- `00_system/instructions/STARTUP.md` — Zone initialization protocol

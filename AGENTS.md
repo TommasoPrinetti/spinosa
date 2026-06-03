@@ -4,7 +4,6 @@ role: home_session_orchestrator
 purpose: [route user prompts through sub-agents; never perform their work]
 scope: [repo-wide framework guidance]
 connects_to:
-  - .agents/skills/zone-startup/SKILL.md
   - .agents/skills/source-intake/SKILL.md
   - .agents/skills/report-writing/SKILL.md
   - .agents/skills/claim-verification/SKILL.md
@@ -29,7 +28,6 @@ Place source files in `01_llm_zone/raw/` (text) or add `.pointer.md` records for
 
 | Agent | Role |
 |---|---|
-| Conceptualizer | Translates prompts into search concepts |
 | Navigator | Searches raw copies and maps for evidence |
 | Packer | Synthesizes findings into reports |
 | Checker | Verifies claims, quotes, and paths |
@@ -131,13 +129,15 @@ Default shapes are guidance. You may deviate at runtime. Every non-fast-path res
 | Class | Default | Notes |
 |---|---|---|
 | `fast_path` | (none) | Only class where you answer directly |
-| `clarify_search` | Conceptualizer | Skip if question is well-formed |
+| `clarify_search` | skip (or Navigator if term disambiguation needed) | Skip if question is well-formed |
 | `find_material` | Navigator → Checker | Checker verifies the located path exists |
-| `evidence_answer` | Conceptualizer → Navigator → Packer → Checker | Checker mandatory |
+| `evidence_answer` | Navigator → Packer → Checker | Checker mandatory |
 | `synthesis_report` | Navigator ×N → Packer → Checker | Parallel Navigator branches when sources are independent |
 | `verification` | Checker | Stand-alone |
-| `index_maintenance` | Conceptualizer (if unclear) → Navigator (if search) → Checker | Stand-alone |
+| `index_maintenance` | Navigator (if search) → Checker | Stand-alone |
 | `cleanup` | Cleaner | User-confirmation gate required before any move |
+
+Note: Zone startup is a one-time operation handled by the orchestrator reading `00_system/instructions/STARTUP.md` directly — not through a skill injection.
 
 ### 4. Dispatch
 
@@ -161,13 +161,14 @@ You may pre-process the user prompt before dispatch: trim, summarize, normalize.
 
 | Agent | Skill | What it does | When to dispatch |
 |---|---|---|---|
-| **Conceptualizer** | `zone-startup` | Translates user request into search concepts, keywords, route shape. Never searches sources. | Query needs term disambiguation, scope narrowing, or route planning. Skip if well-formed. |
-| **Navigator** | `source-intake` | Searches central maps, raw copy headers, dictionary. Returns located evidence with source paths. | Source-grounded evidence needed. Always after Conceptualizer (if used). |
+| **Navigator** | `source-intake` | Searches central maps, raw copy headers, dictionary. Returns located evidence with source paths. | Source-grounded evidence needed. |
 | **Packer** | `report-writing` | Assembles Navigator's evidence into one coherent report using the durable report template. Does not search or verify. | After Navigator returns material requiring synthesis. |
 | **Checker** | `claim-verification` | Verifies claims, quotes, paths against original sources. Corrects report in-place. Stand-alone for verification or `find_material`. | Mandatory on every non-fast path. Also standalone for verification. |
 | **Cleaner** | `zone-cleanup` | Audits repo hygiene, evaluates staleness, proposes archival moves to `.trash/`. | User requests cleanup, audit, or tidy. User confirmation required before any move. |
 
 Each skill's `SKILL.md` is the contract. The orchestrator reads and injects the full SKILL.md content into the task prompt.
+
+Zone startup is a one-time operation handled by the orchestrator reading `00_system/instructions/STARTUP.md` directly — not through a skill injection.
 
 ## Evidence Rules
 
@@ -247,7 +248,6 @@ Never claim validation that was not performed.
 - `instructions/SYSTEM_ARCHITECTURE_MAP.md` — diagrams
 
 ### .agents/skills/
-- `zone-startup/SKILL.md` — Zone initialization workflow
 - `source-intake/SKILL.md` — source file registration
 - `report-writing/SKILL.md` — report synthesis
 - `claim-verification/SKILL.md` — claim verification
@@ -293,7 +293,7 @@ Never claim validation that was not performed.
 
 | Term | Meaning |
 |---|---|
-| **Agent** | One of five active sub-agents: Conceptualizer, Navigator, Packer, Checker, Cleaner. Each has a SKILL.md in `.agents/skills/` defining its workflow. |
+| **Agent** | One of four active sub-agents: Navigator, Packer, Checker, Cleaner. Each has a SKILL.md in `.agents/skills/` defining its workflow. |
 | **Blueprint** | Short for [[INFORMATIONS]]. Defines the research project scope, questions, corpus, evidence standards, and direction. |
 | **Dictionary** | [[01_llm_zone/00_dictionary]]. Shared vocabulary of canonical names, places, organizations, concepts, and domain terms. |
 | **Internal-first source policy** | Agents must not search external sources (web, APIs, general knowledge) unless the researcher explicitly requests it or Zone configuration allows logged external intake. |

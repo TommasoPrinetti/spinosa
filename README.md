@@ -9,7 +9,7 @@
 
 # Pilosa
 
-Pilosa turns a protected folder of source material (the **Root Vault**) into a searchable, header-indexed, multi-agent-readable knowledge map. After onboarding, the Root Vault remains the immutable original source and `01_llm_zone/raw/` becomes the active working corpus for normal source search. A thin orchestrator (`AGENTS.md`) routes every prompt through specialist sub-agents (Conceptualizer, Navigator, Packer, Checker, Cleaner) or executes the startup workflow directly. **Checker** is mandatory on every non-fast-path route. Sub-agents never ask questions — only the orchestrator does.
+Pilosa turns a protected folder of source material (the **Root Vault**) into a searchable, header-indexed, multi-agent-readable knowledge map. After onboarding, the Root Vault remains the immutable original source and `01_llm_zone/raw/` becomes the active working corpus for normal source search. A thin orchestrator (`AGENTS.md`) routes every prompt through specialist sub-agents (Navigator, Packer, Checker, Cleaner) or executes the startup workflow directly. **Checker** is mandatory on every non-fast-path route. Sub-agents never ask questions — only the orchestrator does.
 
 ## Quick Start
 
@@ -79,7 +79,6 @@ pilosa/
 │   └── check-startup.sh         Developer validation helper used by Startup/checks
 ├── .agents/
 │   └── skills/                  Portable workflow skills (OpenCode + Codex)
-│       ├── zone-startup/        Initialize a new Zone
 │       ├── source-intake/       Add source files to the Zone
 │       ├── report-writing/      Write synthesis reports
 │       ├── claim-verification/  Verify claims and quotes
