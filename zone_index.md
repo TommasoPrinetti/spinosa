@@ -1,18 +1,21 @@
 ---
 type: zone_index
 role: zone_master_index
-purpose: [map the whole LLM Zone and point to the main retrieval layers]
+purpose: [map the whole workspace and point to the main retrieval layers]
+description:
+  - Master index for corpus coverage, maps, dictionary status, and known gaps.
+  - Agents use this to orient retrieval and verify whether startup produced a usable workspace.
 scope: [all of raw/]
 connects_to:
   - dictionary.md
-  - HEADER_TEMPLATE.md
-  - maps/MAP_TEMPLATE.md
+  - header_template.md
+  - maps/map_template.md
 status: template
 created: 2026-05-26
 updated: 2026-06-03
 ---
 
-# LLM Zone — Master Index
+# Workspace — Master Index
 
 Startup builds this file after onboarding.
 

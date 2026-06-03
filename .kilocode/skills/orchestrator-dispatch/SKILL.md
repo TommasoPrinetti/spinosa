@@ -11,7 +11,7 @@ Log the request, classify the prompt, choose the right sub-agent sequence, dispa
 
 ### 1. Log
 
-Add one row to `03_logs/user_requests.md`:
+Add one row to `logs/user_requests.md`:
 ```
 | Date | Request summary | Route | Status | Output |
 ```
@@ -28,8 +28,8 @@ Map the prompt to one class. If two apply, choose the stricter. See `references/
 | `evidence_answer` | Answer grounded in sources |
 | `synthesis_report` | Structured report / comparison / narrative |
 | `verification` | Check a quote, claim, citation, path, or report |
-| `index_maintenance` | Fix, deepen, clean, or update the Zone index |
-| `cleanup` | Tidy or audit the Zone |
+| `index_maintenance` | Fix, deepen, clean, or update the workspace index |
+| `cleanup` | Tidy or audit the workspace |
 
 ### 3. Choose Sequence
 
@@ -46,7 +46,7 @@ Default shapes are guidance. You may deviate at runtime. See `references/sequenc
 | `index_maintenance` | Searcher (if search) → Verifier | `source-intake` → `claim-verification` |
 | `cleanup` | Janitor | `zone-cleanup` |
 
-Note: Zone startup is a one-time operation handled by the orchestrator reading `00_system/instructions/STARTUP.md` directly — not through a skill injection.
+Note: workspace startup is a one-time operation handled by the orchestrator reading `system/instructions/startup.md` directly — not through a skill injection.
 
 ### 4. Dispatch
 
@@ -91,4 +91,4 @@ See `references/skills.md` for the full role → skill mapping.
 - `report-writing` — report synthesis
 - `claim-verification` — claim verification
 - `zone-cleanup` — hygiene audit and archival
-- `00_system/instructions/STARTUP.md` — Zone initialization protocol (orchestrator reads directly)
+- `system/instructions/startup.md` — workspace initialization protocol (orchestrator reads directly)

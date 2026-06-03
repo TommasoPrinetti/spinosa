@@ -1,4 +1,17 @@
-# .bin/ — Shell Scripts
+---
+type: directory_guidance
+scope: .bin/
+description:
+  - Rules for setup and validation shell scripts.
+  - Agents read this before inspecting or changing script behavior.
+connects_to:
+  - AGENTS.md
+  - system/instructions/startup.md
+created: 2026-06-03
+updated: 2026-06-03
+---
+
+# .bin — Shell Scripts
 
 Mechanical scripts for setup and validation. Human-maintained — agents should not modify them.
 
@@ -22,5 +35,5 @@ Mechanical scripts for setup and validation. Human-maintained — agents should 
 
 ## See also
 
-- [[STARTUP]] — protocol that reads onboard.sh output
+- [[startup]] — protocol that reads onboard.sh output
 - [[AGENTS]] — orchestrator playbook

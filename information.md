@@ -1,17 +1,20 @@
 ---
-type: informations
+type: information
 agent: startup_agent
+description:
+  - Project blueprint filled during onboarding and startup.
+  - Agents read this to understand scope, Root Vault path, evidence rules, and researcher preferences.
 created: 2026-05-26
 updated: 2026-05-26
 setup_status: cli_started
 connects_to:
   - AGENTS.md
-  - 00_system/instructions/CONFIGURATION.md
-  - 00_system/instructions/STARTUP.md
-  - 03_logs/user_requests.md
+  - system/instructions/configuration.md
+  - system/instructions/startup.md
+  - logs/user_requests.md
 ---
 
-# INFORMATIONS
+# Information
 
 ## Project
 - Title: [project name]
@@ -39,7 +42,7 @@ connects_to:
 - External source policy: [yes/no — ask only if external access is needed]
 
 ## Outputs
-- Start with central maps in maps/ and evidence-grounded answers unless the researcher requests another output.
+- Start with maps in maps/ and evidence-grounded answers unless the researcher requests another output.
 
 ## Blind Spots
 - Fast setup did not include a user-written project description or artifact URLs. The orchestrator inferred them from the raw corpus.

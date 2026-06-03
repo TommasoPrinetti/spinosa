@@ -1,20 +1,20 @@
 ---
 name: zone-cleanup
-description: Evaluate staleness and propose archival of old Zone files
+description: Evaluate staleness and propose archival of old workspace files
 ---
 
 ## Purpose
 
-Audit the LLM Zone for stale, broken, or orphaned files. Propose moves to `.trash/`. Never execute moves without user confirmation.
+Audit the workspace for stale, broken, or orphaned files. Propose moves to `.trash/`. Never execute moves without user confirmation.
 
 ## Prerequisites
 
-- Zone is initialized (`setup_status: zone_started`)
-- `CONFIGURATION.md` has `stale_after_days` threshold (default: 90 for reports, 30 for trash)
+- workspace is initialized (`setup_status: zone_started`)
+- `system/instructions/configuration.md` has `stale_after_days` threshold (default: 30 days; reports may use a longer threshold if configured)
 
 ## Steps
 
-1. Read `CONFIGURATION.md` for staleness thresholds.
+1. Read `system/instructions/configuration.md` for staleness thresholds.
 2. Check raw copy validity:
    - For each file in `raw/`, read `source:` from YAML header.
    - If Root Vault path no longer exists, flag as `stale_source`.
@@ -23,7 +23,7 @@ Audit the LLM Zone for stale, broken, or orphaned files. Propose moves to `.tras
    - Grep all files for `[[` wikilinks.
    - For each link, check if target file exists.
    - Flag as `broken_link` if missing.
-4. Check concept maps:
+4. Check maps:
    - Each map should reference at least one existing raw copy.
    - Flag orphans with no backing files.
 5. Check dictionary entries:
@@ -33,7 +33,7 @@ Audit the LLM Zone for stale, broken, or orphaned files. Propose moves to `.tras
 7. Evaluate staleness by age:
    - Compare `updated:` date in YAML frontmatter against current date.
    - Mark files older than `stale_after_days`.
-8. Write Janitor Report in `05_agent_reports/` with:
+8. Write Janitor Report in `agent_reports/` with:
    - Files checked, issues found, proposed moves with reasons.
 9. **Wait for user confirmation** before any actual moves.
 
@@ -48,5 +48,5 @@ Audit the LLM Zone for stale, broken, or orphaned files. Propose moves to `.tras
 
 ## See also
 
-- `source-intake` — for adding new files to the Zone
+- `source-intake` — for adding new files to the workspace
 - `orchestrator-dispatch` — Janitor dispatch requires user-confirmation gate

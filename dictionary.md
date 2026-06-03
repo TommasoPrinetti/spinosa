@@ -2,6 +2,9 @@
 type: dictionary
 role: shared_vocabulary
 purpose: [ensure coherent terminology across raw copy headers]
+description:
+  - Startup-generated vocabulary for names, places, organizations, concepts, and aliases.
+  - Agents use this as the canonical term source for headers, maps, and reports.
 scope: [all raw copies in raw/]
 connects_to:
   - raw/

@@ -2,6 +2,9 @@
 type: metadata_header_template
 role: header_schema_guide
 purpose: [define the canonical YAML header fields used across the framework]
+description:
+  - Canonical frontmatter schema for raw copies, maps, and framework files.
+  - Agents use this to create compact headers that reveal purpose before body reading.
 scope: [all framework markdown files]
 connects_to:
   - AGENTS.md
@@ -71,7 +74,7 @@ updated: YYYY-MM-DD
 ```
 
 Rules:
-- `source` uses a relative path from the repo root (e.g., `raw/Ex10/...`). The Root Vault path is stored in [[INFORMATIONS]] for re-onboarding only.
+- `source` uses a relative path from the repo root (e.g., `raw/Ex10/...`). The Root Vault path is stored in [[information]] for re-onboarding only.
 - `language` is the ISO 639-1 code of the source file's primary language (en, fr, pt, es, etc.).
 - `people`, `places`, `organizations` MUST use canonical forms from [[dictionary]].
 - `keywords` include both canonical terms and aliases in the source's language (so grep finds any variant).
@@ -130,7 +133,7 @@ scope: raw/
 connects_to:
   - raw/
   - dictionary.md
-  - maps/00_map_overview.md
+  - maps/map_overview.md
 map_quality: machine_generated | checked | human_reviewed
 description_depth: retrieval_oriented
 wikilink_policy: obsidian_wikilinks_required
@@ -149,10 +152,10 @@ Map files must use Obsidian wikilinks for internal references:
 Map entries must use a tabular format for efficiency. Each file entry gets a wikilink heading plus a compact table:
 
 ```markdown
-## [[raw/Ex6/CLARA_PAGE26.md|CLARA_PAGE26.md]]
+## [[raw/field_notes/session_01_notes.md|session_01_notes.md]]
 | Type | Language | People | Topics | Keywords | Caveats |
 |---|---|---|---|---|---|
-| worksheet | en | Clara | prompt design, AI evaluation | llm, prompt, task | date_inferred |
+| field_notes | en | Researcher A | observation, interview setup | site visit, method, consent | date_inferred |
 ```
 
 For large or dense files, add a 2-3 sentence retrieval summary below the table.
@@ -161,8 +164,8 @@ For large or dense files, add a 2-3 sentence retrieval summary below the table.
 
 In body text, use Obsidian wikilinks for all internal references. Apply these rules:
 
-- Files with unique basenames use just the basename: `[[AGENTS]]`, `[[STARTUP]]`, `[[CONFIGURATION]]`, `[[HEADER_TEMPLATE]]`, `[[INFORMATIONS]]`, `[[dictionary]]`, `[[zone_index]]`
-- Folders keep their full vault-relative path with trailing `/`: `[[00_system/]]`, `[[03_logs/]]`, `[[05_agent_reports/]]`, `[[.trash/]]`, `[[raw/]]`
+- Files with unique basenames use just the basename: `[[AGENTS]]`, `[[startup]]`, `[[configuration]]`, `[[header_template]]`, `[[information]]`, `[[dictionary]]`, `[[zone_index]]`
+- Folders keep their full vault-relative path with trailing `/`: `[[system/]]`, `[[logs/]]`, `[[agent_reports/]]`, `[[.trash/]]`, `[[raw/]]`
 - `.md` extension is implicit (Obsidian convention)
 
 **Frontmatter exception:** `connects_to:` and other YAML keys use **bare paths** (not wikilinks). This keeps the metadata machine-readable, grep-friendly, and stable for sub-agents to parse.

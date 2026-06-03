@@ -2,7 +2,7 @@
 
 Default shapes are guidance. You may deviate at runtime. Every non-fast-path response is a sequence (length >= 1).
 
-Zone startup is a one-time operation handled by the orchestrator reading `00_system/instructions/STARTUP.md` directly — not through a skill injection.
+workspace startup is a one-time operation handled by the orchestrator reading `system/instructions/startup.md` directly — not through a skill injection.
 
 | Class | Default Sequence | Skill to inject |
 |---|---|---|

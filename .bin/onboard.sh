@@ -14,8 +14,8 @@ ROOT="$(pwd)"
 TODAY="$(date +%Y-%m-%d)"
 FORCE="0"
 
-Informations="$ROOT/INFORMATIONS.md"
-Config="$ROOT/00_system/instructions/CONFIGURATION.md"
+Information="$ROOT/information.md"
+Config="$ROOT/system/instructions/configuration.md"
 Agents="$ROOT/AGENTS.md"
 Claude="$ROOT/CLAUDE.md"
 RawDir="$ROOT/raw"
@@ -801,9 +801,9 @@ copy_root_vault() {
 
 # ── overwrite check ─────────────────────────────────────────────────────────
 has_filled_setup() {
-  [[ -f "$Informations" && -f "$Config" ]] || return 1
+  [[ -f "$Information" && -f "$Config" ]] || return 1
   local b c
-  b=$(<"$Informations")
+  b=$(<"$Information")
   c=$(<"$Config")
   for ph in "[project name]" "[path]"; do
     [[ "$b" == *"$ph"* || "$c" == *"$ph"* ]] && return 1
@@ -827,7 +827,7 @@ main() {
       --numbered) NUMBERED="1" ;;
       --no-color) R="" G="" B="" Y="" C="" M="" DIM="" BOLD="" RESET="" ;;
       --help|-h)
-        printf '\n  %s\n\n' "${BOLD}LLM Zone Setup${RESET}"
+        printf '\n  %s\n\n' "${BOLD}Pilosa Setup${RESET}"
         printf '  %s\n\n' "${DIM}Usage:${RESET} bash .bin/onboard.sh [--force] [--numbered] [--no-color]"
         printf '  %s\n\n' "${DIM}Flags:${RESET}"
         printf '    %-14s %s\n' "--force" "Overwrite existing setup data"
@@ -849,7 +849,7 @@ main() {
   printf '  %s\n' "${BOLD}${C}╚═╝     ╚═╝╚══════╝ ╚═════╝ ╚══════╝╚═╝  ╚═╝${RESET}"
   printf '\n'
   divider
-  printf '\n  %s  %s\n' "${BOLD}${C}LLM Zone${RESET}" "${DIM}Fast Setup${RESET}"
+  printf '\n  %s  %s\n' "${BOLD}${C}Pilosa${RESET}" "${DIM}Fast Setup${RESET}"
   printf '\n  %s\n' "${DIM}Project name, Root Vault path, corpus scan, consent, then LLM CLI handoff.${RESET}"
   divider
 
@@ -865,7 +865,7 @@ main() {
   print_step 1 4 "Project name"
   note "This is the working title for your research framework."
   note "It appears at the top of every report and in the blueprint."
-  note "You can change it later by editing INFORMATIONS.md."
+  note "You can change it later by editing information.md."
   project_title=""
   while [[ -z "$project_title" ]]; do
     project_title="$(ask "Project name" "" "e.g. My Research Project")"
@@ -922,25 +922,28 @@ main() {
   ok "CLI: ${BOLD}${preferred_cli}${RESET}"
 
   # ── ensure directories exist ──────────────────────────────────────────────
-  mkdir -p "$(dirname "$Informations")"
+  mkdir -p "$(dirname "$Information")"
   mkdir -p "$(dirname "$Config")"
 
   # ── write informations ─────────────────────────────────────────────────────
-  cat > "$Informations" << INFORMATIONS_EOF
+  cat > "$Information" << INFORMATIONS_EOF
 ---
-type: informations
+type: information
 agent: setup_cli
+description:
+  - Project blueprint filled during onboarding and startup.
+  - Agents read this to understand scope, Root Vault path, evidence rules, and researcher preferences.
 created: $TODAY
 updated: $TODAY
 setup_status: cli_started
 connects_to:
   - AGENTS.md
-  - 00_system/instructions/CONFIGURATION.md
-  - 00_system/instructions/STARTUP.md
-  - 03_logs/user_requests.md
+  - system/instructions/configuration.md
+  - system/instructions/startup.md
+  - logs/user_requests.md
 ---
 
-# INFORMATIONS
+# Information
 
 ## Project
 - Title: ${project_title:-[project name]}
@@ -968,7 +971,7 @@ connects_to:
 - External source policy: no (default; ask only if external access is needed)
 
 ## Outputs
-- Start with central maps in maps/ and evidence-grounded answers unless the researcher requests another output.
+- Start with maps in maps/ and evidence-grounded answers unless the researcher requests another output.
 
 ## Blind Spots
 - [identified during startup]
@@ -988,12 +991,15 @@ INFORMATIONS_EOF
 ---
 type: zone_configuration
 agent: setup_cli
+description:
+  - Operating profile for the current Pilosa project or framework template.
+  - Agents read this first to learn source policy, protected paths, and setup status.
 created: $TODAY
 updated: $TODAY
 setup_status: cli_started
 ---
 
-# Zone Configuration
+# Configuration
 
 Agents read this before major work.
 
@@ -1007,16 +1013,13 @@ source_policy: internal_first
 active_corpus_path: raw/
 active_corpus_policy: raw_zone_first_after_onboarding
 external_sources_allowed: no
-external_logs:
-  - 03_logs/external_queries.md
-  - 03_logs/source_intake_log.md
 
 claim_standard: source_link_required
 l2_policy: verifier_required
 
 protected_paths:
   - "$safe_vault"
-  - INFORMATIONS.md
+  - information.md
 
 stale_after_days: 30
 preferred_llm_cli: "$preferred_cli"
@@ -1042,7 +1045,7 @@ CONFIG_EOF
   printf '\n'
   divider
   printf '\n  %s\n\n' "${G}${BOLD}✦ Setup files written${RESET}"
-  printf '  %s %s\n' "${DIM}─${RESET}" "${C}${Informations}${RESET}"
+  printf '  %s %s\n' "${DIM}─${RESET}" "${C}${Information}${RESET}"
   printf '  %s %s\n' "${DIM}─${RESET}" "${C}${Config}${RESET}"
   [[ "$claude_created" == "yes" ]] && printf '  %s %s\n' "${DIM}─${RESET}" "${C}${Claude}${RESET}"
 
@@ -1050,13 +1053,13 @@ CONFIG_EOF
 
   local startup_prompt
   startup_prompt=$(cat <<PROMPT_EOF
-This is the LLM Zone startup handoff. The user has completed fast CLI setup.
+This is the Pilosa startup handoff. The user has completed fast CLI setup.
 
 Read these files first, in this order:
 1. AGENTS.md
-2. 00_system/instructions/CONFIGURATION.md
-3. INFORMATIONS.md
-4. 00_system/instructions/STARTUP.md
+2. system/instructions/configuration.md
+3. information.md
+4. system/instructions/startup.md
 
 The setup draft already contains:
 - Project name: ${project_title}
@@ -1068,17 +1071,17 @@ Optional context not collected by fast setup:
 - Helpful artifact URLs or file paths (if absent, record none provided)
 - External source policy defaults to no; ask only if external URL access is needed or the user requests external sources.
 
-Then execute 00_system/instructions/STARTUP.md from Phase 1.2 onwards. Specifically:
-- Translate the setup draft into filled INFORMATIONS + config
+Then execute system/instructions/startup.md from Phase 1.2 onwards. Specifically:
+- Translate the setup draft into filled information + configuration
 - Build the master dictionary by reading the active raw corpus in raw/
 - Generate YAML headers for every raw copy using the dictionary
 - Account for skipped media as Root Vault-only coverage gaps; do not create media pointer records
 - Create maps/ and write detailed Obsidian-wikilink maps that help future LLMs choose which raw files to open
-- Build concept maps from repeated themes
+- Build maps from repeated themes
 - Update zone_index.md
 - Run startup validation, then the full retrieval test suite
-- Set setup_status to zone_started in both INFORMATIONS and CONFIGURATION
-- Write the startup report to 05_agent_reports/
+- Set setup_status to zone_started in both information and configuration
+- Write the startup report to agent_reports/
 
 Do not re-ask questions the CLI draft already answered. Do not stop after one index. Do not edit the Root Vault.
 PROMPT_EOF
@@ -1086,7 +1089,7 @@ PROMPT_EOF
 
   local startup_prompt_preview
   startup_prompt_preview="$(prompt_preview <<< "$startup_prompt")"
-  print_box "LLM Zone Startup Prompt Preview" <<< "$startup_prompt_preview"
+  print_box "Pilosa Startup Prompt Preview" <<< "$startup_prompt_preview"
 
   local launch_command launch_preview handoff_action
   launch_command="$(build_launch_command "$preferred_cli" "$startup_prompt")"

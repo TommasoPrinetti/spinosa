@@ -2,10 +2,13 @@
 type: map_template
 role: map_structure_guide
 purpose: [guide agents in writing the central navigation maps]
+description:
+  - Template for retrieval-oriented navigation maps under maps/.
+  - Agents use it to keep map headers, wikilinks, and tabular entries consistent.
 scope: maps/
 connects_to:
-  - HEADER_TEMPLATE.md
-  - 00_system/instructions/STARTUP.md
+  - header_template.md
+  - system/instructions/startup.md
 created: 2026-06-03
 updated: 2026-06-03
 ---
@@ -25,7 +28,7 @@ scope: raw/
 connects_to:
   - raw/
   - dictionary.md
-  - maps/00_map_overview.md
+  - maps/map_overview.md
 map_quality: machine_generated | checked | human_reviewed
 description_depth: retrieval_oriented
 wikilink_policy: obsidian_wikilinks_required

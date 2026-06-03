@@ -26,17 +26,17 @@ read_file() {
 # ── read required files ─────────────────────────────────────────────────────
 required_files=(
   "AGENTS.md"
-  "00_system/instructions/CONFIGURATION.md"
-  "00_system/instructions/STARTUP.md"
-  "INFORMATIONS.md"
+  "system/instructions/configuration.md"
+  "system/instructions/startup.md"
+  "information.md"
 )
 
 for file in "${required_files[@]}"; do
   read_file "$file" > /dev/null
 done
 
-config="$(read_file "00_system/instructions/CONFIGURATION.md")"
-blueprint="$(read_file "INFORMATIONS.md")"
+config="$(read_file "system/instructions/configuration.md")"
+blueprint="$(read_file "information.md")"
 startup_text="${config}
 ${blueprint}"
 
@@ -49,7 +49,7 @@ done
 
 # ── check setup_status ──────────────────────────────────────────────────────
 if [[ "$startup_text" == *"setup_status: cli_started"* ]]; then
-  failures+=("setup_status is still cli_started; run the Zone startup agent.")
+  failures+=("setup_status is still cli_started; run the workspace startup agent.")
 fi
 
 if [[ "$startup_text" != *"setup_status: zone_started"* ]]; then
@@ -174,6 +174,7 @@ if [[ -d "$raw_dir" ]]; then
   while IFS= read -r -d '' file; do
     name="$(basename "$file")"
     [[ "$name" == ".gitkeep" ]] && continue
+    [[ "${file#$raw_dir/}" == "AGENTS.md" ]] && continue
     first_line="$(sed -n '1p' "$file")"
     if [[ "$first_line" != "---" ]]; then
       failures+=("Missing YAML frontmatter in ${file#$ROOT/}")
@@ -199,7 +200,7 @@ if [[ -d "$raw_dir" ]]; then
         done
         ;;
       raw_folder_index)
-        warnings+=("Legacy raw folder index found; central maps are authoritative: ${file#$ROOT/}")
+        warnings+=("Legacy raw folder index found; maps are authoritative: ${file#$ROOT/}")
         ;;
       "")
         failures+=("Missing type in ${file#$ROOT/}")
@@ -213,11 +214,11 @@ fi
 
 if [[ "$startup_text" == *"setup_status: zone_started"* ]]; then
   if [[ ! -d "$maps_dir" ]]; then
-    failures+=("Missing central maps directory: maps")
+    failures+=("Missing maps directory: maps")
   else
     while IFS= read -r -d '' map_file; do
       basename="${map_file#$maps_dir/}"
-      [[ "$basename" == "MAP_TEMPLATE.md" || "$basename" == ".gitkeep" ]] && continue
+      [[ "$basename" == "AGENTS.md" || "$basename" == "map_template.md" || "$basename" == ".gitkeep" ]] && continue
 
       first_line="$(sed -n '1p' "$map_file")"
       if [[ "$first_line" != "---" ]]; then

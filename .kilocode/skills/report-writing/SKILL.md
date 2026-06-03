@@ -46,7 +46,7 @@ status: draft
    - Minimum 2 sentences or 1 full paragraph.
    - Key passage in **bold**.
 5. Separate completed, partial, and unresolved items if any branch failed.
-6. Write ONE clean report in `05_agent_reports/`.
+6. Write ONE clean report in `agent_reports/`.
 7. Verifier will verify and correct in-place — do not mark claims verified yourself.
 
 ## Rules

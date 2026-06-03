@@ -1,7 +1,10 @@
 ---
 type: startup_protocol
 role: setup_and_indexing_protocol
-purpose: [translate the protected Root Vault into a searchable, header-indexed LLM Zone]
+purpose: [translate the protected Root Vault into a searchable, header-indexed workspace]
+description:
+  - Startup protocol executed directly by the orchestrator after onboarding.
+  - Agents use it to build dictionary, headers, maps, validation checks, and startup reports.
 scope: [initial setup only]
 connects_to:
   - AGENTS.md
@@ -9,29 +12,29 @@ created: 2026-05-28
 updated: 2026-06-03
 ---
 
-# STARTUP.md — Setup Translation and Indexing Protocol
+# startup.md — Setup Translation and Indexing Protocol
 
 This is the **protocol document** that defines what to do and how to do it. The **orchestrator** reads this file and executes the steps.
 
-Use this file when the user asks to **start the Zone** or when setup files still contain placeholders.
+Use this file when the user asks to **start the workspace** or when setup files still contain placeholders.
 
 Startup is the only authority that can mark setup complete. `.bin/check-startup.sh` is a developer-facing validation helper, not a separate user-facing setup path.
 
 ## Mission
 
-Translate the protected Root Vault into the first usable **LLM Zone**: a searchable, header-indexed collection of raw copies with a shared dictionary for consistent terminology. After CLI onboarding, the Root Vault is the immutable original source and [[raw/]] is the active working corpus for normal source-grounded work.
+Translate the protected Root Vault into the first usable **workspace**: a searchable, header-indexed collection of raw copies with a shared dictionary for consistent terminology. After CLI onboarding, the Root Vault is the immutable original source and [[raw/]] is the active working corpus for normal source-grounded work.
 
 The CLI onboarding script has already collected project name and Root Vault path, scanned the corpus, asked for explicit consent, copied accepted text-like files, native-readable files, and PDFs from the Root Vault into [[raw/]], skipped images, video, audio, and Root Vault `AGENTS.md` control files, and collected the preferred LLM CLI for handoff. Your job is to:
 
 1. **Build the master dictionary and enrich the blueprint from corpus evidence**
 2. **Generate YAML headers** for every raw copy
-3. **Create the central map folder** at `maps/`
+3. **Create the map folder** at `maps/`
 4. **Write detailed Obsidian-wikilink maps** that guide future LLMs into raw files
-5. **Build concept maps** from repeated themes
+5. **Build maps** from repeated themes
 6. **Update the master zone map**
 7. **Run startup validation and retrieval tests**
 
-The protocol runs in two phases: **Phase 1 (Setup Translation)** and **Phase 2 (Anchoring, Mapping, Validation)**. The CLI handles raw record writing; you handle translation, dictionary anchoring, central maps, validation, and recovery notes.
+The protocol runs in two phases: **Phase 1 (Setup Translation)** and **Phase 2 (Anchoring, Mapping, Validation)**. The CLI handles raw record writing; you handle translation, dictionary anchoring, maps, validation, and recovery notes.
 
 ## Non-Negotiable
 
@@ -40,8 +43,8 @@ The protocol runs in two phases: **Phase 1 (Setup Translation)** and **Phase 2 (
 - Copy PDFs as-is when onboarding accepted them. Do not create pointer records for images, audio, or video; account for skipped media as Root Vault-only coverage gaps.
 - Treat every `AGENTS.md` file as repository/control instructions, not corpus evidence. Do not import, header, map, or cite Root Vault `AGENTS.md` files.
 - Use the dictionary for consistent terminology across all headers.
-- Preserve generated-file provenance (`generated_by`, `generated_at`, source path, and `processing_status`) on raw copy headers, central maps, concept maps, and zone reports.
-- Use Obsidian wikilinks for internal map references to raw copies, dictionaries, concept maps, and other maps.
+- Preserve generated-file provenance (`generated_by`, `generated_at`, source path, and `processing_status`) on raw copy headers, maps, and zone reports.
+- Use Obsidian wikilinks for internal map references to raw copies, dictionaries, and maps.
 - Put retrieval-critical terms in **YAML frontmatter** because fast grep starts there.
 - Put interpretation and context in the body.
 - Do not ask questions directly. Produce a Disambiguation Brief only for blocking ambiguity.
@@ -52,12 +55,12 @@ The protocol runs in two phases: **Phase 1 (Setup Translation)** and **Phase 2 (
 Mandatory initial reads:
 
 1. `AGENTS.md`
-2. [[CONFIGURATION]]
-3. [[INFORMATIONS]]
-4. [[HEADER_TEMPLATE]]
+2. [[configuration]]
+3. [[information]]
+4. [[header_template]]
 
 On-demand reads:
-- [[SYSTEM_ARCHITECTURE_MAP]] only when architecture context is needed.
+- [[system_architecture_map]] only when architecture context is needed.
 
 If the user already ran `bash .bin/onboard.sh`, treat its answers as the **setup draft** and complete startup without repeating those questions. Project description and helpful artifact URLs are optional context. If absent, record them as `not provided during fast setup` and infer the working scope from the active raw corpus during indexing. External source policy defaults to `no`; only ask through the orchestrator if user-provided URLs require fetching or the user requests external source access.
 
@@ -67,7 +70,7 @@ If the user already ran `bash .bin/onboard.sh`, treat its answers as the **setup
 
 ## 1.1 Inspect Setup Draft
 
-Read [[INFORMATIONS]] and [[CONFIGURATION]]. Identify filled fields, placeholders, and missing data.
+Read [[information]] and [[configuration]]. Identify filled fields, placeholders, and missing data.
 
 Create a short todo list with the CLI's todo/task tool if available. **Mandatory** when the tool exists. Minimum todo items:
 
@@ -76,8 +79,8 @@ Create a short todo list with the CLI's todo/task tool if available. **Mandatory
 - synthesize blueprint/config,
 - build dictionary and blueprint anchors,
 - generate raw copy headers,
-- create central navigation maps,
-- build concept maps,
+- create navigation maps,
+- build maps,
 - validate headers and retrieval paths.
 
 ## 1.2 Translate Setup Draft
@@ -96,8 +99,8 @@ If artifact URLs are present, use web/MCP/browser tools **only** when `external_
 
 ## 1.3 Fill Blueprint and Configuration
 
-- Fill [[INFORMATIONS]] (project title, project description status, helpful artifact URLs or file paths status, Root Vault path, evidence standards, external source policy).
-- Fill [[CONFIGURATION]] (`root_vault_path`, `root_vault_mode`, `source_policy`, `external_sources_allowed`, `preferred_llm_cli`, `claim_standard`, `l2_policy`).
+- Fill [[information]] (project title, project description status, helpful artifact URLs or file paths status, Root Vault path, evidence standards, external source policy).
+- Fill [[configuration]] (`root_vault_path`, `root_vault_mode`, `source_policy`, `external_sources_allowed`, `preferred_llm_cli`, `claim_standard`, `l2_policy`).
 - Keep `setup_status: cli_started` until mapping, header validation, and retrieval tests have passed. Replace it with `setup_status: zone_started` in both files only at the end of Phase 2.
 
 ## 1.4 Audit the Translation
@@ -119,9 +122,9 @@ Do not ask follow-up questions before Phase 2 unless:
 - external URL access needs permission because the user provided URLs and policy is not already `yes`, or
 - a risky assumption blocks immediate indexing.
 
-Missing project description and missing helpful artifact URLs do not block Phase 2. Treat them as absent context and use the corpus survey, dictionary, and central maps to derive the initial project description and artifact status.
+Missing project description and missing helpful artifact URLs do not block Phase 2. Treat them as absent context and use the corpus survey, dictionary, and maps to derive the initial project description and artifact status.
 
-The user's `start the Zone` prompt is already permission to run initial indexing.
+The user's `start the workspace` prompt is already permission to run initial indexing.
 
 ---
 
@@ -140,7 +143,7 @@ Separately account for unsupported files and skipped media that remain only in t
 
 ## 2.2 Log Source Intake
 
-Register the source batch in [[source_intake_log]]. If any sources are external, also log them in [[external_queries]]. This creates a traceable record of what was intake and when.
+Record the source batch or external-access decision in `logs/user_requests.md` when traceability is needed. Use route `source_intake` or `external_access` and include the retained output or reason.
 
 ## 2.3 Build Master Dictionary And Blueprint Anchors
 
@@ -150,7 +153,7 @@ Read every text-based raw copy in [[raw/]]. Extract:
 2. **Places** — geographic locations, sites, regions. Merge variants (e.g., "Pacific", "Pacific Islands", "Oceania" → canonical: "Pacific Islands"). Record the language.
 3. **Organizations** — institutions, groups, agencies. Merge abbreviations (e.g., "WWF", "World Wildlife Fund" → canonical: "World Wildlife Fund"). Record the language.
 4. **Explicit source terms** — terms visibly present in the source text. Record source language and source files.
-5. **Inferred concepts** — domain-specific ideas, theories, frameworks inferred from multiple source terms. Mark as inferred and map to concept map entries only when source support is clear.
+5. **Inferred concepts** — domain-specific ideas, theories, frameworks inferred from multiple source terms. Mark as inferred and map to map entries only when source support is clear.
 6. **Domain terms** — specialized vocabulary, acronyms, jargon used in the sources. Define each. Record the language.
 7. **Uncertain terms and metadata** — unresolved people, dates, places, or terms needing review.
 8. **Machine artifacts** — ASR speaker labels, diarization labels, OCR noise, conversion residue, timestamps, file-system artifacts, or obvious transcription errors.
@@ -167,7 +170,7 @@ Example:
 
 Write [[dictionary]] with canonical forms, aliases, explicit source terms, inferred concepts, uncertain terms, machine artifacts, languages, and source file references. Every term that appears in more than one source file **MUST** have an alias entry so grep finds any variant in any language.
 
-Use this same pass to enrich [[INFORMATIONS]] from raw corpus evidence:
+Use this same pass to enrich [[information]] from raw corpus evidence:
 - methods,
 - source universe,
 - recurring vocabulary,
@@ -235,7 +238,7 @@ Create `maps/`. This is the canonical LLM navigation layer.
 
 Create as many navigation maps as needed to cover all files in [[raw/]]. Each map should address a distinct retrieval concern — corpus structure, concepts, entities, source types, unresolved items, or any other organizing axis that helps future LLMs navigate the material. There is no fixed set of required maps; create what serves the corpus.
 
-Start with `00_map_overview.md` as the entry point. It should explain which map to read for each retrieval goal.
+When useful, create `map_overview.md` as the entry point. It should explain which map to read for each retrieval goal without imposing a fixed required map set.
 
 Every internal map reference must use Obsidian wikilinks:
 
@@ -247,7 +250,7 @@ Every internal map reference must use Obsidian wikilinks:
 
 Do not use bare internal paths in map bodies. Bare paths are allowed only in YAML `connects_to:` fields.
 
-Each map file must include the header schema from [[HEADER_TEMPLATE]] (`type: navigation_map`):
+Each map file must include the header schema from [[header_template]] (`type: navigation_map`):
 
 ```yaml
 ---
@@ -285,7 +288,7 @@ For recurring concepts appearing in 3+ raw copies, create a concept-focused map 
 
 After reading the source files and building the dictionary, record ambiguities without stopping startup. The first startup pass should produce a usable retrieval layer even when metadata is incomplete.
 
-Record these cases in the dictionary, central maps, zone map, or startup report as `unresolved` / `needs_review`:
+Record these cases in the dictionary, maps, zone map, or startup report as `unresolved` / `needs_review`:
 
 1. **Name collisions** — If "Maria" appears in 3 sources and identity is unclear, keep distinct surface forms or mark the canonical entry `unresolved`.
 2. **Place ambiguity** — If "the village" or "the coast" is unclear, preserve the source phrase as a keyword and mark the place field `needs_review` or omit it.
@@ -298,7 +301,7 @@ Only pause for orchestrator/user input when an ambiguity prevents a valid raw co
 
 Do not guess or over-merge. A conservative unresolved entry is better than a wrong canonical term.
 
-## 2.7 Update Master Zone Map
+## 2.7 Update Master Workspace Map
 
 Update [[zone_index]] with:
 
@@ -314,8 +317,8 @@ Coverage counts must be exact:
 - copied text count,
 - skipped media count,
 - files with valid headers,
-- central maps created,
-- concept maps created and map quality status,
+- maps created,
+- maps created and map quality status,
 - unresolved dates,
 - unresolved people or identities.
 
@@ -324,7 +327,7 @@ Coverage counts must be exact:
 Before reporting startup complete, run validation. `.bin/check-startup.sh` may be used as a developer helper, but Startup remains responsible for judging completion.
 
 Header validation:
-- required YAML fields exist for `raw_copy`, `navigation_map`, and concept map files,
+- required YAML fields exist for `raw_copy`, `navigation_map`, and map files,
 - `source` paths point to existing files where expected,
 - array fields are arrays, not comma-separated strings,
 - generated files have `generated_by`, `generated_at`, and `processing_status`,
@@ -334,14 +337,14 @@ Retrieval tests:
 
 1. **Keyword retrieval** — grep one dictionary keyword in [[raw/]] and confirm it reaches a raw copy header/body.
 2. **Person retrieval** — if any person exists, grep canonical name or alias and confirm dictionary/header agreement.
-3. **Concept retrieval** — if any concept exists, confirm a concept map links back to raw copies.
-4. **Map navigation** — open [[00_map_overview]], follow at least one link to a specialized map, then follow at least one raw-copy or pointer-record wikilink to an existing file.
+3. **Concept retrieval** — if any concept exists, confirm a map links back to raw copies.
+4. **Map navigation** — open a generated overview or map, follow at least one link to a specialized map, then follow at least one raw-copy wikilink to an existing file.
 5. **Dictionary alias lookup** — grep at least one alias and confirm it resolves to a canonical dictionary row.
 6. **Unresolved metadata retrieval** — if unresolved metadata exists, grep `needs_review`, `unresolved`, `metadata_uncertainty`, or `uncertain_terms` and confirm it is findable.
 
 Startup is complete **only if** required headers are valid and every applicable retrieval test passes. If a test is not applicable because no such entity exists, record `not_applicable` with the reason in the startup report.
 
-After validation passes, replace `setup_status: cli_started` with `setup_status: zone_started` in [[INFORMATIONS]] and [[CONFIGURATION]].
+After validation passes, replace `setup_status: cli_started` with `setup_status: zone_started` in [[information]] and [[configuration]].
 
 ## 2.9 Idempotency And Recovery
 
@@ -355,14 +358,14 @@ Onboarding rerun behavior:
 
 Startup rerun behavior:
 - skip valid raw copy headers unless repair is needed,
-- update central maps when raw files, dictionary entries, or concept maps changed,
+- update maps when raw files, dictionary entries, or maps changed,
 - update dictionary rows by merging evidence, not replacing user-reviewed rows,
 - preserve `map_quality: checked` and `map_quality: human_reviewed` unless the user explicitly asks to regenerate.
 
 Recovery behavior:
-- write phase progress in the startup report or a checkpoint in [[05_agent_reports/]] when startup stops partially,
+- write phase progress in the startup report or a checkpoint in [[agent_reports/]] when startup stops partially,
 - resume from the first incomplete phase,
-- repair missing headers, central maps, dictionary rows, or concept maps without rerunning onboarding,
+- repair missing headers, maps, dictionary rows, or maps without rerunning onboarding,
 - keep `setup_status: cli_started` until validation passes.
 
 Header worker delegation:
@@ -374,19 +377,19 @@ Header worker delegation:
 ---
 # Startup Output
 
-Write one startup report in [[05_agent_reports/]] with the following fields:
+Write one startup report in [[agent_reports/]] with the following fields:
 
 - configuration status,
 - Root Vault path verified,
 - raw copy coverage,
 - skipped media coverage,
-- central maps created,
+- maps created,
 - dictionary size (names, places, organizations, concepts),
 - files with valid headers,
 - unresolved dates,
 - unresolved people or identities,
 - files created,
-- concept maps created,
+- maps created,
 - validation and retrieval test results,
 - remaining non-text files in Root Vault,
 - recommended next actions.

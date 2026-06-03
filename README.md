@@ -1,3 +1,12 @@
+---
+type: readme
+description:
+  - Human-facing overview, quick start, and development checklist for Pilosa.
+  - Read this for setup flow, directory layout, and contribution expectations.
+created: 2026-05-26
+updated: 2026-06-03
+---
+
 ```txt
 ██████╗ ██╗██╗      ██████╗ ███████╗ █████╗ 
 ██╔══██╗██║██║     ██╔═══██╗██╔════╝██╔══██╗
@@ -29,7 +38,7 @@ git checkout -b my-project-name
 git push -u origin my-project-name
 ```
 
-> Why a branch? Onboarding rewrites `00_system/instructions/CONFIGURATION.md` and `INFORMATIONS.md` and copies Root Vault text-like files unchanged into `raw/`. Keeping that on a project branch lets you re-onboard, re-index, or wipe the project without touching the framework.
+> Why a branch? Onboarding rewrites `system/instructions/configuration.md` and `information.md` and copies Root Vault text-like files unchanged into `raw/`. Keeping that on a project branch lets you re-onboard, re-index, or wipe the project without touching the framework.
 
 ### 3. Run the onboard script
 
@@ -62,13 +71,13 @@ On macOS you can also double-click `onboard.command`. On Windows, double-click `
 Open Claude Code, Codex, OpenCode, or whichever CLI you picked, point it at this folder, and paste the prompt. The LLM will:
 
 1. Use the fast setup draft, treating project description and artifact URLs as optional. If they were not provided, it records that and infers working scope from the active raw corpus.
-2. Update `00_system/instructions/CONFIGURATION.md` and `INFORMATIONS.md` from `setup_status: cli_started` → `zone_started`.
-3. Build the master dictionary from `raw/`, generate YAML headers for every raw copy, create detailed central maps in `maps/`, build concept maps, validate headers and map links, and run retrieval tests.
-4. Write a startup report to `05_agent_reports/`.
+2. Update `system/instructions/configuration.md` and `information.md` from `setup_status: cli_started` → `zone_started`.
+3. Build the master dictionary from `raw/`, generate YAML headers for every raw copy, create detailed maps in `maps/`, build maps, validate headers and map links, and run retrieval tests.
+4. Write a startup report to `agent_reports/`.
 
 After that, ask research questions normally. The orchestrator will route them through the right sub-agents.
 
-## How the Zone is Organized
+## How the workspace is Organized
 
 ```
 pilosa/
@@ -76,10 +85,10 @@ pilosa/
 ├── README.md                    This file
 ├── .bin/
 │   ├── onboard.sh               Mechanical setup script (zero deps)
-│   └── check-startup.sh         Developer validation helper used by Startup/checks
+│   └── check-startup.sh         Developer validation helper used by startup/checks
 ├── .agents/
 │   └── skills/                  Portable workflow skills (fallback)
-│       ├── source-intake/       Add source files to the Zone
+│       ├── source-intake/       Add source files to the workspace
 │       ├── report-writing/      Write synthesis reports
 │       ├── claim-verification/  Verify claims and quotes
 │       ├── zone-cleanup/        Audit and archive stale files
@@ -96,15 +105,15 @@ pilosa/
 │   └── skills/                  Same skills, Kilo project-local
 ├── onboard.command              macOS launcher
 ├── onboard.cmd                  Windows launcher
-├── 00_system/
-│   └── instructions/            AGENTS, STARTUP, CONFIGURATION
+├── system/
+│   └── instructions/            startup, configuration, architecture map
 ├── raw/                         Active working corpus: unchanged text-like Root Vault copies
 ├── maps/                        Central navigation maps with Obsidian wikilinks
 ├── dictionary.md                Master dictionary (built at startup)
 ├── zone_index.md                Master zone map (built at startup)
-├── HEADER_TEMPLATE.md           Header schema for raw copies
-├── 03_logs/                     Request log, source intake, external queries (+ AGENTS.md)
-├── 05_agent_reports/            Writer / Verifier reports (+ AGENTS.md)
+├── header_template.md           Header schema for raw copies
+├── logs/                        Request, intake, and external-access summaries (+ AGENTS.md)
+├── agent_reports/               Writer / Verifier reports (+ AGENTS.md)
 └── .trash/                      Retired files (+ AGENTS.md)
 ```
 
@@ -116,7 +125,7 @@ Read `.opencode/agents/pilosa-orchestrator.md` for the full routing contract. Br
 - **Chooses a sub-agent sequence** for non-fast-path prompts — never answers them directly.
 - **Owns the question tool** — sub-agents execute; they never ask.
 - **Pre-processes** the user prompt (trim, summarize, normalize) before dispatch.
-- **Logs every request** in `03_logs/user_requests.md`.
+- **Logs every request** in `logs/user_requests.md`.
 
 ## Hard Rules
 

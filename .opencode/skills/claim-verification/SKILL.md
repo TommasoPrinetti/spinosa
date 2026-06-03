@@ -9,22 +9,22 @@ Trace every claim to its source. Confirm accuracy. Correct errors in-place. Neve
 
 ## Prerequisites
 
-- Writer report exists in `05_agent_reports/` with status `draft`
+- Writer report exists in `agent_reports/` with status `draft`
 - Source paths are cited in the report
-- Root Vault or Zone raw copies are accessible
+- Root Vault or workspace raw copies are accessible
 
 ## Steps
 
 1. For each claim in the report, locate the original source file.
-2. Confirm the source path exists in the Zone or Root Vault.
+2. Confirm the source path exists in the workspace or Root Vault.
 3. Compare the quote or claim against the source:
    - `verified` — exact match, claim holds.
    - `corrected` — minor error, fix applied in-place.
    - `unsupported` — source exists but does not contain the claimed content.
    - `contradicted` — source contradicts the claim.
    - `unresolved` — source cannot be opened or path is missing.
-4. Apply corrections directly to the report in `05_agent_reports/`.
-5. Update report `status` from `draft` to `verified`, `pass_with_corrections`, or `partial`.
+4. Apply corrections directly to the report in `agent_reports/`.
+5. Update report `status` from `draft` to `pass`, `pass_with_corrections`, or `partial`.
 6. For `find_material` routes, verify the located path actually exists — mark as `blocked` if not.
 7. Refuse to certify claims that cannot be traced to a registered source path.
 

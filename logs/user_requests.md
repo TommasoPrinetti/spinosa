@@ -2,10 +2,13 @@
 type: request_log
 role: request_routing_log
 purpose: record user prompts and the file or route outcome
+description:
+  - Append-only routing log for user prompts and traceability summaries.
+  - Agents update this with route, status, and output after each orchestrated request.
 scope: framework_and_research_requests
 connects_to:
   - AGENTS.md
-  - 05_agent_reports/
+  - agent_reports/
 created: 2026-05-26
 updated: 2026-06-03
 ---

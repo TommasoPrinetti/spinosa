@@ -1,4 +1,18 @@
-# 05_agent_reports — Durable Reports & Checkpoints
+---
+type: directory_guidance
+scope: agent_reports/
+description:
+  - Rules for durable reports, checkpoints, evidence packets, and verification notes.
+  - Writer, Verifier, and Janitor use this directory for non-transient output artifacts.
+connects_to:
+  - AGENTS.md
+  - logs/user_requests.md
+  - .trash/AGENTS.md
+created: 2026-06-03
+updated: 2026-06-03
+---
+
+# agent_reports — Durable Reports & Checkpoints
 
 Synthesis reports, evidence packets, verification notes, checkpoints, and maintenance reports. These are the primary output artifacts of the sub-agent pipeline.
 
@@ -31,7 +45,7 @@ Synthesis reports, evidence packets, verification notes, checkpoints, and mainte
 ## Conventions
 
 - Filenames: descriptive-snake-case.md
-- Report bodies are Markdown. Use Obsidian wikilinks for Zone references.
+- Report bodies are Markdown. Use Obsidian wikilinks for workspace references.
 - If a report cites a claim that Verifier could not verify, mark it explicitly.
 
 ## See also
