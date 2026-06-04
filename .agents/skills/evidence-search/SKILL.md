@@ -2,7 +2,7 @@
 name: evidence-search
 type: skill
 scope: evidence_retrieval
-description: Read-only fallback for pilosa-searcher evidence retrieval
+description: Write-capable fallback for pilosa-searcher evidence retrieval
 created: 2026-05-26
 updated: 2026-06-04
 ---
@@ -23,30 +23,61 @@ Search existing workspace sources for evidence. This is the fallback instruction
 2. Search `maps/` for concept navigation and likely raw source paths.
 3. Search `raw/` for matching terms and aliases.
 4. Read only the relevant source sections needed to answer the retrieval task.
-5. Return an evidence packet with source paths, excerpts, and confidence.
+5. Write evidence to `agent_reports/evidence_packet.md`.
+6. Return file path and summary to orchestrator.
 
-## Output Format
+## Output — Always Write to File
+
+Never return a large evidence list inline. Write results to a file and return the path.
+
+### Step 1: Write the evidence packet
+
+Write to `agent_reports/evidence_packet.md`:
 
 ```markdown
-## Evidence for: [query summary]
+---
+type: evidence_packet
+query: [original query summary]
+sources_found: [count]
+created: YYYY-MM-DD
+---
+
+# Evidence for: [query summary]
 
 ### Source 1: [file path]
 - **Type:** raw_copy
-- **Relevant excerpt:** [quoted text with enough line context]
+- **Relevant excerpt:** [quoted text with line context]
 - **Confidence:** high | medium | low
 
 ### Source 2: [file path]
 ...
 ```
 
+### Step 2: If evidence exceeds ~300 lines, split into main + appendix
+
+- **Main file** (`agent_reports/evidence_packet.md`): summary, top sources by confidence, key patterns.
+- **Appendix file** (`agent_reports/evidence_appendix.md`): every source with full excerpts.
+
+### Step 3: Return path to orchestrator
+
+Return only:
+
+```
+Evidence written to agent_reports/evidence_packet.md
+- Sources found: N
+- Confidence breakdown: X high, Y medium, Z low
+- Key themes: [1-3 sentence summary]
+```
+
 ## Rules
 
-- Never edit files.
+- Always write evidence to files. Do not return large lists inline.
 - Never copy new files into `raw/`.
 - Never update logs, maps, dictionary, reports, or workspace indexes.
 - Report evidence only; do not synthesize interpretation.
 - Include a source path for every evidence item.
-- If no relevant source exists, say so clearly.
+- If no relevant source exists, write a packet with `sources_found: 0` and say so clearly.
+- If you run multiple search rounds, append to the same file — do not overwrite.
 
 ## See also
 

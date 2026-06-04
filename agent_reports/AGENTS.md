@@ -3,7 +3,7 @@ type: directory_guidance
 scope: agent_reports/
 description:
   - Rules for durable reports, checkpoints, evidence packets, and verification notes.
-  - "`pilosa-writer`, `pilosa-verifier`, and `pilosa-janitor` use this directory for non-transient output artifacts."
+  - "`pilosa-writer`, `pilosa-verifier`, `pilosa-janitor`, and `pilosa-searcher` use this directory for output artifacts."
 connects_to:
   - AGENTS.md
   - logs/user_requests.md
@@ -21,7 +21,20 @@ Synthesis reports, evidence packets, verification notes, checkpoints, and mainte
 - `pilosa-writer` writes reports: full synthesis, partial results, checkpoints. Each report answers the original user prompt or marks progress.
 - `pilosa-verifier` annotates and corrects reports in-place. Standalone verification notes are only for verification routes without an existing report.
 - `pilosa-janitor` evaluates reports for staleness and may propose archival to `.trash/` based on age alone (no structured research needs).
-- `pilosa-searcher` does not write here — outputs raw evidence packets inline to the orchestrator.
+- `pilosa-searcher` writes evidence packets and appendices here during search operations. These are process files — moved to `.trash/` after the final report is verified.
+- `pilosa-mapper` writes extraction batches here during startup indexing. These are process files — moved to `.trash/` after indexing completes.
+
+## Process File Lifecycle
+
+Process files are intermediate artifacts. Only the final verified report stays.
+
+| Process File | Created By | Purpose | Lifecycle |
+|---|---|---|---|
+| `evidence_packet.md` | `pilosa-searcher` | Raw evidence from corpus search | Created during search → Read by Writer → Moved to `.trash/` after verification |
+| `evidence_appendix.md` | `pilosa-searcher` | Overflow evidence (when >300 lines) | Created during search → Read by Writer → Moved to `.trash/` after verification |
+| `extraction_batch_*.md` | `pilosa-mapper` | Extraction packets per batch | Created during indexing → Read by Writer → Moved to `.trash/` after indexing |
+
+**Rule: Only the final verified report remains in `agent_reports/`.**
 
 ## Operations
 
@@ -38,6 +51,8 @@ Synthesis reports, evidence packets, verification notes, checkpoints, and mainte
 |---|---|---|
 | `synthesis` | Full answer to a user prompt | `pilosa-writer` |
 | `evidence_packet` | Raw evidence from `pilosa-searcher` handoff | `pilosa-searcher` -> `pilosa-writer` |
+| `evidence_appendix` | Overflow evidence when packet exceeds ~300 lines | `pilosa-searcher` |
+| `extraction_batch` | Extraction packets from mapper during indexing | `pilosa-mapper` |
 | `checkpoint` | Partial progress during long routes | `pilosa-writer` |
 | `verification` | Standalone claim/path/index verification when no report exists | `pilosa-verifier` |
 | `maintenance` | Index repair, stale audit, cleanup proposal | `pilosa-verifier` / `pilosa-janitor` |
@@ -51,4 +66,4 @@ Synthesis reports, evidence packets, verification notes, checkpoints, and mainte
 ## See also
 
 - [[AGENTS]] — orchestrator playbook (`pilosa-writer` dispatch, `pilosa-verifier` dispatch)
-- [[.trash/AGENTS]] — archival destination for stale reports
+- [[.trash/AGENTS]] — archival destination for stale reports and process files

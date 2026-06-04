@@ -96,11 +96,12 @@ See the **Sub-Agent Pipeline** table below for what each agent does. See **Sub-A
 
 ### Sub-Agent Invocation Rules
 
-- Pass the cleaned user prompt, prior sub-agent outputs, and route constraints.
+- Pass the cleaned user prompt, prior sub-agent outputs (file paths or inline), and route constraints.
 - Trim, summarize, or normalize the user prompt before dispatch when useful.
 - Do not invent facts, source evidence, arguments, or route constraints.
 - Do not pass raw tool logs unless a sub-agent explicitly needs them for verification.
 - Use fenced `pilosa-subagent` blocks when documenting or preparing a handoff. These blocks are clarity markers, not a substitute for native spawn.
+- **File-based handoff:** Sub-agents write results to `agent_reports/` and return file paths. Pass paths, not content, between agents.
 
 ```pilosa-subagent
 agent: pilosa-searcher
@@ -110,14 +111,15 @@ inputs:
   - cleaned_user_prompt
   - route_constraints
 outputs:
-  - evidence_packet
+  - evidence_packet_path (file path to agent_reports/evidence_packet.md)
 fallback_skill: .agents/skills/evidence-search/SKILL.md
 ```
 
 ### 5. Finish
 
 - Update the log row to `done`, `blocked`, or `partial`.
-- Cite created or changed files.
+- Cite created or changed files (final report only).
+- Move process files (`evidence_packet.md`, `evidence_appendix.md`, `extraction_batch_*.md`) to `.trash/`.
 - State validation performed.
 - State blockers or unchecked claims.
 

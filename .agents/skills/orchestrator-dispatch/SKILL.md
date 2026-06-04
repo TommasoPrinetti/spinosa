@@ -80,9 +80,25 @@ Searcher and Analyst run in parallel when both are in the sequence. Writer waits
 
 Canonical definitions live in `.agents/agents/`. Vendor agent directories are generated mirrors, except `.codex/agents/` which is a tracked TOML expansion. The orchestrator playbook lives in `AGENTS.md`.
 
+### File-Based Handoff
+
+Sub-agents write results to files and return paths. The orchestrator passes **paths, not content** between agents.
+
+**How it works:**
+
+1. **Searcher** writes evidence to `agent_reports/evidence_packet.md` (and optionally `agent_reports/evidence_appendix.md` for large sets). Returns path + summary.
+2. **Mapper** writes extraction packets to `agent_reports/extraction_batch.md`. Returns path + count.
+3. **Orchestrator** passes the file paths to the next agent (e.g., Writer reads from the files).
+4. **Writer** reads evidence from the files, creates the final report in `agent_reports/`.
+5. **Cleanup**: After the final report is verified, process files (`evidence_packet.md`, `evidence_appendix.md`, `extraction_batch.md`) are moved to `.trash/`. Only the final report remains in `agent_reports/`.
+
+**Size thresholds:**
+- If a sub-agent returns a file path instead of inline content, always pass the path — never cat the file into the next agent's prompt.
+- If evidence exceeds ~300 lines or ~50 sources, expect the Searcher to split into main packet + appendix.
+
 ### Sub-Agent Invocation Rules
 
-- Pass the cleaned user prompt, prior sub-agent outputs, and route constraints.
+- Pass the cleaned user prompt, prior sub-agent outputs (file paths or inline), and route constraints.
 - Trim, summarize, or normalize the user prompt before dispatch when useful.
 - Do not invent facts, source evidence, arguments, or route constraints.
 - Do not pass raw tool logs unless a sub-agent explicitly needs them for verification.
@@ -96,14 +112,15 @@ inputs:
   - cleaned_user_prompt
   - route_constraints
 outputs:
-  - evidence_packet
+  - evidence_packet_path (file path to agent_reports/evidence_packet.md)
 fallback_skill: .agents/skills/evidence-search/SKILL.md
 ```
 
 ### 5. Close
 
 - Update the log row to `done`, `blocked`, or `partial`.
-- Cite created or changed files.
+- Cite created or changed files (final report only).
+- Move process files to `.trash/` (evidence packets, extraction batches, appendix files).
 - State validation performed.
 - State blockers or unchecked claims.
 
@@ -115,6 +132,7 @@ fallback_skill: .agents/skills/evidence-search/SKILL.md
 - Sub-agents never ask questions directly.
 - Never invent support. Report blockers honestly.
 - Stop when the chain is complete — do not continue just because another specialist could add more detail.
+- **Only the final verified report stays in `agent_reports/`. Process files are moved to `.trash/` after delivery.**
 
 ## Skills Reference
 
@@ -132,7 +150,7 @@ See `references/skills.md` for the full role → skill mapping.
 
 ## See also
 
-- `evidence-search` — read-only evidence retrieval fallback for Searcher
+- `evidence-search` — file-based evidence retrieval fallback for Searcher
 - `source-intake` — source file registration; not a Searcher fallback
 - `context-analysis` — broader contextual analysis
 - `report-writing` — report synthesis
