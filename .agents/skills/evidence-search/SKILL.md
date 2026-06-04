@@ -1,6 +1,10 @@
 ---
 name: evidence-search
+type: skill
+scope: evidence_retrieval
 description: Read-only fallback for pilosa-searcher evidence retrieval
+created: 2026-05-26
+updated: 2026-06-04
 ---
 
 ## Purpose

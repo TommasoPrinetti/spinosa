@@ -1,6 +1,10 @@
 ---
 name: context-analysis
+type: skill
+scope: contextual_analysis
 description: Provide broader contextual analysis parallel to Searcher
+created: 2026-05-26
+updated: 2026-06-04
 ---
 
 ## Purpose

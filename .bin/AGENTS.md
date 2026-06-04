@@ -3,12 +3,12 @@ type: directory_guidance
 scope: .bin/
 description:
   - Rules for setup and validation shell scripts.
-  - Agents read this before inspecting or changing script behavior.
+  - Read this before inspecting or changing script behavior.
 connects_to:
   - AGENTS.md
   - system/startup.md
 created: 2026-06-03
-updated: 2026-06-03
+updated: 2026-06-04
 ---
 
 # .bin — Shell Scripts

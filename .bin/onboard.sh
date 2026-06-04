@@ -15,7 +15,7 @@ ROOT="$(pwd)"
 TODAY="$(date +%Y-%m-%d)"
 FORCE="0"
 
-Information="$ROOT/context.md"
+Context="$ROOT/system/context.md"
 Config="$ROOT/system/configuration.md"
 Agents="$ROOT/AGENTS.md"
 Claude="$ROOT/CLAUDE.md"
@@ -802,9 +802,9 @@ copy_source() {
 
 # ── overwrite check ─────────────────────────────────────────────────────────
 has_filled_setup() {
-  [[ -f "$Information" && -f "$Config" ]] || return 1
+  [[ -f "$Context" && -f "$Config" ]] || return 1
   local b c
-  b=$(<"$Information")
+  b=$(<"$Context")
   c=$(<"$Config")
   for ph in "[project name]" "[path]"; do
     [[ "$b" == *"$ph"* || "$c" == *"$ph"* ]] && return 1
@@ -929,11 +929,11 @@ main() {
   ok "CLI: ${BOLD}${preferred_cli}${RESET}"
 
   # ── ensure directories exist ──────────────────────────────────────────────
-  mkdir -p "$(dirname "$Information")"
+  mkdir -p "$(dirname "$Context")"
   mkdir -p "$(dirname "$Config")"
 
-  # ── write informations ─────────────────────────────────────────────────────
-  cat > "$Information" << INFORMATIONS_EOF
+  # ── write context ──────────────────────────────────────────────────────
+  cat > "$Context" << CONTEXT_EOF
 ---
 type: information
 agent: setup_cli
@@ -988,7 +988,7 @@ connects_to:
 
 ## Preferred LLM CLI
 $preferred_cli
-INFORMATIONS_EOF
+CONTEXT_EOF
 
   # ── write config ──────────────────────────────────────────────────────────
   local safe_source
@@ -1026,7 +1026,7 @@ l2_policy: verifier_required
 
 protected_paths:
   - "$safe_source"
-   - context.md
+  - context.md
 
 stale_after_days: 30
 preferred_llm_cli: "$preferred_cli"

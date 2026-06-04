@@ -1,8 +1,12 @@
 ---
 name: pilosa-searcher
+type: agent
+scope: evidence_retrieval
 description: |
   Searches raw corpus, maps, and dictionary for evidence.
   Read-only agent that never edits files.
+created: 2026-05-26
+updated: 2026-06-04
 permissions:
   read: allow
   grep: allow

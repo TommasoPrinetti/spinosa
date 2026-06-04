@@ -3,7 +3,7 @@ type: directory_guidance
 scope: maps/
 description:
   - Rules for navigation maps generated from the raw corpus.
-  - Agents read this before creating, repairing, or validating map files.
+  - Read this before creating, repairing, or validating map files.
 connects_to:
   - AGENTS.md
 created: 2026-06-03
@@ -18,11 +18,11 @@ updated: 2026-06-04
 
 | Map | Role | Content |
 |---|---|---|
-| `concept_index.md` | Master concept index | Concepts with file references, definitions, exercise/cohort coverage |
+| `concept_index.md` | Master concept index | Concepts with file references, definitions, group coverage |
 | `thematic_tags.md` | Thematic navigation | Files organized by thematic tags (2-5 tags per file) |
-| `cross_exercise_synthesis.md` | Longitudinal analysis | Themes spanning 3+ exercises, showing evolution across curriculum |
+| `cross_exercise_synthesis.md` | Longitudinal analysis | Themes spanning 3+ files, showing evolution across the corpus |
 | `entity_index.md` | Entity navigation | People, organizations, places with file references |
-| `corpus_structure.md` | Structural navigation | Files organized by exercise and cohort |
+| `corpus_structure.md` | Structural navigation | Files organized by their structure in the corpus |
 
 ## Rules
 
@@ -32,8 +32,8 @@ updated: 2026-06-04
 - YAML `connects_to:` fields use bare repo-relative paths.
 - Do not include absolute source paths in map headers or body text — use `raw/` relative paths only.
 - Do not map `AGENTS.md` files; they are control instructions, not source evidence.
-- Files have 2-5 thematic tags from content analysis, not exercise names.
-- Cross-exercise synthesis identifies themes that appear in 3+ exercises.
+- Files have 2-5 thematic tags from content analysis, not group names.
+- Cross-file synthesis identifies themes that appear in 3+ files.
 
 ## Validation
 
@@ -41,4 +41,4 @@ updated: 2026-06-04
 - Each source entry links to an existing raw copy.
 - Concepts have definitions and file references.
 - Thematic tags are content-derived, not filename-derived.
-- Cross-exercise themes span 3+ exercises.
+- Cross-file themes span 3+ files.

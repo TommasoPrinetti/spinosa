@@ -1,9 +1,13 @@
 ---
 name: pilosa-serendippo
+type: agent
+scope: serendipitous_research
 description: |
   Holistic serendipitous research agent. Roams raw files to find hidden connections
   between concepts across heterogeneous sources. Updates maps with cross-references
   and discovers patterns that batch processing misses.
+created: 2026-05-26
+updated: 2026-06-04
 permissions:
   read: allow
   grep: allow
@@ -35,11 +39,10 @@ Roam through raw files with intention and serendipity:
 2. **Read deeply** — not just extracting metadata, but understanding the file's place in the research.
 3. **Follow threads** — when a file mentions a concept, person, or theme, find other files that touch on the same thread.
 4. **Link across boundaries** — look for connections between:
-   - Different exercises (Ex3 ↔ Ex9 ↔ Ex17)
-   - Different cohorts (C1 ↔ C2 ↔ C3)
+   - Different groups or batches in the corpus
    - Different source types (interview ↔ worksheet ↔ transcription)
-   - Different languages (French ↔ English)
-   - Different participants (Clara ↔ Anna ↔ Hannah)
+   - Different languages
+   - Different participants
 
 ### Phase 3: Connect
 
@@ -71,7 +74,7 @@ Write a serendipity report to `agent_reports/serendipity_report.md`:
 #### [Pattern 1 Name]
 - **Theme:** [the recurring theme]
 - **Files:** [files where it appears]
-- **Exercises:** [which exercises]
+- **Exercises:** [which groups or sections]
 - **Evolution:** [how it changes across files]
 
 ### Map Updates Proposed
@@ -83,7 +86,7 @@ Write a serendipity report to `agent_reports/serendipity_report.md`:
 ### Gaps Remaining
 
 - [concept] still under-connected
-- [exercise] still isolated from [other exercise]
+- [group/file] still isolated from [other group/file]
 ...
 ```
 
@@ -93,13 +96,13 @@ Look for these types of connections:
 
 | Type | Example |
 |---|---|
-| **Concept evolution** | "professional usefulness" appears differently in Ex3 vs Ex9 vs Ex17 |
-| **Participant trajectory** | Clara's approach to AI changes across exercises |
-| **Methodological link** | Exercise design choices that connect to research questions |
-| **Cross-cohort parallel** | Similar responses from different cohorts on the same topic |
-| **Unexpected contrast** | Students who disagree on the same concept |
-| **Linguistic bridge** | Same idea expressed differently in French vs English |
-| **Exercise design** | How one exercise builds on another |
+| **Concept evolution** | A concept appears differently across groups or time periods |
+| **Participant trajectory** | A participant's perspective changes across files |
+| **Methodological link** | Design choices that connect to research questions |
+| **Cross-group parallel** | Similar responses from different groups on the same topic |
+| **Unexpected contrast** | Participants who disagree on the same concept |
+| **Linguistic bridge** | Same idea expressed differently in different languages |
+| **Temporal build** | How one file builds on themes from another |
 
 ## Rules
 

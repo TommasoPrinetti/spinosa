@@ -1,11 +1,12 @@
 ---
 type: project_configuration
 agent: startup
+scope: project_configuration
 description:
   - Operating profile for the current Pilosa project or framework template.
   - Agents read this first to learn source policy, protected paths, and setup status.
 created: 2026-06-03
-updated: 2026-06-03
+updated: 2026-06-04
 setup_status: not_started
 ---
 

@@ -28,7 +28,7 @@ required_files=(
   "AGENTS.md"
   "system/configuration.md"
   "system/startup.md"
-"context.md"
+  "system/context.md"
 )
 
 for file in "${required_files[@]}"; do
@@ -36,7 +36,7 @@ for file in "${required_files[@]}"; do
 done
 
 config="$(read_file "system/configuration.md")"
-blueprint="$(read_file "context.md")"
+blueprint="$(read_file "system/context.md")"
 startup_text="${config}
 ${blueprint}"
 
@@ -68,14 +68,10 @@ if [[ -z "$source_path" || "$source_path" == "[path]" ]]; then
   failures+=("source_location is missing or still a placeholder.")
 else
   # check both relative and absolute
-  if [[ ! -d "$source_path" && ! -d "$ROOT/$source_path" ]]; then
+  local_path="$source_path"
+  [[ ! -d "$local_path" ]] && local_path="$ROOT/$source_path"
+  if [[ ! -d "$local_path" ]]; then
     failures+=("Source location does not exist: $source_path")
-  else
-    local_path="$source_path"
-    [[ ! -d "$local_path" ]] && local_path="$ROOT/$source_path"
-    if [[ ! -d "$local_path" ]]; then
-      warnings+=("Source location is not a directory: $source_path")
-    fi
   fi
 fi
 
@@ -217,8 +213,8 @@ if [[ "$startup_text" == *"setup_status: workspace_started"* ]]; then
     failures+=("Missing maps directory: maps")
   else
     while IFS= read -r -d '' map_file; do
-      basename="${map_file#$maps_dir/}"
-      [[ "$basename" == "AGENTS.md" || "$basename" == "map_template.md" || "$basename" == ".gitkeep" ]] && continue
+      map_basename="${map_file#$maps_dir/}"
+      [[ "$map_basename" == "AGENTS.md" || "$map_basename" == "map_template.md" || "$map_basename" == ".gitkeep" ]] && continue
 
       first_line="$(sed -n '1p' "$map_file")"
       if [[ "$first_line" != "---" ]]; then
@@ -243,6 +239,20 @@ if [[ "$startup_text" == *"setup_status: workspace_started"* ]]; then
       fi
     done < <(find "$maps_dir" -maxdepth 1 -type f -name "*.md" -print0 2>/dev/null)
   fi
+fi
+
+# ── check workspace_index.md and dictionary.md ───────────────────────────────
+if [[ "$startup_text" == *"setup_status: workspace_started"* ]]; then
+  for required_file in "system/workspace_index.md" "system/dictionary.md"; do
+    if [[ ! -f "$ROOT/$required_file" ]]; then
+      failures+=("Missing required file: $required_file")
+    else
+      file_content="$(read_file "$required_file")"
+      if [[ -z "$file_content" ]]; then
+        failures+=("Empty required file: $required_file")
+      fi
+    fi
+  done
 fi
 
 # ── output ───────────────────────────────────────────────────────────────────

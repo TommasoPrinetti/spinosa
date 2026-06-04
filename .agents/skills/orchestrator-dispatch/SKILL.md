@@ -1,6 +1,10 @@
 ---
 name: orchestrator-dispatch
+type: skill
+scope: prompt_routing
 description: Classify a user prompt and route it through the sub-agent pipeline
+created: 2026-05-26
+updated: 2026-06-04
 ---
 
 ## Purpose

@@ -1,6 +1,10 @@
 ---
 name: claim-verification
+type: skill
+scope: claim_verification
 description: Verify claims, quotes, and paths against original sources
+created: 2026-05-26
+updated: 2026-06-04
 ---
 
 ## Purpose

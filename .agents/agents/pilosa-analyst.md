@@ -1,8 +1,12 @@
 ---
 name: pilosa-analyst
+type: agent
+scope: project_context
 description: |
   Provides broader contextual analysis parallel to Searcher.
   Challenges assumptions, identifies gaps, and offers alternative framings.
+created: 2026-05-26
+updated: 2026-06-04
 permissions:
   read: allow
 ---

@@ -3,13 +3,13 @@ type: directory_guidance
 scope: raw/
 description:
   - Rules for raw source copies created during onboarding or source intake.
-  - Agents read this before modifying headers or validating corpus files.
+  - Read this before modifying headers or validating corpus files.
 connects_to:
   - AGENTS.md
   - system/header_template.md
   - maps/AGENTS.md
 created: 2026-06-03
-updated: 2026-06-03
+updated: 2026-06-04
 ---
 
 # raw — Corpus Copies

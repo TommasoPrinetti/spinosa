@@ -74,7 +74,7 @@ updated: YYYY-MM-DD
 ```
 
 Rules:
-- `source` uses a relative path from the repo root (e.g., `raw/Ex10/...`). The source location is stored in [[context]] for reference during onboarding only.
+- `source` uses a relative path from the repo root (e.g., `raw/folder/file.md`). The source location is stored in [[context]] for reference during onboarding only.
 - `language` is the ISO 639-1 code of the source file's primary language (en, fr, pt, es, etc.).
 - `people`, `places`, `organizations` MUST use canonical forms from [[dictionary]].
 - `keywords` include both canonical terms and aliases in the source's language (so grep finds any variant).
@@ -133,7 +133,7 @@ scope: raw/
 connects_to:
   - raw/
   - dictionary.md
-  - maps/map_overview.md
+  - maps/concept_index.md
 map_quality: machine_generated | checked | human_reviewed
 description_depth: retrieval_oriented
 wikilink_policy: obsidian_wikilinks_required
@@ -147,7 +147,7 @@ updated: YYYY-MM-DD
 
 Map files must use Obsidian wikilinks for internal references:
 - `[[raw/interviews/interview_01__txt|interview_01.txt]]`
-- `[[maps/concept_map]]`
+- `[[maps/concept_index]]`
 
 Map entries must use a tabular format for efficiency. Each file entry gets a wikilink heading plus a compact table:
 

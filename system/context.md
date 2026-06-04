@@ -1,11 +1,12 @@
 ---
 type: context
 agent: startup
+scope: project_context
 description:
   - Project context: scope, names, particularities, relationships.
   - Read by Writer for synthesis; updated by startup during indexing.
 created: 2026-05-26
-updated: 2026-05-26
+updated: 2026-06-04
 setup_status: not_started
 connects_to:
   - AGENTS.md
@@ -13,7 +14,6 @@ connects_to:
   - system/startup.md
   - logs/user_requests.md
 ---
-
 # Context
 
 ## What This System Is

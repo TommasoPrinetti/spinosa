@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # sync-agents.sh — Generate vendor-specific agent mirrors and sync skills
 #
 # Source of truth:
@@ -19,7 +19,7 @@
 #
 # Usage: bash .bin/sync-agents.sh
 
-set -e
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
@@ -30,8 +30,6 @@ echo ""
 
 # ── Clean stale mirrors ──────────────────────────────────────────────
 echo "--- Cleaning stale mirrors ---"
-rm -rf "$REPO_ROOT/.kilocode"
-echo "  Removed .kilocode/"
 rm -rf "$REPO_ROOT/.opencode/skills"
 echo "  Removed .opencode/skills/"
 
@@ -63,8 +61,8 @@ for canonical in "$REPO_ROOT/.agents/agents/"*.md; do
     # Parse name
     name=$(echo "$frontmatter" | sed -n 's/^name: *//p' | head -1)
 
-    # Parse multiline description (description: through next top-level key)
-    description=$(sed -n '/^description:/,/^permissions:/p' "$canonical" | sed '/^description:/d;/^permissions:/d' | sed 's/^ *//' | tr -s ' ')
+    # Parse multiline description (description: | through next top-level key)
+    description=$(sed -n '/^description: |/,/^[a-z]/p' "$canonical" | sed '/^description:/d;/^[a-z]/d' | sed 's/^  //' | tr -s ' ')
     [ -z "$description" ] && description="$agent"
 
     # Parse permissions (skip list items starting with dashes)
@@ -154,7 +152,7 @@ done
 # ── Sync skills ──────────────────────────────────────────────────────
 echo ""
 echo "--- Syncing skills ---"
-for platform in .claude .codex; do
+for platform in .opencode .claude .codex; do
     dest="$REPO_ROOT/$platform/skills"
     rm -rf "$dest"
     mkdir -p "$dest"

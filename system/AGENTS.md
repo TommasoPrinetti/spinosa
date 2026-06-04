@@ -7,7 +7,7 @@ description:
 connects_to:
   - AGENTS.md
 created: 2026-06-03
-updated: 2026-06-03
+updated: 2026-06-04
 ---
 
 # system — Architecture & Context
@@ -16,15 +16,15 @@ Core system files that define how Pilosa operates. All other directories depend 
 
 ## Contents
 
-| File | Purpose |
-|---|---|
-| `context.md` | Project context: scope, names, particularities. Read by Writer; updated by startup. |
-| `configuration.md` | Operating profile: source policy, source location, evidence standards, enabled workflows. |
-| `startup.md` | Workspace indexing protocol (read by orchestrator). |
-| `dictionary.md` | Shared vocabulary of canonical names, places, organizations, concepts. |
-| `header_template.md` | Canonical YAML frontmatter schema for raw copies. |
-| `workspace_index.md` | Master workspace index (generated at startup). |
-| `system_architecture_map.md` | Diagrams and cross-reference tables. |
+| File                         | Purpose                                                                                   |
+| ---------------------------- | ----------------------------------------------------------------------------------------- |
+| `context.md`                 | Project context: scope, names, particularities. Read by Writer; updated by startup.       |
+| `configuration.md`           | Operating profile: source policy, source location, evidence standards, enabled workflows. |
+| `startup.md`                 | Workspace indexing protocol (read by orchestrator).                                       |
+| `dictionary.md`              | Shared vocabulary of canonical names, places, organizations, concepts.                    |
+| `header_template.md`         | Canonical YAML frontmatter schema for raw copies.                                         |
+| `workspace_index.md`         | Master workspace index (generated at startup).                                            |
+| `system_architecture_map.md` | Diagrams and cross-reference tables.                                                      |
 
 ## Rules
 

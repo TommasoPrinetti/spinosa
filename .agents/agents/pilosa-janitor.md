@@ -1,8 +1,12 @@
 ---
 name: pilosa-janitor
+type: agent
+scope: workspace_hygiene
 description: |
   Audits repo hygiene, evaluates staleness, and proposes archival moves to .trash/.
   Requires explicit user confirmation before any move.
+created: 2026-05-26
+updated: 2026-06-04
 permissions:
   read: allow
   grep: allow

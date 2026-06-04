@@ -1,8 +1,12 @@
 ---
 name: pilosa-mapper
+type: agent
+scope: startup_indexing
 description: |
   Reads raw files in batch and extracts concepts, thematic tags, and entities.
   Specialized for startup indexing — not for search or evidence retrieval.
+created: 2026-05-26
+updated: 2026-06-04
 permissions:
   read: allow
 ---
@@ -25,7 +29,7 @@ For every file, extract:
 2. **Thematic tags** (2-5): Brief search-optimized labels for grep. Examples: "ethics", "professional-use", "student-reflection", "methodology", "critique", "comparison"
 3. **Key entities**: People, organizations, places mentioned. Use dictionary canonical forms.
 4. **One-sentence summary**: What this file is about.
-5. **Cross-exercise connections**: Does this file reference or relate to content in other exercises? If yes, name the exercises.
+5. **Cross-file connections**: Does this file reference or relate to content in other files? If yes, name the files.
 
 ## Output Format
 
@@ -42,7 +46,7 @@ Return extraction packets in this format:
 - **Thematic tags:** [tag1, tag2, tag3]
 - **Key entities:** [Entity1, Entity2]
 - **Summary:** One-sentence summary.
-- **Cross-exercise:** Ex3, Ex5 (or "none")
+- **Cross-file:** [related file1], [related file2] (or "none")
 
 ### [filename2]
 ...

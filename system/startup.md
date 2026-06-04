@@ -15,10 +15,8 @@ updated: 2026-06-04
 # startup.md — Workspace Indexing Protocol
 
 This is the **protocol document** that defines what to do and how to do it. The **orchestrator** reads this file and executes the steps.
-
 Use this file when the user asks to **start the workspace** or when setup files still contain placeholders.
-
-Startup is the only authority that can mark setup complete. `.bin/check-startup.sh` is a developer-facing validation helper, not a separate user-facing setup path.
+Startup.md is the only authority that can mark setup complete. `.bin/check-startup.sh` is a developer-facing validation helper, not a separate user-facing setup path.
 
 ## What Onboarding Already Did
 
@@ -26,8 +24,7 @@ The CLI onboarding script (`bash .bin/onboard.sh`) has already:
 
 - Collected project name, source location, and preferred LLM CLI
 - Scanned the source corpus and copied accepted files into `raw/` (text, native-readable, PDFs)
-- Skipped images, video, audio, and `AGENTS.md` control files
-- Written `context.md` and `configuration.md` with `setup_status: cli_started`
+- Populated partly `context.md` and `configuration.md` with `setup_status: cli_started`
 
 **Startup does not repeat onboarding.** Startup takes the raw corpus and builds the workspace content: dictionary, concept index, maps, and validation.
 
@@ -39,8 +36,10 @@ Your job is to:
 2. **Build the master dictionary** from corpus evidence
 3. **Extract concepts, themes, and entities** from raw files
 4. **Write concept-indexed maps** that help future LLMs find relevant files by meaning, not just filename
-5. **Cross-exercise synthesis** — identify themes that appear across multiple exercises
+5. **Cross-file synthesis** — identify themes that appear across multiple files
 6. **Run startup validation and retrieval tests**
+
+You can use `set_goal` function to pursue this mission.
 
 ## Non-Negotiable
 
@@ -68,7 +67,7 @@ Mandatory initial reads:
 On-demand reads:
 - [[system_architecture_map]] only when architecture context is needed.
 
-If the user already ran `bash .bin/onboard.sh`, treat its answers as the **setup draft** and complete startup without repeating those questions. Project description and helpful artifact URLs are optional context. If absent, record them as `not provided during fast setup` and infer the working scope from the active raw corpus during indexing. External source policy defaults to `no`.
+Project description and helpful artifact URLs are optional context. If absent, infer them from the working scope from the active raw corpus during mapping. External source policy defaults to `no`
 
 ---
 
@@ -84,17 +83,6 @@ Read [[context]] and [[configuration]]. Check:
 - `configuration.md` exists with `source_location` filled (not `[path]`)
 - Source location directory exists on disk
 - No blocking placeholders remain (`[path]`, `[project name]`)
-
-## 1.2 Check For Blocking Missing Info
-
-Do not ask follow-up questions before Phase 2 unless:
-
-- the project title, source location, or preferred LLM CLI is absent,
-- the source location cannot be located,
-- external URL access needs permission because the user provided URLs and policy is not already `yes`, or
-- a risky assumption blocks immediate indexing.
-
-Missing project description and missing helpful artifact URLs do not block Phase 2.
 
 ---
 
@@ -117,19 +105,17 @@ find raw/ -type f -not -name ".DS_Store" -not -name "AGENTS.md" -not -name "INDE
 
 Record this number as `TOTAL_FILES` in `workspace_index.md` under "Extraction Progress". Every subsequent step checks against this number.
 
-Separately account for unsupported files and skipped media that remain only at the source location. Do not create `.pointer.md` records for them during startup. Record media counts, extensions, and processing gaps in `workspace_index.md` and the startup report as source media coverage.
+Separately account for unsupported files and skipped media that remain only at the source location. Record media counts, extensions, and processing gaps in `workspace_index.md` and the startup report as source media coverage.
 
-## 2.2 Log Source Intake
-
-Record the source batch or external-access decision in `logs/user_requests.md` when traceability is needed. Use route `source_intake` or `external_access` and include the retained output or reason.
-
-## 2.3 Build Dictionary And Extract Concepts
+## 2.2 Build Dictionary And Extract Concepts
 
 **This is the core step.** One pass over the corpus that builds both the dictionary and the concept index simultaneously. No duplicate reading.
 
 ### Step 1: Spawn batches until all files are read
 
-Split raw copies into batches of 10-15 files. Spawn **pilosa-mapper** sub-agents. Each batch reads files and extracts:
+Split raw copies into batches of 15-20 files. Spawn `pilosa-mapper` sub-agents, try to maximaze agents to process the most files possible each.
+
+Each batch reads files and extracts:
 
 **For the dictionary:**
 
@@ -140,14 +126,13 @@ Split raw copies into batches of 10-15 files. Spawn **pilosa-mapper** sub-agents
 5. **Inferred concepts** — domain-specific ideas, theories, frameworks inferred from multiple source terms. Mark as inferred.
 6. **Domain terms** — specialized vocabulary, acronyms, jargon used in the sources.
 7. **Uncertain terms and metadata** — unresolved people, dates, places, or terms needing review.
-8. **Machine artifacts** — ASR speaker labels, diarization labels, OCR noise, conversion residue, timestamps.
 
 **For concept extraction (same pass):**
 
 9. **Core concepts** (2-5 per file): The main ideas discussed. Use the dictionary for canonical terms.
 10. **Thematic tags** (2-5 per file): Brief search-optimized labels.
-11. **Key entities**: People, organizations, places mentioned (use dictionary canonical forms).
-12. **Cross-exercise connections**: Does this file reference or relate to content in other files?
+11. **Cross-file connections**: Does this file reference or relate to content in other files?
+12. **Awkward and unique concepts:** the ones that stand out for unicity in relation to the others
 
 **Multilingual rule:** Keywords must appear in the language they were found in. If a source is in French, French keywords are recorded. If in English, English keywords. If a concept appears in multiple languages, list all language variants as aliases.
 
@@ -158,6 +143,8 @@ After each batch completes:
 2. Append extraction packets to `agent_reports/extraction_checkpoint.md`
 3. Update `workspace_index.md` "Extraction Progress" section
 4. Track: `files_read / TOTAL_FILES`
+
+**Note**: sub-agents are preferred to write directly into .md files to keep their knowledge anchored.
 
 **Arrival metric:** `files_read == TOTAL_FILES`. Continue spawning batches until every file has been read by at least one sub-agent.
 
@@ -172,7 +159,6 @@ Use accumulated evidence to enrich [[context]]:
 - **Methods**: Observe what the raw copies actually contain. Infer the research methods.
 - **Source universe**: List the actual source types found, their languages, and approximate date ranges.
 - **Research vocabulary**: Extract key actors, institutions, places, and concepts that appear repeatedly.
-- **Likely output needs**: Based on the corpus structure, infer what the researcher will need.
 
 ### Step 5: Merge into concept index
 
@@ -180,7 +166,7 @@ After all batches complete, merge extraction packets into a **concept index** �
 
 ## 2.4 Write Concept-Indexed Maps
 
-Use **pilosa-writer** sub-agents to create maps from the concept index. The maps are the primary navigation layer for backsearching.
+Use `pilosa-writer` sub-agents to create maps from the concept index. The maps are the primary navigation layer for backsearching.
 
 ### Input
 
@@ -190,7 +176,7 @@ Read `agent_reports/concept_index_accumulated.md` (from step 2.3) and `agent_rep
 
 1. **`maps/concept_index.md`** — The master concept index. Each concept gets a section with:
    - Definition (1-2 sentences)
-   - Files where it appears (with wikilinks)
+   - Files where it appears (with Obsidian wikilinks)
    - Related concepts
 
 2. **`maps/thematic_tags.md`** — Files organized by thematic tag. Each tag gets a section listing all files with that tag.
@@ -226,7 +212,10 @@ If the corpus has exercise/cohort structure, add those columns:
 
 ### Arrival Metric
 
-**Every file in `agent_reports/extraction_checkpoint.md` must appear in at least one map.** After writing all maps, verify:
+**Every file in `agent_reports/extraction_checkpoint.md` must appear in at least one map.**
+So we're sure we processed everything.
+
+After writing all maps, verify:
 
 ```
 Files in checkpoint: N
@@ -241,7 +230,7 @@ If any file is missing from all maps, the maps are incomplete. Fix before procee
 
 Maps start as `map_quality: machine_generated`. After Verifier review, update to `map_quality: checked` or `map_quality: human_reviewed`.
 
-## 2.5 Cross-Exercise Synthesis
+## 2.5 Cross-File Synthesis
 
 **Dedicated step.** After all concept extraction is complete, run a synthesis pass:
 
@@ -254,7 +243,7 @@ This map is critical for longitudinal analysis — it shows how themes develop a
 
 ## 2.6 Serendipitous Connection Discovery
 
-**Dedicated step.** After cross-exercise synthesis is complete, spawn **pilosa-serendippo** to find hidden connections that batch processing misses.
+**Dedicated step.** After cross-file synthesis is complete, spawn `pilosa-serendippo` to find hidden connections that batch processing misses.
 
 ### Purpose
 
@@ -262,13 +251,13 @@ The mapper agent reads files in structured batches — efficient but linear. The
 
 ### When to Run
 
-- After mapper has processed all files (2.3) and cross-exercise synthesis is written (2.5)
+- After mapper has processed all files (2.3) and cross-file synthesis is written (2.5)
 - Maps exist and have initial concept coverage
-- Serendipa can use existing maps as a starting point
+- `pilosa-serendippo` can use existing maps as a starting point
 
 ### How It Works
 
-1. Spawn pilosa-serendippo with access to maps/ and raw/
+1. Spawn `pilosa-serendippo` with access to maps/ and raw/
 2. It reads existing maps to identify under-connected concepts
 3. It roams through raw files, following threads and finding connections
 4. It writes a serendipity report to `agent_reports/serendipity_report.md`
@@ -276,7 +265,7 @@ The mapper agent reads files in structured batches — efficient but linear. The
 
 ### Arrival Metric
 
-Serendipa runs until the orchestrator signals completion or the researcher intervenes. There is no fixed endpoint — this is an open-ended discovery process.
+`pilosa-serendippo` runs until the orchestrator signals completion or the researcher intervenes. There is no fixed endpoint — this is an open-ended discovery process.
 
 ### Output
 
@@ -323,7 +312,7 @@ Retrieval tests:
 
 1. **Concept retrieval** — grep a concept name in maps/ and confirm it links to raw files
 2. **Thematic retrieval** — grep a thematic tag and confirm it returns relevant files
-3. **Cross-exercise retrieval** — find a concept in cross_exercise_synthesis.md and confirm it links to files across the corpus
+3. **Cross-file retrieval** — find a concept in cross_exercise_synthesis.md and confirm it links to files across the corpus
 4. **Entity retrieval** — grep a person/org name and confirm it links to relevant files
 5. **Map navigation** — open concept_index.md, follow a link to a raw file, confirm it exists
 6. **Unresolved metadata retrieval** — grep `needs_review` or `unresolved` and confirm it is findable
@@ -346,8 +335,8 @@ Recovery behavior:
 - keep `setup_status: cli_started` until validation passes.
 
 Sub-agent delegation:
-- Dictionary + concept extraction: pilosa-mapper reads batches of 10-15 files, extracts terms and concepts in one pass
-- Map writing: pilosa-writer synthesizes concept index into maps
+- Dictionary + concept extraction: `pilosa-mapper` reads batches of 10-15 files, extracts terms and concepts in one pass
+- Map writing: `pilosa-writer` synthesizes concept index into maps
 - Startup owns merge, conflict resolution, and validation; sub-agents never set `setup_status: workspace_started`.
 
 ## 2.11 Progress Tracking And Checkpointing
@@ -425,7 +414,7 @@ Write one startup report in [[agent_reports/]] with the following fields:
 - dictionary size (names, places, organizations, concepts),
 - concept index size (number of concepts, files covered),
 - thematic tag count,
-- cross-exercise themes identified,
+- cross-file themes identified,
 - validation and retrieval test results,
 - remaining non-text files at source location,
 - recommended next actions.

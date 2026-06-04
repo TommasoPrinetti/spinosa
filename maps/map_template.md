@@ -53,12 +53,15 @@ Each concept gets a section with definition, coverage, and file references:
 
 [1-2 sentence definition]
 
-**Exercises:** Ex3, Ex5, Ex9
-**Cohorts:** C1, C2, C3
+| File | Thematic Tags | Summary |
+|---|---|---|
+| [[raw/path/to/file.md\|filename]] | ethics, reflection | One-sentence summary |
+```
 
+If the corpus has exercise/cohort structure, add those columns:
+
+```
 | File | Exercise | Cohort | Thematic Tags | Summary |
-|---|---|---|---|---|
-| [[raw/path/to/file.md\|filename]] | Ex3 | C1 | ethics, reflection | One-sentence summary |
 ```
 
 ## Thematic Tags Format
@@ -70,25 +73,30 @@ Each tag gets a section listing all files with that tag:
 
 [N sentences describing what this tag means in context]
 
+| File | Core Concepts | Summary |
+|---|---|---|
+| [[raw/path/to/file.md\|filename]] | ethics, trust | One-sentence summary |
+```
+
+If the corpus has exercise/cohort structure, add those columns:
+
+```
 | File | Exercise | Cohort | Core Concepts | Summary |
-|---|---|---|---|---|
-| [[raw/path/to/file.md\|filename]] | Ex3 | C1 | ethics, trust | One-sentence summary |
 ```
 
 ## Cross-Exercise Synthesis Format
 
-Each theme gets a section showing evolution across exercises:
+Each theme gets a section showing evolution across the corpus:
 
 ```markdown
 ## [Theme Name]
 
-[N sentences describing how this theme evolves across exercises]
+[N sentences describing how this theme evolves across files]
 
-| Exercise | Files | Key Observations |
+| Grouping | Files | Key Observations |
 |---|---|---|
-| Ex3 | [[raw/file1.md\|file1]], [[raw/file2.md\|file2]] | Initial assessment |
-| Ex9 | [[raw/file3.md\|file3]], [[raw/file4.md\|file4]] | Formal judgment |
-| Ex17 | [[raw/file5.md\|file5]] | Final reflection |
+| [group1] | [[raw/file1.md\|file1]], [[raw/file2.md\|file2]] | Initial assessment |
+| [group2] | [[raw/file3.md\|file3]], [[raw/file4.md\|file4]] | Later development |
 ```
 
 ## Entity Index Format
@@ -100,23 +108,27 @@ Each entity gets a section with role/description and file references:
 
 [1-2 sentence description of who/what this is]
 
+| File | Context |
+|---|---|
+| [[raw/path/to/file.md\|filename]] | Pre-session interview |
+```
+
+If the corpus has exercise/cohort structure, add those columns:
+
+```
 | File | Exercise | Cohort | Context |
-|---|---|---|---|
-| [[raw/path/to/file.md\|filename]] | Ex0 | C1 | Pre-session interview |
 ```
 
 ## Corpus Structure Format
 
-Files organized by exercise and cohort:
+Files organized by their structure in the corpus:
 
 ```markdown
-## Exercise N — [Exercise Name]
+## [Group Name]
 
-[1-2 sentence description of the exercise]
+[1-2 sentence description of this group]
 
-### Cohort X
-
-| File | Participant | Thematic Tags | Summary |
-|---|---|---|---|
-| [[raw/path/to/file.md\|filename]] | Name | tag1, tag2 | One-sentence summary |
+| File | Thematic Tags | Summary |
+|---|---|---|
+| [[raw/path/to/file.md\|filename]] | tag1, tag2 | One-sentence summary |
 ```

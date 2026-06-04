@@ -1,8 +1,12 @@
 ---
 name: pilosa-verifier
+type: agent
+scope: claim_verification
 description: |
   Verifies claims, quotes, and paths against original sources.
   Corrects errors in-place and never creates new interpretations.
+created: 2026-05-26
+updated: 2026-06-04
 permissions:
   read: allow
   grep: allow

@@ -96,7 +96,7 @@ Orchestrator reads [[startup]] protocol
   |
   v
 Phase 1 — Setup Translation
-  fill configuration and research blueprint
+  fill configuration and research context
   audit translation
   |
   v
@@ -148,7 +148,7 @@ The setup output is not a final interpretation of the research corpus. It is the
 | [[dictionary]]              | Shared term vocabulary                                                |                                                  |
 | [[workspace_index]]              | Master index                                                          |                                                  |
 | [[maps/]]                   | Central navigation layer with Obsidian wikilinks into raw files       |                                                  |
-| [[raw/]]                    | Active working corpus with raw text/native/PDF copies; legacy pointer records may exist |                                                  |
+| [[raw/]]                    | Active working corpus with raw text/native/PDF copies                |                                                  |
 | [[header_template]]         | YAML header schema                                                    |                                                  |
 | [[user_requests]]           | Request log                                                           |                                                  |
 | [[agent_reports/]]       | Reports, checkpoints, evidence packets, verification notes            |                                                  |

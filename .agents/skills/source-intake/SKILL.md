@@ -1,6 +1,10 @@
 ---
 name: source-intake
+type: skill
+scope: source_registration
 description: Add new source files to the workspace and log them
+created: 2026-05-26
+updated: 2026-06-04
 ---
 
 ## Purpose

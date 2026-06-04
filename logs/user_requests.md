@@ -1,6 +1,7 @@
 ---
 type: request_log
 role: request_routing_log
+scope: framework_and_research_requests
 purpose: record user prompts and the file or route outcome
 description:
   - Append-only routing log for user prompts and traceability summaries.

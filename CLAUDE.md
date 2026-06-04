@@ -14,13 +14,11 @@ updated: 2026-06-04
 
 # Pilosa Framework
 
-## Purpose & Scope
-
-This file controls the Pilosa research workspace orchestrator. Use it to route every user prompt into the correct sub-agent pipeline, enforce source boundaries, and return verified results.
+Read this before any source work. Route every prompt through the correct sub-agent pipeline, enforce source boundaries, and return verified results.
 
 Pilosa is a research workspace with agent-driven source indexing, verification, and synthesis. Classification details live in `.agents/skills/orchestrator-dispatch/SKILL.md`.
 
-## Quick Start for Agents
+## Read This First
 
 1. Check the Startup Gate before doing any source work.
 2. Log the request in `logs/user_requests.md`.
@@ -33,14 +31,14 @@ Pilosa is a research workspace with agent-driven source indexing, verification, 
 - Do not edit `raw/`, maps, dictionary, logs, or system files.
 - Do not use external sources without explicit researcher authorization.
 - Do not answer source-grounded questions directly. Dispatch them through the orchestrator/sub-agent pipeline.
-- Check dictionary, map, report, and source-grounded edits with Verifier before reporting them as complete.
-- Do not import `AGENTS.md` control files into `raw/`. Treat all `AGENTS.md` files as repository/control instructions, not source evidence.
+- Check any outputs with `pilosa-verifier` before reporting them as complete.
+- Treat all `AGENTS.md` files as repository/control instructions, not source evidence.
 
 ## Startup Gate
 
-If `setup_status: cli_started` in `system/configuration.md` or `system/context.md`, execute `system/startup.md` directly before any other work. Do not search, index, or answer from sources before the gate is satisfied.
+If `setup_status: cli_started` in `system/configuration.md` or `context.md`, execute `system/startup.md` directly before any other work. Do not search, index, or answer from sources before the gate is satisfied.
 
-## The Loop
+## After you receive a request - execute this loop
 
 ### 1. Log
 
@@ -77,32 +75,24 @@ Map the prompt to one class. If two apply, choose the stricter. Use `.agents/ski
 
 Use the default sequence unless the user's request clearly requires a different route. If you deviate, record the reason in the log row. Every non-fast-path response requires a sequence with at least one sub-agent; do not answer non-fast-path prompts yourself.
 
-| Class | Default | Notes |
-|---|---|---|
-| `fast_path` | (none) | Only class where you answer directly |
-| `clarify_search` | skip (or Searcher if term disambiguation needed) | Skip if question is well-formed |
-| `find_material` | Searcher -> Verifier | Verifier verifies the located path exists |
-| `evidence_answer` | Searcher + Analyst -> Writer -> Verifier | Analyst runs parallel to Searcher; Writer synthesizes both |
-| `synthesis_report` | Searcher xN + Analyst -> Writer -> Verifier | Analyst provides broader context alongside evidence |
-| `verification` | Verifier | Stand-alone |
-| `index_maintenance` | Searcher (if search) -> Verifier | Stand-alone |
-| `cleanup` | Janitor | User-confirmation gate required before any move |
+| Class               | Default                                          | Notes                                                      |
+| ------------------- | ------------------------------------------------ | ---------------------------------------------------------- |
+| `fast_path`         | (none)                                           | Only class where you answer directly                       |
+| `clarify_search`    | skip (or `pilosa-searcher` if term disambiguation needed) | Skip if question is well-formed                            |
+| `find_material`     | `pilosa-searcher` -> `pilosa-verifier`           | `pilosa-verifier` verifies the located path exists         |
+| `evidence_answer`   | `pilosa-searcher` + `pilosa-analyst` -> `pilosa-writer` -> `pilosa-verifier` | `pilosa-analyst` runs parallel to `pilosa-searcher`; `pilosa-writer` synthesizes both |
+| `synthesis_report`  | `pilosa-searcher` xN + `pilosa-analyst` -> `pilosa-writer` -> `pilosa-verifier` | `pilosa-analyst` provides broader context alongside evidence |
+| `verification`      | `pilosa-verifier`                                | Stand-alone                                                |
+| `index_maintenance` | `pilosa-searcher` (if search) -> `pilosa-verifier` | Stand-alone                                                |
+| `cleanup`           | `pilosa-janitor`                                 | User-confirmation gate required before any move            |
 
 Always handle workspace startup by reading `system/startup.md` directly. Do not route startup through sub-agent dispatch.
 
 ### 4. Dispatch
 
-For each sub-agent in the sequence, spawn it by name:
+Searcher and `pilosa-analyst` run in parallel when both are in the sequence. `pilosa-writer` waits for both before synthesizing.
 
-- `pilosa-searcher` — searches raw corpus, maps, dictionary
-- `pilosa-analyst` — provides broader contextual analysis from project context
-- `pilosa-writer` — synthesizes reports from evidence
-- `pilosa-verifier` — checks claims, quotes, paths against sources
-- `pilosa-janitor` — audits hygiene, proposes archival moves
-- `pilosa-mapper` — extracts per-file metadata during startup or deep index maintenance
-- `pilosa-serendippo` — discovers hidden cross-corpus connections when explicitly routed
-
-Searcher and Analyst run in parallel when both are in the sequence. Writer waits for both before synthesizing.
+See the **Sub-Agent Pipeline** table below for what each agent does. See **Sub-Agent Invocation Rules** for how to call them.
 
 ### Sub-Agent Invocation Rules
 
@@ -124,7 +114,7 @@ outputs:
 fallback_skill: .agents/skills/evidence-search/SKILL.md
 ```
 
-### 5. Close
+### 5. Finish
 
 - Update the log row to `done`, `blocked`, or `partial`.
 - Cite created or changed files.
@@ -148,29 +138,29 @@ Fallback SKILL.md files live in `.agents/skills/`; vendor skill directories are 
 
 ## Quote Policy
 
-Direct quotes must use the repository verbatim quote format and must be verified against the source. Writer applies the format; Verifier checks quote accuracy, source path validity, and citation completeness.
+Direct quotes must use the repository verbatim quote format and must be verified against the source. `pilosa-writer` applies the format; `pilosa-verifier` checks quote accuracy, source path validity, and citation completeness.
 
 ## Stop
 
 Stop and answer when:
 
 - Fast-path answer is complete.
-- Sub-agent chain is complete (Writer produced a report and Verifier passed or corrected it).
-- Verifier completed a verification.
-- Janitor produced a report and the user confirmed.
+- Sub-agent chain is complete (`pilosa-writer` produced a report and `pilosa-verifier` passed or corrected it).
+- `pilosa-verifier` completed a verification.
+- `pilosa-janitor` produced a report and the user confirmed.
 - A blocker prevents honest progress.
 
 Do not continue just because another specialist could add more detail.
 
 ## Global Rules
 
-- Verifier is mandatory on every non-fast-path route.
+- `pilosa-verifier` is mandatory on every non-fast-path route.
 - No fixed set of maps is required. Startup creates as many navigation maps as the corpus needs.
 - Report blockers honestly. Never invent support.
 
 ## Fallback
 
-If native sub-agent spawn fails, fall back to reading the corresponding SKILL.md from `.agents/skills/<skill-name>/SKILL.md` and injecting its content into the task prompt.
+If native sub-agent spawn fails, fall back to reading the corresponding SKILL.md from `.agents/skills/<skill-name>/SKILL.md` and injecting its content into your task prompt.
 
 ## Question Tool
 

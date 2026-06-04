@@ -3,13 +3,13 @@ type: directory_guidance
 scope: logs/
 description:
   - Rules for the lightweight request and routing log.
-  - Agents append request, intake, and external-access summaries here when traceability is needed.
+  - Append request, intake, and external-access summaries here when traceability is needed.
 connects_to:
   - AGENTS.md
   - logs/user_requests.md
   - system/configuration.md
 created: 2026-06-03
-updated: 2026-06-03
+updated: 2026-06-04
 ---
 
 # logs — Request Trail
@@ -21,7 +21,7 @@ Append-only request trail for user prompts, source intake summaries, external ac
 - **Orchestrator (self)** is the only actor that writes `user_requests.md`.
 - **Sub-agents** return proposed log summaries to the orchestrator when traceability is needed.
 - **Source intake and external access routes** must include authorization/status details in the proposed log summary.
-- **Janitor, Searcher, Writer, Verifier, Mapper, and Serendippo** never edit logs directly.
+- `pilosa-janitor`, `pilosa-searcher`, `pilosa-writer`, `pilosa-verifier`, `pilosa-mapper`, and `pilosa-serendippo` never edit logs directly.
 
 ## Operations
 

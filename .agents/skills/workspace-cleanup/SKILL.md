@@ -1,6 +1,10 @@
 ---
 name: workspace-cleanup
+type: skill
+scope: workspace_hygiene
 description: Evaluate staleness and propose archival of old workspace files
+created: 2026-05-26
+updated: 2026-06-04
 ---
 
 ## Purpose

@@ -1,8 +1,12 @@
 ---
 name: pilosa-writer
+type: agent
+scope: report_synthesis
 description: |
   Synthesizes Searcher evidence and Analyst context into coherent markdown reports.
   Does not search or verify; leaves those steps to Searcher and Verifier.
+created: 2026-05-26
+updated: 2026-06-04
 permissions:
   read: allow
   write:

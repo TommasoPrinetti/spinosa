@@ -55,6 +55,4 @@ __pycache__/
 .opencode/skills/
 .claude/agents/
 .claude/skills/
-.kilocode/agents/
-.kilocode/skills/
 .codex/skills/
