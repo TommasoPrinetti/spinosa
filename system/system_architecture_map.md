@@ -106,7 +106,7 @@ CLI copies accepted text-like files unchanged into [[raw/]]
 Phase 2 — Indexing
   agent builds master dictionary
   agent generates YAML headers for all raw copies
-  agent creates maps/*.md with detailed wikilink retrieval summaries
+  agent creates multi-level navigation maps: structural overview, group maps with key passages, and theme threads
   disambiguate with user (via orchestrator) if needed
   build maps from repeated themes
   update master index
@@ -147,7 +147,7 @@ The setup output is not a final interpretation of the research corpus. It is the
 | `.agents/agents/`          | Canonical native agent definitions                              |                                                  |
 | [[dictionary]]              | Shared term vocabulary                                                |                                                  |
 | [[workspace_index]]              | Master index                                                          |                                                  |
-| [[maps/]]                   | Central navigation layer with Obsidian wikilinks into raw files       |                                                  |
+| [[maps/]]                   | Multi-level navigation: structural overview, group maps, theme threads |                                                  |
 | [[raw/]]                    | Active working corpus with raw text/native/PDF copies                |                                                  |
 | [[header_template]]         | YAML header schema                                                    |                                                  |
 | [[user_requests]]           | Request log                                                           |                                                  |

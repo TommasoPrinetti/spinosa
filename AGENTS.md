@@ -28,6 +28,7 @@ Pilosa is a research workspace with agent-driven source indexing, verification, 
 
 ## Safety & Permissions
 
+- **All output must be reports.** Every answer to a user question is a report written to `agent_reports/`. No inline chat responses. No exceptions.
 - Do not edit `raw/`, maps, dictionary, logs, or system files.
 - Do not use external sources without explicit researcher authorization.
 - Do not answer source-grounded questions directly. Dispatch them through the orchestrator/sub-agent pipeline.
@@ -128,7 +129,7 @@ fallback_skill: .agents/skills/evidence-search/SKILL.md
 | Agent | Role | Native Agent |
 |---|---|---|
 | Searcher | Searches raw copies, maps, and dictionary for evidence | `pilosa-searcher` |
-| Mapper | Reads raw files in batch, extracts concepts/tags/entities for indexing | `pilosa-mapper` |
+| Mapper | Reads raw files in batch, extracts content-grounded fragments; writes navigation maps | `pilosa-mapper` |
 | Serendippo | Holistic serendipitous research — finds hidden connections across files | `pilosa-serendippo` |
 | Analyst | Provides broader contextual analysis from project context | `pilosa-analyst` |
 | Writer | Synthesizes findings into reports | `pilosa-writer` |

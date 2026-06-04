@@ -37,6 +37,30 @@ ok()        { printf '  %s %s\n' "${G}✦${RESET}" "$1"; }
 warn()      { printf '  %s %s\n' "${Y}⚠${RESET}" "$1"; }
 note()      { printf '  %s↳%s %s\n' "${DIM}" "${RESET}" "$1"; }
 print_step(){ printf '\n  %s%s[%s/%s] %s%s\n' "${BOLD}" "${C}" "$1" "$2" "$3" "${RESET}"; }
+
+# ── sparkline idle animation ─────────────────────────────────────────────────
+SPARKLINE_CHARS="▁▂▃▄▅▆▇█▇▅▃"
+SPARKLINE_LEN=${#SPARKLINE_CHARS}
+SPARKLINE_POS=0
+SPARKLINE_ACTIVE=0
+
+sparkline_start() {
+  SPARKLINE_ACTIVE=1
+  SPARKLINE_POS=0
+  printf '\n'
+}
+
+sparkline_tick() {
+  if [[ "$SPARKLINE_ACTIVE" -eq 0 ]]; then return; fi
+  local char="${SPARKLINE_CHARS:$SPARKLINE_POS:1}"
+  printf "\r  %s%s%s scanning %s " "${DIM}" "${char}" "${RESET}" "$1"
+  SPARKLINE_POS=$(( (SPARKLINE_POS + 1) % SPARKLINE_LEN ))
+}
+
+sparkline_stop() {
+  SPARKLINE_ACTIVE=0
+  printf "\r%*s\r" 60 ""
+}
 print_box() {
   printf '\n  %s┌%s┐%s\n' "${DIM}" "$(printf '%.0s─' 1 {1..76})" "${RESET}"
   printf '  %s│%s %s%s%s\n' "${DIM}" "${RESET}" "${BOLD}$1${RESET}" "${DIM}" "${RESET}"
@@ -581,7 +605,7 @@ scan_source() {
   SCAN_AUDIO_BYTES=0
   SCAN_UNKNOWN_BYTES=0
 
-  printf '\n  %sScanning source location before writing raw copies...%s\n' "${DIM}" "${RESET}"
+  sparkline_start
 
   local f class size
   while IFS= read -r -d '' f; do
@@ -589,6 +613,7 @@ scan_source() {
     if [[ "$class" != "ignored" ]]; then
       SCAN_TOTAL_COUNT=$((SCAN_TOTAL_COUNT + 1))
       size="$(file_size_bytes "$f")"
+      sparkline_tick "$f:t"
     else
       size=0
     fi
@@ -627,6 +652,8 @@ scan_source() {
         ;;
     esac
   done < <(find "$vault_path" -type f -print0 2>/dev/null)
+
+  sparkline_stop
 }
 
 print_scan_summary() {

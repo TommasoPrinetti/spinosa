@@ -48,7 +48,7 @@ The system provides both direct answers grounded in sources and broader contextu
 - External source policy: no
 
 ## Outputs
-- Start with maps in maps/ and evidence-grounded answers unless the researcher requests another output.
+- Start with navigation maps in maps/ and evidence-grounded answers unless the researcher requires another output.
 
 ## Blind Spots
 [Filled by startup]

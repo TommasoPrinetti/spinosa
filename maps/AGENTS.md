@@ -2,7 +2,7 @@
 type: directory_guidance
 scope: maps/
 description:
-  - Rules for navigation maps generated from the raw corpus.
+  - Rules for content-grounded navigation maps generated from the raw corpus.
   - Read this before creating, repairing, or validating map files.
 connects_to:
   - AGENTS.md
@@ -12,33 +12,34 @@ updated: 2026-06-04
 
 # maps — Navigation Layer
 
-`maps/` holds retrieval-oriented navigation maps that point agents toward the right raw files. Maps are concept-indexed — they organize files by meaning, not just by filename metadata.
+`maps/` holds content-grounded navigation fragments extracted from raw files. Maps are natural-language summaries organized by the corpus's natural structure.
 
-## Map Types
+## What Maps Contain
 
-| Map | Role | Content |
-|---|---|---|
-| `concept_index.md` | Master concept index | Concepts with file references, definitions, group coverage |
-| `thematic_tags.md` | Thematic navigation | Files organized by thematic tags (2-5 tags per file) |
-| `cross_exercise_synthesis.md` | Longitudinal analysis | Themes spanning 3+ files, showing evolution across the corpus |
-| `entity_index.md` | Entity navigation | People, organizations, places with file references |
-| `corpus_structure.md` | Structural navigation | Files organized by their structure in the corpus |
+- **Structural overview**: what the corpus contains, how it's organized, what each group is about
+- **Per-group maps**: what files in each group contain, with key passages and line references
+- **Cross-cutting themes**: concepts that span groups, with trajectory and evidence
 
 ## Rules
 
-- Maps are concept-indexed: organize by meaning, not just filename metadata.
-- Each concept/tag/theme gets a section with definition and file references.
-- Body text uses Obsidian wikilinks for internal references.
-- YAML `connects_to:` fields use bare repo-relative paths.
-- Do not include absolute source paths in map headers or body text — use `raw/` relative paths only.
+- Maps are content-grounded: produced by reading file contents, not filenames.
+- Natural language prose, not data tables.
+- Every key passage includes file path and line references.
+- Organized by the corpus's natural structure — the mapper discovers this during startup.
+- Maps evolve: startup does initial pass; maps deepen as more files are read.
 - Do not map `AGENTS.md` files; they are control instructions, not source evidence.
-- Files have 2-5 thematic tags from content analysis, not group names.
-- Cross-file synthesis identifies themes that appear in 3+ files.
+- Use `raw/` relative paths only.
+- Use Obsidian wikilinks for internal references.
+
+## Who Writes Maps
+
+- **Startup**: `pilosa-mapper` writes all maps.
+- **Normal operations**: `pilosa-mapper` (deep maintenance), `pilosa-serendippo`, `pilosa-searcher`, `pilosa-analyst` can write maps when the orchestrator grants `map_write` route constraint.
+- **Verification**: map content is self-correcting through agent use, not through dedicated verifier gate.
 
 ## Validation
 
-- Map files use `type: navigation_map`.
-- Each source entry links to an existing raw copy.
-- Concepts have definitions and file references.
-- Thematic tags are content-derived, not filename-derived.
-- Cross-file themes span 3+ files.
+- Each map entry links to an existing raw copy.
+- Key passages include line references.
+- Structural overview exists at root of `maps/`.
+- At least one group map subdirectory exists.

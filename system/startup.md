@@ -26,7 +26,7 @@ The CLI onboarding script (`bash .bin/onboard.sh`) has already:
 - Scanned the source corpus and copied accepted files into `raw/` (text, native-readable, PDFs)
 - Populated partly `context.md` and `configuration.md` with `setup_status: cli_started`
 
-**Startup does not repeat onboarding.** Startup takes the raw corpus and builds the workspace content: dictionary, concept index, maps, and validation.
+**Startup does not repeat onboarding.** Startup takes the raw corpus and builds the workspace content: dictionary, content-grounded extraction packets, navigation maps, and validation.
 
 ## Mission
 
@@ -34,23 +34,23 @@ Your job is to:
 
 1. **Verify onboarding completed** — confirm setup files exist and source location is valid
 2. **Build the master dictionary** from corpus evidence
-3. **Extract concepts, themes, and entities** from raw files
-4. **Write concept-indexed maps** that help future LLMs find relevant files by meaning, not just filename
-5. **Cross-file synthesis** — identify themes that appear across multiple files
+3. **Extract content-grounded fragments** from raw files
+4. **Write multi-level navigation maps** that help future LLMs find relevant files by structure, concept, and key passage
+5. **Cross-file synthesis** — identify theme threads that appear across groups
 6. **Run startup validation and retrieval tests**
 
 You can use `set_goal` function to pursue this mission.
 
 ## Non-Negotiable
 
-- **Do not edit `raw/`, maps, dictionary, logs, or system files.**
+- **Do not edit `raw/`.** Startup may write generated maps, dictionary, workspace index, context, configuration, and startup reports as part of setup.
 - Treat `raw/` as the active working corpus after onboarding.
 - Copy PDFs as-is when onboarding accepted them. Do not create pointer records for images, audio, or video; account for skipped media as uncovered source media.
 - Treat every `AGENTS.md` file as repository/control instructions, not corpus evidence.
 - Use the dictionary for consistent terminology across all outputs.
 - Preserve generated-file provenance on maps and reports.
 - Use Obsidian wikilinks for internal map references to raw copies, dictionaries, and maps.
-- Put retrieval-critical terms in **YAML frontmatter** because fast grep starts there.
+- Put retrieval-critical terms in **YAML frontmatter** when useful because fast grep starts there.
 - Put interpretation and context in the body.
 - Do not ask questions directly. Produce a Disambiguation Brief only for blocking ambiguity.
 - Treat machine artifacts as findable noise until verified.
@@ -107,13 +107,13 @@ Record this number as `TOTAL_FILES` in `workspace_index.md` under "Extraction Pr
 
 Separately account for unsupported files and skipped media that remain only at the source location. Record media counts, extensions, and processing gaps in `workspace_index.md` and the startup report as source media coverage.
 
-## 2.2 Build Dictionary And Extract Concepts
+## 2.2 Build Dictionary And Extract Content-Grounded Fragments
 
-**This is the core step.** One pass over the corpus that builds both the dictionary and the concept index simultaneously. No duplicate reading.
+**This is the core step.** One pass over the corpus that builds both the dictionary and extraction packets for navigation maps. No duplicate reading.
 
 ### Step 1: Spawn batches until all files are read
 
-Split raw copies into batches of 15-20 files. Spawn `pilosa-mapper` sub-agents, try to maximaze agents to process the most files possible each.
+Split raw copies into batches and spawn `pilosa-mapper` sub-agents aggressively — as many as you can in parallel. Do not throttle. Spam sub-agents until every file is covered.
 
 Each batch reads files and extracts:
 
@@ -127,12 +127,12 @@ Each batch reads files and extracts:
 6. **Domain terms** — specialized vocabulary, acronyms, jargon used in the sources.
 7. **Uncertain terms and metadata** — unresolved people, dates, places, or terms needing review.
 
-**For concept extraction (same pass):**
+**For content-grounded extraction (same pass):**
 
-9. **Core concepts** (2-5 per file): The main ideas discussed. Use the dictionary for canonical terms.
-10. **Thematic tags** (2-5 per file): Brief search-optimized labels.
-11. **Cross-file connections**: Does this file reference or relate to content in other files?
-12. **Awkward and unique concepts:** the ones that stand out for unicity in relation to the others
+9. **One-paragraph summary** (3-5 sentences): what the file is about, what arguments it makes, what evidence it provides. Content-grounded — must reflect actual content.
+10. **Key passages** (2-5): short quotes or close paraphrases with file path and line references.
+11. **Concept signals** (2-5): which recurring concepts appear in this file. Use dictionary canonical terms.
+12. **Connections**: which other files relate to the same concepts.
 
 **Multilingual rule:** Keywords must appear in the language they were found in. If a source is in French, French keywords are recorded. If in English, English keywords. If a concept appears in multiple languages, list all language variants as aliases.
 
@@ -143,6 +143,7 @@ After each batch completes:
 2. Append extraction packets to `agent_reports/extraction_checkpoint.md`
 3. Update `workspace_index.md` "Extraction Progress" section
 4. Track: `files_read / TOTAL_FILES`
+5. Note which natural groups are emerging from the summaries
 
 **Note**: sub-agents are preferred to write directly into .md files to keep their knowledge anchored.
 
@@ -160,90 +161,89 @@ Use accumulated evidence to enrich [[context]]:
 - **Source universe**: List the actual source types found, their languages, and approximate date ranges.
 - **Research vocabulary**: Extract key actors, institutions, places, and concepts that appear repeatedly.
 
-### Step 5: Merge into concept index
+## 2.4 Write Navigation Maps
 
-After all batches complete, merge extraction packets into a **concept index** — a master list of all concepts found across the corpus, with file references. Write this to `agent_reports/concept_index_accumulated.md` as input for map writing.
-
-## 2.4 Write Concept-Indexed Maps
-
-Use `pilosa-writer` sub-agents to create maps from the concept index. The maps are the primary navigation layer for backsearching.
+After all batches complete, write multi-level navigation maps from the extraction batches.
 
 ### Input
 
-Read `agent_reports/concept_index_accumulated.md` (from step 2.3) and `agent_reports/extraction_checkpoint.md` for the full list of files and their extraction packets.
+Read `agent_reports/extraction_batch_*.md` (all batches) for per-file summaries, key passages, and concept signals.
 
-### Required Maps
+### Step 1: Understand the Structure
 
-1. **`maps/concept_index.md`** — The master concept index. Each concept gets a section with:
-   - Definition (1-2 sentences)
-   - Files where it appears (with Obsidian wikilinks)
-   - Related concepts
+From accumulated extraction batches, identify the natural groups in the corpus. Do not assume exercises, cohorts, or any specific structure. Read the per-file summaries and determine what the organizing principle actually is. It might be exercises, topics, time periods, participants, or something else.
 
-2. **`maps/thematic_tags.md`** — Files organized by thematic tag. Each tag gets a section listing all files with that tag.
+**Edge cases:**
+- **Flat corpus** (no folder structure, no obvious grouping): treat all files as one group. The organizing principle is "flat corpus" or similar.
+- **Monolithic corpus** (one large document or a few large files): treat sections, chapters, or logical divisions as groups.
+- **Tiny corpus** (<10 files): one group is fine. Group maps may be thin — that's acceptable.
+- **Single-topic corpus** (everything about one subject): one group with the topic as the organizing principle.
 
-3. **`maps/cross_exercise_synthesis.md`** — Themes that appear across multiple files. For each cross-file theme:
-   - Theme name and definition
-   - How the theme manifests across files
-   - Key files for each manifestation
+Record the identified groups and their organizing principle. This becomes the structural basis for all maps. If no natural groups emerge, create a single group containing all files.
 
-4. **`maps/entity_index.md`** — People, organizations, places with file references.
+### Step 2: Write Structural Overview
 
-5. **`maps/corpus_structure.md`** — Files organized by their structure (exercise, cohort, date, or other grouping).
+Write one map at the root of `maps/` (e.g., `maps/corpus_overview.md`). This is the Level 0 map.
 
-### Map Format
+For each natural group:
+- 2-4 sentence description of what the group contains (synthesized from per-file summaries)
+- File count
+- Key file pointers (3-5 files that best represent the group)
 
-Maps use a flexible format adapted to the corpus structure. Each map entry must include:
+### Step 3: Write Group Maps
 
-```markdown
-## [Concept Name]
+For each natural group identified in Step 1 (skip this step if there is only one group and the structural overview already covers it adequately):
 
-[1-2 sentence definition]
+1. Create a subdirectory under `maps/` named for the organizing principle.
+2. Write one map file per group.
 
-| File | Tags | Summary |
-|---|---|---|
-| [[raw/path/to/file.md\|filename]] | ethics, reflection | One-sentence summary |
-```
+**If there is only one group:** Write the group map at `maps/corpus_overview.md` directly (no subdirectory). The structural overview and the group map may be the same file for small or flat corpora.
 
-If the corpus has exercise/cohort structure, add those columns:
+Each group map contains:
 
-```
-| File | Exercise | Cohort | Tags | Summary |
-```
+- H2 "What this group is about" — synthesized understanding from reading files
+- H2 "Recurring concepts" — patterns across files within the group, with key passages
+- Each concept: description + examples with file path + line references + quote or paraphrase
+
+### Step 4: Write Theme Maps
+
+Identify concepts that recur across multiple groups. For each cross-cutting theme:
+
+1. Create a subdirectory under `maps/` for themes.
+2. Write one map file per theme.
+
+**If no cross-cutting themes emerge** (single-topic corpus, flat corpus, or all files belong to one group): skip theme maps. The group map(s) already cover the entire corpus. Record in the startup report that no cross-cutting themes were found.
+
+Each theme map contains:
+
+- H2 with theme name + definition
+- H3 per group where the theme appears + key passages
+- H2 "Trajectory" — how the theme evolves across groups
+
+### Step 5: Verify Coverage
+
+Every file in the extraction checkpoint should appear in at least one map (group map or structural overview). If a file is missing from all maps, add it.
+
+### Step 6: Spot-Check Accuracy
+
+Pick 5 random key passages from across the maps. For each, verify that the quoted text exists at the cited line reference in the raw file. Record the spot-check result in the startup report.
 
 ### Arrival Metric
 
-**Every file in `agent_reports/extraction_checkpoint.md` must appear in at least one map.**
-So we're sure we processed everything.
-
-After writing all maps, verify:
-
-```
-Files in checkpoint: N
-Files in concept_index.md: M1
-Files in thematic_tags.md: M2
-Files in corpus_structure.md: M3
-```
-
-If any file is missing from all maps, the maps are incomplete. Fix before proceeding.
-
-### Map Quality
-
-Maps start as `map_quality: machine_generated`. After Verifier review, update to `map_quality: checked` or `map_quality: human_reviewed`.
+- One structural overview map at `maps/` root
+- One subdirectory per organizing principle (skip if single group fits in the overview)
+- One group map per natural group (or combined with overview for small/flat corpora)
+- Theme maps for each cross-cutting concept (skip if no cross-cutting themes)
+- Every file in extraction checkpoint appears in >=1 map
+- Spot-check: >=4/5 passages verified accurate
 
 ## 2.5 Cross-File Synthesis
 
-**Dedicated step.** After all concept extraction is complete, run a synthesis pass:
-
-1. Identify concepts that appear in multiple files
-2. Map how these concepts evolve across files
-3. Identify file-specific concepts (concepts unique to one file)
-4. Write `maps/cross_exercise_synthesis.md` with the results
-
-This map is critical for longitudinal analysis — it shows how themes develop across the corpus.
+Cross-file synthesis is now part of Step 4 in section 2.4 (Write Theme Maps). Theme maps are the output of cross-file synthesis. If no cross-cutting themes emerge, cross-file synthesis is implicit in the group maps and serendipitous discovery.
 
 ## 2.6 Serendipitous Connection Discovery
 
-**Dedicated step.** After cross-file synthesis is complete, spawn `pilosa-serendippo` to find hidden connections that batch processing misses.
+**Dedicated step.** After maps are written (group maps and/or theme maps), spawn `pilosa-serendippo` to find hidden connections that batch processing misses.
 
 ### Purpose
 
@@ -251,13 +251,13 @@ The mapper agent reads files in structured batches — efficient but linear. The
 
 ### When to Run
 
-- After mapper has processed all files (2.3) and cross-file synthesis is written (2.5)
-- Maps exist and have initial concept coverage
+- After mapper has processed all files and maps are written (2.4 Steps 2-4)
+- Maps exist and have initial navigation coverage
 - `pilosa-serendippo` can use existing maps as a starting point
 
 ### How It Works
 
-1. Spawn `pilosa-serendippo` with access to maps/ and raw/
+1. Spawn `pilosa-serendippo` with access to `maps/` (structural overview, group maps, theme maps) and `raw/`
 2. It reads existing maps to identify under-connected concepts
 3. It roams through raw files, following threads and finding connections
 4. It writes a serendipity report to `agent_reports/serendipity_report.md`
@@ -290,7 +290,7 @@ Update [[workspace_index]] with:
 
 - Raw copy coverage (how many copied files, by type),
 - Skipped media coverage (how many uncovered source media files, by media type),
-- Central navigation maps created,
+- Navigation maps created,
 - Dictionary status (canonical names, places, organizations, concepts),
 - Non-text media noted as skipped / uncovered,
 - Known gaps.
@@ -302,19 +302,21 @@ Coverage counts must be exact.
 Before reporting startup complete, run validation.
 
 Map validation:
-- concept_index.md has concepts with file references
-- thematic_tags.md has tags with file lists
-- cross_exercise_synthesis.md has themes spanning multiple files
-- entity_index.md has entities with file references
+- Structural overview exists at maps/ root (excluding AGENTS.md, map_template.md)
+- At least one group map exists (may be the overview itself for flat/small corpora)
+- Each group map has "What this group is about" section
+- Each group map has "Recurring concepts" section with key passages
+- Key passages include file paths and line references
+- Theme maps exist for concepts spanning multiple groups (skip check if single group)
 - All wikilinks resolve to existing files
 
 Retrieval tests:
 
-1. **Concept retrieval** — grep a concept name in maps/ and confirm it links to raw files
-2. **Thematic retrieval** — grep a thematic tag and confirm it returns relevant files
-3. **Cross-file retrieval** — find a concept in cross_exercise_synthesis.md and confirm it links to files across the corpus
-4. **Entity retrieval** — grep a person/org name and confirm it links to relevant files
-5. **Map navigation** — open concept_index.md, follow a link to a raw file, confirm it exists
+1. **Structural retrieval** — open the corpus overview, find a group, confirm it links to raw files
+2. **Group retrieval** — open a group map, find a concept with key passages, confirm file paths exist
+3. **Theme retrieval** — open a theme map, find evidence across groups, confirm passages are grounded (skip if no theme maps)
+4. **Passage retrieval** — grep a quote from a map in raw/, confirm the line reference is valid
+5. **Cross-group retrieval** — find a theme spanning 3+ groups, confirm evidence from each (skip if no theme maps)
 6. **Unresolved metadata retrieval** — grep `needs_review` or `unresolved` and confirm it is findable
 
 Startup is complete **only if** all applicable retrieval tests pass.
@@ -325,9 +327,8 @@ After validation passes, replace `setup_status: cli_started` with `setup_status:
 
 Startup rerun behavior:
 - skip valid dictionary entries unless repair is needed,
-- update maps when raw files or dictionary entries changed,
-- preserve `map_quality: checked` and `map_quality: human_reviewed` unless the user explicitly asks to regenerate,
-- preserve concept extraction results from previous runs.
+- overwrite all generated maps from the current extraction checkpoint,
+- preserve extraction results from previous runs.
 
 Recovery behavior:
 - write phase progress in the startup report or a checkpoint in [[agent_reports/]] when startup stops partially,
@@ -335,8 +336,8 @@ Recovery behavior:
 - keep `setup_status: cli_started` until validation passes.
 
 Sub-agent delegation:
-- Dictionary + concept extraction: `pilosa-mapper` reads batches of 10-15 files, extracts terms and concepts in one pass
-- Map writing: `pilosa-writer` synthesizes concept index into maps
+- Dictionary + concept extraction: `pilosa-mapper` reads files in batches (spawned aggressively in parallel), extracts terms and content-grounded fragments in one pass
+- Map writing: `pilosa-mapper` writes maps directly from extraction batches (structural overview, group maps, theme maps)
 - Startup owns merge, conflict resolution, and validation; sub-agents never set `setup_status: workspace_started`.
 
 ## 2.11 Progress Tracking And Checkpointing
@@ -396,9 +397,13 @@ If startup is interrupted:
 
 | Phase | Arrival Metric | How to Check |
 |---|---|---|
-| Dictionary + extraction (2.3) | `files_read == total_files` | checkpoint file |
-| Map writing (2.4) | Every file in checkpoint appears in ≥1 map | grep file paths in maps/ |
-| Cross-exercise (2.5) | Themes identified for all concepts in multiple files | concept_index.md sections |
+| Dictionary + extraction (2.2) | `files_read == total_files` | checkpoint file |
+| Structure identification (2.4 Step 1) | Natural groups identified from extraction (or single group for flat/small corpora) | extraction batches |
+| Structural overview (2.4 Step 2) | One overview map at maps/ root | `ls maps/*.md` excluding AGENTS.md, map_template.md |
+| Group maps (2.4 Step 3) | One .md per natural group (may equal overview for flat/small corpora) | `ls maps/<subdirectory>/*.md` or `maps/corpus_overview.md` |
+| Theme maps (2.4 Step 4) | Theme .md for each cross-group concept (skip if no cross-cutting themes) | `ls maps/<subdirectory>/*.md` |
+| Coverage (2.4 Step 5) | Every file in checkpoint appears in >=1 map | grep file paths in maps/ |
+| Accuracy (2.4 Step 6) | >=4/5 spot-checked passages accurate | startup report |
 
 ---
 
@@ -412,9 +417,79 @@ Write one startup report in [[agent_reports/]] with the following fields:
 - skipped media coverage,
 - maps created,
 - dictionary size (names, places, organizations, concepts),
-- concept index size (number of concepts, files covered),
-- thematic tag count,
-- cross-file themes identified,
+- extraction coverage (files summarized, key passages captured, concept signals),
+- cross-cutting themes identified,
 - validation and retrieval test results,
 - remaining non-text files at source location,
 - recommended next actions.
+
+## Startup Report Dashboard
+
+Generate a Unicode distribution bars chart in the startup report header to show overall workspace status.
+
+### Distribution Bars (Startup Report)
+
+Compare multiple metrics side-by-side using distribution bars.
+
+**Characters:** `▓` (filled) + `░` (empty) + `█` (accent/total)
+
+**Rendering:**
+```
+bar_width = 16 characters
+filled = round((value / total) * bar_width)
+empty = bar_width - filled
+bar = "▓" * filled + "░" * empty
+```
+
+**Metrics to Display:**
+```
+Extract  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓  925/925 files
+Maps     ▓▓▓▓▓▓▓▓▓▓▓▓░░░░  15 created
+Dict     ▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░  342 terms
+Links    ▓▓▓▓▓▓▓▓▓▓░░░░░░  280 wikilinks
+```
+
+**Dashboard Format:**
+```
+┌─ Startup Status ───────────────────────────────────────────────┐
+│ Extract  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓  925/925 files                     │
+│ Maps     ▓▓▓▓▓▓▓▓▓▓▓▓░░░░  15 created                         │
+│ Dict     ▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░  342 terms                          │
+│ Links    ▓▓▓▓▓▓▓▓▓▓░░░░░░  280 wikilinks                      │
+│ Valid    ✓ passed                                                │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+## Extraction Checkpoint Dashboard
+
+Generate a Unicode progress bar in the extraction checkpoint to show batch completion status.
+
+### Progress Bar (Extraction Checkpoint)
+
+Linear completion tracking for file extraction progress.
+
+**Characters:** `▓` (filled) + `░` (empty)
+
+**Rendering:**
+```
+bar_width = 16 characters
+filled = round((files_read / total_files) * bar_width)
+empty = bar_width - filled
+bar = "▓" * filled + "░" * empty
+```
+
+**Metrics to Display:**
+```
+Files    ▓▓▓▓▓▓▓▓▓▓░░░░░░  450/925 (48%)
+Batches  ▓▓▓▓▓▓░░░░░░░░░░  30/60 completed
+Status   in_progress
+```
+
+**Dashboard Format:**
+```
+┌─ Extraction Progress ───────────────────────────────────────────┐
+│ Files    ▓▓▓▓▓▓▓▓▓▓░░░░░░  450/925 (48%)                       │
+│ Batches  ▓▓▓▓▓▓░░░░░░░░░░  30/60 completed                     │
+│ Status   in_progress                                             │
+└─────────────────────────────────────────────────────────────────┘
+```

@@ -12,7 +12,7 @@ connects_to:
   - dictionary.md
 status: active
 created: 2026-05-26
-updated: 2026-06-03
+updated: 2026-06-04
 ---
 
 # Header Template
@@ -127,13 +127,12 @@ Required for every generated map file under `maps/`.
 ```yaml
 ---
 type: navigation_map
-role: [descriptive role, e.g. folder_map, concept_map, entity_map]
+role: [descriptive role, e.g. corpus_overview, group_map, theme_map]
 purpose: [guide future LLM retrieval into the raw corpus]
 scope: raw/
 connects_to:
   - raw/
   - dictionary.md
-  - maps/concept_index.md
 map_quality: machine_generated | checked | human_reviewed
 description_depth: retrieval_oriented
 wikilink_policy: obsidian_wikilinks_required
@@ -146,19 +145,10 @@ updated: YYYY-MM-DD
 ```
 
 Map files must use Obsidian wikilinks for internal references:
-- `[[raw/interviews/interview_01__txt|interview_01.txt]]`
-- `[[maps/concept_index]]`
+- `[[raw/path/to/file.md|filename]]`
+- `[[maps/corpus_overview]]`
 
-Map entries must use a tabular format for efficiency. Each file entry gets a wikilink heading plus a compact table:
-
-```markdown
-## [[raw/field_notes/session_01_notes.md|session_01_notes.md]]
-| Type | Language | People | Topics | Keywords | Caveats |
-|---|---|---|---|---|---|
-| field_notes | en | Researcher A | observation, interview setup | site visit, method, consent | date_inferred |
-```
-
-For large or dense files, add a 2-3 sentence retrieval summary below the table.
+Map entries use natural-language prose, not tabular format. Key passages include file paths and line references.
 
 ## Wikilink Conventions
 

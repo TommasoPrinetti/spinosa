@@ -212,6 +212,29 @@ if [[ "$startup_text" == *"setup_status: workspace_started"* ]]; then
   if [[ ! -d "$maps_dir" ]]; then
     failures+=("Missing maps directory: maps")
   else
+    has_overview=false
+    for map_file in "$maps_dir"/*.md; do
+      map_basename="$(basename "$map_file")"
+      [[ "$map_basename" == "AGENTS.md" || "$map_basename" == "map_template.md" || "$map_basename" == ".gitkeep" ]] && continue
+      has_overview=true
+      break
+    done
+    if [[ "$has_overview" == "false" ]]; then
+      failures+=("No structural overview map found at maps/ root")
+    fi
+
+    has_groups=false
+    for dir in "$maps_dir"/*/; do
+      [[ ! -d "$dir" ]] && continue
+      dir_name="$(basename "$dir")"
+      [[ "$dir_name" == ".gitkeep" ]] && continue
+      has_groups=true
+      break
+    done
+    if [[ "$has_groups" == "false" ]]; then
+      failures+=("No group map subdirectories found under maps/")
+    fi
+
     while IFS= read -r -d '' map_file; do
       map_basename="${map_file#$maps_dir/}"
       [[ "$map_basename" == "AGENTS.md" || "$map_basename" == "map_template.md" || "$map_basename" == ".gitkeep" ]] && continue
@@ -222,22 +245,13 @@ if [[ "$startup_text" == *"setup_status: workspace_started"* ]]; then
         continue
       fi
 
-      map_type="$(frontmatter_value "$map_file" "type")"
-      if [[ "$map_type" != "navigation_map" ]]; then
-        failures+=("Map type must be navigation_map in ${map_file#$ROOT/}")
-      fi
       validate_generated_provenance "$map_file"
-      for key in role map_quality description_depth wikilink_policy; do
-        if ! has_frontmatter_key "$map_file" "$key"; then
-          failures+=("Missing $key in ${map_file#$ROOT/}")
-        fi
-      done
       if ! grep -q '\[\[' "$map_file"; then
-        failures+=("Navigation map has no Obsidian wikilinks: ${map_file#$ROOT/}")
+        failures+=("Navigation map has no wikilinks: ${map_file#$ROOT/}")
       else
         resolve_wikilinks "$map_file"
       fi
-    done < <(find "$maps_dir" -maxdepth 1 -type f -name "*.md" -print0 2>/dev/null)
+    done < <(find "$maps_dir" -type f -name "*.md" -print0 2>/dev/null)
   fi
 fi
 

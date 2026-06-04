@@ -41,5 +41,5 @@ preferred_llm_cli: "[filled by CLI onboarding]"
 - The CLI collects: project name, source location, and preferred LLM CLI. It scans the source location and transposes accepted files (text, native, PDF) into raw/. Images, video, audio, and AGENTS.md control files are skipped.
 - After onboarding, the source location remains immutable original storage. Normal source-grounded work starts from raw/.
 - During startup, project description and helpful artifact URLs are optional. If absent, the LLM CLI agent records them as not provided, keeps external_sources_allowed at its default `no`, and infers working scope from the raw corpus.
-- When setup_status reaches workspace_started, the startup workflow has built the master dictionary, created concept-indexed maps in maps/, and passed validation.
+- When setup_status reaches workspace_started, the startup workflow has built the master dictionary, created multi-level navigation maps in maps/, and passed validation.
 - This file never grants permission to edit the source location or `raw/`.
