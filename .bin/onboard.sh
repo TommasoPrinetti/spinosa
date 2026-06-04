@@ -661,7 +661,7 @@ print_scan_summary() {
   fi
   printf '  %s└─%s %s ignored\n' "${DIM}" "${RESET}" "$(plural_count "$SCAN_IGNORED_COUNT" "file")"
   note "Text-like files are renamed to .md; native-readable files keep their extension; PDFs are copied as-is; images, video, audio, and AGENTS.md control files are skipped."
-  note "Startup later builds detailed Obsidian-wikilink maps in maps/."
+  note "Startup later builds multi-level navigation maps in maps/."
 }
 
 print_transposition_summary() {
@@ -885,7 +885,7 @@ main() {
   note "This is the folder of your source files — PDFs, notes, transcripts, etc."
   note "Nothing in this folder is moved, renamed, or edited."
   note "Text-like files, native-readable files, and PDFs can be copied into raw/; images, video, audio, and AGENTS.md control files are skipped."
-  note "Startup will create maps/ as the central navigation layer."
+  note "Startup will create multi-level navigation maps in maps/."
   note "Use an absolute path (drag the folder onto the terminal to paste its path)."
   source_path=""
   while [[ -z "$source_path" ]]; do
@@ -974,11 +974,11 @@ connects_to:
 - Methods: [inferred during startup]
 - Claims require source paths.
 - L2 clues require Verifier checking before reporting.
-- External sources must stay labeled external unless moved into `raw/`.
+- External sources must stay labeled external unless moved into \`raw/\`.
 - External source policy: no (default; ask only if external access is needed)
 
 ## Outputs
-- Start with maps in maps/ and evidence-grounded answers unless the researcher requests another output.
+- Start with navigation maps in maps/ and evidence-grounded answers unless the researcher requests another output.
 
 ## Blind Spots
 - [identified during startup]
@@ -1037,8 +1037,8 @@ preferred_llm_cli: "$preferred_cli"
 - The CLI collected: project name, source location, and preferred LLM CLI. It scanned the source location and transposed accepted files (text, native, PDF) into raw/. Images, video, audio, and AGENTS.md control files were skipped.
 - After onboarding, the source location remains immutable original storage. Normal source-grounded work starts from raw/.
 - During startup, project description and helpful artifact URLs are optional. If absent, the LLM CLI agent records them as not provided, keeps external_sources_allowed at its default \`no\`, and infers working scope from the raw corpus.
-- When setup_status reaches workspace_started, the startup workflow has built the master dictionary, generated YAML headers, created detailed maps in maps/, and passed validation.
-- This file never grants permission to edit the source location or `raw/`.
+- When setup_status reaches workspace_started, the startup workflow has built the master dictionary, generated YAML headers, created multi-level navigation maps in maps/, and passed validation.
+- This file never grants permission to edit the source location or \`raw/\`.
 CONFIG_EOF
 
   # ── create CLAUDE.md if preferred CLI is Claude Code ──────────────────────
@@ -1062,7 +1062,7 @@ APPEARANCE_EOF
   printf '\n'
   divider
   printf '\n  %s\n\n' "${G}${BOLD}✦ Setup files written${RESET}"
-  printf '  %s %s\n' "${DIM}─${RESET}" "${C}${Information}${RESET}"
+  printf '  %s %s\n' "${DIM}─${RESET}" "${C}${Context}${RESET}"
   printf '  %s %s\n' "${DIM}─${RESET}" "${C}${Config}${RESET}"
   [[ "$claude_created" == "yes" ]] && printf '  %s %s\n' "${DIM}─${RESET}" "${C}${Claude}${RESET}"
   printf '  %s %s\n' "${DIM}─${RESET}" "${C}$ROOT/.obsidian/appearance.json${RESET}"
@@ -1077,7 +1077,7 @@ Read these files first, in this order:
 1. AGENTS.md
 2. system/configuration.md
 3. context.md
-4. system/startup.md
+4. system/header_template.md
 
 The setup draft already contains:
 - Project name: ${project_title}
@@ -1091,16 +1091,11 @@ Optional context not collected by fast setup:
 
 Then execute system/startup.md. Specifically:
 - Phase 1: Verify onboarding completed (setup files exist, source location valid)
-- Phase 2: Build the master dictionary and extract concepts from raw/ in one pass
-- Generate YAML headers for every raw copy using the dictionary
-- Account for skipped media as uncovered source media; do not create media pointer records
-- Create maps/ and write detailed Obsidian-wikilink maps that help future LLMs choose which raw files to open
-- Update workspace_index.md
-- Run startup validation, then the full retrieval test suite
+- Phase 2: Index, Map, Validate — build the master dictionary, extract content-grounded fragments, generate YAML headers, write multi-level navigation maps (structural overview, group maps, theme maps), run serendipitous connection discovery, update workspace_index.md, run validation and retrieval tests
 - Set setup_status to workspace_started in both context.md and configuration.md
 - Write the startup report to agent_reports/
 
-Do not re-ask questions the CLI draft already answered. Do not stop after one index. Do not edit the source location or `raw/`.
+Do not re-ask questions the CLI draft already answered. Do not stop after one index. Do not edit the source location or \`raw/\`.
 PROMPT_EOF
   )
 
