@@ -3,7 +3,7 @@
 #
 # Source of truth:
 #   - system/agents/*.md → agent definitions
-#   - .agents/skills/*/SKILL.md → skills
+#   - .agents/skills/*/SKILL.md + references/ → skills
 #
 # Destinations:
 #   - .opencode/agents/
@@ -37,7 +37,7 @@ for platform in .opencode .claude .kilocode; do
     echo "  $platform/agents/ → $count files"
 done
 
-# Sync skills
+# Sync skills (including references/ subdirectories)
 echo ""
 echo "--- Syncing skills ---"
 for platform in .claude .codex .kilocode; do
@@ -47,7 +47,13 @@ for platform in .claude .codex .kilocode; do
     for skill_dir in "$REPO_ROOT/.agents/skills"/*/; do
         skill_name=$(basename "$skill_dir")
         mkdir -p "$dest/$skill_name"
+        # Copy SKILL.md and any other .md files from skill root
         cp "$skill_dir"*.md "$dest/$skill_name/" 2>/dev/null || true
+        # Copy references/ subdirectory if it exists
+        if [[ -d "$skill_dir/references" ]]; then
+            mkdir -p "$dest/$skill_name/references"
+            cp "$skill_dir/references/"*.md "$dest/$skill_name/references/" 2>/dev/null || true
+        fi
     done
     count=$(find "$dest" -name "SKILL.md" | wc -l)
     echo "  $platform/skills/ → $count skills"
