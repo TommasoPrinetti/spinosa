@@ -806,7 +806,7 @@ has_filled_setup() {
   local b c
   b=$(<"$Context")
   c=$(<"$Config")
-  for ph in "[project name]" "[path]"; do
+  for ph in "[project name]" "[path]" "[filled by startup]" "[filled by CLI onboarding]" "[source_location from above]"; do
     [[ "$b" == *"$ph"* || "$c" == *"$ph"* ]] && return 1
   done
   return 0
