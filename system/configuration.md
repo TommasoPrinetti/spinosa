@@ -1,5 +1,5 @@
 ---
-type: zone_configuration
+type: project_configuration
 agent: startup
 description:
   - Operating profile for the current Pilosa project or framework template.
@@ -14,21 +14,21 @@ setup_status: not_started
 Agents read this before major work.
 
 ```yaml
-zone_type: research_framework
+workspace_type: research_framework
 research_mode: evolving_complex_corpus
-root_vault_path: "[filled by CLI onboarding]"
-root_vault_mode: protected_append_only
+source_location: "[filled by CLI onboarding]"
+source_mode: protected_append_only
 
 source_policy: internal_first
 active_corpus_path: raw/
-active_corpus_policy: raw_zone_first_after_onboarding
+active_corpus_policy: raw_first_after_onboarding
 external_sources_allowed: no
 
 claim_standard: source_link_required
 l2_policy: verifier_required
 
 protected_paths:
-  - "[root_vault_path from above]"
+  - "[source_location from above]"
   - context.md
 
 stale_after_days: 30

@@ -562,7 +562,7 @@ classify_source_file() {
   esac
 }
 
-scan_root_vault() {
+scan_source() {
   local vault_path="$1"
   SCAN_TOTAL_COUNT=0
   SCAN_MARKDOWN_COUNT=0
@@ -691,7 +691,7 @@ print_transposition_summary() {
 }
 
 # ── transpose source files into raw copies ─────────────────────────────
-copy_root_vault() {
+copy_source() {
   local vault_path="$1"
   local dest_dir="$2"
 
@@ -887,22 +887,22 @@ main() {
   note "Text-like files, native-readable files, and PDFs can be copied into raw/; images, video, audio, and AGENTS.md control files are skipped."
   note "Startup will create maps/ as the central navigation layer."
   note "Use an absolute path (drag the folder onto the terminal to paste its path)."
-  root_vault_path=""
-  while [[ -z "$root_vault_path" ]]; do
-    root_vault_path="$(ask "Source location (absolute)" "" "e.g. /Users/name/Documents/my-sources")"
-    root_vault_path="$(normalize_path_input "$root_vault_path")"
-    [[ -z "$root_vault_path" ]] && printf '  %s\n' "${R}Source location is required.${RESET}" >&2
+  source_path=""
+  while [[ -z "$source_path" ]]; do
+    source_path="$(ask "Source location (absolute)" "" "e.g. /Users/name/Documents/my-sources")"
+    source_path="$(normalize_path_input "$source_path")"
+    [[ -z "$source_path" ]] && printf '  %s\n' "${R}Source location is required.${RESET}" >&2
   done
 
-  if [[ ! -d "$root_vault_path" ]]; then
-    printf '\n  %s Source location does not exist: %s\n\n' "${R}✗${RESET}" "$root_vault_path" >&2
+  if [[ ! -d "$source_path" ]]; then
+    printf '\n  %s Source location does not exist: %s\n\n' "${R}✗${RESET}" "$source_path" >&2
     return 1
   fi
-  ok "Source: ${BOLD}${root_vault_path}${RESET}"
+  ok "Source: ${BOLD}${source_path}${RESET}"
 
   # scan before any raw files are written
   print_step 3 4 "Corpus scan and consent"
-  scan_root_vault "$root_vault_path"
+  scan_source "$source_path"
   print_scan_summary
 
   local copyable_count=$(( SCAN_MARKDOWN_COUNT + SCAN_NATIVE_COUNT + SCAN_BINARY_COPYABLE_COUNT ))
@@ -918,7 +918,7 @@ main() {
 
   # transpose accepted files into raw copies
   printf '\n'
-  copy_root_vault "$root_vault_path" "$RawDir"
+  copy_source "$source_path" "$RawDir"
   printf '\n'
 
   # ── Question 4: CLI preference ───────────────────────────────────────────
@@ -960,7 +960,7 @@ connects_to:
 - none provided during fast setup
 
 ## Sources
-- Source location: ${root_vault_path:-[path]}
+- Source location: ${source_path:-[path]}
 - Main source types: [inferred during startup from the source material]
 - Expected incoming sources: [inferred during startup]
 
@@ -991,12 +991,12 @@ $preferred_cli
 INFORMATIONS_EOF
 
   # ── write config ──────────────────────────────────────────────────────────
-  local safe_vault
-  safe_vault="$(sanitize_yaml "$root_vault_path")"
+  local safe_source
+  safe_source="$(sanitize_yaml "$source_path")"
 
   cat > "$Config" << CONFIG_EOF
 ---
-type: zone_configuration
+type: project_configuration
 agent: setup_cli
 description:
   - Operating profile for the current Pilosa project or framework template.
@@ -1011,21 +1011,21 @@ setup_status: cli_started
 Agents read this before major work.
 
 \`\`\`yaml
-zone_type: research_framework
+workspace_type: research_framework
 research_mode: evolving_complex_corpus
-root_vault_path: "$safe_vault"
-root_vault_mode: protected_append_only
+source_location: "$safe_source"
+source_mode: protected_append_only
 
 source_policy: internal_first
 active_corpus_path: raw/
-active_corpus_policy: raw_zone_first_after_onboarding
+active_corpus_policy: raw_first_after_onboarding
 external_sources_allowed: no
 
 claim_standard: source_link_required
 l2_policy: verifier_required
 
 protected_paths:
-  - "$safe_vault"
+  - "$safe_source"
    - context.md
 
 stale_after_days: 30
@@ -1037,7 +1037,7 @@ preferred_llm_cli: "$preferred_cli"
 - The CLI collected: project name, source location, and preferred LLM CLI. It scanned the source location and transposed accepted files (text, native, PDF) into raw/. Images, video, audio, and AGENTS.md control files were skipped.
 - After onboarding, the source location remains immutable original storage. Normal source-grounded work starts from raw/.
 - During startup, project description and helpful artifact URLs are optional. If absent, the LLM CLI agent records them as not provided, keeps external_sources_allowed at its default \`no\`, and infers working scope from the raw corpus.
-- When setup_status reaches zone_started, the startup workflow has built the master dictionary, generated YAML headers, created detailed maps in maps/, and passed validation.
+- When setup_status reaches workspace_started, the startup workflow has built the master dictionary, generated YAML headers, created detailed maps in maps/, and passed validation.
 - This file never grants permission to edit the source location or `raw/`.
 CONFIG_EOF
 
@@ -1081,7 +1081,7 @@ Read these files first, in this order:
 
 The setup draft already contains:
 - Project name: ${project_title}
-- Source location: ${root_vault_path} (already validated, files transposed to raw/ — images, video, audio, and AGENTS.md skipped)
+- Source location: ${source_path} (already validated, files transposed to raw/ — images, video, audio, and AGENTS.md skipped)
 - Preferred LLM CLI: ${preferred_cli}
 
 Optional context not collected by fast setup:
@@ -1096,9 +1096,9 @@ Then execute system/startup.md from Phase 1.2 onwards. Specifically:
 - Account for skipped media as uncovered source media; do not create media pointer records
 - Create maps/ and write detailed Obsidian-wikilink maps that help future LLMs choose which raw files to open
 - Build maps from repeated themes
-- Update zone_index.md
+- Update workspace_index.md
 - Run startup validation, then the full retrieval test suite
-- Set setup_status to zone_started in both information and configuration
+- Set setup_status to workspace_started in both information and configuration
 - Write the startup report to agent_reports/
 
 Do not re-ask questions the CLI draft already answered. Do not stop after one index. Do not edit the source location or `raw/`.

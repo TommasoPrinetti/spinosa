@@ -101,7 +101,7 @@ Use shell/file tools to confirm the source location exists and is treated as **r
 ## 1.3 Fill Blueprint and Configuration
 
 - Fill [[context]] (project title, project description status, helpful artifact URLs or file paths status, source location, evidence standards, external source policy).
-- Fill [[configuration]] (`root_vault_path`, `root_vault_mode`, `source_policy`, `external_sources_allowed`, `preferred_llm_cli`, `claim_standard`, `l2_policy`).
+- Fill [[configuration]] (`source_location`, `source_mode`, `source_policy`, `external_sources_allowed`, `preferred_llm_cli`, `claim_standard`, `l2_policy`).
 - Keep `setup_status: cli_started` until mapping and retrieval tests have passed. Replace it with `setup_status: workspace_started` in both files only at the end of Phase 2.
 
 ## 1.4 Audit the Translation

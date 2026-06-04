@@ -52,8 +52,8 @@ if [[ "$startup_text" == *"setup_status: cli_started"* ]]; then
   failures+=("setup_status is still cli_started; run the workspace startup agent.")
 fi
 
-if [[ "$startup_text" != *"setup_status: zone_started"* ]]; then
-  warnings+=("setup_status: zone_started was not found.")
+if [[ "$startup_text" != *"setup_status: workspace_started"* ]]; then
+  warnings+=("setup_status: workspace_started was not found.")
 fi
 
 # ── check for stale fast-setup markers ──────────────────────────────────────
@@ -61,20 +61,20 @@ if echo "$startup_text" | grep -qE "To be discovered|Not specified during fast s
   warnings+=("Legacy fast-setup markers remain in blueprint/config.")
 fi
 
-# ── check root vault path ───────────────────────────────────────────────────
-root_vault_path="$(echo "$config" | sed -n 's/.*root_vault_path: *["'\'']*\([^"'\'']*\)["'\'']*.*/\1/p' | head -1)"
+# ── check source location ───────────────────────────────────────────────────
+source_path="$(echo "$config" | sed -n 's/.*source_location: *["'\'']*\([^"'\'']*\)["'\'']*.*/\1/p' | head -1)"
 
-if [[ -z "$root_vault_path" || "$root_vault_path" == "[path]" ]]; then
-  failures+=("root_vault_path is missing or still a placeholder.")
+if [[ -z "$source_path" || "$source_path" == "[path]" ]]; then
+  failures+=("source_location is missing or still a placeholder.")
 else
   # check both relative and absolute
-  if [[ ! -d "$root_vault_path" && ! -d "$ROOT/$root_vault_path" ]]; then
-    failures+=("Source location does not exist: $root_vault_path")
+  if [[ ! -d "$source_path" && ! -d "$ROOT/$source_path" ]]; then
+    failures+=("Source location does not exist: $source_path")
   else
-    local_path="$root_vault_path"
-    [[ ! -d "$local_path" ]] && local_path="$ROOT/$root_vault_path"
+    local_path="$source_path"
+    [[ ! -d "$local_path" ]] && local_path="$ROOT/$source_path"
     if [[ ! -d "$local_path" ]]; then
-      warnings+=("Source location is not a directory: $root_vault_path")
+      warnings+=("Source location is not a directory: $source_path")
     fi
   fi
 fi
