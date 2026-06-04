@@ -833,7 +833,7 @@ main() {
         printf '    %-14s %s\n' "--force" "Overwrite existing setup data"
         printf '    %-14s %s\n' "--numbered" "Force numbered menu instead of arrow-key picker"
         printf '    %-14s %s\n' "--no-color" "Disable colored output"
-        printf '\n  %s\n' "${DIM}Collects: project name and Root Vault path, scans the corpus, transposes files to raw/, then asks which LLM CLI should receive the startup handoff.${RESET}"
+        printf '\n  %s\n' "${DIM}Collects: project name and Root Vault path, scans the corpus, transposes files to raw/, syncs agent definitions from system/agents/, then asks which LLM CLI should receive the startup handoff.${RESET}"
         return 0
         ;;
     esac
@@ -852,6 +852,12 @@ main() {
   printf '\n  %s  %s\n' "${BOLD}${C}Pilosa${RESET}" "${DIM}Fast Setup${RESET}"
   printf '\n  %s\n' "${DIM}Project name, Root Vault path, corpus scan, consent, then LLM CLI handoff.${RESET}"
   divider
+
+  # ── sync agent definitions from source of truth ──────────────────────────────
+  if [[ -f "$SCRIPT_DIR/sync-agents.sh" ]]; then
+    printf '\n'
+    bash "$SCRIPT_DIR/sync-agents.sh"
+  fi
 
   if has_filled_setup && [[ "$FORCE" != "1" ]]; then
     printf '\n  %s Existing setup data found.\n' "${Y}${BOLD}⚠${RESET}"

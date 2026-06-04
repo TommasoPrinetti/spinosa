@@ -4,12 +4,12 @@ role: setup_and_indexing_protocol
 purpose: [translate the protected Root Vault into a searchable, header-indexed workspace]
 description:
   - Startup protocol executed directly by the orchestrator after onboarding.
-  - Agents use it to build dictionary, headers, maps, validation checks, and startup reports.
+  - Agents use it to build dictionary, maps, validation checks, and startup reports.
 scope: [initial setup only]
 connects_to:
   - AGENTS.md
 created: 2026-05-28
-updated: 2026-06-03
+updated: 2026-06-04
 ---
 
 # startup.md — Setup Translation and Indexing Protocol
@@ -22,33 +22,32 @@ Startup is the only authority that can mark setup complete. `.bin/check-startup.
 
 ## Mission
 
-Translate the protected Root Vault into the first usable **workspace**: a searchable, header-indexed collection of raw copies with a shared dictionary for consistent terminology. After CLI onboarding, the Root Vault is the immutable original source and [[raw/]] is the active working corpus for normal source-grounded work.
+Translate the protected Root Vault into the first usable **workspace**: a searchable collection of raw copies with a shared dictionary, concept-indexed maps, and thematic tags for navigation. After CLI onboarding, the Root Vault is the immutable original source and [[raw/]] is the active working corpus for normal source-grounded work.
 
-The CLI onboarding script has already collected project name and Root Vault path, scanned the corpus, asked for explicit consent, copied accepted text-like files, native-readable files, and PDFs from the Root Vault into [[raw/]], skipped images, video, audio, and Root Vault `AGENTS.md` control files, and collected the preferred LLM CLI for handoff. Your job is to:
+The CLI onboarding script has already collected project name and Root Vault path, scanned the corpus, asked for explicit consent, copied accepted text-like files from the Root Vault into [[raw/]], skipped images, video, audio, and Root Vault `AGENTS.md` control files. Your job is to:
 
 1. **Build the master dictionary and enrich the blueprint from corpus evidence**
-2. **Generate YAML headers** for every raw copy
-3. **Create the map folder** at `maps/`
-4. **Write detailed Obsidian-wikilink maps** that guide future LLMs into raw files
-5. **Build maps** from repeated themes
-6. **Update the master workspace map**
-7. **Run startup validation and retrieval tests**
+2. **Read raw copies in batches and extract concepts, themes, and entities**
+3. **Write concept-indexed maps** that help future LLMs find relevant files by meaning, not just filename
+4. **Tag files with brief thematic markers** for search optimization
+5. **Cross-exercise synthesis** — identify themes that appear across multiple exercises
+6. **Run startup validation and retrieval tests**
 
-The protocol runs in two phases: **Phase 1 (Setup Translation)** and **Phase 2 (Anchoring, Mapping, Validation)**. The CLI handles raw record writing; you handle translation, dictionary anchoring, maps, validation, and recovery notes.
+The protocol runs in two phases: **Phase 1 (Setup Translation)** and **Phase 2 (Indexing, Mapping, Validation)**. The CLI handles raw record writing; you handle translation, dictionary anchoring, maps, validation, and recovery notes.
 
 ## Non-Negotiable
 
 - **Never edit, rename, reorganize, or delete Root Vault files.**
-- Treat Root Vault files as protected originals after onboarding; use [[raw/]] as the active working corpus for dictionary building, headers, maps, and normal retrieval.
+- Treat Root Vault files as protected originals after onboarding; use [[raw/]] as the active working corpus.
 - Copy PDFs as-is when onboarding accepted them. Do not create pointer records for images, audio, or video; account for skipped media as Root Vault-only coverage gaps.
-- Treat every `AGENTS.md` file as repository/control instructions, not corpus evidence. Do not import, header, map, or cite Root Vault `AGENTS.md` files.
-- Use the dictionary for consistent terminology across all headers.
-- Preserve generated-file provenance (`generated_by`, `generated_at`, source path, and `processing_status`) on raw copy headers, maps, and reports.
+- Treat every `AGENTS.md` file as repository/control instructions, not corpus evidence.
+- Use the dictionary for consistent terminology across all outputs.
+- Preserve generated-file provenance on maps and reports.
 - Use Obsidian wikilinks for internal map references to raw copies, dictionaries, and maps.
 - Put retrieval-critical terms in **YAML frontmatter** because fast grep starts there.
 - Put interpretation and context in the body.
 - Do not ask questions directly. Produce a Disambiguation Brief only for blocking ambiguity.
-- Treat machine artifacts as findable noise until verified; never promote ASR, diarization, OCR, or conversion artifacts into canonical dictionary entries without source support.
+- Treat machine artifacts as findable noise until verified.
 
 ## Required Startup Inputs
 
@@ -62,7 +61,7 @@ Mandatory initial reads:
 On-demand reads:
 - [[system_architecture_map]] only when architecture context is needed.
 
-If the user already ran `bash .bin/onboard.sh`, treat its answers as the **setup draft** and complete startup without repeating those questions. Project description and helpful artifact URLs are optional context. If absent, record them as `not provided during fast setup` and infer the working scope from the active raw corpus during indexing. External source policy defaults to `no`; only ask through the orchestrator if user-provided URLs require fetching or the user requests external source access.
+If the user already ran `bash .bin/onboard.sh`, treat its answers as the **setup draft** and complete startup without repeating those questions. Project description and helpful artifact URLs are optional context. If absent, record them as `not provided during fast setup` and infer the working scope from the active raw corpus during indexing. External source policy defaults to `no`.
 
 ---
 
@@ -72,16 +71,16 @@ If the user already ran `bash .bin/onboard.sh`, treat its answers as the **setup
 
 Read [[context]] and [[configuration]]. Identify filled fields, placeholders, and missing data.
 
-Create a short todo list with the CLI's todo/task tool if available. **Mandatory** when the tool exists. Minimum todo items:
+Create a todo list with the CLI's todo/task tool if available. Minimum todo items:
 
 - inspect setup draft,
 - verify Root Vault,
 - synthesize blueprint/config,
-- build dictionary and blueprint anchors,
-- generate raw copy headers,
-- create navigation maps,
-- build maps,
-- validate headers and retrieval paths.
+- build dictionary from corpus evidence,
+- read raw copies and extract concepts,
+- write concept-indexed maps,
+- cross-exercise synthesis,
+- validate retrieval paths.
 
 ## 1.2 Translate Setup Draft
 
@@ -89,19 +88,17 @@ Treat CLI-generated answers as a **setup draft**, not as questions to repeat. Tr
 
 - preserve the project title,
 - preserve the project description if provided; otherwise write `not provided during fast setup` and continue,
-- register helpful artifact URLs or file paths if provided; otherwise write `none provided during fast setup`,
-- infer a tentative source universe, vocabulary, methods, outputs, unresolved ambiguities, and indexing target from the description, artifacts, and active raw corpus when available, and from [[raw/]] alone when description/artifacts are absent,
+- register helpful artifact URLs or file paths if provided,
+- infer a tentative source universe, vocabulary, methods, outputs, unresolved ambiguities, and indexing target from the description, artifacts, and active raw corpus when available,
 - keep inferred fields explicitly marked as inferred when useful.
 
-Use shell/file tools to confirm the Root Vault path exists and is treated as **read-only**. Do not read Root Vault text directly for normal indexing when the corresponding raw copy exists; use the Root Vault only to verify protected paths and account for skipped media or unsupported source files.
-
-If artifact URLs are present, use web/MCP/browser tools **only** when `external_sources_allowed` is set to `yes`. If the policy is `no`, record URLs but do not fetch them.
+Use shell/file tools to confirm the Root Vault path exists and is treated as **read-only**. Do not read Root Vault text directly for normal indexing when the corresponding raw copy exists.
 
 ## 1.3 Fill Blueprint and Configuration
 
 - Fill [[context]] (project title, project description status, helpful artifact URLs or file paths status, Root Vault path, evidence standards, external source policy).
 - Fill [[configuration]] (`root_vault_path`, `root_vault_mode`, `source_policy`, `external_sources_allowed`, `preferred_llm_cli`, `claim_standard`, `l2_policy`).
-- Keep `setup_status: cli_started` until mapping, header validation, and retrieval tests have passed. Replace it with `setup_status: workspace_started` in both files only at the end of Phase 2.
+- Keep `setup_status: cli_started` until mapping and retrieval tests have passed. Replace it with `setup_status: workspace_started` in both files only at the end of Phase 2.
 
 ## 1.4 Audit the Translation
 
@@ -122,13 +119,11 @@ Do not ask follow-up questions before Phase 2 unless:
 - external URL access needs permission because the user provided URLs and policy is not already `yes`, or
 - a risky assumption blocks immediate indexing.
 
-Missing project description and missing helpful artifact URLs do not block Phase 2. Treat them as absent context and use the corpus survey, dictionary, and maps to derive the initial project description and artifact status.
-
-The user's `start the workspace` prompt is already permission to run initial indexing.
+Missing project description and missing helpful artifact URLs do not block Phase 2.
 
 ---
 
-# Phase 2 — Anchoring, Mapping, Validation
+# Phase 2 — Indexing, Mapping, Validation
 
 ## 2.1 Survey Active Corpus And Root Vault Coverage
 
@@ -136,10 +131,10 @@ Survey [[raw/]] as the active working corpus, then compare against the Root Vaul
 
 1. List all files and subdirectories (skip `.DS_Store`, `AGENTS.md`, system files, empty dirs)
 2. Note copied text-like file types (`.md`, `.txt`, `.csv`, `.json`, etc.), count per type, approximate date range
-3. Read raw copies to characterize the folder's content accurately
-4. Record: source types, modality, names, dates, topics, keywords, machine-readability, gaps
+3. Read a sample of raw copies to characterize the folder's content accurately
+4. Record: source types, modality, names, dates, topics, keywords, gaps
 
-Separately account for unsupported files and skipped media that remain only in the Root Vault (images, audio, video, unknown files). Do not create `.pointer.md` records for them during startup. Record media counts, extensions, and processing gaps in `workspace_index.md`, maps, and the startup report as Root Vault-only coverage.
+Separately account for unsupported files and skipped media that remain only in the Root Vault. Do not create `.pointer.md` records for them during startup. Record media counts, extensions, and processing gaps in `workspace_index.md` and the startup report as Root Vault-only coverage.
 
 ## 2.2 Log Source Intake
 
@@ -147,164 +142,212 @@ Record the source batch or external-access decision in `logs/user_requests.md` w
 
 ## 2.3 Build Master Dictionary And Blueprint Anchors
 
-Read every text-based raw copy in [[raw/]]. Extract:
+### Step 1: Count total files
 
-1. **Names** — people, roles, named entities. Merge variants into canonical forms (e.g., "Alice", "A. Tufano", "Alice Tufano" → canonical: "Alice Tufano"). Record the language of each term.
-2. **Places** — geographic locations, sites, regions. Merge variants (e.g., "Pacific", "Pacific Islands", "Oceania" → canonical: "Pacific Islands"). Record the language.
-3. **Organizations** — institutions, groups, agencies. Merge abbreviations (e.g., "WWF", "World Wildlife Fund" → canonical: "World Wildlife Fund"). Record the language.
+Before spawning any sub-agents, count all files in raw/:
+
+```
+find raw/ -name "*.md" -not -name "AGENTS.md" -not -name "INDEX.md" -not -name "REPO_GUIDE.md" | wc -l
+```
+
+Record this number as `TOTAL_FILES` in `workspace_index.md` under "Extraction Progress". Every subsequent step checks against this number.
+
+### Step 2: Spawn batches until all files are read
+
+Split raw copies into batches of 10-15 files. Spawn **pilosa-mapper** sub-agents. Each batch reads files and extracts:
+
+1. **Names** — people, roles, named entities. Merge variants into canonical forms.
+2. **Places** — geographic locations, sites, regions. Merge variants.
+3. **Organizations** — institutions, groups, agencies. Merge abbreviations.
 4. **Explicit source terms** — terms visibly present in the source text. Record source language and source files.
-5. **Inferred concepts** — domain-specific ideas, theories, frameworks inferred from multiple source terms. Mark as inferred and map to map entries only when source support is clear.
-6. **Domain terms** — specialized vocabulary, acronyms, jargon used in the sources. Define each. Record the language.
+5. **Inferred concepts** — domain-specific ideas, theories, frameworks inferred from multiple source terms. Mark as inferred.
+6. **Domain terms** — specialized vocabulary, acronyms, jargon used in the sources.
 7. **Uncertain terms and metadata** — unresolved people, dates, places, or terms needing review.
-8. **Machine artifacts** — ASR speaker labels, diarization labels, OCR noise, conversion residue, timestamps, file-system artifacts, or obvious transcription errors.
+8. **Machine artifacts** — ASR speaker labels, diarization labels, OCR noise, conversion residue, timestamps.
 
-**Multilingual rule:** Keywords must appear in the language they were found in. If a source is in French, French keywords are recorded. If in English, English keywords. If a concept appears in multiple languages, list all language variants as aliases so grep finds any form.
+**Multilingual rule:** Keywords must appear in the language they were found in. If a source is in French, French keywords are recorded. If in English, English keywords. If a concept appears in multiple languages, list all language variants as aliases.
 
-Example:
-```markdown
-| Canonical form | Language | Aliases | Source files |
-|---|---|---|---|
-| adaptation | fr | adapção (pt), adaptation (en) | interview_01.md |
-| coral reef | en | récif corallien (fr), recife de coral (pt) | fieldnote_03.md |
+After each batch completes:
+1. Merge batch results into the master dictionary
+2. Update `workspace_index.md` "Extraction Progress" section
+3. Append processed file paths to `agent_reports/extraction_checkpoint.md`
+
+**Arrival metric:** `files_read == TOTAL_FILES`. Continue spawning batches until every file has been read by at least one sub-agent.
+
+### Step 3: Finalize dictionary
+
+Write [[dictionary]] with accumulated canonical forms, aliases, explicit source terms, inferred concepts, uncertain terms, machine artifacts, languages, and source file references.
+
+### Step 4: Enrich context
+
+Use accumulated evidence to enrich [[context]]:
+
+- **Methods**: Observe what the raw copies actually contain. Infer the research methods.
+- **Source universe**: List the actual source types found, their languages, and approximate date ranges.
+- **Research vocabulary**: Extract key actors, institutions, places, and concepts that appear repeatedly.
+- **Likely output needs**: Based on the corpus structure, infer what the researcher will need.
+
+## 2.4 Read Raw Copies And Extract Concepts
+
+**This is the core step that makes maps useful.** Use **pilosa-mapper** sub-agents to read file bodies and extract actual content.
+
+### Step 1: Check progress from dictionary pass
+
+Read `agent_reports/extraction_checkpoint.md` to see which files have already been read. If the dictionary pass (2.3) already read all files, reuse those extraction packets. If not, continue with new batches.
+
+### Step 2: Spawn batches until all files have concept packets
+
+Split raw copies into batches of 10-15 files. For each batch, spawn a pilosa-mapper with this prompt:
+
+```
+Read these 10-15 raw copy files. For EACH file, extract:
+1. **Core concepts** (2-5): The main ideas discussed in this file. Use the dictionary for canonical terms. Examples: "value attribution", "professional judgment", "epistemic authority", "AI trust", "fairness assessment", "prompting techniques"
+2. **Thematic tags** (2-5): Brief search-optimized labels. Examples: "ethics", "professional-use", "student-reflection", "methodology", "critique", "comparison"
+3. **Key entities**: People, organizations, places mentioned (use dictionary canonical forms)
+4. **Cross-exercise connections**: Does this file reference or relate to content in other exercises?
+
+Return a structured packet for each file:
+- File path
+- Source type (interview/worksheet/transcription)
+- Language
+- Core concepts (list)
+- Thematic tags (list)
+- Key entities (list)
+- One-sentence summary
+- Cross-exercise connections (if any)
 ```
 
-Write [[dictionary]] with canonical forms, aliases, explicit source terms, inferred concepts, uncertain terms, machine artifacts, languages, and source file references. Every term that appears in more than one source file **MUST** have an alias entry so grep finds any variant in any language.
+### Step 3: Accumulate packets
 
-Use this same pass to enrich [[context]] from raw corpus evidence:
+After each batch completes:
+1. Append extraction packets to `agent_reports/extraction_checkpoint.md`
+2. Update `workspace_index.md` "Extraction Progress" section
+3. Track: `files_extracted / TOTAL_FILES`
 
-- **Methods**: Observe what the raw copies actually contain — interviews, fieldnotes, reports, datasets, articles. Infer the research methods from the source types and content. Update the Methods field.
-- **Source universe**: List the actual source types found, their languages, and approximate date ranges. Update the Sources section.
-- **Research vocabulary**: Extract key actors, institutions, places, and concepts that appear repeatedly. Update Research Vocabulary with concrete lists instead of placeholders.
-- **Theoretical frames**: If sources reference specific theories, frameworks, or schools of thought, record them in Research Vocabulary under "Theoretical frames."
-- **Likely output needs**: Based on the corpus structure, infer what the researcher will need — comparative analyses, timeline reconstructions, entity mapping, etc. Update Outputs.
-- **Unresolved ambiguities**: Record anything that blocked indexing — unclear dates, unidentified people, conflicting terminology, ambiguous source attribution. Add to Blind Spots.
-- **Project description**: If the corpus clearly reveals what the project studies (even without a user-provided description), write a one-sentence description. Keep "not provided during fast setup" if unreliable.
+**Arrival metric:** `files_extracted == TOTAL_FILES`. Continue spawning batches until every file has an extraction packet in the checkpoint file.
 
-Keep missing project description as absent if no reliable corpus-level description can be inferred. Do not block startup for it.
+### Step 4: Merge into concept index
 
-Noise quarantine:
-- Put ASR speaker labels such as `SPEAKER_00`, diarization fragments, OCR hallucinations, timestamps, and conversion residue in `machine_artifacts`.
-- Put plausible but unverified people, places, or concepts in `uncertain_terms`.
-- Do not add machine artifacts to canonical people, organizations, places, or concepts unless Verifier or source context verifies them.
+After all batches complete, merge extraction packets into a **concept index** — a master list of all concepts found across the corpus, with file references. Write this to `agent_reports/concept_index_accumulated.md` as input for map writing.
 
-## 2.4 Generate Raw Copy Headers
+## 2.5 Write Concept-Indexed Maps
 
-For every raw copy file in [[raw/]], generate a YAML header using the dictionary. Skip legacy `*.pointer.md` records if present; they are not raw copies. The raw copy header must contain:
+Use **pilosa-writer** sub-agents to create maps from the concept index. The maps are the primary navigation layer for backsearching.
 
-```yaml
----
-type: raw_copy
-source: "raw/[relative-path]/[filename]"
-source_type: interview | fieldnote | article | report | dataset | ...
-text_type: md | txt | rtf | csv | json | ...
-language: en | fr | pt | es | ...
-date: "YYYY-MM-DD or YYYY-MM-DD"
-people: ["canonical name from dictionary"]
-places: ["canonical place from dictionary"]
-organizations: ["canonical org from dictionary"]
-topics: ["topic1", "topic2"]
-keywords: ["keyword1", "keyword2", "keyword3"]
-concepts: ["[[Concept Name]]"]
-explicit_source_terms: ["surface term from source"]
-inferred_concepts: ["inferred concept label"]
-canonical_aliases: ["alias from dictionary"]
-uncertain_terms: ["term needing review"]
-machine_artifacts: ["SPEAKER_00", "ocr_noise"]
-metadata_uncertainty: ["date_missing", "identity_ambiguous"]
-related_sources: ["other_file.md"]
-generated_by: startup_agent
-generated_at: "YYYY-MM-DD"
-processing_status: copied_text_headered
-created: "YYYY-MM-DD"
-updated: "YYYY-MM-DD"
----
-```
+### Input
 
-Rules:
-- Use canonical forms from the dictionary — **never invent new variants**.
-- `people`, `places`, `organizations` **MUST** use dictionary canonical names.
-- `keywords` should include both canonical terms and common aliases (so grep finds any form).
-- `explicit_source_terms` are words or phrases actually present in the source.
-- `inferred_concepts` are derived from evidence and must remain separate from explicit source terms.
-- `canonical_aliases` lists dictionary aliases used for retrieval.
-- `uncertain_terms`, `machine_artifacts`, and `metadata_uncertainty` quarantine noisy or incomplete metadata.
-- `concepts` link to relevant concept entries in the navigation maps.
-- `related_sources` lists other raw copies that share topics or concepts.
-- `generated_by`, `generated_at`, and `processing_status` make generated headers traceable.
-- Omit fields that have no value — do not write `people: []`.
+Read `agent_reports/concept_index_accumulated.md` (from step 2.4) and `agent_reports/extraction_checkpoint.md` for the full list of files and their extraction packets.
 
-Write the header at the top of each raw copy file. The body (original content) stays **unchanged**.
+### Required Maps
 
-## 2.5 Create Central Navigation Maps
+1. **`maps/concept_index.md`** — The master concept index. Each concept gets a section with:
+   - Definition (1-2 sentences)
+   - Files where it appears (with wikilinks)
+   - Which exercises contain it
+   - Which cohorts contain it
+   - Related concepts
 
-Create `maps/`. This is the canonical LLM navigation layer.
+2. **`maps/thematic_tags.md`** — Files organized by thematic tag. Each tag gets a section listing all files with that tag.
 
-Create as many navigation maps as needed to cover all files in [[raw/]]. Each map should address a distinct retrieval concern — corpus structure, concepts, entities, source types, unresolved items, or any other organizing axis that helps future LLMs navigate the material. There is no fixed set of required maps; create what serves the corpus.
+3. **`maps/cross_exercise_synthesis.md`** — Themes that appear across 3+ exercises. For each cross-exercise theme:
+   - Theme name and definition
+   - Which exercises contain it
+   - How the theme evolves across exercises
+   - Key files for each exercise
 
-When useful, create `map_overview.md` as the entry point. It should explain which map to read for each retrieval goal without imposing a fixed required map set.
+4. **`maps/entity_index.md`** — People, organizations, places with file references.
 
-Every internal map reference must use Obsidian wikilinks:
+5. **`maps/corpus_structure.md`** — Files organized by exercise and cohort (for structural navigation).
 
-```markdown
-[[raw/interviews/interview_01__txt|interview_01.txt]]
-[[raw/reports/report_01__pdf.pointer|report_01.pdf pointer]]
-[[folder_map]]
-```
+### Map Format
 
-Do not use bare internal paths in map bodies. Bare paths are allowed only in YAML `connects_to:` fields.
-
-Each map file must include the header schema from [[header_template]] (`type: navigation_map`):
-
-```yaml
----
-type: navigation_map
-role: [descriptive role, e.g. folder_map, concept_map, entity_map]
-purpose: [guide future LLM retrieval into the raw corpus]
-scope: raw/
-connects_to:
-  - raw/
-  - dictionary.md
-map_quality: machine_generated | checked | human_reviewed
-description_depth: retrieval_oriented
-wikilink_policy: obsidian_wikilinks_required
-generated_by: startup_agent
-generated_at: YYYY-MM-DD
-processing_status: machine_generated
-created: YYYY-MM-DD
-updated: YYYY-MM-DD
----
-```
-
-Each map entry for a raw copy should use this table shape:
+Each map uses this format:
 
 ```markdown
-| Type | Language | People | Topics | Keywords | Caveats |
-|---|---|---|---|---|---|
-| [[raw/example.md|example]] | en | Name | topic | keyword | needs_review |
+## [Concept Name]
+
+[1-2 sentence definition]
+
+**Exercises:** Ex3, Ex5, Ex9
+**Cohorts:** C1, C2, C3
+
+| File | Exercise | Cohort | Thematic Tags | Summary |
+|---|---|---|---|---|
+| [[raw/path/to/file.md\|filename]] | Ex3 | C1 | ethics, reflection | One-sentence summary |
 ```
 
-Put richer retrieval summaries and wikilinks in body text near the table. Keep Root Vault paths out of map bodies.
+### Arrival Metric
 
-For recurring concepts appearing in 3+ raw copies, create a concept-focused map that links each concept to its source files with definitions, aliases, confidence, and Verifier status. Use [[dictionary]] to identify cross-cutting concepts.
+**Every file in `agent_reports/extraction_checkpoint.md` must appear in at least one map.** After writing all maps, verify:
 
-## 2.6 Record Ambiguities
+```
+Files in checkpoint: N
+Files in concept_index.md: M1
+Files in thematic_tags.md: M2
+Files in corpus_structure.md: M3
+```
 
-After reading the source files and building the dictionary, record ambiguities without stopping startup. The first startup pass should produce a usable retrieval layer even when metadata is incomplete.
+If any file is missing from all maps, the maps are incomplete. Fix before proceeding.
 
-Record these cases in the dictionary, maps, workspace map, or startup report as `unresolved` / `needs_review`:
+### Map Quality
+
+Maps start as `map_quality: machine_generated`. After Verifier review, update to `map_quality: checked` or `map_quality: human_reviewed`.
+
+## 2.6 Cross-Exercise Synthesis
+
+**Dedicated step.** After all concept extraction is complete, run a synthesis pass:
+
+1. Identify concepts that appear in 3+ exercises
+2. Map how these concepts evolve across exercises (e.g., "professional usefulness" appears in Ex3 as initial assessment, in Ex9 as formal judgment, in Ex17 as final reflection)
+3. Identify exercise-specific concepts (concepts unique to one exercise)
+4. Write `maps/cross_exercise_synthesis.md` with the results
+
+This map is critical for longitudinal analysis — it shows how themes develop across the curriculum.
+
+## 2.7 Serendipitous Connection Discovery
+
+**Dedicated step.** After cross-exercise synthesis is complete, spawn **pilosa-serendippo** to find hidden connections that batch processing misses.
+
+### Purpose
+
+The mapper agent reads files in structured batches — efficient but linear. The serendipa agent roams freely, following threads and finding connections that emerge from holistic reading, not just metadata extraction.
+
+### When to Run
+
+- After mapper has processed all files (2.4) and cross-exercise synthesis is written (2.6)
+- Maps exist and have initial concept coverage
+- Serendipa can use existing maps as a starting point
+
+### How It Works
+
+1. Spawn pilosa-serendippo with access to maps/ and raw/
+2. It reads existing maps to identify under-connected concepts
+3. It roams through raw files, following threads and finding connections
+4. It writes a serendipity report to `agent_reports/serendipity_report.md`
+5. It proposes map updates (new cross-references, pattern documentation)
+
+### Arrival Metric
+
+Serendipa runs until the orchestrator signals completion or the researcher intervenes. There is no fixed endpoint — this is an open-ended discovery process.
+
+### Output
+
+- `agent_reports/serendipity_report.md` — connections found, patterns identified, map updates proposed
+- Updates to existing maps (new cross-references, pattern documentation)
+
+## 2.8 Record Ambiguities
+
+After reading the source files and building the dictionary, record ambiguities without stopping startup. Record these cases in the dictionary, maps, workspace map, or startup report as `unresolved` / `needs_review`:
 
 1. **Name collisions** — If "Maria" appears in 3 sources and identity is unclear, keep distinct surface forms or mark the canonical entry `unresolved`.
-2. **Place ambiguity** — If "the village" or "the coast" is unclear, preserve the source phrase as a keyword and mark the place field `needs_review` or omit it.
-3. **Unclear concepts** — If a domain term has no obvious definition, include the term with a brief source-grounded note and mark the definition `needs_review`.
-4. **Missing metadata** — If a source has no date, author, or context, omit that header field or mark the file `needs_review` in the relevant map and source entry.
-5. **Cross-language ambiguity** — If concepts in different languages may not fully align, list variants as aliases only when source context supports it; otherwise keep separate entries.
-6. **Source relationships** — If two sources seem to contradict each other, record the contrast as a gap rather than resolving it.
+2. **Place ambiguity** — If "the village" or "the coast" is unclear, preserve the source phrase as a keyword.
+3. **Unclear concepts** — If a domain term has no obvious definition, include the term with a brief source-grounded note.
+4. **Missing metadata** — If a source has no date, author, or context, omit that header field or mark the file `needs_review`.
+5. **Source relationships** — If two sources seem to contradict each other, record the contrast as a gap rather than resolving it.
 
-Only pause for orchestrator/user input when an ambiguity prevents a valid raw copy path, prevents writing a valid YAML header, or prevents validation from running. Otherwise continue and list unresolved items in the startup report.
+Only pause for orchestrator/user input when an ambiguity prevents valid indexing. Otherwise continue and list unresolved items in the startup report.
 
-Do not guess or over-merge. A conservative unresolved entry is better than a wrong canonical term.
-
-## 2.7 Update Master Workspace Map
+## 2.9 Update Master Workspace Map
 
 Update [[workspace_index]] with:
 
@@ -312,72 +355,124 @@ Update [[workspace_index]] with:
 - Skipped media coverage (how many Root Vault-only media files, by media type),
 - Central navigation maps created,
 - Dictionary status (canonical names, places, organizations, concepts),
-- Navigation maps created,
 - Non-text media noted as skipped / Root Vault-only,
 - Known gaps.
 
-Coverage counts must be exact:
-- copied text count,
-- skipped media count,
-- files with valid headers,
-- maps created,
-- maps created and map quality status,
-- unresolved dates,
-- unresolved people or identities.
+Coverage counts must be exact.
 
-## 2.8 Startup Validation
+## 2.10 Startup Validation
 
-Before reporting startup complete, run validation. `.bin/check-startup.sh` may be used as a developer helper, but Startup remains responsible for judging completion.
+Before reporting startup complete, run validation.
 
-Header validation:
-- required YAML fields exist for `raw_copy`, `navigation_map`, and map files,
-- `source` paths point to existing files where expected,
-- array fields are arrays, not comma-separated strings,
-- generated files have `generated_by`, `generated_at`, and `processing_status`,
-- malformed frontmatter is fixed or reported before `workspace_started`.
+Map validation:
+- concept_index.md has concepts with file references
+- thematic_tags.md has tags with file lists
+- cross_exercise_synthesis.md has themes spanning 3+ exercises
+- entity_index.md has entities with file references
+- All wikilinks resolve to existing files
 
 Retrieval tests:
 
-1. **Keyword retrieval** — grep one dictionary keyword in [[raw/]] and confirm it reaches a raw copy header/body.
-2. **Person retrieval** — if any person exists, grep canonical name or alias and confirm dictionary/header agreement.
-3. **Concept retrieval** — if any concept exists, confirm a map links back to raw copies.
-4. **Map navigation** — open a generated overview or map, follow at least one link to a specialized map, then follow at least one raw-copy wikilink to an existing file.
-5. **Dictionary alias lookup** — grep at least one alias and confirm it resolves to a canonical dictionary row.
-6. **Unresolved metadata retrieval** — if unresolved metadata exists, grep `needs_review`, `unresolved`, `metadata_uncertainty`, or `uncertain_terms` and confirm it is findable.
+1. **Concept retrieval** — grep a concept name in maps/ and confirm it links to raw files
+2. **Thematic retrieval** — grep a thematic tag and confirm it returns relevant files
+3. **Cross-exercise retrieval** — find a concept in cross_exercise_synthesis.md and confirm it links to files across exercises
+4. **Entity retrieval** — grep a person/org name and confirm it links to relevant files
+5. **Map navigation** — open concept_index.md, follow a link to a raw file, confirm it exists
+6. **Unresolved metadata retrieval** — grep `needs_review` or `unresolved` and confirm it is findable
 
-Startup is complete **only if** required headers are valid and every applicable retrieval test passes. If a test is not applicable because no such entity exists, record `not_applicable` with the reason in the startup report.
+Startup is complete **only if** all applicable retrieval tests pass.
 
 After validation passes, replace `setup_status: cli_started` with `setup_status: workspace_started` in [[context]] and [[configuration]].
 
-## 2.9 Idempotency And Recovery
+## 2.11 Idempotency And Recovery
 
 Onboarding rerun behavior:
 - skip existing raw text copies,
 - skip `AGENTS.md` control files,
-- skip legacy source pointer records if present,
-- leave legacy raw folder `index.md` files untouched,
-- overwrite blueprint/config only when the user confirms overwrite or passes `--force`,
-- never overwrite user-edited generated files in [[raw/]].
+- leave legacy raw folder files untouched,
+- overwrite blueprint/config only when the user confirms overwrite or passes `--force`.
 
 Startup rerun behavior:
-- skip valid raw copy headers unless repair is needed,
-- update maps when raw files, dictionary entries, or maps changed,
-- update dictionary rows by merging evidence, not replacing user-reviewed rows,
-- preserve `map_quality: checked` and `map_quality: human_reviewed` unless the user explicitly asks to regenerate.
+- skip valid dictionary entries unless repair is needed,
+- update maps when raw files or dictionary entries changed,
+- preserve `map_quality: checked` and `map_quality: human_reviewed` unless the user explicitly asks to regenerate,
+- preserve concept extraction results from previous runs.
 
 Recovery behavior:
 - write phase progress in the startup report or a checkpoint in [[agent_reports/]] when startup stops partially,
 - resume from the first incomplete phase,
-- repair missing headers, maps, dictionary rows, or maps without rerunning onboarding,
 - keep `setup_status: cli_started` until validation passes.
 
-Header worker delegation:
-- Header assignment may be delegated only after the dictionary has a stable first pass.
-- Batch size: 10 to 25 raw copies per worker, adjusted downward for long files.
-- Handoff format: list raw paths, dictionary path, header schema path, required output fields, known unresolved terms, and a strict instruction to leave raw bodies unchanged.
-- Startup owns merge, conflict resolution, and validation; workers never set `setup_status: workspace_started`.
+Sub-agent delegation:
+- Dictionary building: pilosa-mapper reads batches of 10-15 files, extracts terms
+- Concept extraction: pilosa-mapper reads batches of 10-15 files, extracts concepts and themes
+- Map writing: pilosa-writer synthesizes concept index into maps
+- Startup owns merge, conflict resolution, and validation; sub-agents never set `setup_status: workspace_started`.
+
+## 2.12 Progress Tracking And Checkpointing
+
+### Checkpoint File
+
+Use `agent_reports/extraction_checkpoint.md` to track progress across sub-agent batches. This file survives restarts and enables resumption.
+
+Format:
+
+```markdown
+---
+type: extraction_checkpoint
+total_files: 925
+files_read: 0
+last_updated: YYYY-MM-DD
+---
+
+# Extraction Checkpoint
+
+## Processed Files
+
+| File Path | Batch ID | Date Processed |
+|---|---|---|
+| raw/Ex0-.../CLARA.md | batch_001 | 2026-06-04 |
+| raw/Ex0-.../FRANCOIS.md | batch_001 | 2026-06-04 |
+
+## Extraction Packets
+
+### Batch 001
+[Structured extraction results from sub-agent]
+```
+
+### Progress Display
+
+After each batch, update `workspace_index.md` "Extraction Progress" section:
+
+```markdown
+## Extraction Progress
+
+- Total files: 925
+- Files read: 150
+- Remaining: 775
+- Last batch: Ex0/COHORT2 (15 files)
+- Status: in_progress
+```
+
+### Resume On Restart
+
+If startup is interrupted:
+1. Read `agent_reports/extraction_checkpoint.md`
+2. Count `files_read` vs `total_files`
+3. Resume spawning batches from where we stopped
+4. Skip files already in the "Processed Files" table
+
+### Arrival Metrics Summary
+
+| Phase | Arrival Metric | How to Check |
+|---|---|---|
+| Dictionary (2.3) | `files_read == total_files` | checkpoint file |
+| Concept extraction (2.4) | `files_extracted == total_files` | checkpoint file |
+| Map writing (2.5) | Every file in checkpoint appears in ≥1 map | grep file paths in maps/ |
+| Cross-exercise (2.6) | Themes identified for all concepts in 3+ exercises | concept_index.md sections |
 
 ---
+
 # Startup Output
 
 Write one startup report in [[agent_reports/]] with the following fields:
@@ -388,11 +483,9 @@ Write one startup report in [[agent_reports/]] with the following fields:
 - skipped media coverage,
 - maps created,
 - dictionary size (names, places, organizations, concepts),
-- files with valid headers,
-- unresolved dates,
-- unresolved people or identities,
-- files created,
-- maps created,
+- concept index size (number of concepts, files covered),
+- thematic tag count,
+- cross-exercise themes identified,
 - validation and retrieval test results,
 - remaining non-text files in Root Vault,
 - recommended next actions.

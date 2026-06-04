@@ -9,48 +9,53 @@ scope: [all raw copies in raw/]
 connects_to:
   - raw/
   - workspace_index.md
-status: template
+status: draft
 created: 2026-05-26
-updated: 2026-06-03
+updated: 2026-05-26
 ---
 
 # Master Dictionary
 
 Startup builds this file from the active raw corpus.
 
-Keep this template empty on the framework branch. Project-specific dictionary rows belong on project branches after onboarding and startup.
-
 ## Canonical Names
 
 | Canonical form | Language | Aliases | Source files |
 |---|---|---|---|
+| [filled by startup] | | | |
 
 ## Canonical Places
 
 | Canonical form | Language | Aliases | Source files |
 |---|---|---|---|
+| [filled by startup] | | | |
 
 ## Canonical Organizations
 
 | Canonical form | Language | Aliases | Source files |
 |---|---|---|---|
+| [filled by startup] | | | |
 
 ## Canonical Concepts
 
 | Canonical form | Language | Aliases | Source files |
 |---|---|---|---|
+| [filled by startup] | | | |
 
 ## Explicit Source Terms
 
 | Source term | Language | Related canonical form | Source files |
 |---|---|---|---|
+| [filled by startup] | | | |
 
 ## Uncertain Terms
 
 | Term | Language | Reason | Source files |
 |---|---|---|---|
+| [filled by startup] | | | |
 
 ## Machine Artifacts
 
 | Artifact | Type | Notes |
 |---|---|---|
+| [filled by startup] | | |

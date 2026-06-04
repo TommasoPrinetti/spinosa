@@ -5,8 +5,8 @@ description:
   - Project context: scope, names, particularities, relationships.
   - Read by Writer for synthesis; updated by startup during indexing.
 created: 2026-05-26
-updated: 2026-06-03
-setup_status: cli_started
+updated: 2026-05-26
+setup_status: not_started
 connects_to:
   - AGENTS.md
   - system/configuration.md
@@ -23,38 +23,38 @@ Pilosa is a search-and-find engine for large datasets and text archives. It uses
 The system provides both direct answers grounded in sources and broader contextual perspectives on the topics being researched. Every factual claim traces back to a source path. Every report is verified before presentation.
 
 ## Project
-- Title: [project name]
-- Description: [one sentence — what the project studies or builds]
+- Title: [filled by startup]
+- Description: [filled by startup or "not provided during fast setup"]
 
 ## Project Artifacts
-- URLs or repos the user provided: [URLs or none]
+- URLs or repos the user provided: [filled by startup]
 
 ## Sources
-- Root Vault path: [path]
-- Main source types: [e.g., PDFs, markdown notes, transcripts]
-- Expected incoming sources: [what the user said they would add]
+- Root Vault path: [filled by CLI onboarding]
+- Main source types: [filled by startup]
+- Expected incoming sources: [filled by startup]
 
 ## Research Vocabulary
-- Key actors / institutions / places: [list]
-- Key concepts: [list]
-- Sensitizing concepts, not evidence: [list]
-- Theoretical frames, not forced labels: [list]
+- Key actors / institutions / places: [filled by startup]
+- Key concepts: [filled by startup]
+- Sensitizing concepts, not evidence: [filled by startup]
+- Theoretical frames, not forced labels: [filled by startup]
 
 ## Method And Evidence
-- Methods: [how the project gathers, organizes, or interprets evidence]
+- Methods: [filled by startup]
 - Claims require source paths.
 - L2 clues require Verifier checking before reporting.
 - External sources must stay labeled external unless moved into the Root Vault.
-- External source policy: [yes/no — ask only if external access is needed]
+- External source policy: no
 
 ## Outputs
 - Start with maps in maps/ and evidence-grounded answers unless the researcher requests another output.
 
 ## Blind Spots
-- Fast setup did not include a user-written project description or artifact URLs. The orchestrator inferred them from the raw corpus.
+[Filled by startup]
 
 ## Researcher Preferences
-[How the researcher wants to work: internal-first vs web-grounded, preferred retrieval style, risk tolerance, output style.]
+[To be filled by researcher]
 
 ## Preferred LLM CLI
-[which CLI the researcher plans to use]
+[filled by CLI onboarding]

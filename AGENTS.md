@@ -18,7 +18,7 @@ Research workspace with agent-driven source indexing, verification, and synthesi
 
 ## Setup
 
-Place source files in the Root Vault and run `bash .bin/onboard.sh` to configure. Onboarding copies text/native files and PDFs into `raw/`, skips images/video/audio and Root Vault `AGENTS.md` control files, then the orchestrator builds the dictionary, headers, and navigation maps.
+Place source files in the Root Vault and run `bash .bin/onboard.sh` to configure. Onboarding copies text/native files and PDFs into `raw/`, skips images/video/audio and Root Vault `AGENTS.md` control files, syncs agent definitions from `system/agents/`, then the orchestrator builds the dictionary and concept-indexed navigation maps.
 
 ## Startup Gate
 
@@ -134,12 +134,14 @@ Use the question tool to clarify scope, disambiguate, or resolve blocking uncert
 | Agent | Role | Native Agent |
 |---|---|---|
 | Searcher | Searches raw copies, maps, and dictionary for evidence | `pilosa-searcher` |
+| Mapper | Reads raw files in batch, extracts concepts/tags/entities for indexing | `pilosa-mapper` |
+| Serendippo | Holistic serendipitous research — finds hidden connections across files | `pilosa-serendippo` |
 | Analyst | Provides broader contextual analysis from project context | `pilosa-analyst` |
 | Writer | Synthesizes findings into reports | `pilosa-writer` |
 | Verifier | Verifies claims, quotes, and paths | `pilosa-verifier` |
 | Janitor | Audits hygiene and archives stale files | `pilosa-janitor` |
 
-Native agent definitions live in `.opencode/agents/`, `.claude/agents/`, `.codex/agents/`.
+Native agent definitions live in `.opencode/agents/`, `.claude/agents/`, `.codex/agents/`, `.kilocode/agents/`.
 Fallback SKILL.md files live in `.agents/skills/`; the orchestrator may reference `orchestrator-dispatch` for chain selection.
 
 ## Per-directory rules
@@ -176,6 +178,7 @@ Domain-specific AGENTS.md files define local conventions. Standard coding agents
 - `system/dictionary.md` — shared vocabulary
 - `system/header_template.md` — canonical YAML frontmatter schema
 - `system/workspace_index.md` — master workspace index
+- `system/agents/` — **source of truth** for all agent definitions (synced to platform dirs)
 - `system_architecture_map.md` — diagrams
 
 ### `raw/`
@@ -195,9 +198,11 @@ Domain-specific AGENTS.md files define local conventions. Standard coding agents
 - `orchestrator-dispatch/` — prompt routing and skill injection
 
 ### Native agents
-- `.opencode/agents/` — OpenCode agent definitions (Searcher, Writer, Verifier, Janitor)
-- `.claude/agents/` — Claude Code agent definitions (Searcher, Writer, Verifier, Janitor)
-- `.codex/agents/` — Codex agent definitions (Searcher, Writer, Verifier, Janitor)
+- `system/agents/` — **source of truth** for all agent definitions (Searcher, Mapper, Serendippo, Analyst, Writer, Verifier, Janitor)
+- `.opencode/agents/` — synced copies for OpenCode
+- `.claude/agents/` — synced copies for Claude Code
+- `.kilocode/agents/` — synced copies for Kilo Code
+- `.codex/agents/` — Codex agent definitions (uses .toml format, not synced)
 
 ### `.kilocode/skills/`
 - Skill copies for Kilo Code (same as `.agents/skills/`)
@@ -238,7 +243,7 @@ Domain-specific AGENTS.md files define local conventions. Standard coding agents
 
 | Term | Meaning |
 |---|---|
-| **Agent** | One of four sub-agents: Searcher, Writer, Verifier, Janitor. Native definitions in `.opencode/agents/`, `.claude/agents/`, `.codex/agents/`. |
+| **Agent** | One of seven sub-agents: Searcher, Mapper, Serendippo, Analyst, Writer, Verifier, Janitor. Source of truth in `system/agents/`, synced to `.opencode/agents/`, `.claude/agents/`, `.kilocode/agents/`. |
 | **Blueprint** | Short for `system/context.md`. Defines the research project scope, questions, corpus, evidence standards, and direction. |
 | **Configuration** | `system/configuration.md`. Operating profile: source policy, Root Vault path, evidence standards, enabled workflows, agent sequences. |
 | **Context** | `system/context.md`. Project context storing scope, names, particularities, relationships. Read by Writer for synthesis; updated by startup during indexing. |
