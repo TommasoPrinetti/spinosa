@@ -1,11 +1,4 @@
----
-type: readme
-description:
-  - Human-facing overview, quick start, and development checklist for Pilosa.
-  - Read this for setup flow, directory layout, and contribution expectations.
-created: 2026-05-26
-updated: 2026-06-03
----
+
 
 ```txt
 ██████╗ ██╗██╗      ██████╗ ███████╗ █████╗ 
