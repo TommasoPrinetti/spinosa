@@ -18,7 +18,7 @@ Research workspace with agent-driven source indexing, verification, and synthesi
 
 ## Setup
 
-Place source files in the Root Vault and run `bash .bin/onboard.sh` to configure. Onboarding copies text/native files and PDFs into `raw/`, skips images/video/audio and Root Vault `AGENTS.md` control files, syncs agent definitions from `system/agents/`, then the orchestrator builds the dictionary and concept-indexed navigation maps.
+Place source files in the Root Vault and run `bash .bin/onboard.sh` to configure. Onboarding copies text/native files and PDFs into `raw/`, skips images/video/audio and Root Vault `AGENTS.md` control files, syncs agent definitions from `.agents/agents/`, then the orchestrator builds the dictionary and concept-indexed navigation maps.
 
 ## Startup Gate
 
@@ -178,7 +178,7 @@ Domain-specific AGENTS.md files define local conventions. Standard coding agents
 - `system/dictionary.md` — shared vocabulary
 - `system/header_template.md` — canonical YAML frontmatter schema
 - `system/workspace_index.md` — master workspace index
-- `system/agents/` — **source of truth** for all agent definitions (synced to platform dirs)
+- `.agents/agents/` — **source of truth** for all agent definitions (synced to platform dirs)
 - `system_architecture_map.md` — diagrams
 
 ### `raw/`
@@ -198,7 +198,7 @@ Domain-specific AGENTS.md files define local conventions. Standard coding agents
 - `orchestrator-dispatch/` — prompt routing and skill injection
 
 ### Native agents
-- `system/agents/` — **source of truth** for all agent definitions (Searcher, Mapper, Serendippo, Analyst, Writer, Verifier, Janitor)
+- `.agents/agents/` — **source of truth** for all agent definitions (Searcher, Mapper, Serendippo, Analyst, Writer, Verifier, Janitor)
 - `.opencode/agents/` — synced copies for OpenCode
 - `.claude/agents/` — synced copies for Claude Code
 - `.kilocode/agents/` — synced copies for Kilo Code
@@ -243,7 +243,7 @@ Domain-specific AGENTS.md files define local conventions. Standard coding agents
 
 | Term | Meaning |
 |---|---|
-| **Agent** | One of seven sub-agents: Searcher, Mapper, Serendippo, Analyst, Writer, Verifier, Janitor. Source of truth in `system/agents/`, synced to `.opencode/agents/`, `.claude/agents/`, `.kilocode/agents/`. |
+| **Agent** | One of seven sub-agents: Searcher, Mapper, Serendippo, Analyst, Writer, Verifier, Janitor. Source of truth in `.agents/agents/`, synced to `.opencode/agents/`, `.claude/agents/`, `.kilocode/agents/`. |
 | **Blueprint** | Short for `system/context.md`. Defines the research project scope, questions, corpus, evidence standards, and direction. |
 | **Configuration** | `system/configuration.md`. Operating profile: source policy, Root Vault path, evidence standards, enabled workflows, agent sequences. |
 | **Context** | `system/context.md`. Project context storing scope, names, particularities, relationships. Read by Writer for synthesis; updated by startup during indexing. |

@@ -2,7 +2,7 @@
 # sync-agents.sh — Copy agent definitions and skills from source of truth to all platform directories
 #
 # Source of truth:
-#   - system/agents/*.md → agent definitions
+#   - .agents/agents/*.md → agent definitions
 #   - .agents/skills/*/SKILL.md + references/ → skills
 #
 # Destinations:
@@ -24,7 +24,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 
 echo "=== Pilosa Agent Sync ==="
-echo "Source: $REPO_ROOT/system/agents/"
+echo "Source: $REPO_ROOT/.agents/agents/"
 echo ""
 
 # Sync agent definitions
@@ -32,7 +32,7 @@ echo "--- Syncing agent definitions ---"
 for platform in .opencode .claude .kilocode; do
     dest="$REPO_ROOT/$platform/agents"
     mkdir -p "$dest"
-    cp "$REPO_ROOT/system/agents/"*.md "$dest/"
+    cp "$REPO_ROOT/.agents/agents/"*.md "$dest/"
     count=$(ls "$dest"/*.md 2>/dev/null | wc -l)
     echo "  $platform/agents/ → $count files"
 done
