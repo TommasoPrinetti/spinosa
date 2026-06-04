@@ -16,7 +16,7 @@ Log the request, classify the prompt, choose the right sub-agent sequence, dispa
 - Do not edit `raw/`, maps, dictionary, logs, or system files.
 - Do not use external sources without explicit researcher authorization.
 - Do not answer source-grounded questions directly. Dispatch them through the orchestrator/sub-agent pipeline.
-- Check dictionary, map, report, and source-grounded edits with Verifier before reporting them as complete.
+- Check dictionary, report, and source-grounded edits with Verifier before reporting them as complete. Map content is self-correcting through agent use; Verifier checks map paths only when a route explicitly asks for path verification.
 - Do not import `AGENTS.md` control files into `raw/`. Treat all `AGENTS.md` files as repository/control instructions, not source evidence.
 
 ## Steps
@@ -61,8 +61,8 @@ Use the default sequence unless the user's request clearly requires a different 
 | `fast_path` | (none — answer directly) | — |
 | `clarify_search` | skip (or Searcher if term disambiguation needed) | `evidence-search` (if needed) |
 | `find_material` | Searcher → Verifier | `evidence-search` → `claim-verification` |
-| `evidence_answer` | Searcher + Analyst → Writer → Verifier | `evidence-search` + `context-analysis` → `report-writing` → `claim-verification` |
-| `synthesis_report` | Searcher ×N + Analyst → Writer → Verifier | `evidence-search` ×N + `context-analysis` → `report-writing` → `claim-verification` |
+| `evidence_answer` | Searcher + Analyst → Serendippo → Writer → Verifier | `evidence-search` + `context-analysis` → serendipity → `report-writing` → `claim-verification` |
+| `synthesis_report` | Searcher ×N + Analyst → Serendippo → Writer → Verifier | `evidence-search` ×N + `context-analysis` → serendipity → `report-writing` → `claim-verification` |
 | `verification` | Verifier | `claim-verification` |
 | `index_maintenance` | Searcher, Mapper, or Source Intake → Verifier | `evidence-search` or `source-intake` → `claim-verification` |
 | `cleanup` | Janitor | `workspace-cleanup` |
@@ -126,6 +126,7 @@ fallback_skill: .agents/skills/evidence-search/SKILL.md
 
 ## Rules
 
+- **All output must be reports.** Every answer to a user question is a report written to `agent_reports/`. No inline chat responses. No exceptions.
 - Verifier is mandatory on every non-fast path.
 - Never answer a non-fast-path question directly — always dispatch.
 - The Question Tool is the root orchestrator's clarification mechanism. Use it only to clarify scope, disambiguate, or resolve blocking uncertainties.
@@ -145,7 +146,7 @@ See `references/skills.md` for the full role → skill mapping.
 | Writer | `pilosa-writer` | `report-writing` | Synthesizes findings into reports |
 | Verifier | `pilosa-verifier` | `claim-verification` | Verifies claims, quotes, and paths |
 | Janitor | `pilosa-janitor` | `workspace-cleanup` | Audits hygiene and archives stale files |
-| Mapper | `pilosa-mapper` | startup protocol | Reads raw files in batches for dictionary, concept, tag, and entity extraction |
+| Mapper | `pilosa-mapper` | startup protocol | Reads raw files in batches; extracts content-grounded fragments, key passages, and concept signals; writes maps |
 | Serendippo | `pilosa-serendippo` | startup protocol | Finds hidden cross-corpus connections and proposes map enrichment |
 
 ## See also

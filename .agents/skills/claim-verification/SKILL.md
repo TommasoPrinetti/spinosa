@@ -29,11 +29,16 @@ Trace every claim to its source. Confirm accuracy. Correct errors in-place. Neve
    - `unresolved` — source cannot be opened or path is missing.
 4. Apply corrections directly to the report in `agent_reports/`.
 5. Update report `status` from `draft` to `pass`, `pass_with_corrections`, or `partial`.
-6. For `find_material` routes, verify the located path actually exists — mark as `blocked` if not.
-7. Refuse to certify claims that cannot be traced to a registered source path.
+6. Update the Navigation Dashboard Status line:
+   - `○ pending` → `✓ verified` if status is `pass`
+   - `○ pending` → `⚠ corrections` if status is `pass_with_corrections`
+   - `○ pending` → `✗ failed` if status is `partial` or `fail`
+7. For `find_material` routes, verify the located path actually exists — mark as `blocked` if not.
+8. Refuse to certify claims that cannot be traced to a registered source path.
 
 ## Rules
 
+- **All output must be reports.** Every answer is a report written to `agent_reports/`. No inline chat responses. No exceptions.
 - Verification failures are documented, not hidden.
 - Never soften a failed verification.
 - Never create new interpretations — only verify existing claims.
@@ -41,6 +46,7 @@ Trace every claim to its source. Confirm accuracy. Correct errors in-place. Neve
 - Confirm every quoted passage is accurate, has a valid source path, and includes enough context to stand alone.
 - Do not edit `raw/`, maps, dictionary, or logs.
 - Do not create separate verifier notes when a report exists — modify the report itself.
+- Update the Navigation Dashboard Status line after verification: `○ pending` → `✓ verified` | `⚠ corrections` | `✗ failed`.
 
 ## Status meanings
 

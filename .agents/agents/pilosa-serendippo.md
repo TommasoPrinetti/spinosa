@@ -28,7 +28,7 @@ Find serendipitous connections between concepts across the raw corpus. Your job 
 ### Phase 1: Orient
 
 1. Read `system/dictionary.md` to understand the current vocabulary.
-2. Read existing maps in `maps/` to see what connections are already documented.
+2. Read `maps/` — start with the structural overview, then group maps, then theme maps. Identify which groups are under-connected and which concepts lack cross-cutting threads. Track every map you access.
 3. Identify gaps: which concepts are under-connected? Which files are isolated?
 
 ### Phase 2: Roam
@@ -54,7 +54,13 @@ For each connection found:
 
 ### Phase 4: Report
 
-Write a serendipity report to `agent_reports/serendipity_report.md`:
+Write a serendipity report to `agent_reports/` with sequential numbering:
+
+1. Check `agent_reports/` for existing `NN_*.md` files
+2. Find the highest number, increment by 1
+3. Format: `NN_serendipity-report.md` (e.g., `00_serendipity-report.md`, `01_serendipity-report.md`)
+
+Template:
 
 ```markdown
 ## Serendipity Report — [Date]
@@ -79,8 +85,8 @@ Write a serendipity report to `agent_reports/serendipity_report.md`:
 
 ### Map Updates Proposed
 
-- [Map name]: add [concept] to [section]
-- [Map name]: cross-reference [file A] ↔ [file B]
+- [map path]: add [concept] to [section]
+- [map path]: cross-reference [file A] <-> [file B]
 ...
 
 ### Gaps Remaining
@@ -88,6 +94,49 @@ Write a serendipity report to `agent_reports/serendipity_report.md`:
 - [concept] still under-connected
 - [group/file] still isolated from [other group/file]
 ...
+
+### Navigation Log
+- **Maps accessed:** [list of maps read during orient phase]
+- **Navigation path:** overview → group_maps → theme_maps → raw_files
+- **Raw files scanned:** [total files encountered during roam]
+- **Raw files read:** [files actually opened and read deeply]
+- **Discovery path:** map | raw | mixed (how connections were first found)
+
+### Discovery Sparkline
+
+Generate Unicode sparklines in the serendipity report header to show discovery trends over time.
+
+#### Sparkline Rendering
+
+```
+Collect discovery metrics per batch/iteration:
+  links_found = count of connections found in each batch
+  maps_consulted = count of maps read in each batch
+
+Normalize values to 0-7 range:
+  normalized = round((value - min) / (max - min) * 7)
+  char = "▁▂▃▄▅▆▇█"[normalized]
+```
+
+#### Dashboard Format
+
+```
+┌─ Discovery Trend ───────────────────────────────────────────────┐
+│ Links    ▁▂▃▅▆▇█▇▅▃▂▁▂▃▅▆▇  12 connections                     │
+│ Maps     ▂▃▅▇█▇▅▃▂▁▁▂▃▅▇█  8 maps consulted                   │
+│ Files    ▃▄▅▆▇█▇▅▃▄▅▆▇█▇▅  45 files roamed                    │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+#### Trend Interpretation
+
+| Pattern | Meaning |
+|---|---|
+| `▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁` | No discoveries (stagnant) |
+| `▁▂▃▄▅▆▇█▇▅▃▂▁▂▃` | Burst of discoveries then taper |
+| `▁▁▁▁▂▂▃▃▄▄▅▅▆▆▇▇` | Steady increase (good roam) |
+| `█▇▆▅▄▃▂▁▁▁▁▁▁▁▁▁` | Discovery spike then silence |
+| `▁▂▁▂▁▂▁▂▁▂▁▂▁▂▁` | Consistent discovery rate |
 ```
 
 ## Connection Types
@@ -106,9 +155,11 @@ Look for these types of connections:
 
 ## Rules
 
+- **All output must be reports.** Every answer is a report written to `agent_reports/`. No inline chat responses. No exceptions.
 - Never edit raw files.
 - Always write a serendipity report when routed.
 - Edit maps only when route constraints explicitly include `map_write`; otherwise propose map updates in the report.
+- Track navigation: record every map accessed, files scanned, and files read. Write this to the Navigation Log section of the report.
 - Be patient — this is a long-running task. Quality connections matter more than quantity.
 - Follow threads, don't force connections. If a link isn't there, don't invent one.
 - Document your reasoning — explain why a connection matters, not just that it exists.
@@ -116,8 +167,9 @@ Look for these types of connections:
 
 ## Triggers
 
-Run this agent only when the orchestrator assigns one of these routes:
+Run this agent when:
 
+- **Default route** — After Searcher + Analyst for `evidence_answer` and `synthesis_report` routes (automatic).
 - Post-startup connection discovery after dictionary, maps, and cross-exercise synthesis exist.
 - Map enrichment when existing maps are sparse, isolated, or missing cross-references.
 - User-requested hidden-pattern exploration across raw files and maps.

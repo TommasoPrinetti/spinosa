@@ -20,3 +20,5 @@ Short routing log for user prompts. Log the request before deciding whether to a
 
 | Date | Request summary | Route | Status | Output |
 |---|---|---|---|---|
+| 2026-06-04 | Implement maps redesign navigation layer on new branch | fast_path | done | navigation-map framework updated |
+| 2026-06-04 | Finish remaining maps redesign gaps | fast_path | done | script and consistency updates applied |

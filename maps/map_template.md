@@ -1,10 +1,10 @@
 ---
 type: map_template
 role: map_structure_guide
-purpose: [guide agents in writing the central navigation maps]
+purpose: [guide agents in writing content-grounded navigation maps]
 description:
-  - Template for retrieval-oriented navigation maps under maps/.
-  - Agents use it to keep map headers, wikilinks, and tabular entries consistent.
+  - Template for navigation maps under maps/.
+  - Defines format levels without prescribing corpus structure.
 scope: maps/
 connects_to:
   - system/startup.md
@@ -21,7 +21,7 @@ Every map file in `maps/` must include the navigation_map header and use Obsidia
 ```yaml
 ---
 type: navigation_map
-role: [descriptive role, e.g. concept_index, thematic_tags, cross_exercise_synthesis, entity_index, corpus_structure]
+role: [descriptive role, e.g. corpus_overview, group_map, theme_map]
 purpose: [guide future LLM retrieval into the raw corpus]
 scope: raw/
 connects_to:
@@ -38,97 +38,38 @@ updated: YYYY-MM-DD
 ---
 ```
 
-## Wikilink Rules
+## Level 0: Structural Overview
 
-- Every raw copy reference must use an Obsidian wikilink: `[[raw/path/to/file.md|filename]]`
-- Every map-to-map reference must use a wikilink: `[[maps/concept_index]]`
-- No absolute source paths in map entries. Use `raw/` relative paths only.
+One file at the root of maps/. Describes the corpus structure and provides entry points.
 
-## Concept Index Format
+Format:
 
-Each concept gets a section with definition, coverage, and file references:
+- H2 per natural group
+- Each H2: 2-4 sentence description of what the group contains
+- File count and key file pointers (not exhaustive lists)
+- The mapper decides what the groups are based on what it finds
 
-```markdown
-## [Concept Name]
+## Level 1: Group Map
 
-[1-2 sentence definition]
+One file per natural group, in a subdirectory named for the organizing principle.
 
-| File | Thematic Tags | Summary |
-|---|---|---|
-| [[raw/path/to/file.md\|filename]] | ethics, reflection | One-sentence summary |
-```
+Format:
 
-If the corpus has exercise/cohort structure, add those columns:
+- H2 "What this group is about" — synthesized understanding from reading files
+- H2 "Recurring concepts" — patterns across files within the group
+- Each concept: 1-2 sentence description + examples with file path + line references + short quote or paraphrase
 
-```
-| File | Exercise | Cohort | Thematic Tags | Summary |
-```
+## Level 2: Theme Map
 
-## Thematic Tags Format
+One file per cross-cutting concept thread, in a subdirectory named for the thematic principle.
 
-Each tag gets a section listing all files with that tag:
+Format:
 
-```markdown
-## [Tag Name]
+- H2 with theme name + 1-2 sentence definition
+- H3 per group where the theme appears
+- Each H3: how the theme manifests in that group + key passages with file paths
+- H2 "Trajectory" — how the theme evolves across groups
 
-[N sentences describing what this tag means in context]
+## Key Principle
 
-| File | Core Concepts | Summary |
-|---|---|---|
-| [[raw/path/to/file.md\|filename]] | ethics, trust | One-sentence summary |
-```
-
-If the corpus has exercise/cohort structure, add those columns:
-
-```
-| File | Exercise | Cohort | Core Concepts | Summary |
-```
-
-## Cross-Exercise Synthesis Format
-
-Each theme gets a section showing evolution across the corpus:
-
-```markdown
-## [Theme Name]
-
-[N sentences describing how this theme evolves across files]
-
-| Grouping | Files | Key Observations |
-|---|---|---|
-| [group1] | [[raw/file1.md\|file1]], [[raw/file2.md\|file2]] | Initial assessment |
-| [group2] | [[raw/file3.md\|file3]], [[raw/file4.md\|file4]] | Later development |
-```
-
-## Entity Index Format
-
-Each entity gets a section with role/description and file references:
-
-```markdown
-## [Entity Name]
-
-[1-2 sentence description of who/what this is]
-
-| File | Context |
-|---|---|
-| [[raw/path/to/file.md\|filename]] | Pre-session interview |
-```
-
-If the corpus has exercise/cohort structure, add those columns:
-
-```
-| File | Exercise | Cohort | Context |
-```
-
-## Corpus Structure Format
-
-Files organized by their structure in the corpus:
-
-```markdown
-## [Group Name]
-
-[1-2 sentence description of this group]
-
-| File | Thematic Tags | Summary |
-|---|---|---|
-| [[raw/path/to/file.md\|filename]] | tag1, tag2 | One-sentence summary |
-```
+The template defines what maps should contain (depth, format, content quality) without prescribing how they're organized. The mapper figures out the organization from the corpus.

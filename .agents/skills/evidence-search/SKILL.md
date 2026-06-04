@@ -20,7 +20,7 @@ Search existing workspace sources for evidence. This is the fallback instruction
 ## Steps
 
 1. Read `system/dictionary.md` for canonical terms and aliases related to the query.
-2. Search `maps/` for concept navigation and likely raw source paths.
+2. Read `maps/` for navigation — start with the structural overview, then group maps to identify relevant files.
 3. Search `raw/` for matching terms and aliases.
 4. Read only the relevant source sections needed to answer the retrieval task.
 5. Write evidence to `agent_reports/evidence_packet.md`.
@@ -73,7 +73,7 @@ Evidence written to agent_reports/evidence_packet.md
 
 - Always write evidence to files. Do not return large lists inline.
 - Never copy new files into `raw/`.
-- Never update logs, maps, dictionary, reports, or workspace indexes.
+- Never update logs, dictionary, reports, or workspace indexes. Update maps only when route constraints explicitly include `map_write`; otherwise propose map updates in the evidence packet.
 - Report evidence only; do not synthesize interpretation.
 - Include a source path for every evidence item.
 - If no relevant source exists, write a packet with `sources_found: 0` and say so clearly.
