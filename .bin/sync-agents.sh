@@ -4,6 +4,7 @@
 # Source of truth:
 #   - .agents/agents/*.md → agent definitions
 #   - .agents/skills/*/SKILL.md + references/ → skills
+#   - AGENTS.md → CLAUDE.md (Claude Code reads this automatically)
 #
 # Destinations:
 #   - .opencode/agents/
@@ -12,6 +13,7 @@
 #   - .claude/skills/
 #   - .codex/skills/
 #   - .kilocode/skills/
+#   - CLAUDE.md
 #
 # Note: .codex/agents/ uses .toml format (different) — not synced here.
 #       .github/copilot-instructions.md is unique — not synced.
@@ -58,6 +60,12 @@ for platform in .claude .codex .kilocode; do
     count=$(find "$dest" -name "SKILL.md" | wc -l)
     echo "  $platform/skills/ → $count skills"
 done
+
+# Sync CLAUDE.md (Claude Code reads this automatically)
+echo ""
+echo "--- Syncing CLAUDE.md ---"
+cp "$REPO_ROOT/AGENTS.md" "$REPO_ROOT/CLAUDE.md"
+echo "  CLAUDE.md → updated"
 
 echo ""
 echo "=== Sync complete ==="
