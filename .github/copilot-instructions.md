@@ -26,4 +26,6 @@ Core rules:
 - Keep agent outputs Markdown-only.
 - Back-search factual claims to a source path.
 - Label evidence-bearing outputs with `evidence_type` and `evidence_level`.
-- Read the skill's SKILL.md from `.agents/skills/<name>/SKILL.md` before invoking specialists. Inject the full SKILL.md content into the task prompt.
+- Spawn sub-agents by name (e.g., `pilosa-searcher`) for non-fast-path tasks. Native sub-agents are primary.
+- If native sub-agent spawn fails, fall back to reading `.agents/skills/<name>/SKILL.md` and injecting its content into the task prompt.
+- Do not read SKILL.md before every specialist invocation.
