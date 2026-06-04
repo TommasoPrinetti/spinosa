@@ -3,7 +3,7 @@ type: information
 agent: setup_cli
 description:
   - Project blueprint filled during onboarding and startup.
-  - Agents read this to understand scope, Root Vault path, evidence rules, and researcher preferences.
+  - Agents read this to understand scope, source location, evidence rules, and researcher preferences.
 created: 2026-05-26
 updated: 2026-05-26
 setup_status: not_started
@@ -24,8 +24,8 @@ connects_to:
 - none provided during fast setup
 
 ## Sources
-- Root Vault path: [path]
-- Main source types: [inferred during startup from the Root Vault]
+- Source location: [path]
+- Main source types: [inferred during startup from the source material]
 - Expected incoming sources: [inferred during startup]
 
 ## Research Vocabulary
@@ -38,7 +38,7 @@ connects_to:
 - Methods: [inferred during startup]
 - Claims require source paths.
 - L2 clues require Verifier checking before reporting.
-- External sources must stay labeled external unless moved into the Root Vault.
+- External sources must stay labeled external unless moved into `raw/`.
 - External source policy: no (default; ask only if external access is needed)
 
 ## Outputs

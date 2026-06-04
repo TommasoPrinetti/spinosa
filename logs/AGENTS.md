@@ -18,11 +18,10 @@ Append-only request trail for user prompts, source intake summaries, external ac
 
 ## Sub-agent ownership
 
-- **Orchestrator (self)** logs user requests during the Close step of every route.
-- **Searcher** records source intake summaries in `user_requests.md` when new files enter the workspace.
-- **Verifier or any agent** that queries external sources records the authorization and result in `user_requests.md` and the relevant report.
-- **Janitor** never touches logs.
-- **Writer** never touches logs.
+- **Orchestrator (self)** is the only actor that writes `user_requests.md`.
+- **Sub-agents** return proposed log summaries to the orchestrator when traceability is needed.
+- **Source intake and external access routes** must include authorization/status details in the proposed log summary.
+- **Janitor, Searcher, Writer, Verifier, Mapper, and Serendippo** never edit logs directly.
 
 ## Operations
 

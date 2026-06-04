@@ -1,7 +1,7 @@
 ---
 type: startup_protocol
 role: setup_and_indexing_protocol
-purpose: [translate the protected Root Vault into a searchable, header-indexed workspace]
+purpose: [translate the source material into a searchable, header-indexed workspace]
 description:
   - Startup protocol executed directly by the orchestrator after onboarding.
   - Agents use it to build dictionary, maps, validation checks, and startup reports.
@@ -20,11 +20,13 @@ Use this file when the user asks to **start the workspace** or when setup files 
 
 Startup is the only authority that can mark setup complete. `.bin/check-startup.sh` is a developer-facing validation helper, not a separate user-facing setup path.
 
-## Mission
+## Context
 
-Translate the protected Root Vault into the first usable **workspace**: a searchable collection of raw copies with a shared dictionary, concept-indexed maps, and thematic tags for navigation. After CLI onboarding, the Root Vault is the immutable original source and [[raw/]] is the active working corpus for normal source-grounded work.
+The CLI onboarding script has already transposed all the relevant files into the`raw` folder.  scanned the corpus, asked for explicit consent, copied accepted text-like files into [[raw/]], skipped images, video, audio, and `AGENTS.md` control files. 
 
-The CLI onboarding script has already collected project name and Root Vault path, scanned the corpus, asked for explicit consent, copied accepted text-like files from the Root Vault into [[raw/]], skipped images, video, audio, and Root Vault `AGENTS.md` control files. Your job is to:
+## Mission 
+
+Your job is to:
 
 1. **Build the master dictionary and enrich the blueprint from corpus evidence**
 2. **Read raw copies in batches and extract concepts, themes, and entities**
@@ -35,11 +37,13 @@ The CLI onboarding script has already collected project name and Root Vault path
 
 The protocol runs in two phases: **Phase 1 (Setup Translation)** and **Phase 2 (Indexing, Mapping, Validation)**. The CLI handles raw record writing; you handle translation, dictionary anchoring, maps, validation, and recovery notes.
 
+GPT: Use `set_goal` to achieve your mission.
+
 ## Non-Negotiable
 
-- **Never edit, rename, reorganize, or delete Root Vault files.**
-- Treat Root Vault files as protected originals after onboarding; use [[raw/]] as the active working corpus.
-- Copy PDFs as-is when onboarding accepted them. Do not create pointer records for images, audio, or video; account for skipped media as Root Vault-only coverage gaps.
+- **Do not edit `raw/`, maps, dictionary, logs, or system files.**
+- Treat `raw/` as the active working corpus after onboarding.
+- Copy PDFs as-is when onboarding accepted them. Do not create pointer records for images, audio, or video; account for skipped media as uncovered source media.
 - Treat every `AGENTS.md` file as repository/control instructions, not corpus evidence.
 - Use the dictionary for consistent terminology across all outputs.
 - Preserve generated-file provenance on maps and reports.
@@ -74,7 +78,7 @@ Read [[context]] and [[configuration]]. Identify filled fields, placeholders, an
 Create a todo list with the CLI's todo/task tool if available. Minimum todo items:
 
 - inspect setup draft,
-- verify Root Vault,
+- verify source location,
 - synthesize blueprint/config,
 - build dictionary from corpus evidence,
 - read raw copies and extract concepts,
@@ -92,11 +96,11 @@ Treat CLI-generated answers as a **setup draft**, not as questions to repeat. Tr
 - infer a tentative source universe, vocabulary, methods, outputs, unresolved ambiguities, and indexing target from the description, artifacts, and active raw corpus when available,
 - keep inferred fields explicitly marked as inferred when useful.
 
-Use shell/file tools to confirm the Root Vault path exists and is treated as **read-only**. Do not read Root Vault text directly for normal indexing when the corresponding raw copy exists.
+Use shell/file tools to confirm the source location exists and is treated as **read-only**. Do not read source files directly for normal indexing when the corresponding raw copy exists.
 
 ## 1.3 Fill Blueprint and Configuration
 
-- Fill [[context]] (project title, project description status, helpful artifact URLs or file paths status, Root Vault path, evidence standards, external source policy).
+- Fill [[context]] (project title, project description status, helpful artifact URLs or file paths status, source location, evidence standards, external source policy).
 - Fill [[configuration]] (`root_vault_path`, `root_vault_mode`, `source_policy`, `external_sources_allowed`, `preferred_llm_cli`, `claim_standard`, `l2_policy`).
 - Keep `setup_status: cli_started` until mapping and retrieval tests have passed. Replace it with `setup_status: workspace_started` in both files only at the end of Phase 2.
 
@@ -114,8 +118,8 @@ Before moving on, confirm:
 
 Do not ask follow-up questions before Phase 2 unless:
 
-- the project title, Root Vault path, or preferred LLM CLI is absent,
-- the Root Vault path cannot be located,
+- the project title, source location, or preferred LLM CLI is absent,
+- the source location cannot be located,
 - external URL access needs permission because the user provided URLs and policy is not already `yes`, or
 - a risky assumption blocks immediate indexing.
 
@@ -125,16 +129,16 @@ Missing project description and missing helpful artifact URLs do not block Phase
 
 # Phase 2 — Indexing, Mapping, Validation
 
-## 2.1 Survey Active Corpus And Root Vault Coverage
+## 2.1 Survey Active Corpus And Source Coverage
 
-Survey [[raw/]] as the active working corpus, then compare against the Root Vault for skipped media and coverage gaps. For each raw directory:
+Survey [[raw/]] as the active working corpus, then compare against the source location for skipped media and coverage gaps. For each raw directory:
 
 1. List all files and subdirectories (skip `.DS_Store`, `AGENTS.md`, system files, empty dirs)
 2. Note copied text-like file types (`.md`, `.txt`, `.csv`, `.json`, etc.), count per type, approximate date range
 3. Read a sample of raw copies to characterize the folder's content accurately
 4. Record: source types, modality, names, dates, topics, keywords, gaps
 
-Separately account for unsupported files and skipped media that remain only in the Root Vault. Do not create `.pointer.md` records for them during startup. Record media counts, extensions, and processing gaps in `workspace_index.md` and the startup report as Root Vault-only coverage.
+Separately account for unsupported files and skipped media that remain only at the source location. Do not create `.pointer.md` records for them during startup. Record media counts, extensions, and processing gaps in `workspace_index.md` and the startup report as source media coverage.
 
 ## 2.2 Log Source Intake
 
@@ -352,10 +356,10 @@ Only pause for orchestrator/user input when an ambiguity prevents valid indexing
 Update [[workspace_index]] with:
 
 - Raw copy coverage (how many copied text files, by type),
-- Skipped media coverage (how many Root Vault-only media files, by media type),
+- Skipped media coverage (how many uncovered source media files, by media type),
 - Central navigation maps created,
 - Dictionary status (canonical names, places, organizations, concepts),
-- Non-text media noted as skipped / Root Vault-only,
+- Non-text media noted as skipped / uncovered,
 - Known gaps.
 
 Coverage counts must be exact.
@@ -478,7 +482,7 @@ If startup is interrupted:
 Write one startup report in [[agent_reports/]] with the following fields:
 
 - configuration status,
-- Root Vault path verified,
+- Source location verified,
 - raw copy coverage,
 - skipped media coverage,
 - maps created,
@@ -487,5 +491,5 @@ Write one startup report in [[agent_reports/]] with the following fields:
 - thematic tag count,
 - cross-exercise themes identified,
 - validation and retrieval test results,
-- remaining non-text files in Root Vault,
+- remaining non-text files at source location,
 - recommended next actions.

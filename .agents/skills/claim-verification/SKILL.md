@@ -11,12 +11,12 @@ Trace every claim to its source. Confirm accuracy. Correct errors in-place. Neve
 
 - Writer report exists in `agent_reports/` with status `draft`
 - Source paths are cited in the report
-- Root Vault or workspace raw copies are accessible
+- Workspace raw copies are accessible.
 
 ## Steps
 
-1. For each claim in the report, locate the original source file.
-2. Confirm the source path exists in the workspace or Root Vault.
+1. For each claim in the report, locate the original source file in `raw/`.
+2. Confirm the source path exists in `raw/`.
 3. Compare the quote or claim against the source:
    - `verified` — exact match, claim holds.
    - `corrected` — minor error, fix applied in-place.
@@ -33,11 +33,9 @@ Trace every claim to its source. Confirm accuracy. Correct errors in-place. Neve
 - Verification failures are documented, not hidden.
 - Never soften a failed verification.
 - Never create new interpretations — only verify existing claims.
-- Use verbatim quote format for direct quotes:
-  - `> **Author Name**, *Source Title* (Date, Place)`
-  - Minimum 2 sentences or 1 full paragraph.
-  - Key passage in **bold**.
-- Do not edit Root Vault files.
+- Check every direct quote against the repository verbatim format in `../report-writing/references/verbatim-format.md`.
+- Confirm every quoted passage is accurate, has a valid source path, and includes enough context to stand alone.
+- Do not edit `raw/`, maps, dictionary, or logs.
 - Do not create separate verifier notes when a report exists — modify the report itself.
 
 ## Status meanings

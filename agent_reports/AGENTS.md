@@ -19,7 +19,7 @@ Synthesis reports, evidence packets, verification notes, checkpoints, and mainte
 ## Sub-agent ownership
 
 - **Writer** writes reports: full synthesis, partial results, checkpoints. Each report answers the original user prompt or marks progress.
-- **Verifier** annotates, corrects in-place, and writes standalone verification notes. Corrections are applied directly to the report (not as separate commentary).
+- **Verifier** annotates and corrects reports in-place. Standalone verification notes are only for verification routes without an existing report.
 - **Janitor** evaluates reports for staleness and may propose archival to `.trash/` based on age alone (no structured research needs).
 - **Searcher** does not write here — outputs raw evidence packets inline to the orchestrator.
 
@@ -27,7 +27,7 @@ Synthesis reports, evidence packets, verification notes, checkpoints, and mainte
 
 - Reports are **read-write**: Writer creates, Verifier corrects in-place. Janitor may archive.
 - Each report must have a clear `type` and `scope` in the body or frontmatter.
-- Evidence-bearing claims must cite source paths (raw copy or Root Vault).
+- Evidence-bearing claims must cite source paths (raw copy).
 - Verification failures are documented, not hidden.
 - Partial results must be labeled as such.
 - Janitor evaluates staleness by comparing `updated:` dates against current date — no tendency detection or structured needs analysis.
@@ -39,7 +39,7 @@ Synthesis reports, evidence packets, verification notes, checkpoints, and mainte
 | `synthesis` | Full answer to a user prompt | Writer |
 | `evidence_packet` | Raw evidence from Searcher handoff | Searcher → Writer |
 | `checkpoint` | Partial progress during long routes | Writer |
-| `verification` | Claim/path/index verification | Verifier |
+| `verification` | Standalone claim/path/index verification when no report exists | Verifier |
 | `maintenance` | Index repair, stale audit, cleanup proposal | Verifier / Janitor |
 
 ## Conventions

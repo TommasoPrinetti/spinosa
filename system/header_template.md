@@ -74,7 +74,7 @@ updated: YYYY-MM-DD
 ```
 
 Rules:
-- `source` uses a relative path from the repo root (e.g., `raw/Ex10/...`). The Root Vault path is stored in [[context]] for re-onboarding only.
+- `source` uses a relative path from the repo root (e.g., `raw/Ex10/...`). The source location is stored in [[context]] for reference during onboarding only.
 - `language` is the ISO 639-1 code of the source file's primary language (en, fr, pt, es, etc.).
 - `people`, `places`, `organizations` MUST use canonical forms from [[dictionary]].
 - `keywords` include both canonical terms and aliases in the source's language (so grep finds any variant).

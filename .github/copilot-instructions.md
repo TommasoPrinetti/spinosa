@@ -20,7 +20,7 @@ If the user asks to start the workspace, follow [[startup]] directly:
 - run the initial mapping pass unless blocked.
 
 Core rules:
-- Do not modify the Root Vault.
+- Do not edit `raw/`, maps, dictionary, logs, or system files.
 
 - Use the smallest valid workspace action.
 - Keep agent outputs Markdown-only.

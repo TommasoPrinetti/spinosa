@@ -30,7 +30,7 @@ The system provides both direct answers grounded in sources and broader contextu
 - URLs or repos the user provided: [filled by startup]
 
 ## Sources
-- Root Vault path: [filled by CLI onboarding]
+- Source location: [filled by CLI onboarding]
 - Main source types: [filled by startup]
 - Expected incoming sources: [filled by startup]
 
@@ -44,7 +44,7 @@ The system provides both direct answers grounded in sources and broader contextu
 - Methods: [filled by startup]
 - Claims require source paths.
 - L2 clues require Verifier checking before reporting.
-- External sources must stay labeled external unless moved into the Root Vault.
+- External sources must stay labeled external unless moved into `raw/`.
 - External source policy: no
 
 ## Outputs

@@ -18,7 +18,7 @@ updated: 2026-06-03
 
 # Pilosa
 
-Pilosa turns a protected folder of source material (the **Root Vault**) into a searchable, header-indexed, multi-agent-readable knowledge map. After onboarding, the Root Vault remains the immutable original source and `raw/` becomes the active working corpus for normal source search. A thin orchestrator (`AGENTS.md`) routes every prompt through specialist sub-agents (Searcher, Writer, Verifier, Janitor) or executes the startup workflow directly. **Verifier** is mandatory on every non-fast-path route. Sub-agents never ask questions — only the orchestrator does.
+Pilosa turns a folder of source material into a searchable, header-indexed, multi-agent-readable knowledge map. After onboarding, the source location remains the immutable original and `raw/` becomes the active working corpus for normal source search. A thin orchestrator (`AGENTS.md`) routes every prompt through specialist sub-agents (Searcher, Writer, Verifier, Janitor) or executes the startup workflow directly. **Verifier** is mandatory on every non-fast-path route. Sub-agents never ask questions — only the orchestrator does.
 
 ## Quick Start
 
@@ -38,20 +38,20 @@ git checkout -b my-project-name
 git push -u origin my-project-name
 ```
 
-> Why a branch? Onboarding rewrites `system/configuration.md` and `system/context.md` and copies Root Vault text-like files unchanged into `raw/`. Keeping that on a project branch lets you re-onboard, re-index, or wipe the project without touching the framework.
+> Why a branch? Onboarding rewrites `system/configuration.md` and `system/context.md` and copies source files unchanged into `raw/`. Keeping that on a project branch lets you re-onboard, re-index, or wipe the project without touching the framework.
 
 ### 3. Run the onboard script
 
-The script collects your project name and Root Vault path, scans the corpus, asks for consent before writing raw records, then asks which LLM CLI should receive the startup handoff. It copies markdown-convertible files into `raw/` with `.md` names, copies native-readable files unchanged, copies PDFs as-is, and skips images, video, audio, and Root Vault `AGENTS.md` control files. Startup then creates detailed Obsidian-wikilink maps in `maps/`. Optional context such as project description and artifact URLs can be inferred or added later.
+The script collects your project name and source location, scans the corpus, asks for consent before writing raw records, then asks which LLM CLI should receive the startup handoff. It copies markdown-convertible files into `raw/` with `.md` names, copies native-readable files unchanged, copies PDFs as-is, and skips images, video, audio, and `AGENTS.md` control files. Startup then creates detailed Obsidian-wikilink maps in `maps/`. Optional context such as project description and artifact URLs can be inferred or added later.
 
 ```bash
 bash .bin/onboard.sh
 ```
 
 What happens:
-- Flow: project name → Root Vault path → scan summary → consent → raw record writing → CLI handoff.
+- Flow: project name → source location → scan summary → consent → raw record writing → CLI handoff.
 - Scan summary shows counts for text files, images, videos, audio files, PDFs, unknown files, ignored files, and byte totals by major class where available.
-- Non-text media stays in the Root Vault; images, video, audio, and Root Vault `AGENTS.md` control files are skipped during onboarding.
+- Non-text media stays at the source location; images, video, audio, and `AGENTS.md` control files are skipped during onboarding.
 - Startup creates `maps/` with map files that contain detailed retrieval summaries and Obsidian wikilinks into raw files.
 - TTY arrow-key picker for the CLI handoff choice (numbered fallback when piped).
 - Cursor hidden during raw record writing, restored on exit.
@@ -86,23 +86,22 @@ pilosa/
 ├── .bin/
 │   ├── onboard.sh               Mechanical setup script (zero deps)
 │   └── check-startup.sh         Developer validation helper used by startup/checks
-├── .agents/
-│   └── skills/                  Portable workflow skills (fallback)
+├── .agents/                     Canonical agent and skill source
+│   ├── agents/                  Canonical native agent definitions (.md)
+│   └── skills/                  Canonical portable workflow skills (fallback)
 │       ├── source-intake/       Add source files to the workspace
 │       ├── report-writing/      Write synthesis reports
 │       ├── claim-verification/  Verify claims and quotes
 │       ├── workspace-cleanup/        Audit and archive stale files
 │       └── orchestrator-dispatch/ Route prompts through pipeline
 ├── .opencode/
-│   ├── agents/                  Native OpenCode agent definitions (.md)
-│   └── skills/                  Same skills, OpenCode project-local
+│   └── agents/                  Generated mirror of canonical agents
 ├── .claude/
-│   ├── agents/                  Native Claude Code agent definitions (.md)
-│   └── skills/                  Same skills, Claude Code project-local
+│   ├── agents/                  Generated mirror of canonical agents
+│   └── skills/                  Generated mirror of canonical skills
 ├── .codex/
-│   └── agents/                  Native Codex agent definitions (.toml)
-├── .kilocode/
-│   └── skills/                  Same skills, Kilo project-local
+│   ├── agents/                  Tracked TOML expansion of canonical agents
+│   └── skills/                  Generated mirror of canonical skills
 ├── onboard.command              macOS launcher
 ├── onboard.cmd                  Windows launcher
 ├── system/                        Architecture, context, configuration, templates
@@ -113,7 +112,7 @@ pilosa/
 │   ├── header_template.md         YAML frontmatter schema
 │   ├── workspace_index.md         Master workspace index (built at startup)
 │   └── system_architecture_map.md Diagrams
-├── raw/                           Active working corpus: unchanged text-like Root Vault copies
+├── raw/                           Active working corpus: unchanged source copies
 ├── maps/                          Navigation maps with Obsidian wikilinks
 ├── logs/                          Request, intake, and external-access summaries (+ AGENTS.md)
 ├── agent_reports/                 Writer / Verifier reports (+ AGENTS.md)
@@ -132,7 +131,7 @@ Read `AGENTS.md` for the full routing contract. Briefly:
 
 ## Hard Rules
 
-- Never edit the Root Vault.
+- Do not edit `raw/`, maps, dictionary, logs, or system files.
 - `connects_to` lists in YAML frontmatter stay at 3–5 load-bearing entries.
 - File retirement goes to `.trash/`, not `rm`.
 
@@ -160,7 +159,7 @@ Framework improvements tracked openly:
 
 ### Infrastructure
 - [ ] Explore scalable indexing architecture (current indexing is O(files) per startup)
-- [ ] Continuous Root Vault sync (today: one-shot copy at onboarding, re-run to refresh)
+- [ ] Continuous source sync (today: one-shot copy at onboarding, re-run to refresh)
 
 ### Open Questions
 - [ ] How should token/context budgeting work long term?

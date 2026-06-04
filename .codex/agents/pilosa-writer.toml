@@ -60,8 +60,9 @@ status: draft
 ## Rules
 
 - Never invent evidence. Only use what Searcher (and optionally Analyst) provided.
+- Write only to `agent_reports/`.
 - Always cite source paths in the body.
-- Use verbatim quote format for direct quotes: `> **Author Name**, *Source Title* (Date, Place)`.
+- Apply the full verbatim quote format from `.agents/skills/report-writing/references/verbatim-format.md` for direct quotes.
 - Separate facts from interpretation; label interpretation clearly.
 - Keep reports concise. Do not pad with filler.
 - When Analyst provides broader context, integrate into Analysis -- do not duplicate as separate section.

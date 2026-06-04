@@ -10,14 +10,14 @@ Audit the workspace for stale, broken, or orphaned files. Propose moves to `.tra
 ## Prerequisites
 
 - workspace is initialized (`setup_status: workspace_started`)
-- `system/instructions/configuration.md` has `stale_after_days` threshold (default: 30 days; reports may use a longer threshold if configured)
+- `system/configuration.md` has `stale_after_days` threshold (default: 30 days; reports may use a longer threshold if configured)
 
 ## Steps
 
-1. Read `system/instructions/configuration.md` for staleness thresholds.
+1. Read `system/configuration.md` for staleness thresholds.
 2. Check raw copy validity:
    - For each file in `raw/`, read `source:` from YAML header.
-   - If Root Vault path no longer exists, flag as `stale_source`.
+   - If source location no longer exists, flag as `stale_source`.
    - If raw copy is empty or unreadable, flag as `corrupt_copy`.
 3. Check wikilinks:
    - Grep all files for `[[` wikilinks.
@@ -35,7 +35,8 @@ Audit the workspace for stale, broken, or orphaned files. Propose moves to `.tra
    - Mark files older than `stale_after_days`.
 8. Write Janitor Report in `agent_reports/` with:
    - Files checked, issues found, proposed moves with reasons.
-9. **Wait for user confirmation** before any actual moves.
+9. Return a proposed log summary to the orchestrator when traceability is needed.
+10. **Wait for user confirmation** before any actual moves.
 
 ## Rules
 
@@ -45,6 +46,7 @@ Audit the workspace for stale, broken, or orphaned files. Propose moves to `.tra
 - Never reorganize or rename files outside of archival moves.
 - `.gitkeep` must always remain in `.trash/`.
 - Evaluate by file age only — no structured research needs or tendency detection.
+- Do not edit `logs/user_requests.md`; the orchestrator writes logs.
 
 ## See also
 

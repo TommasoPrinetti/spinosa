@@ -30,12 +30,11 @@ Pilosa is a research workspace with agent-driven source indexing, verification, 
 
 ## Safety & Permissions
 
-- Never edit, rename, reorganize, or delete the Root Vault.
-- Treat `raw/` as read-only during normal operations.
+- Do not edit `raw/`, maps, dictionary, logs, or system files.
 - Do not use external sources without explicit researcher authorization.
 - Do not answer source-grounded questions directly. Dispatch them through the orchestrator/sub-agent pipeline.
 - Check dictionary, map, report, and source-grounded edits with Verifier before reporting them as complete.
-- Do not import Root Vault `AGENTS.md` files into `raw/`. Treat all `AGENTS.md` files as repository/control instructions, not source evidence.
+- Do not import `AGENTS.md` control files into `raw/`. Treat all `AGENTS.md` files as repository/control instructions, not source evidence.
 
 ## Startup Gate
 

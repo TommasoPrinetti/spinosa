@@ -6,7 +6,6 @@ description:
   - Agents read this before creating, repairing, or validating map files.
 connects_to:
   - AGENTS.md
-  - raw/AGENTS.md
 created: 2026-06-03
 updated: 2026-06-04
 ---
@@ -31,8 +30,8 @@ updated: 2026-06-04
 - Each concept/tag/theme gets a section with definition and file references.
 - Body text uses Obsidian wikilinks for internal references.
 - YAML `connects_to:` fields use bare repo-relative paths.
-- Do not include Root Vault absolute paths in map headers or body text.
-- Do not map Root Vault `AGENTS.md` files; they are control instructions, not source evidence.
+- Do not include absolute source paths in map headers or body text — use `raw/` relative paths only.
+- Do not map `AGENTS.md` files; they are control instructions, not source evidence.
 - Files have 2-5 thematic tags from content analysis, not exercise names.
 - Cross-exercise synthesis identifies themes that appear in 3+ exercises.
 

@@ -42,7 +42,7 @@ updated: YYYY-MM-DD
 
 - Every raw copy reference must use an Obsidian wikilink: `[[raw/path/to/file.md|filename]]`
 - Every map-to-map reference must use a wikilink: `[[maps/concept_index]]`
-- No Root Vault paths in map entries. Use `raw/` relative paths only.
+- No absolute source paths in map entries. Use `raw/` relative paths only.
 
 ## Concept Index Format
 

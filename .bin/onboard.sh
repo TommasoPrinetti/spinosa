@@ -581,7 +581,7 @@ scan_root_vault() {
   SCAN_AUDIO_BYTES=0
   SCAN_UNKNOWN_BYTES=0
 
-  printf '\n  %sScanning Root Vault before writing raw copies...%s\n' "${DIM}" "${RESET}"
+  printf '\n  %sScanning source location before writing raw copies...%s\n' "${DIM}" "${RESET}"
 
   local f class size
   while IFS= read -r -d '' f; do
@@ -630,7 +630,7 @@ scan_root_vault() {
 }
 
 print_scan_summary() {
-  printf '  %s✓%s Root Vault scan complete\n' "${G}" "${RESET}"
+  printf '  %s✓%s Source scan complete\n' "${G}" "${RESET}"
   if [[ "$SCAN_MARKDOWN_COUNT" -gt 0 ]]; then
     printf '  %s├─%s %s to rename to .md\n' "${DIM}" "${RESET}" "$(plural_count "$SCAN_MARKDOWN_COUNT" "text-based file")"
     printf '  %s│ %s%s%s\n' "${DIM}" "${RESET}" "$(format_bytes "$SCAN_MARKDOWN_BYTES")" "${DIM} text-like data${RESET}"
@@ -690,14 +690,14 @@ print_transposition_summary() {
   printf '  %s└─%s Raw corpus records: %s%s%s\n' "${DIM}" "${RESET}" "${C}${BOLD}" "$dest_dir" "${RESET}"
 }
 
-# ── transpose Root Vault files into raw copies ─────────────────────────────
+# ── transpose source files into raw copies ─────────────────────────────
 copy_root_vault() {
   local vault_path="$1"
   local dest_dir="$2"
 
   local total_files=$(( SCAN_MARKDOWN_COUNT + SCAN_NATIVE_COUNT + SCAN_BINARY_COPYABLE_COUNT ))
   if [[ "$total_files" -eq 0 ]]; then
-    warn "No copyable files found in Root Vault."
+    warn "No copyable files found in source location."
     return 1
   fi
 
@@ -795,7 +795,7 @@ copy_root_vault() {
 
   printf '\n'
 
-  printf '  %s✓%s %sRoot Vault records written to%s %s%s%s\n' "${G}${BOLD}" "${RESET}" "${BOLD}" "${RESET}" "${C}${BOLD}" "${dest_dir}" "${RESET}"
+  printf '  %s✓%s %sRaw records written to%s %s%s%s\n' "${G}${BOLD}" "${RESET}" "${BOLD}" "${RESET}" "${C}${BOLD}" "${dest_dir}" "${RESET}"
   print_transposition_summary "$dest_dir" "$copied" "$skipped" "$native_copied" "$native_skipped" "$binary_copied" "$binary_skipped"
   return 0
 }
@@ -834,7 +834,7 @@ main() {
         printf '    %-14s %s\n' "--force" "Overwrite existing setup data"
         printf '    %-14s %s\n' "--numbered" "Force numbered menu instead of arrow-key picker"
         printf '    %-14s %s\n' "--no-color" "Disable colored output"
-        printf '\n  %s\n' "${DIM}Collects: project name and Root Vault path, scans the corpus, transposes files to raw/, syncs agent definitions from system/agents/, then asks which LLM CLI should receive the startup handoff.${RESET}"
+        printf '\n  %s\n' "${DIM}Collects: project name and source location, scans the corpus, transposes files to raw/, syncs agent definitions from .agents/agents/, enables Obsidian CSS snippet, then asks which LLM CLI should receive the startup handoff.${RESET}"
         return 0
         ;;
     esac
@@ -851,7 +851,7 @@ main() {
   printf '\n'
   divider
   printf '\n  %s  %s\n' "${BOLD}${C}Pilosa${RESET}" "${DIM}Fast Setup${RESET}"
-  printf '\n  %s\n' "${DIM}Project name, Root Vault path, corpus scan, consent, then LLM CLI handoff.${RESET}"
+  printf '\n  %s\n' "${DIM}Project name, source location, corpus scan, consent, then LLM CLI handoff.${RESET}"
   divider
 
   # ── sync agent definitions from source of truth ──────────────────────────────
@@ -880,25 +880,25 @@ main() {
   done
   ok "Project: ${BOLD}${project_title}${RESET}"
 
-  # ── Question 2: Root Vault path ──────────────────────────────────────────
-  print_step 2 4 "Root Vault"
-  note "The Root Vault is the folder of your source files — PDFs, notes, transcripts, etc."
-  note "Nothing in the Root Vault is moved, renamed, or edited."
+  # ── Question 2: source location ──────────────────────────────────────────
+  print_step 2 4 "Source location"
+  note "This is the folder of your source files — PDFs, notes, transcripts, etc."
+  note "Nothing in this folder is moved, renamed, or edited."
   note "Text-like files, native-readable files, and PDFs can be copied into raw/; images, video, audio, and AGENTS.md control files are skipped."
   note "Startup will create maps/ as the central navigation layer."
   note "Use an absolute path (drag the folder onto the terminal to paste its path)."
   root_vault_path=""
   while [[ -z "$root_vault_path" ]]; do
-    root_vault_path="$(ask "Root Vault path (absolute)" "" "e.g. /Users/name/Documents/my-sources")"
+    root_vault_path="$(ask "Source location (absolute)" "" "e.g. /Users/name/Documents/my-sources")"
     root_vault_path="$(normalize_path_input "$root_vault_path")"
-    [[ -z "$root_vault_path" ]] && printf '  %s\n' "${R}Root Vault path is required.${RESET}" >&2
+    [[ -z "$root_vault_path" ]] && printf '  %s\n' "${R}Source location is required.${RESET}" >&2
   done
 
   if [[ ! -d "$root_vault_path" ]]; then
-    printf '\n  %s Root Vault path does not exist: %s\n\n' "${R}✗${RESET}" "$root_vault_path" >&2
+    printf '\n  %s Source location does not exist: %s\n\n' "${R}✗${RESET}" "$root_vault_path" >&2
     return 1
   fi
-  ok "Root Vault: ${BOLD}${root_vault_path}${RESET}"
+  ok "Source: ${BOLD}${root_vault_path}${RESET}"
 
   # scan before any raw files are written
   print_step 3 4 "Corpus scan and consent"
@@ -907,7 +907,7 @@ main() {
 
   local copyable_count=$(( SCAN_MARKDOWN_COUNT + SCAN_NATIVE_COUNT + SCAN_BINARY_COPYABLE_COUNT ))
   if [[ "$copyable_count" -eq 0 ]]; then
-    warn "No copyable files found in Root Vault."
+    warn "No copyable files found in source location."
     return 1
   fi
 
@@ -939,7 +939,7 @@ type: information
 agent: setup_cli
 description:
   - Project blueprint filled during onboarding and startup.
-  - Agents read this to understand scope, Root Vault path, evidence rules, and researcher preferences.
+  - Agents read this to understand scope, source location, evidence rules, and researcher preferences.
 created: $TODAY
 updated: $TODAY
 setup_status: cli_started
@@ -960,8 +960,8 @@ connects_to:
 - none provided during fast setup
 
 ## Sources
-- Root Vault path: ${root_vault_path:-[path]}
-- Main source types: [inferred during startup from the Root Vault]
+- Source location: ${root_vault_path:-[path]}
+- Main source types: [inferred during startup from the source material]
 - Expected incoming sources: [inferred during startup]
 
 ## Research Vocabulary
@@ -974,7 +974,7 @@ connects_to:
 - Methods: [inferred during startup]
 - Claims require source paths.
 - L2 clues require Verifier checking before reporting.
-- External sources must stay labeled external unless moved into the Root Vault.
+- External sources must stay labeled external unless moved into `raw/`.
 - External source policy: no (default; ask only if external access is needed)
 
 ## Outputs
@@ -1034,11 +1034,11 @@ preferred_llm_cli: "$preferred_cli"
 
 ## Notes
 - This file was initialized by the CLI fast setup.
-- The CLI collected: project name, Root Vault path, and preferred LLM CLI. It scanned the Root Vault and transposed accepted files (text, native, PDF) into raw/. Images, video, audio, and AGENTS.md control files were skipped.
-- After onboarding, the Root Vault remains immutable original storage. Normal source-grounded work starts from raw/.
+- The CLI collected: project name, source location, and preferred LLM CLI. It scanned the source location and transposed accepted files (text, native, PDF) into raw/. Images, video, audio, and AGENTS.md control files were skipped.
+- After onboarding, the source location remains immutable original storage. Normal source-grounded work starts from raw/.
 - During startup, project description and helpful artifact URLs are optional. If absent, the LLM CLI agent records them as not provided, keeps external_sources_allowed at its default \`no\`, and infers working scope from the raw corpus.
 - When setup_status reaches zone_started, the startup workflow has built the master dictionary, generated YAML headers, created detailed maps in maps/, and passed validation.
-- This file never grants permission to edit the Root Vault.
+- This file never grants permission to edit the source location or `raw/`.
 CONFIG_EOF
 
   # ── create CLAUDE.md if preferred CLI is Claude Code ──────────────────────
@@ -1048,6 +1048,16 @@ CONFIG_EOF
     claude_created="yes"
   fi
 
+  # ── enable Pilosa CSS snippet in Obsidian ────────────────────────────────
+  mkdir -p "$ROOT/.obsidian/snippets"
+  cat > "$ROOT/.obsidian/appearance.json" << 'APPEARANCE_EOF'
+{
+  "cssSnippets": [
+    "pilosa"
+  ]
+}
+APPEARANCE_EOF
+
   # ── success ───────────────────────────────────────────────────────────────
   printf '\n'
   divider
@@ -1055,6 +1065,7 @@ CONFIG_EOF
   printf '  %s %s\n' "${DIM}─${RESET}" "${C}${Information}${RESET}"
   printf '  %s %s\n' "${DIM}─${RESET}" "${C}${Config}${RESET}"
   [[ "$claude_created" == "yes" ]] && printf '  %s %s\n' "${DIM}─${RESET}" "${C}${Claude}${RESET}"
+  printf '  %s %s\n' "${DIM}─${RESET}" "${C}$ROOT/.obsidian/appearance.json${RESET}"
 
   printf '\n  %s\n\n' "${BOLD}Next:${RESET}"
 
@@ -1070,7 +1081,7 @@ Read these files first, in this order:
 
 The setup draft already contains:
 - Project name: ${project_title}
-- Root Vault path: ${root_vault_path} (already validated, files transposed to raw/ — images, video, audio, and AGENTS.md skipped)
+- Source location: ${root_vault_path} (already validated, files transposed to raw/ — images, video, audio, and AGENTS.md skipped)
 - Preferred LLM CLI: ${preferred_cli}
 
 Optional context not collected by fast setup:
@@ -1082,7 +1093,7 @@ Then execute system/startup.md from Phase 1.2 onwards. Specifically:
 - Translate the setup draft into filled information + configuration
 - Build the master dictionary by reading the active raw corpus in raw/
 - Generate YAML headers for every raw copy using the dictionary
-- Account for skipped media as Root Vault-only coverage gaps; do not create media pointer records
+- Account for skipped media as uncovered source media; do not create media pointer records
 - Create maps/ and write detailed Obsidian-wikilink maps that help future LLMs choose which raw files to open
 - Build maps from repeated themes
 - Update zone_index.md
@@ -1090,7 +1101,7 @@ Then execute system/startup.md from Phase 1.2 onwards. Specifically:
 - Set setup_status to zone_started in both information and configuration
 - Write the startup report to agent_reports/
 
-Do not re-ask questions the CLI draft already answered. Do not stop after one index. Do not edit the Root Vault.
+Do not re-ask questions the CLI draft already answered. Do not stop after one index. Do not edit the source location or `raw/`.
 PROMPT_EOF
   )
 

@@ -1,0 +1,298 @@
+/* ══════════════════════════════════════════════════════════════════════════════
+   Pilosa — Obsidian CSS Snippet
+   Accent: #8F2DFF (vibrant purple)
+   Font: Source Serif 4 (serif)
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+/* Google Fonts import — Source Serif 4 */
+@import url('https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;0,8..60,700;1,8..60,400&display=swap');
+
+/* ── Font Variables ──────────────────────────────────────────────────────── */
+body {
+  --font-text-theme: 'Source Serif 4', Georgia, 'Times New Roman', serif;
+  --font-monospace-theme: 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Consolas', monospace;
+}
+
+/* ── Light Mode ──────────────────────────────────────────────────────────── */
+.theme-light {
+  /* Background */
+  --background-primary: #faf8f5;
+  --background-primary-alt: #f5f3f0;
+  --background-secondary: #f0ede8;
+
+  /* Text */
+  --text-normal: #1a1a1a;
+  --text-muted: #4a4a4a;
+  --text-faint: #8a8a8a;
+
+  /* Accent — purple #8F2DFF → HSL(267, 100%, 59%) */
+  --accent-h: 267;
+  --accent-s: 100%;
+  --accent-l: 59%;
+
+  /* Heading colors */
+  --pilosa-h1: #8F2DFF;
+  --pilosa-h2: #6b4f9e;
+  --pilosa-h3: #4a7c59;
+  --pilosa-h4: #c4922a;
+
+  /* Borders */
+  --background-modifier-border: #e0dcd5;
+
+  /* Selection */
+  --text-selection: rgba(143, 45, 255, 0.15);
+}
+
+/* ── Dark Mode ───────────────────────────────────────────────────────────── */
+.theme-dark {
+  /* Background */
+  --background-primary: #1e1e1e;
+  --background-primary-alt: #252525;
+  --background-secondary: #2a2a2a;
+
+  /* Text */
+  --text-normal: #e0e0e0;
+  --text-muted: #b0b0b0;
+  --text-faint: #808080;
+
+  /* Accent — same purple */
+  --accent-h: 267;
+  --accent-s: 100%;
+  --accent-l: 59%;
+
+  /* Heading colors — slightly brighter for dark mode */
+  --pilosa-h1: #a666ff;
+  --pilosa-h2: #8a70b8;
+  --pilosa-h3: #5fa373;
+  --pilosa-h4: #d4a840;
+
+  /* Borders */
+  --background-modifier-border: #3a3a3a;
+
+  /* Selection */
+  --text-selection: rgba(143, 45, 255, 0.25);
+}
+
+/* ── Heading Colors ──────────────────────────────────────────────────────── */
+.markdown-preview-view h1,
+.cm-s-obsidian .cm-header-1 {
+  color: var(--pilosa-h1);
+}
+
+.markdown-preview-view h2,
+.cm-s-obsidian .cm-header-2 {
+  color: var(--pilosa-h2);
+}
+
+.markdown-preview-view h3,
+.cm-s-obsidian .cm-header-3 {
+  color: var(--pilosa-h3);
+}
+
+.markdown-preview-view h4,
+.cm-s-obsidian .cm-header-4 {
+  color: var(--pilosa-h4);
+}
+
+/* ── Links ───────────────────────────────────────────────────────────────── */
+.markdown-preview-view a {
+  color: var(--text-accent);
+  text-decoration: underline;
+  text-decoration-color: rgba(143, 45, 255, 0.3);
+  text-underline-offset: 2px;
+  transition: text-decoration-color 0.2s ease;
+}
+
+.markdown-preview-view a:hover {
+  text-decoration-color: var(--text-accent);
+}
+
+/* ── Inline Code ─────────────────────────────────────────────────────────── */
+.markdown-preview-view code,
+.cm-s-obsidian .cm-inline-code {
+  font-family: var(--font-monospace-theme);
+  font-size: 0.9em;
+  padding: 0.15em 0.4em;
+  border-radius: 4px;
+  background: rgba(143, 45, 255, 0.08);
+}
+
+.theme-dark .markdown-preview-view code,
+.theme-dark .cm-s-obsidian .cm-inline-code {
+  background: rgba(143, 45, 255, 0.15);
+}
+
+/* ── Code Blocks ─────────────────────────────────────────────────────────── */
+.markdown-preview-view pre {
+  font-family: var(--font-monospace-theme);
+  border-left: 3px solid var(--pilosa-h2);
+}
+
+/* ── Blockquotes ─────────────────────────────────────────────────────────── */
+.markdown-preview-view blockquote {
+  border-left: 3px solid var(--pilosa-h2);
+  padding-left: 1em;
+  color: var(--text-muted);
+}
+
+/* ── Callouts ────────────────────────────────────────────────────────────── */
+
+/* Base callout styling */
+.callout {
+  border-left-width: 4px;
+  border-left-style: solid;
+}
+
+/* note — purple */
+.callout[data-callout="note"] {
+  --callout-color: 143, 45, 255;
+  --callout-icon: lucide-info;
+}
+
+/* tip — green */
+.callout[data-callout="tip"] {
+  --callout-color: 74, 124, 89;
+  --callout-icon: lucide-flame;
+}
+
+/* important — deep purple */
+.callout[data-callout="important"] {
+  --callout-color: 107, 79, 158;
+  --callout-icon: lucide-alert-circle;
+}
+
+/* warning — amber */
+.callout[data-callout="warning"] {
+  --callout-color: 196, 146, 42;
+  --callout-icon: lucide-alert-triangle;
+}
+
+/* caution — coral/red */
+.callout[data-callout="caution"] {
+  --callout-color: 200, 80, 80;
+  --callout-icon: lucide-shield-alert;
+}
+
+/* quote — muted purple */
+.callout[data-callout="quote"] {
+  --callout-color: 138, 112, 184;
+  --callout-icon: lucide-quote;
+}
+
+/* Custom callout types */
+
+/* evidence — for source-grounded evidence */
+.callout[data-callout="evidence"] {
+  --callout-color: 107, 79, 158;
+  --callout-icon: lucide-book-open;
+}
+
+/* agent — for agent-related content */
+.callout[data-callout="agent"] {
+  --callout-color: 74, 124, 156;
+  --callout-icon: lucide-bot;
+}
+
+/* task — for to-do items */
+.callout[data-callout="task"] {
+  --callout-color: 74, 124, 89;
+  --callout-icon: lucide-check-square;
+}
+
+/* question — for open questions */
+.callout[data-callout="question"] {
+  --callout-color: 196, 146, 42;
+  --callout-icon: lucide-help-circle;
+}
+
+/* decision — for decisions made */
+.callout[data-callout="decision"] {
+  --callout-color: 143, 45, 255;
+  --callout-icon: lucide-git-branch;
+}
+
+/* ── Tables ──────────────────────────────────────────────────────────────── */
+.markdown-preview-view table {
+  border-collapse: collapse;
+}
+
+.markdown-preview-view th {
+  background: rgba(143, 45, 255, 0.08);
+  font-weight: 600;
+}
+
+.theme-dark .markdown-preview-view th {
+  background: rgba(143, 45, 255, 0.15);
+}
+
+/* ── Horizontal Rules ────────────────────────────────────────────────────── */
+.markdown-preview-view hr {
+  border: none;
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    transparent,
+    var(--pilosa-h2),
+    transparent
+  );
+}
+
+/* ── Wikilinks ───────────────────────────────────────────────────────────── */
+.internal-link {
+  color: var(--text-accent);
+  font-weight: 500;
+}
+
+.internal-link:hover {
+  color: var(--text-accent-hover);
+}
+
+/* ── Tags ────────────────────────────────────────────────────────────────── */
+.tag {
+  background: rgba(143, 45, 255, 0.1);
+  color: var(--pilosa-h1);
+  border-radius: 3px;
+  padding: 0.1em 0.4em;
+  font-size: 0.85em;
+}
+
+.theme-dark .tag {
+  background: rgba(143, 45, 255, 0.2);
+}
+
+/* ── Reading View — Frontmatter ──────────────────────────────────────────── */
+.markdown-preview-view hrFrontmatter,
+.markdown-preview-view hrProperties {
+  border: none;
+  border-top: 1px dashed var(--background-modifier-border);
+}
+
+/* ── Checkboxes ──────────────────────────────────────────────────────────── */
+.markdown-preview-view .task-list-item-checkbox:checked {
+  accent-color: var(--pilosa-h1);
+}
+
+/* ── Search Highlights ───────────────────────────────────────────────────── */
+.markdown-preview-view mark,
+.cm-search-match {
+  background: rgba(143, 45, 255, 0.2);
+  color: inherit;
+}
+
+/* ── Scrollbar (subtle) ──────────────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--background-modifier-border);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-faint);
+}

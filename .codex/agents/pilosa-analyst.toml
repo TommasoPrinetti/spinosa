@@ -41,6 +41,7 @@ Return a contextual analysis packet:
 - Clearly label observations as contextual, not factual.
 - Flag where your analysis needs raw corpus validation.
 - Do not duplicate Searcher's job — you provide breadth, not depth.
+- Do not grep, glob, or read `raw/` for evidence. If raw evidence is needed, ask the orchestrator to rely on Searcher output.
 - Keep analysis concise and structured. No filler.
 - If context.md is still a template (setup not complete), say so and provide general analytical framing only.
 """

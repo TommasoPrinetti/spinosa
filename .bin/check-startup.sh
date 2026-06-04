@@ -69,12 +69,12 @@ if [[ -z "$root_vault_path" || "$root_vault_path" == "[path]" ]]; then
 else
   # check both relative and absolute
   if [[ ! -d "$root_vault_path" && ! -d "$ROOT/$root_vault_path" ]]; then
-    failures+=("Root Vault path does not exist: $root_vault_path")
+    failures+=("Source location does not exist: $root_vault_path")
   else
     local_path="$root_vault_path"
     [[ ! -d "$local_path" ]] && local_path="$ROOT/$root_vault_path"
     if [[ ! -d "$local_path" ]]; then
-      warnings+=("Root Vault path is not a directory: $root_vault_path")
+      warnings+=("Source location is not a directory: $root_vault_path")
     fi
   fi
 fi

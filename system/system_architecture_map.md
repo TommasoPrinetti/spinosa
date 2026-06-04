@@ -26,11 +26,11 @@ updated: 2026-06-02
 Pilosa is a two-layer research system.
 
 ```txt
-Root Vault
+Source location
   read-only original sources
   canonical evidence layer
         |
-        | CLI copies text-like files unchanged into raw/,
+        | CLI copies files unchanged into raw/,
         | agent builds dictionary, headers, and maps
         v
 Pilosa workspace
@@ -61,30 +61,32 @@ Classify
 Choose sequence (default shapes; orchestrator may deviate)
   |
   v
-Dispatch sub-agents — inject SKILL.md content into task prompt
+Dispatch sub-agents — native spawn by canonical name, or inject SKILL.md fallback
   |
   v
 Final answer
 ```
 
-The home session is the orchestrator. It is governed by `AGENTS.md` and controls routing, handoffs, stop conditions, and final response assembly. Sub-agent routing tables, default sequences, hard rules, and evidence/quotes conventions all live in `AGENTS.md` — there is no separate router file.
+The home session is the orchestrator. It is governed by `AGENTS.md` and controls routing, handoffs, stop conditions, and final response assembly. `.agents/` is the canonical source for agent and skill definitions; vendor directories are generated mirrors.
 
 ## Sub-Agent Pipeline
 
 | Stage | Owner | Function | Output |
 |---|---|---|---|
 | 0 | Home session | Log request, choose route, dispatch sub-agents, enforce stop conditions | Fast-path answer or routed sequence |
-| 1 | Searcher | Search the active raw corpus first; use Root Vault directly only for skipped media accounting or approved recovery | Raw evidence packet |
+| 1 | Searcher | Search the active raw corpus first; use source location directly only for skipped media accounting or approved recovery | Raw evidence packet |
 | 2 | Writer | Build coherent report answering the original request | ONE clean report in [[agent_reports/]] |
 | 3 | Verifier | Verify quotes, claims, paths, indexes | Verification status, in-place corrections |
 | 4 | Janitor | Audit repo hygiene, propose archival moves, evaluate staleness | Janitor Report with user-confirmation gate |
 | 5 | Startup | Execute setup translation + mapping to create the first usable workspace (orchestrator reads [[startup]] directly) | Configuration, dictionary, headers, maps, startup report |
+| 6 | Mapper | Read raw files in batches during startup or deep index maintenance | Extraction packets and checkpoint entries |
+| 7 | Serendippo | Find hidden cross-corpus connections after baseline maps exist | Serendipity report and map-enrichment proposals |
 
-The **Verifier** can run alone for verification, source-path repair, or index maintenance. The **Janitor** runs on-demand for hygiene audits. The **Startup** skill runs when the user asks to start the workspace or setup files contain placeholders. Routing decisions and default route shapes live in `AGENTS.md`; sub-agent workflows are defined in `.agents/skills/<name>/SKILL.md`.
+The **Verifier** can run alone for verification, source-path repair, or index maintenance. The **Janitor** runs on-demand for hygiene audits. The **Startup** protocol runs when the user asks to start the workspace or setup files contain placeholders. Routing decisions and default route shapes live in `AGENTS.md`; sub-agent workflows are defined canonically in `.agents/agents/` and `.agents/skills/`.
 
 ## Setup Lifecycle
 
-Initial setup creates the translation layer between Root Vault and the workspace. The **startup** skill executes the protocol in [[startup]], which has two phases:
+Initial setup creates the translation layer between the source location and the workspace. The **startup** skill executes the protocol in [[startup]], which has two phases:
 
 ```txt
 Setup draft / user startup prompt
@@ -122,7 +124,7 @@ The setup output is not a final interpretation of the research corpus. It is the
 
 | Layer | Role |
 |---|---|
-| Root Vault source | Canonical source of truth |
+| Source location | Canonical source of truth |
 | Raw copy with header | Indexed, searchable copy in the workspace |
 | Dictionary | Canonical vocabulary for consistent headers |
 | Concept index | Thematic retrieval and pattern layer |
@@ -142,6 +144,7 @@ The setup output is not a final interpretation of the research corpus. It is the
 | `.agents/skills/claim-verification/SKILL.md` | Claim verification                               |                                                  |
 | `.agents/skills/workspace-cleanup/SKILL.md` | Hygiene audit and archival                            |                                                  |
 | `.agents/skills/orchestrator-dispatch/SKILL.md` | Prompt routing and skill injection         |                                                  |
+| `.agents/agents/`          | Canonical native agent definitions                              |                                                  |
 | [[dictionary]]              | Shared term vocabulary                                                |                                                  |
 | [[workspace_index]]              | Master index                                                          |                                                  |
 | [[maps/]]                   | Central navigation layer with Obsidian wikilinks into raw files       |                                                  |

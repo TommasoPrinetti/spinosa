@@ -30,7 +30,7 @@ Mechanical scripts for setup and validation. Human-maintained — agents should 
 
 | File | Purpose |
 |---|---|
-| `onboard.sh` | Collects project name, Root Vault path, scans corpus, copies accepted text/native/PDF files to `raw/`, generates setup draft |
+| `onboard.sh` | Collects project name, source location, scans corpus, copies accepted text/native/PDF files to `raw/`, generates setup draft |
 | `check-startup.sh` | Developer validation helper: checks raw copy headers, map coverage, dictionary completeness after startup |
 
 ## See also
