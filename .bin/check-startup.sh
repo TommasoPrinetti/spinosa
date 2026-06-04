@@ -212,7 +212,7 @@ if [[ -d "$raw_dir" ]]; then
   done < <(find "$raw_dir" -type f -name "*.md" -print0 2>/dev/null)
 fi
 
-if [[ "$startup_text" == *"setup_status: zone_started"* ]]; then
+if [[ "$startup_text" == *"setup_status: workspace_started"* ]]; then
   if [[ ! -d "$maps_dir" ]]; then
     failures+=("Missing maps directory: maps")
   else

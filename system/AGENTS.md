@@ -20,7 +20,7 @@ Core system files that define how Pilosa operates. All other directories depend 
 |---|---|
 | `context.md` | Project context: scope, names, particularities. Read by Writer; updated by startup. |
 | `configuration.md` | Operating profile: source policy, source location, evidence standards, enabled workflows. |
-| `startup.md` | Setup translation + indexing protocol (read by orchestrator). |
+| `startup.md` | Workspace indexing protocol (read by orchestrator). |
 | `dictionary.md` | Shared vocabulary of canonical names, places, organizations, concepts. |
 | `header_template.md` | Canonical YAML frontmatter schema for raw copies. |
 | `workspace_index.md` | Master workspace index (generated at startup). |

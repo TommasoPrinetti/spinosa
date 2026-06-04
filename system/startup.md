@@ -1,7 +1,7 @@
 ---
 type: startup_protocol
-role: setup_and_indexing_protocol
-purpose: [translate the source material into a searchable, header-indexed workspace]
+role: workspace_indexing_protocol
+purpose: [build the dictionary, maps, and index from the raw corpus]
 description:
   - Startup protocol executed directly by the orchestrator after onboarding.
   - Agents use it to build dictionary, maps, validation checks, and startup reports.
@@ -12,7 +12,7 @@ created: 2026-05-28
 updated: 2026-06-04
 ---
 
-# startup.md — Setup Translation and Indexing Protocol
+# startup.md — Workspace Indexing Protocol
 
 This is the **protocol document** that defines what to do and how to do it. The **orchestrator** reads this file and executes the steps.
 
@@ -20,24 +20,27 @@ Use this file when the user asks to **start the workspace** or when setup files 
 
 Startup is the only authority that can mark setup complete. `.bin/check-startup.sh` is a developer-facing validation helper, not a separate user-facing setup path.
 
-## Context
+## What Onboarding Already Did
 
-The CLI onboarding script has already transposed all the relevant files into the`raw` folder.  scanned the corpus, asked for explicit consent, copied accepted text-like files into [[raw/]], skipped images, video, audio, and `AGENTS.md` control files. 
+The CLI onboarding script (`bash .bin/onboard.sh`) has already:
 
-## Mission 
+- Collected project name, source location, and preferred LLM CLI
+- Scanned the source corpus and copied accepted files into `raw/` (text, native-readable, PDFs)
+- Skipped images, video, audio, and `AGENTS.md` control files
+- Written `context.md` and `configuration.md` with `setup_status: cli_started`
+
+**Startup does not repeat onboarding.** Startup takes the raw corpus and builds the workspace content: dictionary, concept index, maps, and validation.
+
+## Mission
 
 Your job is to:
 
-1. **Build the master dictionary and enrich the blueprint from corpus evidence**
-2. **Read raw copies in batches and extract concepts, themes, and entities**
-3. **Write concept-indexed maps** that help future LLMs find relevant files by meaning, not just filename
-4. **Tag files with brief thematic markers** for search optimization
+1. **Verify onboarding completed** — confirm setup files exist and source location is valid
+2. **Build the master dictionary** from corpus evidence
+3. **Extract concepts, themes, and entities** from raw files
+4. **Write concept-indexed maps** that help future LLMs find relevant files by meaning, not just filename
 5. **Cross-exercise synthesis** — identify themes that appear across multiple exercises
 6. **Run startup validation and retrieval tests**
-
-The protocol runs in two phases: **Phase 1 (Setup Translation)** and **Phase 2 (Indexing, Mapping, Validation)**. The CLI handles raw record writing; you handle translation, dictionary anchoring, maps, validation, and recovery notes.
-
-GPT: Use `set_goal` to achieve your mission.
 
 ## Non-Negotiable
 
@@ -69,52 +72,20 @@ If the user already ran `bash .bin/onboard.sh`, treat its answers as the **setup
 
 ---
 
-# Phase 1 — Setup Translation
+# Phase 1 — Verify Onboarding
 
-## 1.1 Inspect Setup Draft
+Quick verification that onboarding completed correctly. This phase should take under a minute.
 
-Read [[context]] and [[configuration]]. Identify filled fields, placeholders, and missing data.
+## 1.1 Confirm Setup Files Exist
 
-Create a todo list with the CLI's todo/task tool if available. Minimum todo items:
+Read [[context]] and [[configuration]]. Check:
 
-- inspect setup draft,
-- verify source location,
-- synthesize blueprint/config,
-- build dictionary from corpus evidence,
-- read raw copies and extract concepts,
-- write concept-indexed maps,
-- cross-exercise synthesis,
-- validate retrieval paths.
+- `context.md` exists and has `setup_status: cli_started`
+- `configuration.md` exists with `source_location` filled (not `[path]`)
+- Source location directory exists on disk
+- No blocking placeholders remain (`[path]`, `[project name]`)
 
-## 1.2 Translate Setup Draft
-
-Treat CLI-generated answers as a **setup draft**, not as questions to repeat. Translate the draft into a usable research configuration:
-
-- preserve the project title,
-- preserve the project description if provided; otherwise write `not provided during fast setup` and continue,
-- register helpful artifact URLs or file paths if provided,
-- infer a tentative source universe, vocabulary, methods, outputs, unresolved ambiguities, and indexing target from the description, artifacts, and active raw corpus when available,
-- keep inferred fields explicitly marked as inferred when useful.
-
-Use shell/file tools to confirm the source location exists and is treated as **read-only**. Do not read source files directly for normal indexing when the corresponding raw copy exists.
-
-## 1.3 Fill Blueprint and Configuration
-
-- Fill [[context]] (project title, project description status, helpful artifact URLs or file paths status, source location, evidence standards, external source policy).
-- Fill [[configuration]] (`source_location`, `source_mode`, `source_policy`, `external_sources_allowed`, `preferred_llm_cli`, `claim_standard`, `l2_policy`).
-- Keep `setup_status: cli_started` until mapping and retrieval tests have passed. Replace it with `setup_status: workspace_started` in both files only at the end of Phase 2.
-
-## 1.4 Audit the Translation
-
-Before moving on, confirm:
-
-- every project detail from the CLI draft is preserved or intentionally summarized,
-- every artifact URL or file path is listed,
-- every source policy and protected path is reflected in configuration,
-- inferred scope, source universe, vocabulary, methods, outputs, and initial indexing target are present where useful,
-- anything not translated is listed as deferred with a reason.
-
-## 1.5 Question Gating
+## 1.2 Check For Blocking Missing Info
 
 Do not ask follow-up questions before Phase 2 unless:
 
@@ -127,16 +98,24 @@ Missing project description and missing helpful artifact URLs do not block Phase
 
 ---
 
-# Phase 2 — Indexing, Mapping, Validation
+# Phase 2 — Index, Map, Validate
 
-## 2.1 Survey Active Corpus And Source Coverage
+## 2.1 Survey Active Corpus
 
-Survey [[raw/]] as the active working corpus, then compare against the source location for skipped media and coverage gaps. For each raw directory:
+Survey [[raw/]] as the active working corpus. For each raw directory:
 
 1. List all files and subdirectories (skip `.DS_Store`, `AGENTS.md`, system files, empty dirs)
-2. Note copied text-like file types (`.md`, `.txt`, `.csv`, `.json`, etc.), count per type, approximate date range
+2. Note file types (`.md`, `.txt`, `.csv`, `.json`, etc.), count per type, approximate date range
 3. Read a sample of raw copies to characterize the folder's content accurately
 4. Record: source types, modality, names, dates, topics, keywords, gaps
+
+Count **all** files in raw/ (not just `.md`):
+
+```
+find raw/ -type f -not -name ".DS_Store" -not -name "AGENTS.md" -not -name "INDEX.md" -not -name "REPO_GUIDE.md" -not -name ".gitkeep" | wc -l
+```
+
+Record this number as `TOTAL_FILES` in `workspace_index.md` under "Extraction Progress". Every subsequent step checks against this number.
 
 Separately account for unsupported files and skipped media that remain only at the source location. Do not create `.pointer.md` records for them during startup. Record media counts, extensions, and processing gaps in `workspace_index.md` and the startup report as source media coverage.
 
@@ -144,21 +123,15 @@ Separately account for unsupported files and skipped media that remain only at t
 
 Record the source batch or external-access decision in `logs/user_requests.md` when traceability is needed. Use route `source_intake` or `external_access` and include the retained output or reason.
 
-## 2.3 Build Master Dictionary And Blueprint Anchors
+## 2.3 Build Dictionary And Extract Concepts
 
-### Step 1: Count total files
+**This is the core step.** One pass over the corpus that builds both the dictionary and the concept index simultaneously. No duplicate reading.
 
-Before spawning any sub-agents, count all files in raw/:
-
-```
-find raw/ -name "*.md" -not -name "AGENTS.md" -not -name "INDEX.md" -not -name "REPO_GUIDE.md" | wc -l
-```
-
-Record this number as `TOTAL_FILES` in `workspace_index.md` under "Extraction Progress". Every subsequent step checks against this number.
-
-### Step 2: Spawn batches until all files are read
+### Step 1: Spawn batches until all files are read
 
 Split raw copies into batches of 10-15 files. Spawn **pilosa-mapper** sub-agents. Each batch reads files and extracts:
+
+**For the dictionary:**
 
 1. **Names** — people, roles, named entities. Merge variants into canonical forms.
 2. **Places** — geographic locations, sites, regions. Merge variants.
@@ -169,12 +142,22 @@ Split raw copies into batches of 10-15 files. Spawn **pilosa-mapper** sub-agents
 7. **Uncertain terms and metadata** — unresolved people, dates, places, or terms needing review.
 8. **Machine artifacts** — ASR speaker labels, diarization labels, OCR noise, conversion residue, timestamps.
 
+**For concept extraction (same pass):**
+
+9. **Core concepts** (2-5 per file): The main ideas discussed. Use the dictionary for canonical terms.
+10. **Thematic tags** (2-5 per file): Brief search-optimized labels.
+11. **Key entities**: People, organizations, places mentioned (use dictionary canonical forms).
+12. **Cross-exercise connections**: Does this file reference or relate to content in other files?
+
 **Multilingual rule:** Keywords must appear in the language they were found in. If a source is in French, French keywords are recorded. If in English, English keywords. If a concept appears in multiple languages, list all language variants as aliases.
 
+### Step 2: Accumulate results
+
 After each batch completes:
-1. Merge batch results into the master dictionary
-2. Update `workspace_index.md` "Extraction Progress" section
-3. Append processed file paths to `agent_reports/extraction_checkpoint.md`
+1. Merge dictionary terms into the master dictionary
+2. Append extraction packets to `agent_reports/extraction_checkpoint.md`
+3. Update `workspace_index.md` "Extraction Progress" section
+4. Track: `files_read / TOTAL_FILES`
 
 **Arrival metric:** `files_read == TOTAL_FILES`. Continue spawning batches until every file has been read by at least one sub-agent.
 
@@ -191,93 +174,54 @@ Use accumulated evidence to enrich [[context]]:
 - **Research vocabulary**: Extract key actors, institutions, places, and concepts that appear repeatedly.
 - **Likely output needs**: Based on the corpus structure, infer what the researcher will need.
 
-## 2.4 Read Raw Copies And Extract Concepts
-
-**This is the core step that makes maps useful.** Use **pilosa-mapper** sub-agents to read file bodies and extract actual content.
-
-### Step 1: Check progress from dictionary pass
-
-Read `agent_reports/extraction_checkpoint.md` to see which files have already been read. If the dictionary pass (2.3) already read all files, reuse those extraction packets. If not, continue with new batches.
-
-### Step 2: Spawn batches until all files have concept packets
-
-Split raw copies into batches of 10-15 files. For each batch, spawn a pilosa-mapper with this prompt:
-
-```
-Read these 10-15 raw copy files. For EACH file, extract:
-1. **Core concepts** (2-5): The main ideas discussed in this file. Use the dictionary for canonical terms. Examples: "value attribution", "professional judgment", "epistemic authority", "AI trust", "fairness assessment", "prompting techniques"
-2. **Thematic tags** (2-5): Brief search-optimized labels. Examples: "ethics", "professional-use", "student-reflection", "methodology", "critique", "comparison"
-3. **Key entities**: People, organizations, places mentioned (use dictionary canonical forms)
-4. **Cross-exercise connections**: Does this file reference or relate to content in other exercises?
-
-Return a structured packet for each file:
-- File path
-- Source type (interview/worksheet/transcription)
-- Language
-- Core concepts (list)
-- Thematic tags (list)
-- Key entities (list)
-- One-sentence summary
-- Cross-exercise connections (if any)
-```
-
-### Step 3: Accumulate packets
-
-After each batch completes:
-1. Append extraction packets to `agent_reports/extraction_checkpoint.md`
-2. Update `workspace_index.md` "Extraction Progress" section
-3. Track: `files_extracted / TOTAL_FILES`
-
-**Arrival metric:** `files_extracted == TOTAL_FILES`. Continue spawning batches until every file has an extraction packet in the checkpoint file.
-
-### Step 4: Merge into concept index
+### Step 5: Merge into concept index
 
 After all batches complete, merge extraction packets into a **concept index** — a master list of all concepts found across the corpus, with file references. Write this to `agent_reports/concept_index_accumulated.md` as input for map writing.
 
-## 2.5 Write Concept-Indexed Maps
+## 2.4 Write Concept-Indexed Maps
 
 Use **pilosa-writer** sub-agents to create maps from the concept index. The maps are the primary navigation layer for backsearching.
 
 ### Input
 
-Read `agent_reports/concept_index_accumulated.md` (from step 2.4) and `agent_reports/extraction_checkpoint.md` for the full list of files and their extraction packets.
+Read `agent_reports/concept_index_accumulated.md` (from step 2.3) and `agent_reports/extraction_checkpoint.md` for the full list of files and their extraction packets.
 
 ### Required Maps
 
 1. **`maps/concept_index.md`** — The master concept index. Each concept gets a section with:
    - Definition (1-2 sentences)
    - Files where it appears (with wikilinks)
-   - Which exercises contain it
-   - Which cohorts contain it
    - Related concepts
 
 2. **`maps/thematic_tags.md`** — Files organized by thematic tag. Each tag gets a section listing all files with that tag.
 
-3. **`maps/cross_exercise_synthesis.md`** — Themes that appear across 3+ exercises. For each cross-exercise theme:
+3. **`maps/cross_exercise_synthesis.md`** — Themes that appear across multiple files. For each cross-file theme:
    - Theme name and definition
-   - Which exercises contain it
-   - How the theme evolves across exercises
-   - Key files for each exercise
+   - How the theme manifests across files
+   - Key files for each manifestation
 
 4. **`maps/entity_index.md`** — People, organizations, places with file references.
 
-5. **`maps/corpus_structure.md`** — Files organized by exercise and cohort (for structural navigation).
+5. **`maps/corpus_structure.md`** — Files organized by their structure (exercise, cohort, date, or other grouping).
 
 ### Map Format
 
-Each map uses this format:
+Maps use a flexible format adapted to the corpus structure. Each map entry must include:
 
 ```markdown
 ## [Concept Name]
 
 [1-2 sentence definition]
 
-**Exercises:** Ex3, Ex5, Ex9
-**Cohorts:** C1, C2, C3
+| File | Tags | Summary |
+|---|---|---|
+| [[raw/path/to/file.md\|filename]] | ethics, reflection | One-sentence summary |
+```
 
-| File | Exercise | Cohort | Thematic Tags | Summary |
-|---|---|---|---|---|
-| [[raw/path/to/file.md\|filename]] | Ex3 | C1 | ethics, reflection | One-sentence summary |
+If the corpus has exercise/cohort structure, add those columns:
+
+```
+| File | Exercise | Cohort | Tags | Summary |
 ```
 
 ### Arrival Metric
@@ -297,18 +241,18 @@ If any file is missing from all maps, the maps are incomplete. Fix before procee
 
 Maps start as `map_quality: machine_generated`. After Verifier review, update to `map_quality: checked` or `map_quality: human_reviewed`.
 
-## 2.6 Cross-Exercise Synthesis
+## 2.5 Cross-Exercise Synthesis
 
 **Dedicated step.** After all concept extraction is complete, run a synthesis pass:
 
-1. Identify concepts that appear in 3+ exercises
-2. Map how these concepts evolve across exercises (e.g., "professional usefulness" appears in Ex3 as initial assessment, in Ex9 as formal judgment, in Ex17 as final reflection)
-3. Identify exercise-specific concepts (concepts unique to one exercise)
+1. Identify concepts that appear in multiple files
+2. Map how these concepts evolve across files
+3. Identify file-specific concepts (concepts unique to one file)
 4. Write `maps/cross_exercise_synthesis.md` with the results
 
-This map is critical for longitudinal analysis — it shows how themes develop across the curriculum.
+This map is critical for longitudinal analysis — it shows how themes develop across the corpus.
 
-## 2.7 Serendipitous Connection Discovery
+## 2.6 Serendipitous Connection Discovery
 
 **Dedicated step.** After cross-exercise synthesis is complete, spawn **pilosa-serendippo** to find hidden connections that batch processing misses.
 
@@ -318,7 +262,7 @@ The mapper agent reads files in structured batches — efficient but linear. The
 
 ### When to Run
 
-- After mapper has processed all files (2.4) and cross-exercise synthesis is written (2.6)
+- After mapper has processed all files (2.3) and cross-exercise synthesis is written (2.5)
 - Maps exist and have initial concept coverage
 - Serendipa can use existing maps as a starting point
 
@@ -339,7 +283,7 @@ Serendipa runs until the orchestrator signals completion or the researcher inter
 - `agent_reports/serendipity_report.md` — connections found, patterns identified, map updates proposed
 - Updates to existing maps (new cross-references, pattern documentation)
 
-## 2.8 Record Ambiguities
+## 2.7 Record Ambiguities
 
 After reading the source files and building the dictionary, record ambiguities without stopping startup. Record these cases in the dictionary, maps, workspace map, or startup report as `unresolved` / `needs_review`:
 
@@ -351,11 +295,11 @@ After reading the source files and building the dictionary, record ambiguities w
 
 Only pause for orchestrator/user input when an ambiguity prevents valid indexing. Otherwise continue and list unresolved items in the startup report.
 
-## 2.9 Update Master Workspace Map
+## 2.8 Update Workspace Index
 
 Update [[workspace_index]] with:
 
-- Raw copy coverage (how many copied text files, by type),
+- Raw copy coverage (how many copied files, by type),
 - Skipped media coverage (how many uncovered source media files, by media type),
 - Central navigation maps created,
 - Dictionary status (canonical names, places, organizations, concepts),
@@ -364,14 +308,14 @@ Update [[workspace_index]] with:
 
 Coverage counts must be exact.
 
-## 2.10 Startup Validation
+## 2.9 Validate
 
 Before reporting startup complete, run validation.
 
 Map validation:
 - concept_index.md has concepts with file references
 - thematic_tags.md has tags with file lists
-- cross_exercise_synthesis.md has themes spanning 3+ exercises
+- cross_exercise_synthesis.md has themes spanning multiple files
 - entity_index.md has entities with file references
 - All wikilinks resolve to existing files
 
@@ -379,7 +323,7 @@ Retrieval tests:
 
 1. **Concept retrieval** — grep a concept name in maps/ and confirm it links to raw files
 2. **Thematic retrieval** — grep a thematic tag and confirm it returns relevant files
-3. **Cross-exercise retrieval** — find a concept in cross_exercise_synthesis.md and confirm it links to files across exercises
+3. **Cross-exercise retrieval** — find a concept in cross_exercise_synthesis.md and confirm it links to files across the corpus
 4. **Entity retrieval** — grep a person/org name and confirm it links to relevant files
 5. **Map navigation** — open concept_index.md, follow a link to a raw file, confirm it exists
 6. **Unresolved metadata retrieval** — grep `needs_review` or `unresolved` and confirm it is findable
@@ -388,13 +332,7 @@ Startup is complete **only if** all applicable retrieval tests pass.
 
 After validation passes, replace `setup_status: cli_started` with `setup_status: workspace_started` in [[context]] and [[configuration]].
 
-## 2.11 Idempotency And Recovery
-
-Onboarding rerun behavior:
-- skip existing raw text copies,
-- skip `AGENTS.md` control files,
-- leave legacy raw folder files untouched,
-- overwrite blueprint/config only when the user confirms overwrite or passes `--force`.
+## 2.10 Idempotency And Recovery
 
 Startup rerun behavior:
 - skip valid dictionary entries unless repair is needed,
@@ -408,12 +346,11 @@ Recovery behavior:
 - keep `setup_status: cli_started` until validation passes.
 
 Sub-agent delegation:
-- Dictionary building: pilosa-mapper reads batches of 10-15 files, extracts terms
-- Concept extraction: pilosa-mapper reads batches of 10-15 files, extracts concepts and themes
+- Dictionary + concept extraction: pilosa-mapper reads batches of 10-15 files, extracts terms and concepts in one pass
 - Map writing: pilosa-writer synthesizes concept index into maps
 - Startup owns merge, conflict resolution, and validation; sub-agents never set `setup_status: workspace_started`.
 
-## 2.12 Progress Tracking And Checkpointing
+## 2.11 Progress Tracking And Checkpointing
 
 ### Checkpoint File
 
@@ -470,10 +407,9 @@ If startup is interrupted:
 
 | Phase | Arrival Metric | How to Check |
 |---|---|---|
-| Dictionary (2.3) | `files_read == total_files` | checkpoint file |
-| Concept extraction (2.4) | `files_extracted == total_files` | checkpoint file |
-| Map writing (2.5) | Every file in checkpoint appears in ≥1 map | grep file paths in maps/ |
-| Cross-exercise (2.6) | Themes identified for all concepts in 3+ exercises | concept_index.md sections |
+| Dictionary + extraction (2.3) | `files_read == total_files` | checkpoint file |
+| Map writing (2.4) | Every file in checkpoint appears in ≥1 map | grep file paths in maps/ |
+| Cross-exercise (2.5) | Themes identified for all concepts in multiple files | concept_index.md sections |
 
 ---
 

@@ -1089,16 +1089,15 @@ Optional context not collected by fast setup:
 - Helpful artifact URLs or file paths (if absent, record none provided)
 - External source policy defaults to no; ask only if external URL access is needed or the user requests external sources.
 
-Then execute system/startup.md from Phase 1.2 onwards. Specifically:
-- Translate the setup draft into filled information + configuration
-- Build the master dictionary by reading the active raw corpus in raw/
+Then execute system/startup.md. Specifically:
+- Phase 1: Verify onboarding completed (setup files exist, source location valid)
+- Phase 2: Build the master dictionary and extract concepts from raw/ in one pass
 - Generate YAML headers for every raw copy using the dictionary
 - Account for skipped media as uncovered source media; do not create media pointer records
 - Create maps/ and write detailed Obsidian-wikilink maps that help future LLMs choose which raw files to open
-- Build maps from repeated themes
 - Update workspace_index.md
 - Run startup validation, then the full retrieval test suite
-- Set setup_status to workspace_started in both information and configuration
+- Set setup_status to workspace_started in both context.md and configuration.md
 - Write the startup report to agent_reports/
 
 Do not re-ask questions the CLI draft already answered. Do not stop after one index. Do not edit the source location or `raw/`.
