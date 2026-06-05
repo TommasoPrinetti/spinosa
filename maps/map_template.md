@@ -16,7 +16,7 @@ updated: 2026-06-04
 
 Every map file in `maps/` must include the navigation_map header and use Obsidian wikilinks for all internal references.
 
-## Header Schema
+## YAML Header Schema
 
 ```yaml
 ---
@@ -40,7 +40,7 @@ updated: YYYY-MM-DD
 
 ## Level 0: Structural Overview
 
-One file at the root of maps/. Describes the corpus structure and provides entry points.
+One file at the root of maps/. Describes the corpus structure and provides some entry points.
 
 Format:
 

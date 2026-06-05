@@ -1,0 +1,665 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ── pilosa — CLI entry point ────────────────────────────────────────────────
+# Usage: pilosa [new|update|help]
+#
+# Commands:
+#   new       Create a new Pilosa workspace and run onboarding
+#   update    Update workspace framework files from a release
+#   help      Show this help
+
+# ── ANSI colors (zero dependencies) ─────────────────────────────────────────
+if [[ "${NO_COLOR:-}" == "1" ]] || [[ ! -t 1 ]]; then
+  R="" G="" B="" Y="" C="" M="" DIM="" BOLD="" RESET=""
+else
+  R=$'\033[31m' G=$'\033[32m' B=$'\033[34m' Y=$'\033[33m'
+  C=$'\033[36m' M=$'\033[35m' DIM=$'\033[2m' BOLD=$'\033[1m' RESET=$'\033[0m'
+fi
+
+# ── paths ───────────────────────────────────────────────────────────────────
+PILOSA_HOME="${PILOSA_HOME:-$HOME/.pilosa}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TODAY="$(date +%Y-%m-%d)"
+
+# Resolve framework root:
+#   - Dev mode: binary is in .bin/ of the repo → FRAMEWORK_ROOT is repo root
+#   - Installed mode: binary is in ~/.pilosa/bin/ → framework is in ~/.pilosa/versions/<latest>/
+resolve_framework_root() {
+  # Dev mode: check if we're in the repo's .bin/
+  local candidate="${SCRIPT_DIR}/.."
+  if [[ -f "${candidate}/.pilosa/framework-files.tsv" ]]; then
+    echo "$candidate"
+    return
+  fi
+
+  # Installed mode: find latest version
+  if [[ -d "${PILOSA_HOME}/versions" ]]; then
+    local latest_version
+    latest_version="$(ls -1 "${PILOSA_HOME}/versions" 2>/dev/null | sort -V | tail -1)"
+    if [[ -n "$latest_version" ]]; then
+      local fw_dir="${PILOSA_HOME}/versions/${latest_version}"
+      # The archive unpacks to pilosa-framework-<version>/
+      local fw_subdir
+      fw_subdir="$(find "$fw_dir" -maxdepth 1 -type d -name 'pilosa-framework-*' 2>/dev/null | head -1)"
+      if [[ -n "$fw_subdir" && -f "${fw_subdir}/.pilosa/framework-files.tsv" ]]; then
+        echo "$fw_subdir"
+        return
+      fi
+    fi
+  fi
+
+  echo ""
+}
+
+FRAMEWORK_ROOT="$(resolve_framework_root)"
+
+# ── helpers ─────────────────────────────────────────────────────────────────
+divider()   { printf '%s\n' "${DIM}$(printf '%.0s─' 1 {1..78})${RESET}"; }
+header()    { printf '\n%s\n\n' "${BOLD}${C}$1${RESET}"; }
+info()      { printf '  %s %s\n' "${DIM}→${RESET}" "$1"; }
+ok()        { printf '  %s %s\n' "${G}✦${RESET}" "$1"; }
+warn()      { printf '  %s %s\n' "${Y}⚠${RESET}" "$1"; }
+note()      { printf '  %s↳%s %s\n' "${DIM}" "${RESET}" "$1"; }
+die()       { printf '\n  %s %s\n\n' "${R}✗${RESET}" "$1" >&2; exit 1; }
+
+ask() {
+  local prompt="$1" default="${2:-}" hint="${3:-}"
+  local fb=""
+  [[ -n "$default" ]] && fb=" ${DIM}(${default})${RESET}"
+  [[ -n "$hint" ]] && printf '  %s %s\n' "${DIM}↳${RESET}" "$hint" >&2
+  printf '%s' "${BOLD}${prompt}${RESET}${fb}${DIM}: ${RESET}" >&2
+  local reply
+  IFS= read -r reply || true
+  reply="${reply:-$default}"
+  echo "$reply"
+}
+
+confirm() {
+  local prompt="$1" default="${2:-y}"
+  local hint="Y/n"
+  [[ "$default" == "n" ]] && hint="y/N"
+  local reply normalized
+  while true; do
+    printf '%s' "${BOLD}${prompt}${RESET} ${DIM}${hint}${RESET}: " >&2
+    IFS= read -r reply || reply="$default"
+    reply="${reply:-$default}"
+    normalized="$(printf '%s' "$reply" | tr '[:upper:]' '[:lower:]')"
+    case "$normalized" in
+      y|yes) return 0 ;;
+      n|no) return 1 ;;
+      *) printf '  %s\n' "${R}Please answer y/yes or n/no.${RESET}" >&2 ;;
+    esac
+  done
+}
+
+select_menu() {
+  local prompt="$1"
+  shift
+  local options=("$@")
+
+  printf '%s\n' "${BOLD}${prompt}${RESET}" >&2
+  for i in "${!options[@]}"; do
+    printf '  %s %s\n' "${DIM}$((i+1)).${RESET}" "${options[$i]}" >&2
+  done
+
+  local choice
+  while true; do
+    printf '%s' "${DIM}  Enter number [1-${#options[@]}]: ${RESET}" >&2
+    IFS= read -r choice || choice="1"
+    if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#options[@]} )); then
+      echo "${options[$((choice-1))]}"
+      return
+    fi
+    printf '  %s\n' "${R}Invalid choice. Try again.${RESET}" >&2
+  done
+}
+
+arrow_select() {
+  local prompt="$1"
+  shift
+  local options=("$@")
+
+  if [[ "${NUMBERED:-0}" == "1" ]] || [[ ! -t 0 ]]; then
+    select_menu "$prompt" "${options[@]}"
+    return
+  fi
+
+  if ! command -v stty >/dev/null 2>&1; then
+    select_menu "$prompt" "${options[@]}"
+    return
+  fi
+
+  local count=${#options[@]}
+  local current=0
+  local key seq part
+  local old_stty
+  old_stty=$(stty -g 2>/dev/null) || { select_menu "$prompt" "${options[@]}"; return; }
+
+  printf '\n  %s\n' "${BOLD}${prompt}${RESET}" >&2
+  printf '  %s\n' "${DIM}↑/↓ to move, Enter to confirm, q to cancel${RESET}" >&2
+  for i in "${!options[@]}"; do
+    if (( i == current )); then
+      printf '  %s %s %s\n' "${C}" "▶" "${BOLD}${options[$i]}${RESET}" >&2
+    else
+      printf '    %s\n' "${options[$i]}" >&2
+    fi
+  done
+
+  if ! stty raw -echo 2>/dev/null; then
+    printf '\n  %s arrow-key mode failed, falling back to numbered menu\n' "${Y}⚠${RESET}" >&2
+    printf '\033[%dF' "$count" >&2
+    for _ in "${!options[@]}"; do printf '\r\033[2K\n' >&2; done
+    select_menu "$prompt" "${options[@]}"
+    return
+  fi
+
+  local old_int_trap old_term_trap old_exit_trap
+  old_int_trap="$(trap -p INT || true)"
+  old_term_trap="$(trap -p TERM || true)"
+  old_exit_trap="$(trap -p EXIT || true)"
+
+  restore_arrow_traps() {
+    if [[ -n "$old_int_trap" ]]; then eval "$old_int_trap"; else trap - INT; fi
+    if [[ -n "$old_term_trap" ]]; then eval "$old_term_trap"; else trap - TERM; fi
+    if [[ -n "$old_exit_trap" ]]; then eval "$old_exit_trap"; else trap - EXIT; fi
+  }
+
+  cleanup_arrow() {
+    stty "$old_stty" 2>/dev/null || true
+    printf '\033[?25h' >&2
+    restore_arrow_traps
+  }
+  trap 'cleanup_arrow; printf "\n  Cancelled.\n" >&2; exit 1' INT TERM
+  trap 'cleanup_arrow' EXIT
+
+  while true; do
+    IFS= read -r -n 1 -s key 2>/dev/null || { cleanup_arrow; return 1; }
+    case "$key" in
+      $'\x1b')
+        seq=""
+        while IFS= read -r -n 1 -s -t 1 part 2>/dev/null; do
+          seq+="$part"
+          [[ ${#seq} -ge 2 ]] && break
+        done
+        case "$seq" in
+          '[A'|'OA') ((current--)); ((current < 0)) && current=$((count - 1)) ;;
+          '[B'|'OB') ((current++)); ((current >= count)) && current=0 ;;
+          *) continue ;;
+        esac
+        printf '\033[%dF' "$count" >&2
+        for _ in "${!options[@]}"; do printf '\r\033[2K\n' >&2; done
+        for i in "${!options[@]}"; do
+          if (( i == current )); then
+            printf '  %s %s %s\n' "${C}" "▶" "${BOLD}${options[$i]}${RESET}" >&2
+          else
+            printf '    %s\n' "${options[$i]}" >&2
+          fi
+        done
+        ;;
+      '')
+        cleanup_arrow
+        echo "${options[$current]}"
+        return
+        ;;
+      q|Q)
+        cleanup_arrow
+        printf '\n  Cancelled.\n' >&2
+        return 1
+        ;;
+    esac
+  done
+}
+
+normalize_path_input() {
+  local value="$1"
+  value="${value#"${value%%[![:space:]]*}"}"
+  value="${value%"${value##*[![:space:]]}"}"
+  if [[ ${#value} -ge 2 ]]; then
+    if [[ "${value:0:1}" == "'" && "${value: -1}" == "'" ]] || [[ "${value:0:1}" == '"' && "${value: -1}" == '"' ]]; then
+      value="${value:1:${#value}-2}"
+    fi
+  fi
+  value="${value//\\ / }"
+  echo "$value"
+}
+
+expand_home() {
+  local path="$1"
+  if [[ "$path" == "~"* ]]; then
+    path="${path/#\~/$HOME}"
+  fi
+  echo "$path"
+}
+
+# ── Gum integration (optional, private install) ─────────────────────────────
+pilosa_gum() {
+  if [ -x "${PILOSA_HOME}/bin/gum" ]; then
+    "${PILOSA_HOME}/bin/gum" "$@"
+  else
+    return 127
+  fi
+}
+
+# ── checksum helper ─────────────────────────────────────────────────────────
+sha256_file() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$1" | awk '{print $1}'
+  else
+    return 1
+  fi
+}
+
+# ── framework manifest reader ──────────────────────────────────────────────
+# Reads framework-files.tsv and returns paths matching the given role filter.
+# Usage: read_manifest [framework|user_state|mixed_framework_user]
+read_manifest() {
+  local filter="${1:-}"
+  local tsv="${FRAMEWORK_ROOT}/.pilosa/framework-files.tsv"
+  [[ -f "$tsv" ]] || die "Framework manifest not found: $tsv"
+
+  while IFS=$'\t' read -r path role policy; do
+    [[ "$path" == "path" ]] && continue  # skip header
+    if [[ -z "$filter" || "$role" == "$filter" ]]; then
+      echo "$path"
+    fi
+  done < "$tsv"
+}
+
+# ── detect installed LLM CLIs ──────────────────────────────────────────────
+detect_llm_clis() {
+  local clis=()
+  command -v claude >/dev/null 2>&1 && clis+=("Claude Code")
+  command -v codex >/dev/null 2>&1 && clis+=("Codex")
+  command -v opencode >/dev/null 2>&1 && clis+=("OpenCode")
+  command -v kilo >/dev/null 2>&1 && clis+=("Kilo")
+  if [[ ${#clis[@]} -eq 0 ]]; then
+    clis+=("Other (manual)")
+  fi
+  printf '%s\n' "${clis[@]}"
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# COMMAND: help
+# ═══════════════════════════════════════════════════════════════════════════
+cmd_help() {
+  header "Pilosa — Research Framework CLI"
+
+  printf '  %s\n' "${BOLD}Usage:${RESET}"
+  printf '    %s\n' "pilosa new [directory]    Create a new workspace and run onboarding"
+  printf '    %s\n' "pilosa update             Update workspace framework files"
+  printf '    %s\n' "pilosa help               Show this help"
+  printf '\n'
+
+  # Detect workspace
+  if [[ -f ".pilosa/workspace" ]]; then
+    local fw_version project_name setup_status
+    fw_version="$(grep 'framework_version:' .pilosa/workspace | awk '{print $2}')"
+    project_name="$(grep 'project_name:' .pilosa/workspace | awk '{print $2}')"
+    setup_status="$(grep 'setup_status:' .pilosa/workspace | awk '{print $2}')"
+    divider
+    printf '\n  %s %s\n' "${BOLD}Current workspace:${RESET}" "${project_name:-unknown}"
+    printf '  %s %s\n' "${DIM}framework:${RESET}" "${fw_version:-unknown}"
+    printf '  %s %s\n' "${DIM}status:${RESET}" "${setup_status:-unknown}"
+    printf '\n'
+  fi
+
+  # Detect LLM CLIs
+  local clis_str clis_arr
+  clis_str="$(detect_llm_clis)"
+  if [[ -n "$clis_str" ]]; then
+    divider
+    printf '\n  %s\n' "${BOLD}Detected LLM CLIs:${RESET}"
+    while IFS= read -r cli; do
+      printf '    %s %s\n' "${G}✓${RESET}" "$cli"
+    done <<< "$clis_str"
+    printf '\n'
+  fi
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# COMMAND: new
+# ═══════════════════════════════════════════════════════════════════════════
+cmd_new() {
+  header "Pilosa — New Workspace"
+
+  # ── Step 1: Workspace location ──────────────────────────────────────────
+  local workspace_path=""
+
+  if [[ -n "${1:-}" ]]; then
+    workspace_path="$(expand_home "$1")"
+  else
+    # Try Gum file picker first
+    if pilosa_gum file --directory --title "Where should the workspace live?" 2>/dev/null; then
+      workspace_path="$(pilosa_gum file --directory --title "Where should the workspace live?" 2>/dev/null)"
+    else
+      note "This will be your Pilosa research workspace."
+      note "Nothing outside this folder is touched."
+      note "Use an absolute path (drag the folder onto the terminal to paste its path)."
+      workspace_path=""
+      while [[ -z "$workspace_path" ]]; do
+        workspace_path="$(ask "Workspace location" "" "e.g. ~/Projects/my-research")"
+        workspace_path="$(normalize_path_input "$workspace_path")"
+        workspace_path="$(expand_home "$workspace_path")"
+        [[ -z "$workspace_path" ]] && printf '  %s\n' "${R}Workspace location is required.${RESET}" >&2
+      done
+    fi
+  fi
+
+  # Validate
+  if [[ -e "$workspace_path" ]]; then
+    if [[ -f "$workspace_path" ]]; then
+      die "Path exists but is a file, not a directory: $workspace_path"
+    fi
+    if [[ -f "$workspace_path/.pilosa/workspace" ]]; then
+      die "A Pilosa workspace already exists at: $workspace_path"
+    fi
+  fi
+
+  ok "Workspace: ${BOLD}${workspace_path}${RESET}"
+
+  # ── Step 2: Project name ────────────────────────────────────────────────
+  local project_name=""
+  local default_name
+  default_name="$(basename "$workspace_path")"
+
+  if pilosa_gum input --placeholder "Project name" --value "$default_name" 2>/dev/null; then
+    project_name="$(pilosa_gum input --placeholder "Project name" --value "$default_name" 2>/dev/null)"
+  else
+    note "This is the working title for your research framework."
+    note "It appears at the top of every report."
+    project_name=""
+    while [[ -z "$project_name" ]]; do
+      project_name="$(ask "Project name" "$default_name" "e.g. My Research Project")"
+      [[ -z "$project_name" ]] && printf '  %s\n' "${R}Project name is required.${RESET}" >&2
+    done
+  fi
+
+  ok "Project: ${BOLD}${project_name}${RESET}"
+
+  # ── Step 3: Copy framework ──────────────────────────────────────────────
+  if [[ -z "$FRAMEWORK_ROOT" ]]; then
+    die "Framework not found. Is Pilosa installed? Check ${PILOSA_HOME}/versions/"
+  fi
+  if [[ ! -f "${FRAMEWORK_ROOT}/.pilosa/framework-files.tsv" ]]; then
+    die "Framework manifest not found: ${FRAMEWORK_ROOT}/.pilosa/framework-files.tsv"
+  fi
+
+  divider
+  printf '\n  %s%sCopying framework files...%s\n\n' "${BOLD}" "${C}" "${RESET}"
+
+  mkdir -p "$workspace_path/.pilosa"
+
+  # Copy all framework-owned files
+  while IFS=$'\t' read -r path role policy; do
+    [[ "$path" == "path" ]] && continue  # skip header
+    [[ "$role" == "user_state" ]] && continue  # skip user-state dirs
+
+    local src="${FRAMEWORK_ROOT}/${path}"
+    local dst="${workspace_path}/${path}"
+
+    if [[ -d "$src" ]]; then
+      mkdir -p "$dst"
+      # Copy contents, not just the directory
+      cp -a "$src"/. "$dst"/ 2>/dev/null || true
+    elif [[ -f "$src" ]]; then
+      mkdir -p "$(dirname "$dst")"
+      cp -a "$src" "$dst"
+    fi
+  done < "${FRAMEWORK_ROOT}/.pilosa/framework-files.tsv"
+
+  # Create empty user-state directories with .gitkeep
+  for dir in raw maps logs agent_reports .trash; do
+    mkdir -p "$workspace_path/$dir"
+    touch "$workspace_path/$dir/.gitkeep"
+  done
+
+  ok "Framework files copied"
+
+  # ── Step 4: Write workspace metadata ────────────────────────────────────
+  cat > "$workspace_path/.pilosa/workspace" << EOF
+workspace_version: 1
+framework_version: 0.1.0
+created: ${TODAY}
+project_name: ${project_name}
+setup_status: not_started
+EOF
+
+  # Generate manifest with checksums
+  printf 'path\tsha256\n' > "$workspace_path/.pilosa/manifest.tsv"
+  while IFS=$'\t' read -r path role policy; do
+    [[ "$path" == "path" ]] && continue
+    [[ "$role" == "user_state" ]] && continue
+
+    local full_path="${workspace_path}/${path}"
+    if [[ -f "$full_path" ]]; then
+      local hash
+      hash="$(sha256_file "$full_path" 2>/dev/null || echo "none")"
+      printf '%s\t%s\n' "$path" "$hash" >> "$workspace_path/.pilosa/manifest.tsv"
+    elif [[ -d "$full_path" ]]; then
+      # For directories, record as "dir"
+      printf '%s\tdir\n' "$path" >> "$workspace_path/.pilosa/manifest.tsv"
+    fi
+  done < "${FRAMEWORK_ROOT}/.pilosa/framework-files.tsv"
+
+  ok "Workspace metadata written"
+
+  # ── Step 5: Onboarding ──────────────────────────────────────────────────
+  divider
+  printf '\n  %s%sRunning onboarding...%s\n\n' "${BOLD}" "${C}" "${RESET}"
+
+  # Run onboard.sh from within the new workspace
+  (
+    cd "$workspace_path"
+    bash "${workspace_path}/.bin/onboard.sh" "$@"
+  )
+
+  # Update workspace status
+  if [[ -f "$workspace_path/system/configuration.md" ]]; then
+    sed -i.bak 's/setup_status: not_started/setup_status: workspace_started/' "$workspace_path/.pilosa/workspace" 2>/dev/null || \
+    sed -i '' 's/setup_status: not_started/setup_status: workspace_started/' "$workspace_path/.pilosa/workspace" 2>/dev/null || true
+    rm -f "$workspace_path/.pilosa/workspace.bak"
+  fi
+
+  divider
+  ok "Workspace ready at: ${BOLD}${workspace_path}${RESET}"
+  printf '\n'
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# COMMAND: update
+# ═══════════════════════════════════════════════════════════════════════════
+cmd_update() {
+  header "Pilosa — Update Workspace"
+
+  local workspace_path=""
+  local target_version="latest"
+  local dry_run=0
+  local auto_yes=0
+
+  # Parse arguments
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --version) target_version="$2"; shift 2 ;;
+      --dry-run) dry_run=1; shift ;;
+      --yes|-y) auto_yes=1; shift ;;
+      --help|-h)
+        printf '  %s\n' "Usage: pilosa update [workspace] [options]"
+        printf '    %s\n' "  --version X.Y.Z   Target framework version"
+        printf '    %s\n' "  --dry-run         Show what would change without writing"
+        printf '    %s\n' "  --yes             Skip confirmation prompts"
+        return 0
+        ;;
+      *)
+        if [[ -z "$workspace_path" ]]; then
+          workspace_path="$(expand_home "$1")"
+        fi
+        shift
+        ;;
+    esac
+  done
+
+  # Default to current directory
+  [[ -z "$workspace_path" ]] && workspace_path="$(pwd)"
+
+  # Validate workspace
+  if [[ ! -f "$workspace_path/.pilosa/workspace" ]]; then
+    die "Not a Pilosa workspace (missing .pilosa/workspace): $workspace_path"
+  fi
+
+  local fw_version project_name
+  fw_version="$(grep 'framework_version:' "$workspace_path/.pilosa/workspace" | awk '{print $2}')"
+  project_name="$(grep 'project_name:' "$workspace_path/.pilosa/workspace" | awk '{print $2}')"
+
+  ok "Workspace: ${BOLD}${project_name:-unknown}${RESET}"
+  info "Current framework version: ${fw_version:-unknown}"
+  info "Target version: ${target_version}"
+
+  # Validate manifest exists
+  if [[ ! -f "$workspace_path/.pilosa/manifest.tsv" ]]; then
+    die "Manifest not found: $workspace_path/.pilosa/manifest.tsv"
+  fi
+
+  # ── Compare checksums ──────────────────────────────────────────────────
+  divider
+  printf '\n  %sComparing framework files...%s\n\n' "${BOLD}" "${RESET}"
+
+  local modified=0
+  local unchanged=0
+  local missing=0
+  local conflicts=0
+
+  while IFS=$'\t' read -r path role policy; do
+    [[ "$path" == "path" ]] && continue
+    [[ "$role" == "user_state" ]] && continue
+    [[ "$role" == "generated_state" ]] && continue  # auto-generated by sync-agents.sh
+
+    local current_hash stored_hash
+    local file_path="${workspace_path}/${path}"
+
+    if [[ -f "$file_path" ]]; then
+      current_hash="$(sha256_file "$file_path" 2>/dev/null || echo "none")"
+      stored_hash="$(grep "^${path}" "$workspace_path/.pilosa/manifest.tsv" | cut -f2)"
+
+      if [[ "$current_hash" == "$stored_hash" ]]; then
+        unchanged=$((unchanged + 1))
+      elif [[ "$current_hash" == "none" ]]; then
+        warn "Cannot compute checksum: $path"
+      else
+        modified=$((modified + 1))
+        printf '  %s %s (modified locally)\n' "${Y}~${RESET}" "$path"
+      fi
+    elif [[ -d "$file_path" ]]; then
+      # Directory — check if it exists
+      unchanged=$((unchanged + 1))
+    else
+      missing=$((missing + 1))
+      printf '  %s %s (new in release)\n' "${G}+${RESET}" "$path"
+    fi
+  done < "${FRAMEWORK_ROOT}/.pilosa/framework-files.tsv"
+
+  printf '\n'
+  info "Unchanged: $unchanged"
+  [[ $modified -gt 0 ]] && info "Modified locally: $modified"
+  [[ $missing -gt 0 ]] && info "New in release: $missing"
+
+  if [[ $modified -gt 0 ]]; then
+    warn "Modified files will receive a .pilosa-new sidecar (not overwritten)."
+  fi
+
+  if [[ "$dry_run" -eq 1 ]]; then
+    printf '\n  %sDry run — no files changed.%s\n\n' "${DIM}" "${RESET}"
+    return 0
+  fi
+
+  # ── Confirm ─────────────────────────────────────────────────────────────
+  if [[ "$auto_yes" -ne 1 ]]; then
+    if ! confirm "  Apply update?"; then
+      printf '\n  %sUpdate cancelled.%s\n\n' "${DIM}" "${RESET}"
+      return 0
+    fi
+  fi
+
+  # ── Execute update ──────────────────────────────────────────────────────
+  divider
+  printf '\n  %sApplying update...%s\n\n' "${BOLD}" "${RESET}"
+
+  while IFS=$'\t' read -r path role policy; do
+    [[ "$path" == "path" ]] && continue
+    [[ "$role" == "user_state" ]] && continue
+    [[ "$role" == "generated_state" ]] && continue  # auto-generated by sync-agents.sh
+
+    local src="${FRAMEWORK_ROOT}/${path}"
+    local dst="${workspace_path}/${path}"
+
+    if [[ -f "$src" ]]; then
+      local current_hash stored_hash
+      if [[ -f "$dst" ]]; then
+        current_hash="$(sha256_file "$dst" 2>/dev/null || echo "none")"
+        stored_hash="$(grep "^${path}" "$workspace_path/.pilosa/manifest.tsv" | cut -f2)"
+
+        if [[ "$current_hash" == "$stored_hash" ]]; then
+          # Safe to replace
+          cp -a "$src" "$dst"
+          ok "Replaced: $path"
+        else
+          # Conflict — user modified it
+          cp -a "$src" "${dst}.pilosa-new"
+          warn "Conflict: $path → wrote ${path}.pilosa-new"
+        fi
+      else
+        # New file
+        mkdir -p "$(dirname "$dst")"
+        cp -a "$src" "$dst"
+        ok "Added: $path"
+      fi
+    elif [[ -d "$src" ]]; then
+      mkdir -p "$dst"
+      cp -a "$src"/. "$dst"/ 2>/dev/null || true
+      ok "Updated: $path/"
+    fi
+  done < "${FRAMEWORK_ROOT}/.pilosa/framework-files.tsv"
+
+  # ── Update manifest ─────────────────────────────────────────────────────
+  printf 'path\tsha256\n' > "$workspace_path/.pilosa/manifest.tsv"
+  while IFS=$'\t' read -r path role policy; do
+    [[ "$path" == "path" ]] && continue
+    [[ "$role" == "user_state" ]] && continue
+    [[ "$role" == "generated_state" ]] && continue
+
+    local full_path="${workspace_path}/${path}"
+    if [[ -f "$full_path" ]]; then
+      local hash
+      hash="$(sha256_file "$full_path" 2>/dev/null || echo "none")"
+      printf '%s\t%s\n' "$path" "$hash" >> "$workspace_path/.pilosa/manifest.tsv"
+    elif [[ -d "$full_path" ]]; then
+      printf '%s\tdir\n' "$path" >> "$workspace_path/.pilosa/manifest.tsv"
+    fi
+  done < "${FRAMEWORK_ROOT}/.pilosa/framework-files.tsv"
+
+  # Update workspace version
+  sed -i.bak "s/framework_version: .*/framework_version: ${target_version}/" "$workspace_path/.pilosa/workspace" 2>/dev/null || \
+  sed -i '' "s/framework_version: .*/framework_version: ${target_version}/" "$workspace_path/.pilosa/workspace" 2>/dev/null || true
+  rm -f "$workspace_path/.pilosa/workspace.bak"
+
+  divider
+  ok "Update complete."
+  [[ $modified -gt 0 ]] && warn "Check .pilosa-new files for conflicts."
+  printf '\n'
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# MAIN
+# ═══════════════════════════════════════════════════════════════════════════
+case "${1:-help}" in
+  new)     shift; cmd_new "$@" ;;
+  update)  shift; cmd_update "$@" ;;
+  help|-h|--help) cmd_help ;;
+  *)
+    printf '%s\n' "${R}Unknown command: $1${RESET}" >&2
+    cmd_help
+    exit 1
+    ;;
+esac

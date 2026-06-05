@@ -62,7 +62,7 @@ Mandatory initial reads:
 1. `AGENTS.md`
 2. [[configuration]]
 3. [[context]]
-4. [[header_template]]
+4. [[yaml_header_template]]
 
 On-demand reads:
 - [[system_architecture_map]] only when architecture context is needed.

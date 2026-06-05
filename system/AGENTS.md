@@ -1,9 +1,7 @@
 ---
 type: directory_guidance
 scope: system/
-description:
-  - Architecture, instructions, templates, and project context files.
-  - Read this when consulting system-level configuration or context.
+description: Architecture, instructions, templates, and project context files.,Read this when consulting system-level configuration or context.
 connects_to:
   - AGENTS.md
 created: 2026-06-03

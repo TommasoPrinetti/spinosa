@@ -15,9 +15,9 @@ created: 2026-05-26
 updated: 2026-06-04
 ---
 
-# Header Template
+# YAML Header Template
 
-Use a small, stable header on every framework file. The goal is to let an agent identify the file, understand its role, and know which files it connects to without reading the body first.
+Use a small, stable yaml header on every framework file. The goal is to let an agent identify the file, understand its role, and know which files it connects to without reading the body first.
 
 ## Base Header
 
@@ -86,77 +86,6 @@ Rules:
 - `related_sources` lists other raw copies with shared topics or concepts.
 - `generated_by`, `generated_at`, and `processing_status` preserve provenance for generated headers.
 - Omit fields that have no value — do not write `people: []`.
-
-## Legacy Source Pointer Header
-
-Used only for legacy pointer-only records. New onboarding and source intake skip images, video, and audio instead of creating `.pointer.md` records.
-
-```yaml
----
-type: source_pointer
-role: pointer_only_source_record
-purpose: [make a non-text source findable without copying the original media]
-scope: single_source_file
-source: "raw/[relative-path]/[filename]"
-root_rel_path: "[relative-path]/[filename]"
-media_type: image | video | audio | pdf | unknown
-extension: jpg | mp4 | wav | pdf | unknown
-size_bytes: 12345
-processing_status: pointer_only_pending | processed_text_available | needs_review
-ocr_status: pending | not_applicable | complete | failed
-asr_status: pending | not_applicable | complete | failed
-transcription_status: pending | not_applicable | complete | failed
-image_analysis_status: pending | not_applicable | complete | failed
-generated_by: onboarding_cli
-generated_at: YYYY-MM-DD
-created: YYYY-MM-DD
-updated: YYYY-MM-DD
----
-```
-
-Rules:
-- `source` uses a relative path from the repo root.
-- `root_rel_path` preserves the source folder structure for grep and repair.
-- OCR, ASR, transcription, and image analysis statuses stay `pending` unless a later processing pass actually creates evidence.
-- Pointer records are retrieval metadata, not source interpretation. Do not create new media pointer records in normal onboarding.
-
-## Navigation Map Header
-
-Required for every generated map file under `maps/`.
-
-```yaml
----
-type: navigation_map
-role: [descriptive role, e.g. corpus_overview, group_map, theme_map]
-purpose: [guide future LLM retrieval into the raw corpus]
-scope: raw/
-connects_to:
-  - raw/
-  - dictionary.md
-map_quality: machine_generated | checked | human_reviewed
-description_depth: retrieval_oriented
-wikilink_policy: obsidian_wikilinks_required
-generated_by: startup_agent
-generated_at: YYYY-MM-DD
-processing_status: machine_generated | checked | human_reviewed
-created: YYYY-MM-DD
-updated: YYYY-MM-DD
----
-```
-
-Map files must use Obsidian wikilinks for internal references:
-- `[[raw/path/to/file.md|filename]]`
-- `[[maps/corpus_overview]]`
-
-Map entries use natural-language prose, not tabular format. Key passages include file paths and line references.
-
-## Wikilink Conventions
-
-In body text, use Obsidian wikilinks for all internal references. Apply these rules:
-
-- Files with unique basenames use just the basename: `[[AGENTS]]`, `[[startup]]`, `[[configuration]]`, `[[header_template]]`, `[[context]]`, `[[dictionary]]`, `[[workspace_index]]`
-- Folders keep their full vault-relative path with trailing `/`: `[[system/]]`, `[[logs/]]`, `[[agent_reports/]]`, `[[.trash/]]`, `[[raw/]]`
-- `.md` extension is implicit (Obsidian convention)
 
 **Frontmatter exception:** `connects_to:` and other YAML keys use **bare paths** (not wikilinks). This keeps the metadata machine-readable, grep-friendly, and stable for sub-agents to parse.
 

@@ -1,11 +1,13 @@
 ---
 type: dictionary
 role: shared_vocabulary
-purpose: [ensure coherent terminology across raw copy headers]
+purpose:
+  - ensure coherent terminology across raw copy headers
 description:
   - Startup-generated vocabulary for names, places, organizations, concepts, and aliases.
   - Agents use this as the canonical term source for headers, maps, and reports.
-scope: [all raw copies in raw/]
+scope:
+  - all raw copies in raw/
 connects_to:
   - raw/
   - workspace_index.md
@@ -59,3 +61,9 @@ Startup builds this file from the active raw corpus.
 | Artifact | Type | Notes |
 |---|---|---|
 | [filled by startup] | | |
+
+## People mentioned
+
+| Artifact            | Type | Notes |     |
+| ------------------- | ---- | ----- | --- |
+| [filled by startup] |      |       |     |

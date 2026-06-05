@@ -26,7 +26,7 @@ Synthesis reports, evidence packets, verification notes, checkpoints, and mainte
 
 ## Process File Lifecycle
 
-Process files are intermediate artifacts. Only the final verified report stays.
+Process files are intermediate artifacts. Only the final **unique** verified report stays.
 
 | Process File | Created By | Purpose | Lifecycle |
 |---|---|---|---|
@@ -34,7 +34,7 @@ Process files are intermediate artifacts. Only the final verified report stays.
 | `evidence_appendix.md` | `pilosa-searcher` | Overflow evidence (when >300 lines) | Created during search → Read by Writer → Moved to `.trash/` after verification |
 | `extraction_batch_*.md` | `pilosa-mapper` | Extraction packets per batch | Created during indexing → Read by Writer → Moved to `.trash/` after indexing |
 
-**Rule: Only the final verified report remains in `agent_reports/`.**
+**Rule: ONLY ONE final verified report remains in `agent_reports/`** after all the processing.
 
 ## Operations
 
@@ -45,22 +45,11 @@ Process files are intermediate artifacts. Only the final verified report stays.
 - Partial results must be labeled as such.
 - `pilosa-janitor` evaluates staleness by comparing `updated:` dates against current date — no tendency detection or structured needs analysis.
 
-## Report types
-
-| Type | When | Who |
-|---|---|---|
-| `synthesis` | Full answer to a user prompt | `pilosa-writer` |
-| `evidence_packet` | Raw evidence from `pilosa-searcher` handoff | `pilosa-searcher` -> `pilosa-writer` |
-| `evidence_appendix` | Overflow evidence when packet exceeds ~300 lines | `pilosa-searcher` |
-| `extraction_batch` | Extraction packets from mapper during indexing | `pilosa-mapper` |
-| `checkpoint` | Partial progress during long routes | `pilosa-writer` |
-| `verification` | Standalone claim/path/index verification when no report exists | `pilosa-verifier` |
-| `maintenance` | Index repair, stale audit, cleanup proposal | `pilosa-verifier` / `pilosa-janitor` |
-
 ## Conventions
 
-- Filenames: descriptive-snake-case.md
-- Report bodies are Markdown. Use Obsidian wikilinks for workspace references.
+- Filenames: nn_descriptive-snake-case.md
+- Report bodies are flavoured Markdown, well designed and tidy.
+- Use Obsidian wikilinks for in-workspace references.
 - If a report cites a claim that `pilosa-verifier` could not verify, mark it explicitly.
 
 ## See also
