@@ -277,7 +277,7 @@ fi
 echo ""
 echo "Test 10: pilosa dashboard (global)"
 DASH_OUTPUT="$(printf '5\n' | perl -e 'alarm(5); exec "'"$REPO_ROOT"'/.bin/pilosa"' 2>&1 || true)"
-if echo "$DASH_OUTPUT" | grep -q "Pilosa Research Hub"; then
+if echo "$DASH_OUTPUT" | grep -q "Pilosa.*v.*gum:"; then
   pass "global dashboard renders"
 else
   fail "global dashboard did not render"

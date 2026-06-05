@@ -26,7 +26,7 @@ PILOSA_HOME="${PILOSA_HOME:-$HOME/.pilosa}"
 PILOSA_REPO="${PILOSA_REPO:-TommasoPrinetti/pilosa}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TODAY="$(date +%Y-%m-%d)"
-USE_GUM="${USE_GUM:-0}"
+USE_GUM="${USE_GUM:-1}"
 
 # Source file classes used by integrated onboarding.
 MARKDOWN_EXTENSIONS="txt|rtf|textile|wiki|mediawiki|dokuwiki|pmwiki|outliner|workflowy|dynalist"
@@ -1274,6 +1274,8 @@ cmd_onboard() {
       --help|-h)
         echo "Usage: pilosa onboard [workspace-directory] [options]" >&2
         echo "  --source-dir PATH  Pre-select source folder (skip prompt)" >&2
+        echo "  --gum              Use interactive Gum prompts (default, if installed)" >&2
+        echo "  --no-gum           Use plain shell prompts" >&2
         return 0
         ;;
       -*) die "Unknown option: $1" ;;
@@ -1329,8 +1331,8 @@ cmd_new() {
         printf '  %s\n' "Usage: pilosa new [directory] [options]"
         printf '    %s\n' "  --numbered   Force numbered menus instead of arrow-key menus"
         printf '    %s\n' "  --no-color   Disable colored output"
-        printf '    %s\n' "  --gum        Use interactive Gum prompts (if installed)"
-        printf '    %s\n' "  --no-gum     Use plain shell prompts (default)"
+        printf '    %s\n' "  --gum        Use interactive Gum prompts (default, if installed)"
+        printf '    %s\n' "  --no-gum     Use plain shell prompts"
         return 0
         ;;
       *)
@@ -1344,19 +1346,19 @@ cmd_new() {
   if [[ -n "${new_args[0]:-}" ]]; then
     workspace_path="$(expand_home "${new_args[0]}")"
   else
-    # Try Gum file picker first
-    if workspace_path="$(gum_file "Where should the workspace live?" 2>/dev/null)"; then
+    note "This will be your Pilosa research workspace."
+    note "Nothing outside this folder is touched."
+    if gum_available; then
+      workspace_path="$(gum_input "Workspace path" "~/pilosa-workspace")"
       workspace_path="$(normalize_path_input "$workspace_path")"
-    else
-      note "This will be your Pilosa research workspace."
-      note "Nothing outside this folder is touched."
-      note "Use an absolute path (drag the folder onto the terminal to paste its path)."
-      workspace_path=""
+      workspace_path="$(expand_home "$workspace_path")"
+    fi
+    if [[ -z "$workspace_path" ]]; then
       while [[ -z "$workspace_path" ]]; do
-        workspace_path="$(ask "Workspace location" "" "e.g. ~/Projects/my-research")"
+        workspace_path="$(ask "Workspace path (absolute)" "" "e.g. ~/Projects/my-research")"
         workspace_path="$(normalize_path_input "$workspace_path")"
         workspace_path="$(expand_home "$workspace_path")"
-        [[ -z "$workspace_path" ]] && printf '  %s\n' "${R}Workspace location is required.${RESET}" >&2
+        [[ -z "$workspace_path" ]] && printf '  %s\n' "${R}Workspace path is required.${RESET}" >&2
       done
     fi
   fi
@@ -1505,8 +1507,8 @@ cmd_update() {
         printf '    %s\n' "  --dry-run         Show what would change without writing"
         printf '    %s\n' "  --yes             Apply the shown plan without confirmation prompts"
         printf '    %s\n' "  --no-color        Disable colored output"
-        printf '    %s\n' "  --gum             Use interactive Gum prompts (if installed)"
-        printf '    %s\n' "  --no-gum          Use plain shell confirmations (default)"
+        printf '    %s\n' "  --gum             Use interactive Gum prompts (default, if installed)"
+        printf '    %s\n' "  --no-gum          Use plain shell confirmations"
         return 0
         ;;
       --*)
@@ -2225,8 +2227,7 @@ cmd_dashboard_global() {
   done < <(discover_workspaces)
 
   printf '\033[2J\033[H'
-  header "Pilosa Research Hub"
-
+  
   local fw_version
   fw_version="$(framework_version "$FRAMEWORK_ROOT")"
   local gum_status="✗" pdf2md_status="✗"
@@ -2237,11 +2238,12 @@ cmd_dashboard_global() {
   command -v codex >/dev/null 2>&1 && cli_count=$((cli_count + 1))
   command -v opencode >/dev/null 2>&1 && cli_count=$((cli_count + 1))
 
-  printf '  %sFramework:%s %s  %sGum:%s %s  %spdf2md:%s %s  %sCLIs:%s %d/3\n\n' \
-    "${BOLD}" "${RESET}" "$fw_version" \
-    "${BOLD}" "${RESET}" "$gum_status" \
-    "${BOLD}" "${RESET}" "$pdf2md_status" \
-    "${BOLD}" "${RESET}" "$cli_count"
+  printf '\n  %sPilosa%s  %s·%s  v%s  %s·%s  gum:%s  %s·%s  pdf2md:%s  %s·%s  clis:%d/3\n\n' \
+    "${BOLD}" "${RESET}" \
+    "${DIM}" "${RESET}" "$fw_version" \
+    "${DIM}" "${RESET}" "$gum_status" \
+    "${DIM}" "${RESET}" "$pdf2md_status" \
+    "${DIM}" "${RESET}" "$cli_count"
 
   local d_options
   d_options=()
