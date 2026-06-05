@@ -417,6 +417,26 @@ SHIM_EOF
   echo ""
   divider
   printf '\n  %s%sPilosa installed successfully!%s\n\n' "${BOLD}" "${G}" "${RESET}"
+
+  # ── prominent next-step banner ────────────────────────────────────────────
+  printf '  %s%s%s\n' "${BOLD}" "The pilosa command is now available." "${RESET}"
+  echo ""
+
+  case ":${PATH}:" in
+    *":${PILOSA_BIN_DIR}:")
+      printf '  %sTry it now:%s\n' "${BOLD}" "${RESET}"
+      printf '    %s%s%s\n\n' "${C}" "$ pilosa" "${RESET}"
+      ;;
+    *)
+      printf '  %s%sPILOSA_BIN_DIR is not on your PATH%s\n' "${Y}" "${BOLD}" "${RESET}"
+      echo ""
+      printf '  %sAdd this to your shell profile, then reload:%s\n' "${BOLD}" "${RESET}"
+      printf '    %sexport PATH="%s:\$PATH"%s\n\n' "${C}" "${PILOSA_BIN_DIR}" "${RESET}"
+      printf '  %sThen run:%s\n' "${BOLD}" "${RESET}"
+      printf '    %s%s%s\n\n' "${C}" "$ pilosa" "${RESET}"
+      ;;
+  esac
+
   info "Run ${BOLD}pilosa new${RESET} to create a research workspace"
   info "Run ${BOLD}pilosa help${RESET} to see available commands"
   echo ""
