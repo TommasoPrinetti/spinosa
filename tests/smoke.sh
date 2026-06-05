@@ -53,6 +53,12 @@ for cmd in new onboard update upgrade check sync uninstall; do
     fail "help missing 'pilosa $cmd'"
   fi
 done
+NEW_HELP_OUTPUT="$($REPO_ROOT/.bin/pilosa new --help 2>/dev/null || true)"
+if echo "$NEW_HELP_OUTPUT" | grep -q -- "--gum" && ! echo "$NEW_HELP_OUTPUT" | grep -qi "default, if installed"; then
+  pass "new help documents Gum as opt-in"
+else
+  fail "new help still suggests Gum is default"
+fi
 
 # ── Test 3: pilosa check on minimal workspace ───────────────────────────────
 echo ""
@@ -209,7 +215,7 @@ FAKE_BIN="$TMPDIR/fake-bin"
 mkdir -p "$FAKE_BIN"
 cat > "$FAKE_BIN/pdf2md" << 'EOF'
 #!/bin/sh
-echo "fake pdf2md"
+printf '# Converted PDF\n\nsource: %s\n' "$1" > "$2"
 EOF
 chmod +x "$FAKE_BIN/pdf2md"
 
@@ -220,9 +226,46 @@ else
   fail "pilosa failed to load with pdf2md on PATH"
 fi
 
-# ── Test 7: install.sh version pinning ──────────────────────────────────────
+# ── Test 7: pilosa new uses plain prompts by default ────────────────────────
 echo ""
-echo "Test 7: install.sh version pinning"
+echo "Test 7: pilosa new plain prompt default"
+FAKE_GUM_MARKER="$TMPDIR/fake-gum-used"
+FAKE_PILOSA_HOME="$TMPDIR/fake-pilosa-home"
+mkdir -p "$FAKE_PILOSA_HOME/bin"
+cat > "$FAKE_BIN/gum" << EOF
+#!/bin/sh
+if [ "\$1" = "--version" ]; then
+  echo "fake gum"
+  exit 0
+fi
+touch "$FAKE_GUM_MARKER"
+exit 9
+EOF
+chmod +x "$FAKE_BIN/gum"
+cp "$FAKE_BIN/pdf2md" "$FAKE_PILOSA_HOME/bin/pdf2md"
+cp "$FAKE_BIN/gum" "$FAKE_PILOSA_HOME/bin/gum"
+
+NEW_CORPUS="$TMPDIR/new-corpus"
+mkdir -p "$NEW_CORPUS"
+cat > "$NEW_CORPUS/note.txt" << 'EOF'
+temporary source note
+EOF
+cat > "$NEW_CORPUS/paper.pdf" << 'EOF'
+fake pdf bytes
+EOF
+
+NEW_OUTPUT="$(printf '\ny\n3\n1\n' | PILOSA_HOME="$FAKE_PILOSA_HOME" PATH="$FAKE_BIN:$PATH" "$REPO_ROOT/.bin/pilosa" new "$NEW_CORPUS" --numbered --no-color 2>&1 || true)"
+NEW_WS="$TMPDIR/new-corpus-pilosa"
+if [[ -f "$NEW_WS/.pilosa/workspace" ]] && [[ -f "$NEW_WS/raw/note__txt.md" ]] && [[ -f "$NEW_WS/raw/paper.md" ]] && [[ ! -f "$NEW_WS/raw/paper.pdf" ]] && [[ ! -f "$FAKE_GUM_MARKER" ]]; then
+  pass "pilosa new completed without implicit Gum and translated PDFs to Markdown only"
+else
+  fail "pilosa new plain default failed"
+  echo "    Output: $NEW_OUTPUT" | head -5
+fi
+
+# ── Test 8: install.sh version pinning ──────────────────────────────────────
+echo ""
+echo "Test 8: install.sh version pinning"
 HELP_OUTPUT="$(bash "$REPO_ROOT/install.sh" --help 2>/dev/null || true)"
 if echo "$HELP_OUTPUT" | grep -q "default: 0.2.1"; then
   pass "install.sh defaults to pinned version 0.2.1"
@@ -230,9 +273,9 @@ else
   fail "install.sh does not default to pinned version"
 fi
 
-# ── Test 8: install.sh --upgrade and --reinstall flags ──────────────────────
+# ── Test 9: install.sh --upgrade and --reinstall flags ──────────────────────
 echo ""
-echo "Test 8: install.sh --upgrade and --reinstall flags"
+echo "Test 9: install.sh --upgrade and --reinstall flags"
 HELP_OUTPUT="$(bash "$REPO_ROOT/install.sh" --help 2>/dev/null || true)"
 if echo "$HELP_OUTPUT" | grep -q "\-\-upgrade"; then
   pass "install.sh has --upgrade flag"
@@ -245,9 +288,9 @@ else
   fail "install.sh missing --reinstall flag"
 fi
 
-# ── Test 9: install.sh --min-days on old release ──────────────────────────
+# ── Test 10: install.sh --min-days on old release ─────────────────────────
 echo ""
-echo "Test 9: install.sh --min-days on old release"
+echo "Test 10: install.sh --min-days on old release"
 # v0.1.0 should be older than 1 day
 MIN_DAYS_OUTPUT="$(bash "$REPO_ROOT/install.sh" --version 0.1.0 --min-days 1 --dry-run 2>/dev/null || true)"
 if echo "$MIN_DAYS_OUTPUT" | grep -q "Dry run"; then
@@ -257,9 +300,9 @@ else
   echo "    Output: $MIN_DAYS_OUTPUT" | head -3
 fi
 
-# ── Test 10: install.sh --verify-only ────────────────────────────────────────
+# ── Test 11: install.sh --verify-only ───────────────────────────────────────
 echo ""
-echo "Test 10: install.sh --verify-only"
+echo "Test 11: install.sh --verify-only"
 FAKE_INSTALL="$TMPDIR/fake-verify"
 mkdir -p "$FAKE_INSTALL/.pilosa/versions/0.1.0/pilosa-framework-0.1.0/metadata"
 mkdir -p "$FAKE_INSTALL/.pilosa/versions/0.1.0/pilosa-framework-0.1.0/.bin/lib/vendor"
@@ -288,9 +331,9 @@ else
   echo "    Output: $VERIFY_OUTPUT" | head -3
 fi
 
-# ── Test 11: pilosa upgrade --help ────────────────────────────────────────
+# ── Test 12: pilosa upgrade --help ─────────────────────────────────────────
 echo ""
-echo "Test 11: pilosa upgrade --help"
+echo "Test 12: pilosa upgrade --help"
 UPGRADE_HELP="$($REPO_ROOT/.bin/pilosa upgrade --help 2>/dev/null || true)"
 if echo "$UPGRADE_HELP" | grep -q "pilosa upgrade"; then
   pass "upgrade command has help"

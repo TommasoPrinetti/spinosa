@@ -26,7 +26,7 @@ PILOSA_HOME="${PILOSA_HOME:-$HOME/.pilosa}"
 PILOSA_REPO="${PILOSA_REPO:-TommasoPrinetti/pilosa}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TODAY="$(date +%Y-%m-%d)"
-USE_GUM="${USE_GUM:-1}"
+USE_GUM="${USE_GUM:-0}"
 
 # Source file classes used by integrated onboarding.
 MARKDOWN_EXTENSIONS="txt|rtf|textile|wiki|mediawiki|dokuwiki|pmwiki|outliner|workflowy|dynalist"
@@ -128,6 +128,60 @@ gum_confirm() {
   "$bin" confirm "$prompt"
 }
 
+prompt_input() {
+  local prompt="$1" default="${2:-}" hint="${3:-}" value=""
+  if gum_available; then
+    value="$(gum_input "$prompt" "$default" 2>/dev/null)" || value=""
+    reset_terminal
+  fi
+  if [[ -z "$value" ]]; then
+    value="$(ask "$prompt" "$default" "$hint")"
+  fi
+  echo "$value"
+}
+
+prompt_directory() {
+  local prompt="$1" default="${2:-}" hint="${3:-}" value=""
+  if gum_available; then
+    value="$(gum_file "$prompt" 2>/dev/null)" || value=""
+    reset_terminal
+  fi
+  if [[ -z "$value" ]]; then
+    value="$(ask "$prompt" "$default" "$hint")"
+  fi
+  echo "$value"
+}
+
+prompt_choose() {
+  local prompt="$1"
+  shift
+  if gum_available; then
+    local choice=""
+    if choice="$(gum_choose "$prompt" "$@" 2>/dev/null)"; then
+      reset_terminal
+      echo "$choice"
+      return 0
+    fi
+    reset_terminal
+  fi
+  arrow_select "$prompt" "$@"
+}
+
+prompt_confirm() {
+  local prompt="$1" default="${2:-y}"
+  if gum_available; then
+    local status=0
+    if gum_confirm "$prompt" 2>/dev/null; then
+      status=0
+    else
+      status=$?
+    fi
+    reset_terminal
+    return "$status"
+  fi
+  confirm "$prompt" "$default"
+}
+
 ask() {
   local prompt="$1" default="${2:-}" hint="${3:-}"
   local fb=""
@@ -205,20 +259,32 @@ arrow_select() {
   local old_stty
   old_stty=$(stty -g 2>/dev/null) || { select_menu "$prompt" "${options[@]}"; return; }
 
+  render_arrow_options() {
+    local i
+    for i in "${!options[@]}"; do
+      if (( i == current )); then
+        printf '\r\033[2K  %s %s %s\n' "${C}" "▶" "${BOLD}${options[$i]}${RESET}" >&2
+      else
+        printf '\r\033[2K    %s\n' "${options[$i]}" >&2
+      fi
+    done
+  }
+
+  clear_arrow_options() {
+    local i
+    printf '\033[%dF' "$count" >&2
+    for i in "${!options[@]}"; do
+      printf '\r\033[2K\n' >&2
+    done
+  }
+
   printf '\n  %s\n' "${BOLD}${prompt}${RESET}" >&2
   printf '  %s\n' "${DIM}↑/↓ to move, Enter to confirm, q to cancel${RESET}" >&2
-  for i in "${!options[@]}"; do
-    if (( i == current )); then
-      printf '  %s %s %s\n' "${C}" "▶" "${BOLD}${options[$i]}${RESET}" >&2
-    else
-      printf '    %s\n' "${options[$i]}" >&2
-    fi
-  done
+  render_arrow_options
 
   if ! stty raw -echo 2>/dev/null; then
+    clear_arrow_options
     printf '\n  %s arrow-key mode failed, falling back to numbered menu\n' "${Y}⚠${RESET}" >&2
-    printf '\033[%dF' "$count" >&2
-    for _ in "${!options[@]}"; do printf '\r\033[2K\n' >&2; done
     select_menu "$prompt" "${options[@]}"
     return
   fi
@@ -257,16 +323,9 @@ arrow_select() {
           *) continue ;;
         esac
         printf '\033[%dF' "$count" >&2
-        for _ in "${!options[@]}"; do printf '\r\033[2K\n' >&2; done
-        for i in "${!options[@]}"; do
-          if (( i == current )); then
-            printf '  %s %s %s\n' "${C}" "▶" "${BOLD}${options[$i]}${RESET}" >&2
-          else
-            printf '    %s\n' "${options[$i]}" >&2
-          fi
-        done
+        render_arrow_options
         ;;
-      '')
+      ''|$'\r'|$'\n')
         cleanup_arrow
         echo "${options[$current]}"
         return
@@ -666,6 +725,12 @@ format_bytes() {
   fi
 }
 
+spinner_frame() {
+  local index="$1"
+  local frames=("◐" "◓" "◑" "◒")
+  printf '%s' "${frames[$((index % ${#frames[@]}))]}"
+}
+
 classify_source_file() {
   local path="$1" ext
   should_skip_source_file "$path" && { echo "ignored"; return; }
@@ -689,7 +754,7 @@ classify_source_file() {
 }
 
 scan_source() {
-  local source_path="$1" f class size
+  local source_path="$1" f class size spin=0 frame
   SCAN_TOTAL_COUNT=0
   SCAN_MARKDOWN_COUNT=0
   SCAN_NATIVE_COUNT=0
@@ -715,7 +780,9 @@ scan_source() {
     if [[ "$class" != "ignored" ]]; then
       SCAN_TOTAL_COUNT=$((SCAN_TOTAL_COUNT + 1))
       size="$(file_size_bytes "$f")"
-      printf '\r\033[2K  %sscanning%s %s' "${DIM}" "${RESET}" "$(truncate_display_path "$f" 54)" >&2
+      frame="$(spinner_frame "$spin")"
+      printf '\r\033[2K  %s%s%s %sscanning%s %s' "${C}" "$frame" "${RESET}" "${DIM}" "${RESET}" "$(truncate_display_path "$f" 54)" >&2
+      spin=$((spin + 1))
     else
       size=0
     fi
@@ -739,7 +806,7 @@ print_scan_summary() {
   [[ "$SCAN_MARKDOWN_COUNT" -gt 0 ]] && printf '  %s├─%s %s to rename to .md (%s)\n' "${DIM}" "${RESET}" "$(plural_count "$SCAN_MARKDOWN_COUNT" "text-based file")" "$(format_bytes "$SCAN_MARKDOWN_BYTES")"
   [[ "$SCAN_NATIVE_COUNT" -gt 0 ]] && printf '  %s├─%s %s to copy unchanged (%s)\n' "${DIM}" "${RESET}" "$(plural_count "$SCAN_NATIVE_COUNT" "native-readable file")" "$(format_bytes "$SCAN_NATIVE_BYTES")"
   if [[ "$SCAN_PDF_CONVERTIBLE_COUNT" -gt 0 ]]; then
-    printf '  %s├─%s %s to convert to Markdown (%s)\n' "${DIM}" "${RESET}" "$(plural_count "$SCAN_PDF_CONVERTIBLE_COUNT" "PDF")" "$(format_bytes "$SCAN_PDF_CONVERTIBLE_BYTES")"
+    printf '  %s├─%s %s%s%s to translate into Markdown (%s)\n' "${DIM}" "${RESET}" "${M}" "$(plural_count "$SCAN_PDF_CONVERTIBLE_COUNT" "PDF")" "${RESET}" "$(format_bytes "$SCAN_PDF_CONVERTIBLE_BYTES")"
   fi
   [[ "$SCAN_BINARY_COPYABLE_COUNT" -gt 0 ]] && printf '  %s├─%s %s to copy as-is (%s)\n' "${DIM}" "${RESET}" "$(plural_count "$SCAN_BINARY_COPYABLE_COUNT" "PDF")" "$(format_bytes "$SCAN_BINARY_COPYABLE_BYTES")"
   [[ "$SCAN_IMAGE_COUNT" -gt 0 ]] && printf '  %s├─%s %s skipped (%s)\n' "${DIM}" "${RESET}" "$(plural_count "$SCAN_IMAGE_COUNT" "image")" "$(format_bytes "$SCAN_IMAGE_BYTES")"
@@ -758,7 +825,18 @@ render_copy_progress() {
     if (( i < filled )); then bar+="█"; else bar+="░"; fi
   done
   current_file="$(truncate_display_path "$current_file" 46)"
-  printf '\r\033[2K  %s[%s]%s %d/%d %s (%d copied, %d skipped)' "${C}" "$bar" "${RESET}" "$processed" "$total" "$current_file" "$copied" "$skipped" >&2
+  printf '\r\033[2K  %s%s%s %s[%s]%s %d/%d %s (%d copied, %d skipped)' "${C}" "$(spinner_frame "$processed")" "${RESET}" "${C}" "$bar" "${RESET}" "$processed" "$total" "$current_file" "$copied" "$skipped" >&2
+}
+
+render_pdf_progress() {
+  local processed="$1" total="$2" converted="$3" skipped="$4" current_file="${5:-}"
+  local width=28 filled=0 bar="" i
+  [[ "$total" -gt 0 ]] && filled=$((processed * width / total))
+  for ((i = 0; i < width; i++)); do
+    if (( i < filled )); then bar+="◆"; else bar+="◇"; fi
+  done
+  current_file="$(truncate_display_path "$current_file" 44)"
+  printf '\r\033[2K  %s%s PDF → MD%s %s[%s]%s %d/%d %s (%d converted, %d skipped)' "${M}" "$(spinner_frame "$processed")" "${RESET}" "${M}" "$bar" "${RESET}" "$processed" "$total" "$current_file" "$converted" "$skipped" >&2
 }
 
 copy_source() {
@@ -806,9 +884,10 @@ copy_source() {
     render_copy_progress "$processed" "$total_files" "$copied" "$skipped" "$rel_path"
   done < <(find "$source_path" -type f -print0 2>/dev/null)
 
-  # PDF conversion pass — convert PDFs to Markdown when pdf2md is available
+  # PDF conversion pass — when pdf2md is available, raw/ receives Markdown only.
   if [[ "$pdf_converter_found" -eq 1 && "$SCAN_PDF_CONVERTIBLE_COUNT" -gt 0 ]]; then
     local pdf_files
+    local pdf_processed=0 pdf_converted=0 pdf_skipped=0
     pdf_files=()
     while IFS= read -r -d '' src_file; do
       should_skip_source_file "$src_file" && continue
@@ -817,30 +896,38 @@ copy_source() {
     done < <(find "$source_path" -type f -print0 2>/dev/null)
 
     if [[ ${#pdf_files[@]} -gt 0 ]]; then
-      info "Converting ${#pdf_files[@]} PDFs to Markdown..."
+      printf '\n'
+      info "${M}PDF → MD${RESET} Translating ${#pdf_files[@]} PDFs into Markdown..."
+      render_pdf_progress 0 "${#pdf_files[@]}" "$pdf_converted" "$pdf_skipped" ""
       for src_file in "${pdf_files[@]}"; do
         rel_path="${src_file#"$source_path"/}"
-        md_name="$(basename "${rel_path%.pdf}")"
+        md_name="$(basename "$rel_path")"
+        md_name="${md_name%.*}"
         md_dest="$dest_dir/$(dirname "$rel_path")/${md_name}.md"
         dest_parent="$(dirname "$md_dest")"
         mkdir -p "$dest_parent"
         if [[ -f "$md_dest" ]]; then
           skipped=$((skipped + 1))
+          pdf_skipped=$((pdf_skipped + 1))
         else
           local pdf2md_cmd
           pdf2md_cmd="$(pdf2md_bin)"
           if [[ -n "$pdf2md_cmd" ]] && "$pdf2md_cmd" "$src_file" "$md_dest" 2>/dev/null; then
             converted=$((converted + 1))
+            pdf_converted=$((pdf_converted + 1))
             copied=$((copied + 1))
           else
-            warn "Failed to convert: $(basename "$src_file") — copying as-is"
-            cp "$src_file" "$dest_dir/$rel_path"
-            copied=$((copied + 1))
+            printf '\n' >&2
+            warn "Failed to convert PDF, leaving original out of raw/: $(basename "$src_file")"
+            skipped=$((skipped + 1))
+            pdf_skipped=$((pdf_skipped + 1))
           fi
         fi
         processed=$((processed + 1))
-        render_copy_progress "$processed" "$total_files" "$copied" "$skipped" "$rel_path"
+        pdf_processed=$((pdf_processed + 1))
+        render_pdf_progress "$pdf_processed" "${#pdf_files[@]}" "$pdf_converted" "$pdf_skipped" "$rel_path"
       done
+      printf '\n'
     fi
   fi
 
@@ -870,21 +957,17 @@ copy_source() {
 
 choose_preferred_cli() {
   local options=("Claude Code" "Claude Code Desktop" "Codex" "Codex App" "OpenCode" "OpenCode Desktop" "Kilo" "Other")
-  gum_choose "Preferred LLM CLI" "${options[@]}" 2>/dev/null || arrow_select "Preferred LLM CLI" "${options[@]}"
+  prompt_choose "Preferred LLM CLI" "${options[@]}"
 }
 
 choose_handoff_action() {
   local options=("Copy launch command" "Run launch command now")
-  gum_choose "Handoff action" "${options[@]}" 2>/dev/null || arrow_select "Handoff action" "${options[@]}"
+  prompt_choose "Handoff action" "${options[@]}"
 }
 
 confirm_action() {
   local prompt="$1" default="${2:-y}"
-  if gum_available; then
-    gum_confirm "$prompt" 2>/dev/null
-    return $?
-  fi
-  confirm "$prompt" "$default"
+  prompt_confirm "$prompt" "$default"
 }
 
 print_path_list() {
@@ -1084,21 +1167,12 @@ run_integrated_onboarding() {
     note "These files will be COPIED into the workspace's raw/ directory."
     note "Nothing in the original folder is moved, renamed, or edited."
 
-    if gum_available; then
-      if source_path="$(gum_file "Select source folder" 2>/dev/null)"; then
-        source_path="$(normalize_path_input "$source_path")"
-        [[ -d "$source_path" ]] || source_path=""
-      fi
-    fi
-
-    if [[ -z "$source_path" ]]; then
-      while [[ -z "$source_path" ]]; do
-        source_path="$(ask "Source folder (absolute path)" "" "e.g. /home/user/Documents/my-sources")"
-        source_path="$(normalize_path_input "$source_path")"
-        source_path="$(expand_home "$source_path")"
-        [[ -z "$source_path" ]] && printf '  %s\n' "${R}Source folder is required.${RESET}" >&2
-      done
-    fi
+    while [[ -z "$source_path" ]]; do
+      source_path="$(prompt_directory "Source folder (absolute path)" "" "e.g. /home/user/Documents/my-sources")"
+      source_path="$(normalize_path_input "$source_path")"
+      source_path="$(expand_home "$source_path")"
+      [[ -z "$source_path" ]] && printf '  %s\n' "${R}Source folder is required.${RESET}" >&2
+    done
 
     [[ -d "$source_path" ]] || die "Source folder does not exist: $source_path"
     ok "Source: ${BOLD}${source_path}${RESET}"
@@ -1109,7 +1183,7 @@ run_integrated_onboarding() {
   print_scan_summary
 
   if pdf_converter_available; then
-    [[ "$SCAN_PDF_CONVERTIBLE_COUNT" -gt 0 ]] && ok "pdf2md found — $(plural_count "$SCAN_PDF_CONVERTIBLE_COUNT" "PDF") will be converted to Markdown"
+    [[ "$SCAN_PDF_CONVERTIBLE_COUNT" -gt 0 ]] && ok "${M}PDF → MD${RESET} pdf2md found — $(plural_count "$SCAN_PDF_CONVERTIBLE_COUNT" "PDF") will be translated into Markdown"
   else
     [[ "$SCAN_BINARY_COPYABLE_COUNT" -gt 0 ]] && note "PDFs will be copied as-is. Re-run the installer to add pdf2md for PDF-to-Markdown conversion."
   fi
@@ -1291,7 +1365,7 @@ cmd_onboard() {
       --help|-h)
         echo "Usage: pilosa onboard [workspace-directory] [options]" >&2
         echo "  --source-dir PATH  Pre-select source folder (skip prompt)" >&2
-        echo "  --gum              Use interactive Gum prompts (default, if installed)" >&2
+        echo "  --gum              Use interactive Gum prompts" >&2
         echo "  --no-gum           Use plain shell prompts" >&2
         return 0
         ;;
@@ -1319,7 +1393,7 @@ cmd_onboard() {
   if [[ -z "$project_name" ]]; then
     local default_name
     default_name="$(basename "$workspace_path")"
-    project_name="$(gum_input "Project name" "$default_name")"
+    project_name="$(prompt_input "Project name" "$default_name")"
     sed -i.bak "s/project_name:.*/project_name: ${project_name}/" "$workspace_path/.pilosa/workspace" 2>/dev/null || \
     sed -i '' "s/project_name:.*/project_name: ${project_name}/" "$workspace_path/.pilosa/workspace" 2>/dev/null || true
     rm -f "$workspace_path/.pilosa/workspace.bak"
@@ -1361,7 +1435,7 @@ cmd_new() {
         printf '  %s\n' "Usage: pilosa new [corpus-directory] [options]"
         printf '    %s\n' "  --numbered   Force numbered menus instead of arrow-key menus"
         printf '    %s\n' "  --no-color   Disable colored output"
-        printf '    %s\n' "  --gum        Use interactive Gum prompts (default, if installed)"
+        printf '    %s\n' "  --gum        Use interactive Gum prompts"
         printf '    %s\n' "  --no-gum     Use plain shell prompts"
         return 0
         ;;
@@ -1379,20 +1453,12 @@ cmd_new() {
     note "Where is your research corpus?"
     note "This is the folder containing your source documents, PDFs, notes, etc."
     note "A sibling workspace folder will be created next to it."
-    if gum_available; then
-      corpus_path="$(gum_input "Corpus folder" "")"
-      reset_terminal
+    while [[ -z "$corpus_path" ]]; do
+      corpus_path="$(prompt_input "Corpus folder" "" "e.g. ~/Documents/my-research")"
       corpus_path="$(normalize_path_input "$corpus_path")"
       corpus_path="$(expand_home "$corpus_path")"
-    fi
-    if [[ -z "$corpus_path" ]]; then
-      while [[ -z "$corpus_path" ]]; do
-        corpus_path="$(ask "Corpus folder" "" "e.g. ~/Documents/my-research")"
-        corpus_path="$(normalize_path_input "$corpus_path")"
-        corpus_path="$(expand_home "$corpus_path")"
-        [[ -z "$corpus_path" ]] && printf '  %s\n' "${R}Corpus folder is required.${RESET}" >&2
-      done
-    fi
+      [[ -z "$corpus_path" ]] && printf '  %s\n' "${R}Corpus folder is required.${RESET}" >&2
+    done
   fi
 
   # Validate corpus
@@ -1420,16 +1486,10 @@ cmd_new() {
   local default_name
   default_name="$corpus_name"
 
-  if gum_available; then
-    project_name="$(gum_input "Project name" "$default_name")"
-    reset_terminal
-  fi
-  if [[ -z "$project_name" ]]; then
-    while [[ -z "$project_name" ]]; do
-      project_name="$(ask "Project name" "$default_name")"
-      [[ -z "$project_name" ]] && printf '  %s\n' "${R}Project name is required.${RESET}" >&2
-    done
-  fi
+  while [[ -z "$project_name" ]]; do
+    project_name="$(prompt_input "Project name" "$default_name")"
+    [[ -z "$project_name" ]] && printf '  %s\n' "${R}Project name is required.${RESET}" >&2
+  done
   project_name="${project_name:-$default_name}"
   ok "Project:   ${BOLD}${project_name}${RESET}"
 
@@ -1538,7 +1598,7 @@ cmd_update() {
         printf '    %s\n' "  --dry-run         Show what would change without writing"
         printf '    %s\n' "  --yes             Apply the shown plan without confirmation prompts"
         printf '    %s\n' "  --no-color        Disable colored output"
-        printf '    %s\n' "  --gum             Use interactive Gum prompts (default, if installed)"
+        printf '    %s\n' "  --gum             Use interactive Gum prompts"
         printf '    %s\n' "  --no-gum          Use plain shell confirmations"
         return 0
         ;;

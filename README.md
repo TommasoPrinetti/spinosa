@@ -35,7 +35,7 @@ git push -u origin my-project-name
 
 ### 3. Create and onboard a workspace
 
-The CLI creates a workspace, collects your project name and source location, scans the corpus, asks for consent before writing raw records, then asks which LLM CLI should receive the startup handoff. It copies markdown-convertible files into `raw/` with `.md` names, copies native-readable files unchanged, converts PDFs to Markdown when `pdf2md` is installed (otherwise copies as-is), and skips images, video, audio, and `AGENTS.md` control files. Startup then creates detailed Obsidian-wikilink maps in `maps/`. Optional context such as project description and artifact URLs can be inferred or added later.
+The CLI creates a workspace, collects your project name and source location, scans the corpus, asks for consent before writing raw records, then asks which LLM CLI should receive the startup handoff. It copies markdown-convertible files into `raw/` with `.md` names, copies native-readable files unchanged, translates PDFs to Markdown when `pdf2md` is installed (otherwise copies PDFs as-is), and skips images, video, audio, and `AGENTS.md` control files. Startup then creates detailed Obsidian-wikilink maps in `maps/`. Optional context such as project description and artifact URLs can be inferred or added later.
 
 ```bash
 pilosa new /path/to/my-research
@@ -45,15 +45,16 @@ What happens:
 - Flow: corpus root → auto-generated sibling workspace → project name → scan summary → consent → raw record writing → CLI handoff.
 - Scan summary shows counts for text files, images, videos, audio files, PDFs, unknown files, ignored files, and byte totals by major class where available.
 - Non-text media stays at the source location; images, video, audio, and `AGENTS.md` control files are skipped during onboarding.
-- PDFs are converted to Markdown when `pdf2md` is installed; otherwise copied as-is.
+- PDFs are translated to Markdown when `pdf2md` is installed; the original PDF is not duplicated into `raw/` in that path. Without `pdf2md`, PDFs are copied as-is.
 - Startup creates `maps/` with map files that contain detailed retrieval summaries and Obsidian wikilinks into raw files.
-- Gum is used for prompts when installed; plain shell prompts and numbered menus are used as fallback.
+- Plain shell prompts are used by default; Gum prompts are available with `--gum`.
 - A startup prompt is written to your clipboard and printed to the terminal.
 
 Flags:
 - `--numbered` — force the numbered CLI menu instead of the arrow-key picker
 - `--no-color` — disable colored output
-- `--no-gum` — use plain shell prompts
+- `--gum` — use interactive Gum prompts when Gum is installed
+- `--no-gum` — use plain shell prompts (default)
 - `--help` — show usage
 
 ### 4. Paste the prompt into your LLM CLI
