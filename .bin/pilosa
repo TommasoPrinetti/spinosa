@@ -2111,9 +2111,290 @@ processing_status: auto_generated' \
 }
 
 # ═══════════════════════════════════════════════════════════════════════════
+# DASHBOARD
+# ═══════════════════════════════════════════════════════════════════════════
+
+discover_workspaces() {
+  local seen
+  seen=()
+  local search_roots
+  search_roots=("$HOME/Projects" "$HOME/Work" "$HOME/Documents" "$HOME")
+  for root in "${search_roots[@]}"; do
+    [[ -d "$root" ]] || continue
+    while IFS= read -r -d '' ws_file; do
+      local ws_dir
+      ws_dir="$(cd "$(dirname "$(dirname "$ws_file")")" && pwd)"
+      local already_seen=0
+      for s in "${seen[@]}"; do
+        [[ "$s" == "$ws_dir" ]] && { already_seen=1; break; }
+      done
+      [[ "$already_seen" == "0" ]] || continue
+      seen+=("$ws_dir")
+      printf '%s\n' "$ws_dir"
+    done < <(find "$root" -maxdepth 3 -name "workspace" -path "*/.pilosa/workspace" -print0 2>/dev/null)
+  done
+}
+
+cmd_health() {
+  header "Pilosa — System Health"
+  local issues=0
+
+  if [[ -n "$FRAMEWORK_ROOT" ]]; then
+    ok "Framework found: ${FRAMEWORK_ROOT}"
+  else
+    warn "Framework not found — is Pilosa installed?"
+    issues=$((issues + 1))
+  fi
+
+  if gum_available; then
+    ok "Gum available"
+  else
+    note "Gum not available — plain prompts will be used"
+  fi
+
+  if pdf_converter_available; then
+    ok "pdf2md available"
+  else
+    note "pdf2md not available — PDFs will be copied as-is"
+  fi
+
+  local ws_count
+  ws_count="$(discover_workspaces | wc -l | tr -d ' ')"
+  if [[ "$ws_count" -gt 0 ]]; then
+    ok "${ws_count} workspace(s) discovered"
+  else
+    note "No workspaces discovered yet"
+  fi
+
+  local cli_count=0
+  command -v claude >/dev/null 2>&1 && cli_count=$((cli_count + 1))
+  command -v codex >/dev/null 2>&1 && cli_count=$((cli_count + 1))
+  command -v opencode >/dev/null 2>&1 && cli_count=$((cli_count + 1))
+  ok "${cli_count} LLM CLI(s) detected"
+
+  divider
+  if [[ "$issues" -gt 0 ]]; then
+    warn "${issues} issue(s) found"
+  else
+    ok "System health check passed"
+  fi
+  echo ""
+}
+
+cmd_dashboard_global() {
+  local ws_paths
+  ws_paths=()
+  local ws_names
+  ws_names=()
+  local ws_counts
+  ws_counts=()
+
+  while IFS= read -r ws_dir; do
+    [[ -n "$ws_dir" ]] || continue
+    local name count
+    name="$(grep 'project_name:' "$ws_dir/.pilosa/workspace" 2>/dev/null | sed 's/project_name: *//' | head -1 || basename "$ws_dir")"
+    count="$(find "$ws_dir/raw" -type f 2>/dev/null | wc -l | tr -d ' ')"
+    ws_paths+=("$ws_dir")
+    ws_names+=("$name")
+    ws_counts+=("$count")
+  done < <(discover_workspaces)
+
+  printf '\033[2J\033[H'
+  header "Pilosa Research Hub"
+
+  local fw_version
+  fw_version="$(framework_version "$FRAMEWORK_ROOT")"
+  local gum_status="✗" pdf2md_status="✗"
+  gum_available && gum_status="✓"
+  pdf_converter_available && pdf2md_status="✓"
+  local cli_count=0
+  command -v claude >/dev/null 2>&1 && cli_count=$((cli_count + 1))
+  command -v codex >/dev/null 2>&1 && cli_count=$((cli_count + 1))
+  command -v opencode >/dev/null 2>&1 && cli_count=$((cli_count + 1))
+
+  printf '  %sFramework:%s %s  %sGum:%s %s  %spdf2md:%s %s  %sCLIs:%s %d/3\n\n' \
+    "${BOLD}" "${RESET}" "$fw_version" \
+    "${BOLD}" "${RESET}" "$gum_status" \
+    "${BOLD}" "${RESET}" "$pdf2md_status" \
+    "${BOLD}" "${RESET}" "$cli_count"
+
+  local d_options
+  d_options=()
+  local d_types
+  d_types=()
+  local d_values
+  d_values=()
+
+  if [[ ${#ws_names[@]} -gt 0 ]]; then
+    printf '  %s%sWorkspaces%s\n' "${BOLD}" "${C}" "${RESET}"
+    for i in "${!ws_names[@]}"; do
+      printf '    %s%d.%s %s %s(%s sources)%s  %s%s%s\n' \
+        "${BOLD}" "$((i+1))" "${RESET}" \
+        "${ws_names[$i]}" \
+        "${DIM}" "${ws_counts[$i]}" "${RESET}" \
+        "${DIM}" "${ws_paths[$i]}" "${RESET}"
+      d_options+=("${ws_names[$i]} (${ws_counts[$i]} sources)")
+      d_types+=("workspace")
+      d_values+=("${ws_paths[$i]}")
+    done
+    echo ""
+  fi
+
+  printf '  %s%sActions%s\n' "${BOLD}" "${C}" "${RESET}"
+  local action_labels=(
+    "New workspace"
+    "System health"
+    "Sync agents"
+    "Help"
+    "Quit"
+  )
+  local action_values=(new health sync help quit)
+  local action_offset=${#d_options[@]}
+  for i in "${!action_labels[@]}"; do
+    local num=$((action_offset + i + 1))
+    printf '    %s%d.%s %s\n' "${BOLD}" "$num" "${RESET}" "${action_labels[$i]}"
+    d_options+=("${action_labels[$i]}")
+    d_types+=("action")
+    d_values+=("${action_values[$i]}")
+  done
+  echo ""
+
+  local choice
+  if gum_available; then
+    choice="$(gum_choose "Select" "${d_options[@]}")" || return 0
+  else
+    printf '  %s' "${BOLD}Select: ${RESET}"
+    IFS= read -r choice
+  fi
+
+  local selected_idx=-1
+  if [[ "$choice" =~ ^[0-9]+$ ]]; then
+    selected_idx=$((choice - 1))
+  else
+    for i in "${!d_options[@]}"; do
+      [[ "${d_options[$i]}" == "$choice" ]] && { selected_idx=$i; break; }
+    done
+  fi
+
+  if [[ "$selected_idx" -lt 0 || "$selected_idx" -ge ${#d_options[@]} ]]; then
+    warn "Invalid selection"
+    return 1
+  fi
+
+  local sel_type="${d_types[$selected_idx]}"
+  local sel_value="${d_values[$selected_idx]}"
+
+  case "$sel_type" in
+    workspace) cmd_dashboard_workspace "$sel_value" ;;
+    action)
+      case "$sel_value" in
+        new) cmd_new ;;
+        health) cmd_health ;;
+        sync) cmd_sync ;;
+        help) cmd_help ;;
+        quit) return 0 ;;
+      esac
+      ;;
+  esac
+}
+
+cmd_dashboard_workspace() {
+  local ws_dir="$1"
+  local name fw_version source_count map_count
+  name="$(grep 'project_name:' "$ws_dir/.pilosa/workspace" 2>/dev/null | sed 's/project_name: *//' | head -1 || basename "$ws_dir")"
+  fw_version="$(grep 'framework_version:' "$ws_dir/.pilosa/workspace" 2>/dev/null | awk '{print $2}' || echo "unknown")"
+  source_count="$(find "$ws_dir/raw" -type f 2>/dev/null | wc -l | tr -d ' ')"
+  map_count="$(find "$ws_dir/maps" -name "*.md" -not -name "AGENTS.md" -not -name "map_template.md" -not -name ".gitkeep" 2>/dev/null | wc -l | tr -d ' ')"
+
+  printf '\033[2J\033[H'
+  header "Pilosa — ${name}"
+
+  printf '  %sPath:%s %s\n' "${BOLD}" "${RESET}" "$ws_dir"
+  printf '  %sFramework:%s %s  %sSources:%s %s  %sMaps:%s %s\n\n' \
+    "${BOLD}" "${RESET}" "$fw_version" \
+    "${BOLD}" "${RESET}" "$source_count" \
+    "${BOLD}" "${RESET}" "$map_count"
+
+  local d_options
+  d_options=()
+  local d_types
+  d_types=()
+  local d_values
+  d_values=()
+
+  local action_labels=(
+    "Start research"
+    "Run check"
+    "Sync agents"
+    "Update framework"
+    "Onboard source"
+    "Back to global menu"
+    "Quit"
+  )
+  local action_values=(research check sync update onboard back quit)
+
+  printf '  %s%sActions%s\n' "${BOLD}" "${C}" "${RESET}"
+  for i in "${!action_labels[@]}"; do
+    printf '    %s%d.%s %s\n' "${BOLD}" "$((i+1))" "${RESET}" "${action_labels[$i]}"
+    d_options+=("${action_labels[$i]}")
+    d_types+=("action")
+    d_values+=("${action_values[$i]}")
+  done
+  echo ""
+
+  local choice
+  if gum_available; then
+    choice="$(gum_choose "Select action" "${d_options[@]}")" || return 0
+  else
+    printf '  %s' "${BOLD}Select: ${RESET}"
+    IFS= read -r choice
+  fi
+
+  local selected_idx=-1
+  if [[ "$choice" =~ ^[0-9]+$ ]]; then
+    selected_idx=$((choice - 1))
+  else
+    for i in "${!d_options[@]}"; do
+      [[ "${d_options[$i]}" == "$choice" ]] && { selected_idx=$i; break; }
+    done
+  fi
+
+  if [[ "$selected_idx" -lt 0 || "$selected_idx" -ge ${#d_options[@]} ]]; then
+    warn "Invalid selection"
+    return 1
+  fi
+
+  local sel_value="${d_values[$selected_idx]}"
+
+  case "$sel_value" in
+    research)
+      ok "Workspace ready: ${name}"
+      info "Open your LLM CLI (Claude Code, Codex, OpenCode) in:"
+      info "  ${BOLD}${ws_dir}${RESET}"
+      info "Ask research questions or paste the startup prompt."
+      echo ""
+      ;;
+    check) cmd_check "$ws_dir" ;;
+    sync) cmd_sync ;;
+    update) cmd_update "$ws_dir" ;;
+    onboard) cmd_onboard "$ws_dir" ;;
+    back) cmd_dashboard_global ;;
+    quit) return 0 ;;
+  esac
+}
+
+cmd_dashboard() {
+  if [[ -f "$(pwd)/.pilosa/workspace" ]]; then
+    cmd_dashboard_workspace "$(pwd)"
+  else
+    cmd_dashboard_global
+  fi
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
 # MAIN
 # ═══════════════════════════════════════════════════════════════════════════
-case "${1:-help}" in
+case "${1:-}" in
   new)       shift; cmd_new "$@" ;;
   onboard)   shift; cmd_onboard "$@" ;;
   update)    shift; cmd_update "$@" ;;
@@ -2121,6 +2402,7 @@ case "${1:-help}" in
   sync)      shift; cmd_sync ;;
   uninstall) shift; cmd_uninstall "$@" ;;
   help|-h|--help) cmd_help ;;
+  "") cmd_dashboard ;;
   *)
     printf '%s\n' "${R}Unknown command: $1${RESET}" >&2
     cmd_help
