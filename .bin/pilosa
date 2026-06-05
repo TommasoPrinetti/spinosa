@@ -1225,6 +1225,7 @@ cmd_help() {
   printf '    %s\n' "pilosa new [directory]    Create a new workspace and run onboarding"
   printf '    %s\n' "pilosa onboard [dir]     Run onboarding on an existing workspace"
   printf '    %s\n' "pilosa update [dir]      Update workspace framework files"
+  printf '    %s\n' "pilosa upgrade           Upgrade Pilosa CLI to latest release"
   printf '    %s\n' "pilosa check [directory] Validate workspace integrity"
   printf '    %s\n' "pilosa sync              Sync agent and skill mirrors from canonical"
   printf '    %s\n' "pilosa uninstall         Remove Pilosa from this system"
@@ -2272,10 +2273,11 @@ cmd_dashboard_global() {
     "New workspace"
     "System health"
     "Sync agents"
+    "Upgrade Pilosa"
     "Help"
     "Quit"
   )
-  local action_values=(new health sync help quit)
+  local action_values=(new health sync upgrade help quit)
   local action_offset=${#d_options[@]}
   for i in "${!action_labels[@]}"; do
     local num=$((action_offset + i + 1))
@@ -2404,6 +2406,7 @@ cmd_dashboard_workspace() {
     check) cmd_check "$ws_dir" ;;
     sync) cmd_sync ;;
     update) cmd_update "$ws_dir" ;;
+    upgrade) cmd_upgrade ;;
     onboard) cmd_onboard "$ws_dir" ;;
     back) cmd_dashboard_global ;;
     quit) return 0 ;;
@@ -2419,12 +2422,55 @@ cmd_dashboard() {
 }
 
 # ═══════════════════════════════════════════════════════════════════════════
+# COMMAND: upgrade
+# ═══════════════════════════════════════════════════════════════════════════
+cmd_upgrade() {
+  local target_version="latest"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --version) target_version="$2"; shift 2 ;;
+      --help|-h)
+        printf '  %s\n' "Usage: pilosa upgrade [options]"
+        printf '    %s\n' "  --version X.Y.Z   Upgrade to specific version (default: latest)"
+        printf '    %s\n' "  --help            Show this help"
+        return 0
+        ;;
+      -*) die "Unknown option: $1" ;;
+      *) shift ;;
+    esac
+  done
+
+  header "Pilosa — Upgrade"
+  info "Downloading latest installer..."
+
+  local tmpdir
+  tmpdir="$(mktemp -d)"
+  local installer="${tmpdir}/install-pilosa.sh"
+
+  if ! curl -fsSL "https://github.com/${PILOSA_REPO}/releases/download/v${PINNED_VERSION}/install.sh" -o "$installer" 2>/dev/null; then
+    warn "Could not download release installer. Falling back to raw main branch..."
+    curl -fsSL "https://raw.githubusercontent.com/${PILOSA_REPO}/main/install.sh" -o "$installer" || die "Could not download installer"
+  fi
+
+  ok "Installer downloaded"
+
+  if [ "$target_version" = "latest" ]; then
+    bash "$installer" --upgrade
+  else
+    bash "$installer" --upgrade --version "$target_version"
+  fi
+
+  rm -rf "$tmpdir"
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
 # MAIN
 # ═══════════════════════════════════════════════════════════════════════════
 case "${1:-}" in
   new)       shift; cmd_new "$@" ;;
   onboard)   shift; cmd_onboard "$@" ;;
   update)    shift; cmd_update "$@" ;;
+  upgrade)   shift; cmd_upgrade "$@" ;;
   check)     shift; cmd_check "$@" ;;
   sync)      shift; cmd_sync ;;
   uninstall) shift; cmd_uninstall "$@" ;;

@@ -25,6 +25,8 @@ VERSION="${VERSION:-$PINNED_VERSION}"
 DRY_RUN=0
 VERIFY_ONLY=0
 NO_GUM=0
+UPGRADE=0
+REINSTALL=0
 MIN_DAYS=""
 PILOSA_HOME="${PILOSA_HOME:-$HOME/.pilosa}"
 PILOSA_BIN_DIR="${PILOSA_BIN_DIR:-$HOME/.local/bin}"
@@ -51,6 +53,8 @@ while [ $# -gt 0 ]; do
     --latest)     VERSION="latest"; shift ;;
     --dry-run)    DRY_RUN=1; shift ;;
     --verify-only) VERIFY_ONLY=1; shift ;;
+    --upgrade)    UPGRADE=1; shift ;;
+    --reinstall)  REINSTALL=1; shift ;;
     --no-gum)     NO_GUM=1; shift ;;
     --min-days)   MIN_DAYS="$2"; shift 2 ;;
     --prefix)     PILOSA_HOME="$2"; shift 2 ;;
@@ -58,14 +62,18 @@ while [ $# -gt 0 ]; do
     --help|-h)
       echo "Usage: bash install-pilosa.sh [options]"
       echo ""
-      echo "Security:"
+      echo "Install / Upgrade:"
       echo "  --version X.Y.Z   Install specific version (default: $PINNED_VERSION)"
       echo "  --latest          Use latest release instead of pinned version"
-      echo "  --min-days N      Reject releases newer than N days old"
+      echo "  --upgrade         Upgrade if a newer version is available"
+      echo "  --reinstall       Reinstall even if same version"
+      echo "  --dry-run         Show what would happen without doing it"
       echo "  --verify-only     Verify installed binaries, do not install"
       echo ""
-      echo "Install:"
-      echo "  --dry-run         Show what would happen without doing it"
+      echo "Security:"
+      echo "  --min-days N      Reject releases newer than N days old"
+      echo ""
+      echo "Paths:"
       echo "  --no-gum          Skip bundled binary installation (Gum, pdf2md)"
       echo "  --prefix PATH     Install root (default: ~/.pilosa)"
       echo "  --bin-dir PATH    Shim directory (default: ~/.local/bin)"
@@ -253,6 +261,101 @@ resolve_version() {
   fi
 }
 
+# ── version comparison ──────────────────────────────────────────────────────
+# Compare two dot-separated version strings.
+# Returns 0 if $1 == $2, 1 if $1 > $2, 2 if $1 < $2
+compare_versions() {
+  local a="$1" b="$2"
+  local IFS=.
+  set -- $a
+  local av=($@)
+  set -- $b
+  local bv=($@)
+  local i max
+  max=${#av[@]}
+  [ ${#bv[@]} -gt $max ] && max=${#bv[@]}
+  for ((i=0; i<max; i++)); do
+    local an=${av[$i]:-0} bn=${bv[$i]:-0}
+    if [ "$an" -gt "$bn" ]; then
+      return 1
+    elif [ "$an" -lt "$bn" ]; then
+      return 2
+    fi
+  done
+  return 0
+}
+
+get_installed_version() {
+  if [ -d "${PILOSA_HOME}/versions" ]; then
+    ls -1 "${PILOSA_HOME}/versions" 2>/dev/null | sort -t. -k1,1n -k2,2n -k3,3n | tail -1
+  fi
+}
+
+prompt_upgrade() {
+  local installed="$1" target="$2"
+  local action=""
+
+  compare_versions "$target" "$installed"
+  local cmp=$?
+
+  if [ "$cmp" -eq 0 ]; then
+    # Same version
+    if [ "$REINSTALL" -eq 1 ]; then
+      info "Reinstalling v${target}..."
+      return 0
+    fi
+    if [ "$UPGRADE" -eq 1 ]; then
+      info "Already on v${target}. No upgrade needed."
+      return 1
+    fi
+    printf '  %sPilosa v%s is already installed.%s\n' "${Y}" "$installed" "${RESET}"
+    printf '  %sReinstall?%s ' "${BOLD}" "${RESET}"
+    local reply
+    IFS= read -r reply
+    case "$reply" in
+      y|Y|yes|YES) return 0 ;;
+      *) info "Install cancelled." ; return 1 ;;
+    esac
+  elif [ "$cmp" -eq 1 ]; then
+    # Target is newer
+    if [ "$UPGRADE" -eq 1 ]; then
+      info "Upgrading v${installed} → v${target}..."
+      return 0
+    fi
+    if [ "$REINSTALL" -eq 1 ]; then
+      info "Installing v${target} (over v${installed})..."
+      return 0
+    fi
+    printf '  %sPilosa v%s is installed. v%s is available.%s\n' "${G}" "$installed" "$target" "${RESET}"
+    printf '  %sUpgrade?%s [Y/n]: ' "${BOLD}" "${RESET}"
+    local reply
+    IFS= read -r reply
+    reply="${reply:-Y}"
+    case "$reply" in
+      n|N|no|NO) info "Upgrade cancelled." ; return 1 ;;
+      *) return 0 ;;
+    esac
+  else
+    # Target is older
+    if [ "$UPGRADE" -eq 1 ]; then
+      warn "Installed v${installed} is newer than target v${target}. Skipping upgrade."
+      return 1
+    fi
+    if [ "$REINSTALL" -eq 1 ]; then
+      info "Downgrading v${installed} → v${target}..."
+      return 0
+    fi
+    printf '  %sInstalled v%s is newer than target v%s.%s\n' "${Y}" "$installed" "$target" "${RESET}"
+    printf '  %sDowngrade?%s [y/N]: ' "${BOLD}" "${RESET}"
+    local reply
+    IFS= read -r reply
+    case "$reply" in
+      y|Y|yes|YES) return 0 ;;
+      *) info "Install cancelled." ; return 1 ;;
+    esac
+  fi
+}
+
 # ── main install flow ──────────────────────────────────────────────────────
 main() {
   echo ""
@@ -269,6 +372,17 @@ main() {
   info "Install root: ${PILOSA_HOME}"
   info "Bin directory: ${PILOSA_BIN_DIR}"
   echo ""
+
+  # ── check for existing installation ────────────────────────────────────
+  if [ "$DRY_RUN" -eq 0 ] && [ "$VERIFY_ONLY" -eq 0 ]; then
+    local installed_version
+    installed_version="$(get_installed_version)"
+    if [ -n "$installed_version" ]; then
+      if ! prompt_upgrade "$installed_version" "$VERSION"; then
+        return 0
+      fi
+    fi
+  fi
 
   # ── verify-only mode ──────────────────────────────────────────────────
   if [ "$VERIFY_ONLY" -eq 1 ]; then

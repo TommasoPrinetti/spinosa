@@ -46,7 +46,7 @@ done
 echo ""
 echo "Test 2: pilosa help"
 HELP_OUTPUT="$($REPO_ROOT/.bin/pilosa help 2>/dev/null || true)"
-for cmd in new onboard update check sync uninstall; do
+for cmd in new onboard update upgrade check sync uninstall; do
   if echo "$HELP_OUTPUT" | grep -q "pilosa $cmd"; then
     pass "help mentions 'pilosa $cmd'"
   else
@@ -230,9 +230,24 @@ else
   fail "install.sh does not default to pinned version"
 fi
 
-# ── Test 8: install.sh --min-days on old release ──────────────────────────
+# ── Test 8: install.sh --upgrade and --reinstall flags ──────────────────────
 echo ""
-echo "Test 8: install.sh --min-days on old release"
+echo "Test 8: install.sh --upgrade and --reinstall flags"
+HELP_OUTPUT="$(bash "$REPO_ROOT/install.sh" --help 2>/dev/null || true)"
+if echo "$HELP_OUTPUT" | grep -q "\-\-upgrade"; then
+  pass "install.sh has --upgrade flag"
+else
+  fail "install.sh missing --upgrade flag"
+fi
+if echo "$HELP_OUTPUT" | grep -q "\-\-reinstall"; then
+  pass "install.sh has --reinstall flag"
+else
+  fail "install.sh missing --reinstall flag"
+fi
+
+# ── Test 9: install.sh --min-days on old release ──────────────────────────
+echo ""
+echo "Test 9: install.sh --min-days on old release"
 # v0.1.0 should be older than 1 day
 MIN_DAYS_OUTPUT="$(bash "$REPO_ROOT/install.sh" --version 0.1.0 --min-days 1 --dry-run 2>/dev/null || true)"
 if echo "$MIN_DAYS_OUTPUT" | grep -q "Dry run"; then
@@ -242,9 +257,9 @@ else
   echo "    Output: $MIN_DAYS_OUTPUT" | head -3
 fi
 
-# ── Test 9: install.sh --verify-only ────────────────────────────────────────
+# ── Test 10: install.sh --verify-only ────────────────────────────────────────
 echo ""
-echo "Test 9: install.sh --verify-only"
+echo "Test 10: install.sh --verify-only"
 FAKE_INSTALL="$TMPDIR/fake-verify"
 mkdir -p "$FAKE_INSTALL/.pilosa/versions/0.1.0/pilosa-framework-0.1.0/metadata"
 mkdir -p "$FAKE_INSTALL/.pilosa/versions/0.1.0/pilosa-framework-0.1.0/.bin/lib/vendor"
@@ -273,9 +288,19 @@ else
   echo "    Output: $VERIFY_OUTPUT" | head -3
 fi
 
-# ── Test 10: pilosa dashboard (global) ──────────────────────────────────────
+# ── Test 11: pilosa upgrade --help ────────────────────────────────────────
 echo ""
-echo "Test 10: pilosa dashboard (global)"
+echo "Test 11: pilosa upgrade --help"
+UPGRADE_HELP="$($REPO_ROOT/.bin/pilosa upgrade --help 2>/dev/null || true)"
+if echo "$UPGRADE_HELP" | grep -q "pilosa upgrade"; then
+  pass "upgrade command has help"
+else
+  fail "upgrade command missing help"
+fi
+
+# ── Test 12: pilosa dashboard (global) ──────────────────────────────────────
+echo ""
+echo "Test 12: pilosa dashboard (global)"
 DASH_OUTPUT="$(printf '5\n' | perl -e 'alarm(5); exec "'"$REPO_ROOT"'/.bin/pilosa"' 2>&1 || true)"
 if echo "$DASH_OUTPUT" | grep -q "Pilosa.*v.*gum:"; then
   pass "global dashboard renders"
@@ -283,9 +308,9 @@ else
   fail "global dashboard did not render"
 fi
 
-# ── Test 11: pilosa dashboard (workspace) ───────────────────────────────────
+# ── Test 13: pilosa dashboard (workspace) ───────────────────────────────────
 echo ""
-echo "Test 11: pilosa dashboard (workspace)"
+echo "Test 13: pilosa dashboard (workspace)"
 DASH_WS="$TMPDIR/dash-test"
 mkdir -p "$DASH_WS/.pilosa" "$DASH_WS/raw" "$DASH_WS/maps"
 cat > "$DASH_WS/.pilosa/workspace" << 'EOF'
