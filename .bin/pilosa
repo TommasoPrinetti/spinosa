@@ -1369,14 +1369,14 @@ cmd_new() {
     note "This is the folder containing your source documents, PDFs, notes, etc."
     note "A sibling workspace folder will be created next to it."
     if gum_available; then
-      corpus_path="$(gum_input "Corpus folder (absolute path)" "~/Documents/my-research")"
+      corpus_path="$(gum_input "Corpus folder" "")"
       reset_terminal
       corpus_path="$(normalize_path_input "$corpus_path")"
       corpus_path="$(expand_home "$corpus_path")"
     fi
     if [[ -z "$corpus_path" ]]; then
       while [[ -z "$corpus_path" ]]; do
-        corpus_path="$(ask "Corpus folder (absolute path)" "" "e.g. ~/Documents/my-research")"
+        corpus_path="$(ask "Corpus folder" "" "e.g. ~/Documents/my-research")"
         corpus_path="$(normalize_path_input "$corpus_path")"
         corpus_path="$(expand_home "$corpus_path")"
         [[ -z "$corpus_path" ]] && printf '  %s\n' "${R}Corpus folder is required.${RESET}" >&2
@@ -1387,7 +1387,6 @@ cmd_new() {
   # Validate corpus
   [[ -d "$corpus_path" ]] || die "Not a directory: $corpus_path"
   corpus_path="$(cd "$corpus_path" 2>/dev/null && pwd)"
-  ok "Corpus: ${BOLD}${corpus_path}${RESET}"
 
   # ── Step 2: Auto-generate workspace path ────────────────────────────────
   local corpus_name
@@ -1403,7 +1402,7 @@ cmd_new() {
   done
   workspace_path="$candidate"
 
-  # ── Step 3: Project name ────────────────────────────────────────────────
+  # ── Step 3: Project name (prompt BEFORE confirmations) ──────────────────
   local project_name=""
   local default_name
   default_name="$corpus_name"
@@ -1420,6 +1419,8 @@ cmd_new() {
   fi
   project_name="${project_name:-$default_name}"
 
+  # Print all confirmations together after prompts are done
+  ok "Corpus:   ${BOLD}${corpus_path}${RESET}"
   ok "Workspace: ${BOLD}${workspace_path}${RESET}"
   ok "Project:   ${BOLD}${project_name}${RESET}"
 
@@ -2229,217 +2230,7 @@ cmd_health() {
   echo ""
 }
 
-cmd_dashboard_global() {
-  local ws_paths
-  ws_paths=()
-  local ws_names
-  ws_names=()
-  local ws_counts
-  ws_counts=()
 
-  while IFS= read -r ws_dir; do
-    [[ -n "$ws_dir" ]] || continue
-    local name count
-    name="$(grep 'project_name:' "$ws_dir/.pilosa/workspace" 2>/dev/null | sed 's/project_name: *//' | head -1 || basename "$ws_dir")"
-    count="$(find "$ws_dir/raw" -type f 2>/dev/null | wc -l | tr -d ' ')"
-    ws_paths+=("$ws_dir")
-    ws_names+=("$name")
-    ws_counts+=("$count")
-  done < <(discover_workspaces)
-
-  printf '\033[2J\033[H'
-  
-  local fw_version
-  fw_version="$(framework_version "$FRAMEWORK_ROOT")"
-  local gum_status="✗" pdf2md_status="✗"
-  gum_available && gum_status="✓"
-  pdf_converter_available && pdf2md_status="✓"
-  local cli_count=0
-  command -v claude >/dev/null 2>&1 && cli_count=$((cli_count + 1))
-  command -v codex >/dev/null 2>&1 && cli_count=$((cli_count + 1))
-  command -v opencode >/dev/null 2>&1 && cli_count=$((cli_count + 1))
-
-  printf '\n  %sPilosa%s  %s·%s  v%s  %s·%s  gum:%s  %s·%s  pdf2md:%s  %s·%s  clis:%d/3\n\n' \
-    "${BOLD}" "${RESET}" \
-    "${DIM}" "${RESET}" "$fw_version" \
-    "${DIM}" "${RESET}" "$gum_status" \
-    "${DIM}" "${RESET}" "$pdf2md_status" \
-    "${DIM}" "${RESET}" "$cli_count"
-
-  local d_options
-  d_options=()
-  local d_types
-  d_types=()
-  local d_values
-  d_values=()
-
-  if [[ ${#ws_names[@]} -gt 0 ]]; then
-    printf '  %s%sWorkspaces%s\n' "${BOLD}" "${C}" "${RESET}"
-    for i in "${!ws_names[@]}"; do
-      printf '    %s%d.%s %s %s(%s sources)%s  %s%s%s\n' \
-        "${BOLD}" "$((i+1))" "${RESET}" \
-        "${ws_names[$i]}" \
-        "${DIM}" "${ws_counts[$i]}" "${RESET}" \
-        "${DIM}" "${ws_paths[$i]}" "${RESET}"
-      d_options+=("${ws_names[$i]} (${ws_counts[$i]} sources)")
-      d_types+=("workspace")
-      d_values+=("${ws_paths[$i]}")
-    done
-    echo ""
-  fi
-
-  printf '  %s%sActions%s\n' "${BOLD}" "${C}" "${RESET}"
-  local action_labels=(
-    "New workspace"
-    "System health"
-    "Sync agents"
-    "Upgrade Pilosa"
-    "Help"
-    "Quit"
-  )
-  local action_values=(new health sync upgrade help quit)
-  local action_offset=${#d_options[@]}
-  for i in "${!action_labels[@]}"; do
-    local num=$((action_offset + i + 1))
-    printf '    %s%d.%s %s\n' "${BOLD}" "$num" "${RESET}" "${action_labels[$i]}"
-    d_options+=("${action_labels[$i]}")
-    d_types+=("action")
-    d_values+=("${action_values[$i]}")
-  done
-  echo ""
-
-  local choice
-  if gum_available; then
-    choice="$(gum_choose "Select" "${d_options[@]}")" || return 0
-  else
-    printf '  %s' "${BOLD}Select: ${RESET}"
-    IFS= read -r choice
-  fi
-
-  local selected_idx=-1
-  if [[ "$choice" =~ ^[0-9]+$ ]]; then
-    selected_idx=$((choice - 1))
-  else
-    for i in "${!d_options[@]}"; do
-      [[ "${d_options[$i]}" == "$choice" ]] && { selected_idx=$i; break; }
-    done
-  fi
-
-  if [[ "$selected_idx" -lt 0 || "$selected_idx" -ge ${#d_options[@]} ]]; then
-    warn "Invalid selection"
-    return 1
-  fi
-
-  local sel_type="${d_types[$selected_idx]}"
-  local sel_value="${d_values[$selected_idx]}"
-
-  case "$sel_type" in
-    workspace) cmd_dashboard_workspace "$sel_value" ;;
-    action)
-      case "$sel_value" in
-        new) cmd_new ;;
-        health) cmd_health ;;
-        sync) cmd_sync ;;
-        help) cmd_help ;;
-        quit) return 0 ;;
-      esac
-      ;;
-  esac
-}
-
-cmd_dashboard_workspace() {
-  local ws_dir="$1"
-  local name fw_version source_count map_count
-  name="$(grep 'project_name:' "$ws_dir/.pilosa/workspace" 2>/dev/null | sed 's/project_name: *//' | head -1 || basename "$ws_dir")"
-  fw_version="$(grep 'framework_version:' "$ws_dir/.pilosa/workspace" 2>/dev/null | awk '{print $2}' || echo "unknown")"
-  source_count="$(find "$ws_dir/raw" -type f 2>/dev/null | wc -l | tr -d ' ')"
-  map_count="$(find "$ws_dir/maps" -name "*.md" -not -name "AGENTS.md" -not -name "map_template.md" -not -name ".gitkeep" 2>/dev/null | wc -l | tr -d ' ')"
-
-  printf '\033[2J\033[H'
-  header "Pilosa — ${name}"
-
-  printf '  %sPath:%s %s\n' "${BOLD}" "${RESET}" "$ws_dir"
-  printf '  %sFramework:%s %s  %sSources:%s %s  %sMaps:%s %s\n\n' \
-    "${BOLD}" "${RESET}" "$fw_version" \
-    "${BOLD}" "${RESET}" "$source_count" \
-    "${BOLD}" "${RESET}" "$map_count"
-
-  local d_options
-  d_options=()
-  local d_types
-  d_types=()
-  local d_values
-  d_values=()
-
-  local action_labels=(
-    "Start research"
-    "Run check"
-    "Sync agents"
-    "Update framework"
-    "Onboard source"
-    "Back to global menu"
-    "Quit"
-  )
-  local action_values=(research check sync update onboard back quit)
-
-  printf '  %s%sActions%s\n' "${BOLD}" "${C}" "${RESET}"
-  for i in "${!action_labels[@]}"; do
-    printf '    %s%d.%s %s\n' "${BOLD}" "$((i+1))" "${RESET}" "${action_labels[$i]}"
-    d_options+=("${action_labels[$i]}")
-    d_types+=("action")
-    d_values+=("${action_values[$i]}")
-  done
-  echo ""
-
-  local choice
-  if gum_available; then
-    choice="$(gum_choose "Select action" "${d_options[@]}")" || return 0
-  else
-    printf '  %s' "${BOLD}Select: ${RESET}"
-    IFS= read -r choice
-  fi
-
-  local selected_idx=-1
-  if [[ "$choice" =~ ^[0-9]+$ ]]; then
-    selected_idx=$((choice - 1))
-  else
-    for i in "${!d_options[@]}"; do
-      [[ "${d_options[$i]}" == "$choice" ]] && { selected_idx=$i; break; }
-    done
-  fi
-
-  if [[ "$selected_idx" -lt 0 || "$selected_idx" -ge ${#d_options[@]} ]]; then
-    warn "Invalid selection"
-    return 1
-  fi
-
-  local sel_value="${d_values[$selected_idx]}"
-
-  case "$sel_value" in
-    research)
-      ok "Workspace ready: ${name}"
-      info "Open your LLM CLI (Claude Code, Codex, OpenCode) in:"
-      info "  ${BOLD}${ws_dir}${RESET}"
-      info "Ask research questions or paste the startup prompt."
-      echo ""
-      ;;
-    check) cmd_check "$ws_dir" ;;
-    sync) cmd_sync ;;
-    update) cmd_update "$ws_dir" ;;
-    upgrade) cmd_upgrade ;;
-    onboard) cmd_onboard "$ws_dir" ;;
-    back) cmd_dashboard_global ;;
-    quit) return 0 ;;
-  esac
-}
-
-cmd_dashboard() {
-  if [[ -f "$(pwd)/.pilosa/workspace" ]]; then
-    cmd_dashboard_workspace "$(pwd)"
-  else
-    cmd_dashboard_global
-  fi
-}
 
 # ═══════════════════════════════════════════════════════════════════════════
 # COMMAND: upgrade
@@ -2495,7 +2286,7 @@ case "${1:-}" in
   sync)      shift; cmd_sync ;;
   uninstall) shift; cmd_uninstall "$@" ;;
   help|-h|--help) cmd_help ;;
-  "") cmd_dashboard ;;
+  "") cmd_help ;;
   *)
     printf '%s\n' "${R}Unknown command: $1${RESET}" >&2
     cmd_help

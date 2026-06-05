@@ -298,36 +298,6 @@ else
   fail "upgrade command missing help"
 fi
 
-# ── Test 12: pilosa dashboard (global) ──────────────────────────────────────
-echo ""
-echo "Test 12: pilosa dashboard (global)"
-DASH_OUTPUT="$(printf '5\n' | perl -e 'alarm(5); exec "'"$REPO_ROOT"'/.bin/pilosa"' 2>&1 || true)"
-if echo "$DASH_OUTPUT" | grep -q "Pilosa.*v.*gum:"; then
-  pass "global dashboard renders"
-else
-  fail "global dashboard did not render"
-fi
-
-# ── Test 13: pilosa dashboard (workspace) ───────────────────────────────────
-echo ""
-echo "Test 13: pilosa dashboard (workspace)"
-DASH_WS="$TMPDIR/dash-test"
-mkdir -p "$DASH_WS/.pilosa" "$DASH_WS/raw" "$DASH_WS/maps"
-cat > "$DASH_WS/.pilosa/workspace" << 'EOF'
-workspace_version: 1
-framework_version: 0.2.1
-created: 2026-06-05
-project_name: Dashboard Test
-setup_status: workspace_started
-EOF
-touch "$DASH_WS/raw/doc.md"
-DASH_WS_OUTPUT="$(cd "$DASH_WS" && printf '7\n' | perl -e 'alarm(5); exec "'"$REPO_ROOT"'/.bin/pilosa"' 2>&1 || true)"
-if echo "$DASH_WS_OUTPUT" | grep -q "Pilosa — Dashboard Test"; then
-  pass "workspace dashboard renders with project name"
-else
-  fail "workspace dashboard did not render"
-fi
-
 # ── Summary ─────────────────────────────────────────────────────────────────
 echo ""
 echo "═══════════════════════════════════════════════════════════════════════════"
