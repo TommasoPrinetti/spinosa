@@ -67,6 +67,25 @@ Open Claude Code, Codex, OpenCode, or whichever CLI you picked, point it at this
 
 After that, ask research questions normally. The orchestrator will route them through the right sub-agents.
 
+## Install
+
+One command. Zero dependencies.
+
+```bash
+curl -fsSL https://github.com/TommasoPrinetti/pilosa/releases/download/v0.2.0/install.sh | bash
+```
+
+This installs the **pinned stable version** (`0.2.0`). No npm, no Python, no Go — fully autonomous.
+
+For options (specific version, security flags, etc.), download first:
+
+```bash
+curl -fsSL https://github.com/TommasoPrinetti/pilosa/releases/download/v0.2.0/install.sh -o install-pilosa.sh
+bash install-pilosa.sh --version 0.2.0
+bash install-pilosa.sh --min-days 7
+bash install-pilosa.sh --verify-only
+```
+
 ## Security Model
 
 Pilosa is designed with supply-chain paranoia in mind. There are zero npm, Python, Java, Go, or Homebrew dependencies in the core install.
@@ -74,17 +93,6 @@ Pilosa is designed with supply-chain paranoia in mind. There are zero npm, Pytho
 ### Version pinning
 
 By default, the installer uses a **pinned stable version** (not `latest`). This prevents a compromised fresh release from auto-installing on every `curl | sh` run.
-
-```bash
-# Default: installs the pinned stable version
-bash install-pilosa.sh
-
-# Explicit version
-bash install-pilosa.sh --version 0.2.0
-
-# Bleeding edge (not recommended for production)
-bash install-pilosa.sh --latest
-```
 
 ### Checksum verification
 
@@ -100,12 +108,10 @@ A mismatch aborts the install with an error.
 Reject releases that are too fresh. This gives the community time to detect a compromised upload.
 
 ```bash
-# Only install if the release is at least 7 days old
 bash install-pilosa.sh --min-days 7
-
-# The check queries the GitHub API for the release date.
-# If the API is unreachable and you specified --min-days, the install aborts.
 ```
+
+The check queries the GitHub API for the release date. If the API is unreachable and you specified `--min-days`, the install aborts.
 
 ### Verify-only mode
 
