@@ -1109,7 +1109,10 @@ run_integrated_onboarding() {
 
   local copyable_count=$((SCAN_MARKDOWN_COUNT + SCAN_NATIVE_COUNT + SCAN_PDF_CONVERTIBLE_COUNT + SCAN_BINARY_COPYABLE_COUNT))
   [[ "$copyable_count" -gt 0 ]] || die "No copyable files found in source location."
-  if ! confirm_action "Write accepted raw copies into raw/?" "y"; then
+  echo ""
+  note "Ready to copy ${copyable_count} files into raw/. This does not modify your source."
+  echo ""
+  if ! confirm_action "Proceed with copy?" "y"; then
     warn "No raw copies were written. Onboarding stopped after the scan."
     return 1
   fi
