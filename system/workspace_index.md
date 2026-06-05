@@ -8,7 +8,7 @@ description:
 scope: [all of raw/]
 connects_to:
   - dictionary.md
-  - header_template.md
+  - yaml_header_template.md
 status: active
 created: 2026-05-26
 updated: 2026-06-04
@@ -30,7 +30,7 @@ system/
   workspace_index.md
   context.md
   configuration.md
-  header_template.md
+  yaml_header_template.md
 ```
 
 ## Navigation Maps

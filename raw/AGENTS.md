@@ -6,7 +6,7 @@ description:
   - Read this before modifying headers or validating corpus files.
 connects_to:
   - AGENTS.md
-  - system/header_template.md
+  - system/yaml_header_template.md
   - maps/AGENTS.md
 created: 2026-06-03
 updated: 2026-06-04
@@ -26,6 +26,6 @@ updated: 2026-06-04
 
 ## Validation
 
-- Raw copies use `type: raw_copy` and the schema in `header_template.md`.
+- Raw copies use `type: raw_copy` and the schema in `yaml_header_template.md`.
 - `source:` uses a repo-relative `raw/...` path.
 - Source location paths belong in `system/context.md` for reference during onboarding only.

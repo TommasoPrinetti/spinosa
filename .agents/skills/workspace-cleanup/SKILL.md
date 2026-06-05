@@ -40,7 +40,8 @@ Audit the workspace for stale, broken, or orphaned files. Propose moves to `.tra
 8. Write Janitor Report in `agent_reports/` with:
    - Files checked, issues found, proposed moves with reasons.
 9. Return a proposed log summary to the orchestrator when traceability is needed.
-10. **Wait for user confirmation** before any actual moves.
+10. Append one compact metrics row to `logs/session_metrics.tsv`.
+11. **Wait for user confirmation** before any actual moves.
 
 ## Rules
 
@@ -51,6 +52,7 @@ Audit the workspace for stale, broken, or orphaned files. Propose moves to `.tra
 - `.gitkeep` must always remain in `.trash/`.
 - Evaluate by file age only — no structured research needs or tendency detection.
 - Do not edit `logs/user_requests.md`; the orchestrator writes logs.
+- Append one metrics row with operation `cleanup_audit`, directories seen, maps read if applicable, files checked, files read, reports written, and output path. Use `.bin/lib/metrics.sh` when available; never log raw command output, long grep terms, source excerpts, secrets, or credentials.
 
 ## See also
 

@@ -13,7 +13,7 @@ Log the request, classify the prompt, choose the right sub-agent sequence, dispa
 
 ## Safety & Permissions
 
-- Do not edit `raw/`, maps, dictionary, logs, or system files.
+- Do not edit `raw/`, maps, dictionary, or system files. The orchestrator writes `logs/user_requests.md`; sub-agents append only compact count/path rows to `logs/session_metrics.tsv`.
 - Do not use external sources without explicit researcher authorization.
 - Do not answer source-grounded questions directly. Dispatch them through the orchestrator/sub-agent pipeline.
 - Check dictionary, report, and source-grounded edits with Verifier before reporting them as complete. Map content is self-correcting through agent use; Verifier checks map paths only when a route explicitly asks for path verification.
@@ -36,6 +36,8 @@ Example:
 ```
 
 Keep log rows short. Do not write secrets, credentials, large blobs, raw source dumps, or raw tool logs into `logs/user_requests.md`.
+
+Assign a `session_id` in the form `YYYYMMDD-HHMMSS-route` for every non-fast-path route. Pass it to sub-agents and ask them to append compact operation metrics to `logs/session_metrics.tsv` after they write their normal output.
 
 ### 2. Classify
 
@@ -99,6 +101,7 @@ Sub-agents write results to files and return paths. The orchestrator passes **pa
 ### Sub-Agent Invocation Rules
 
 - Pass the cleaned user prompt, prior sub-agent outputs (file paths or inline), and route constraints.
+- Pass `session_id`, `route`, and a short `query_label` so sub-agents can write session metrics.
 - Trim, summarize, or normalize the user prompt before dispatch when useful.
 - Do not invent facts, source evidence, arguments, or route constraints.
 - Do not pass raw tool logs unless a sub-agent explicitly needs them for verification.
@@ -146,8 +149,8 @@ See `references/skills.md` for the full role → skill mapping.
 | Writer | `pilosa-writer` | `report-writing` | Synthesizes findings into reports |
 | Verifier | `pilosa-verifier` | `claim-verification` | Verifies claims, quotes, and paths |
 | Janitor | `pilosa-janitor` | `workspace-cleanup` | Audits hygiene and archives stale files |
-| Mapper | `pilosa-mapper` | startup protocol | Reads raw files in batches; extracts content-grounded fragments, key passages, and concept signals; writes maps |
-| Serendippo | `pilosa-serendippo` | startup protocol | Finds hidden cross-corpus connections and proposes map enrichment |
+| Mapper | `pilosa-mapper` | `mapper-fallback` | Reads raw files in batches; extracts content-grounded fragments, key passages, and concept signals; writes maps |
+| Serendippo | `pilosa-serendippo` | `serendippo-fallback` | Finds hidden cross-corpus connections and proposes map enrichment |
 
 ## See also
 

@@ -13,6 +13,7 @@ permissions:
   glob: allow
   write:
     - agent_reports/
+    - logs/session_metrics.tsv
   move:
     - .trash/ # only after explicit user confirmation
 ---
@@ -27,6 +28,7 @@ You are Pilosa's cleanup agent. You audit the workspace for hygiene issues, eval
 4. Check `logs/` for log entries referencing moved or deleted files.
 5. Generate a cleanup report listing proposed moves with reasons.
 6. Present the report to the user for confirmation before executing any moves.
+7. Append one compact metrics row to `logs/session_metrics.tsv`.
 
 ## Hygiene Score Gauge
 
@@ -90,3 +92,4 @@ Read `system/configuration.md` for `stale_after_days` thresholds:
 - Document every proposed move with a reason.
 - Do not move files that are still referenced by active maps or reports.
 - Return a log summary to the orchestrator when traceability is needed; the orchestrator writes `logs/user_requests.md`.
+- Append one metrics row with operation `cleanup_audit`, directories seen, maps read if applicable, files checked, files read, reports written, and output path. Use `.bin/lib/metrics.sh` when available; never log raw command output, long grep terms, source excerpts, secrets, or credentials.

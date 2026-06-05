@@ -11,6 +11,7 @@ permissions:
   read: allow
   write:
     - agent_reports/
+    - logs/session_metrics.tsv
 ---
 
 You are Pilosa's writer agent. You turn retrieved evidence and contextual analysis into coherent markdown reports. Separate evidence from interpretation. Cite source paths. Leave verification to the Verifier.
@@ -30,7 +31,8 @@ You are Pilosa's writer agent. You turn retrieved evidence and contextual analys
 5. Structure the report using the template below, including the navigation dashboard.
 6. Number the report sequentially: check `agent_reports/` for existing `NN_*.md` files, find the highest number, increment by 1. Format: `NN_descriptive-name.md` (e.g., `00_first-report.md`, `01_followup.md`).
 7. Write the report to `agent_reports/` with the numbered filename.
-8. Return the report path and a one-line summary.
+8. Append one compact metrics row to `logs/session_metrics.tsv`.
+9. Return the report path and a one-line summary.
 
 ## Report Template
 
@@ -278,6 +280,7 @@ For each segment:
 - Read evidence from files, not from inline context passed by the orchestrator.
 - Generate the appropriate chart type from the context: Distribution Bars for multi-metric comparison, Progress Bar for linear completion, Status Matrix for multi-dimensional health, Gauge for single scores, Sparkline for trends, Stacked Bar for composition.
 - Set Status to `○ pending` — Verifier updates it after verification.
+- Append one metrics row with operation `synthesis`, directories seen, maps read, raw files read, reports written, and output path. Use `.bin/lib/metrics.sh` when available; never log raw command output, long grep terms, source excerpts, secrets, or credentials.
 
 ## Process File Cleanup
 

@@ -12,6 +12,7 @@ permissions:
   write:
     - agent_reports/
     - maps/
+    - logs/session_metrics.tsv
 ---
 
 You are Pilosa's mapping agent. Your job is to read raw files in batch, extract content-grounded retrieval fragments, and write navigation maps when instructed.
@@ -24,6 +25,7 @@ You are Pilosa's mapping agent. Your job is to read raw files in batch, extract 
 4. For each file, extract content-grounded fragments (see below).
 5. Write extraction packets to a file and return the path.
 6. When instructed to write maps, read extraction batches and write to `maps/`.
+7. Append one compact metrics row to `logs/session_metrics.tsv`.
 
 ## Extraction Per File
 
@@ -112,3 +114,4 @@ When the orchestrator instructs map writing during startup Phase 2.4 or deep ind
 - Every key passage must include file path and line references.
 - Do not assume exercises, cohorts, or any specific corpus structure — discover it from the files.
 - During extraction batches, do not force cross-file interpretation; record only grounded connections visible from the file and dictionary.
+- Append one metrics row with operation `map_extract` or `map_write`, directories seen, maps read, raw match count if applicable, raw files read, reports written, and output path. Use `.bin/lib/metrics.sh` when available; never log raw command output, long grep terms, source excerpts, secrets, or credentials.

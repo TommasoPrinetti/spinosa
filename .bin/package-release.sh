@@ -9,7 +9,8 @@ set -euo pipefail
 #   - install.sh
 #   - checksums.txt
 #
-# The bundle is built from .pilosa/framework-files.tsv, not from the working tree.
+# The framework archive is built from .pilosa/framework-files.tsv.
+# install.sh is published as a separate release asset.
 
 if [[ -z "${1:-}" ]]; then
   echo "Usage: bash .bin/package-release.sh <version>"
@@ -38,6 +39,12 @@ if [[ ! -f "$MANIFEST" ]]; then
   exit 1
 fi
 
+# ── Validate release assets ─────────────────────────────────────────────────
+if [[ ! -f "${REPO_ROOT}/install.sh" ]]; then
+  echo "Error: install.sh not found at repo root"
+  exit 1
+fi
+
 # ── Create output directory ─────────────────────────────────────────────────
 mkdir -p "$DIST"
 
@@ -46,6 +53,7 @@ echo "Copying framework files..."
 
 excluded_count=0
 copied_count=0
+missing_count=0
 
 while IFS=$'\t' read -r path role policy; do
   # Skip header
@@ -53,8 +61,8 @@ while IFS=$'\t' read -r path role policy; do
 
   src="${REPO_ROOT}/${path}"
 
-  # Skip user_state files — they are templates, not release content
-  if [[ "$role" == "user_state" ]]; then
+  # Skip user-owned and generated workspace state. These are never release input.
+  if [[ "$role" == "user_state" || "$role" == "generated_state" ]]; then
     excluded_count=$((excluded_count + 1))
     continue
   fi
@@ -69,12 +77,20 @@ while IFS=$'\t' read -r path role policy; do
     cp -a "$src" "${FRAMEWORK_DIR}/${path}"
     copied_count=$((copied_count + 1))
   else
-    echo "  Warning: $path not found, skipping"
+    echo "  ERROR: required manifest path not found: $path"
+    missing_count=$((missing_count + 1))
   fi
 done < "$MANIFEST"
 
 echo "  Copied: $copied_count paths"
-echo "  Excluded: $excluded_count user_state paths"
+echo "  Excluded: $excluded_count user/generated paths"
+
+if [[ "$missing_count" -gt 0 ]]; then
+  echo ""
+  echo "Aborted: $missing_count required manifest paths missing."
+  rm -rf "$STAGE"
+  exit 1
+fi
 
 # ── Clean macOS junk from staged files ──────────────────────────────────────
 echo "Cleaning .DS_Store files..."
@@ -164,11 +180,7 @@ tar -czf "${DIST}/${FRAMEWORK_ARCHIVE}" -C "$STAGE" "pilosa-framework-${VERSION}
 # ── Stage install.sh ────────────────────────────────────────────────────────
 echo "Staging install.sh..."
 
-if [[ -f "${REPO_ROOT}/install.sh" ]]; then
-  cp "${REPO_ROOT}/install.sh" "${DIST}/install.sh"
-else
-  echo "  Warning: install.sh not found at repo root. Create it before releasing."
-fi
+cp "${REPO_ROOT}/install.sh" "${DIST}/install.sh"
 
 # ── Generate checksums ─────────────────────────────────────────────────────
 echo "Generating checksums..."

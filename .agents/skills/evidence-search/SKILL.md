@@ -24,7 +24,8 @@ Search existing workspace sources for evidence. This is the fallback instruction
 3. Search `raw/` for matching terms and aliases.
 4. Read only the relevant source sections needed to answer the retrieval task.
 5. Write evidence to `agent_reports/evidence_packet.md`.
-6. Return file path and summary to orchestrator.
+6. Append one compact metrics row to `logs/session_metrics.tsv`.
+7. Return file path and summary to orchestrator.
 
 ## Output — Always Write to File
 
@@ -78,6 +79,7 @@ Evidence written to agent_reports/evidence_packet.md
 - Include a source path for every evidence item.
 - If no relevant source exists, write a packet with `sources_found: 0` and say so clearly.
 - If you run multiple search rounds, append to the same file — do not overwrite.
+- Append one metrics row with operation `search`, directories seen, maps read, raw match count, raw files read, reports written, and output path. Use `.bin/lib/metrics.sh` when available; never log raw command output, long grep terms, source excerpts, secrets, or credentials.
 
 ## See also
 

@@ -19,7 +19,8 @@ connects_to:
   - .agents/skills/orchestrator-dispatch/SKILL.md
   - workspace_index.md
 created: 2026-05-26
-updated: 2026-06-02
+updated: 2026-06-05
+status: active
 ---
 
 # System Architecture Map

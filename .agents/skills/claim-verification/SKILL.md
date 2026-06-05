@@ -44,7 +44,7 @@ Trace every claim to its source. Confirm accuracy. Correct errors in-place. Neve
 - Never create new interpretations — only verify existing claims.
 - Check every direct quote against the repository verbatim format in `../report-writing/references/verbatim-format.md`.
 - Confirm every quoted passage is accurate, has a valid source path, and includes enough context to stand alone.
-- Do not edit `raw/`, maps, dictionary, or logs.
+- Do not edit `raw/`, maps, dictionary, or `logs/user_requests.md`; append only compact operation metrics to `logs/session_metrics.tsv` when verification completes.
 - Do not create separate verifier notes when a report exists — modify the report itself.
 - Update the Navigation Dashboard Status line after verification: `○ pending` → `✓ verified` | `⚠ corrections` | `✗ failed`.
 

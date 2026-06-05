@@ -2,11 +2,13 @@
 set -euo pipefail
 
 # ── pilosa — CLI entry point ────────────────────────────────────────────────
-# Usage: pilosa [new|update|help]
+# Usage: pilosa [new|update|check|sync|help]
 #
 # Commands:
 #   new       Create a new Pilosa workspace and run onboarding
 #   update    Update workspace framework files from a release
+#   check     Validate workspace integrity and configuration
+#   sync      Sync agent and skill mirrors from canonical sources
 #   help      Show this help
 
 # ── ANSI colors (zero dependencies) ─────────────────────────────────────────
@@ -19,8 +21,15 @@ fi
 
 # ── paths ───────────────────────────────────────────────────────────────────
 PILOSA_HOME="${PILOSA_HOME:-$HOME/.pilosa}"
+PILOSA_REPO="${PILOSA_REPO:-TommasoPrinetti/pilosa}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TODAY="$(date +%Y-%m-%d)"
+USE_GUM="1"
+
+# Source file classes used by integrated onboarding.
+MARKDOWN_EXTENSIONS="txt|rtf|textile|wiki|mediawiki|dokuwiki|pmwiki|outliner|workflowy|dynalist"
+NATIVE_EXTENSIONS="md|csv|json|yaml|yml|toml|xml|html|css|js|ts|py|rb|sh|log|ini|cfg|conf|tex|bib|org|adoc|rst|tiddlywiki|logseq|roam|obsidian"
+BINARY_COPYABLE_EXTENSIONS="pdf"
 
 # Resolve framework root:
 #   - Dev mode: binary is in .bin/ of the repo → FRAMEWORK_ROOT is repo root
@@ -35,8 +44,14 @@ resolve_framework_root() {
 
   # Installed mode: find latest version
   if [[ -d "${PILOSA_HOME}/versions" ]]; then
-    local latest_version
-    latest_version="$(ls -1 "${PILOSA_HOME}/versions" 2>/dev/null | sort -V | tail -1)"
+      local latest_version
+      local portable_sort
+      if sort -V /dev/null 2>/dev/null; then
+        portable_sort="sort -V"
+      else
+        portable_sort="sort -t. -k1,1n -k2,2n -k3,3n"
+      fi
+      latest_version="$(ls -1 "${PILOSA_HOME}/versions" 2>/dev/null | $portable_sort | tail -1)"
     if [[ -n "$latest_version" ]]; then
       local fw_dir="${PILOSA_HOME}/versions/${latest_version}"
       # The archive unpacks to pilosa-framework-<version>/
@@ -62,6 +77,36 @@ ok()        { printf '  %s %s\n' "${G}✦${RESET}" "$1"; }
 warn()      { printf '  %s %s\n' "${Y}⚠${RESET}" "$1"; }
 note()      { printf '  %s↳%s %s\n' "${DIM}" "${RESET}" "$1"; }
 die()       { printf '\n  %s %s\n\n' "${R}✗${RESET}" "$1" >&2; exit 1; }
+print_step(){ printf '\n  %s%s[%s/%s] %s%s\n' "${BOLD}" "${C}" "$1" "$2" "$3" "${RESET}"; }
+
+gum_available() {
+  [[ "$USE_GUM" == "1" && -x "${PILOSA_HOME}/bin/gum" && -t 0 ]]
+}
+
+gum_input() {
+  local prompt="$1" value="${2:-}"
+  gum_available || return 127
+  "${PILOSA_HOME}/bin/gum" input --placeholder "$prompt" --value "$value"
+}
+
+gum_file() {
+  local title="$1"
+  gum_available || return 127
+  "${PILOSA_HOME}/bin/gum" file --directory --title "$title"
+}
+
+gum_choose() {
+  local prompt="$1"
+  shift
+  gum_available || return 127
+  "${PILOSA_HOME}/bin/gum" choose --header "$prompt" "$@"
+}
+
+gum_confirm() {
+  local prompt="$1"
+  gum_available || return 127
+  "${PILOSA_HOME}/bin/gum" confirm "$prompt"
+}
 
 ask() {
   local prompt="$1" default="${2:-}" hint="${3:-}"
@@ -252,6 +297,746 @@ sha256_file() {
   fi
 }
 
+download_file() {
+  local url="$1" dest="$2"
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsSL "$url" -o "$dest"
+  elif command -v wget >/dev/null 2>&1; then
+    wget -q "$url" -O "$dest"
+  else
+    die "Neither curl nor wget found. Please install one."
+  fi
+}
+
+verify_checksum() {
+  local file="$1" expected="$2"
+  local actual
+  actual="$(sha256_file "$file" 2>/dev/null || true)"
+  [[ -n "$actual" ]] || die "No SHA-256 tool found. Cannot verify release artifact."
+  [[ "$actual" == "$expected" ]] || die "Checksum mismatch for $(basename "$file")"
+}
+
+manifest_hash() {
+  local manifest="$1" path="$2"
+  awk -F '\t' -v p="$path" '$1 == p { print $2; exit }' "$manifest"
+}
+
+framework_version() {
+  local root="$1"
+  if [[ -f "${root}/metadata/version" ]]; then
+    sed -n '1p' "${root}/metadata/version"
+  else
+    echo "dev"
+  fi
+}
+
+is_release_managed_role() {
+  local role="$1"
+  [[ "$role" != "user_state" && "$role" != "generated_state" ]]
+}
+
+next_sidecar_path() {
+  local dst="$1"
+  local sidecar="${dst}.pilosa-new"
+  local n=1
+  while [[ -e "$sidecar" ]]; do
+    sidecar="${dst}.pilosa-new.${n}"
+    n=$((n + 1))
+  done
+  echo "$sidecar"
+}
+
+resolve_latest_release_version() {
+  local url
+  if ! command -v curl >/dev/null 2>&1; then
+    die "curl is required to resolve latest. Use --version X.Y.Z instead."
+  fi
+  url="$(curl -fsSL -o /dev/null -w '%{url_effective}' "https://github.com/${PILOSA_REPO}/releases/latest" 2>/dev/null || true)"
+  [[ -n "$url" && "$url" != */latest ]] || die "Could not resolve latest version. Use --version X.Y.Z instead."
+  basename "$url" | sed 's/^v//'
+}
+
+release_dir_version() {
+  local release_dir="$1" version="$2"
+  if [[ "$version" != "latest" ]]; then
+    echo "$version"
+    return
+  fi
+  basename "$release_dir" | sed 's/^v//'
+}
+
+prepare_release_framework() {
+  local requested_version="$1" release_dir="$2" tmpdir="$3"
+  local version archive_name archive_path checksums_path expected framework_dir
+
+  if [[ -n "$release_dir" ]]; then
+    version="$(release_dir_version "$release_dir" "$requested_version")"
+  elif [[ "$requested_version" == "latest" ]]; then
+    version="$(resolve_latest_release_version)"
+  else
+    version="$requested_version"
+  fi
+
+  archive_name="pilosa-framework-${version}.tar.gz"
+  archive_path="${tmpdir}/${archive_name}"
+  checksums_path="${tmpdir}/checksums.txt"
+
+  if [[ -n "$release_dir" ]]; then
+    [[ -f "${release_dir}/${archive_name}" ]] || die "Release archive not found: ${release_dir}/${archive_name}"
+    [[ -f "${release_dir}/checksums.txt" ]] || die "Release checksums not found: ${release_dir}/checksums.txt"
+    cp "${release_dir}/${archive_name}" "$archive_path"
+    cp "${release_dir}/checksums.txt" "$checksums_path"
+  else
+    local base_url="${PILOSA_RELEASE_BASE_URL:-https://github.com/${PILOSA_REPO}/releases/download/v${version}}"
+    info "Downloading release: v${version}" >&2
+    download_file "${base_url}/${archive_name}" "$archive_path"
+    download_file "${base_url}/checksums.txt" "$checksums_path"
+  fi
+
+  expected="$(awk -v f="$archive_name" '$2 == f { print $1; exit }' "$checksums_path")"
+  [[ -n "$expected" ]] || die "${archive_name} not found in checksums.txt"
+  verify_checksum "$archive_path" "$expected"
+
+  tar -xzf "$archive_path" -C "$tmpdir"
+  framework_dir="${tmpdir}/pilosa-framework-${version}"
+  [[ -f "${framework_dir}/.pilosa/framework-files.tsv" ]] || die "Release manifest missing from archive"
+  printf '%s\t%s\n' "$version" "$framework_dir"
+}
+
+copy_to_clipboard() {
+  local text="$1"
+  if command -v pbcopy >/dev/null 2>&1; then
+    printf '%s' "$text" | pbcopy
+  elif command -v xclip >/dev/null 2>&1; then
+    printf '%s' "$text" | xclip -selection clipboard
+  elif command -v xsel >/dev/null 2>&1; then
+    printf '%s' "$text" | xsel --clipboard --input
+  elif command -v clip.exe >/dev/null 2>&1; then
+    printf '%s' "$text" | clip.exe
+  else
+    return 1
+  fi
+}
+
+sanitize_yaml() { printf '%s' "$1" | tr '"' "'" | tr '\n' ' '; }
+
+shell_quote() {
+  local value="$1"
+  value="${value//\'/\'\\\'\'}"
+  printf "'%s'" "$value"
+}
+
+prompt_preview() {
+  local line count=0
+  while IFS= read -r line; do
+    printf '%s\n' "$line"
+    count=$((count + 1))
+    [[ "$count" -ge 4 ]] && break
+  done
+  printf '...\n'
+}
+
+print_box() {
+  printf '\n  %s┌%s┐%s\n' "${DIM}" "$(printf '%.0s─' 1 {1..76})" "${RESET}"
+  printf '  %s│%s %s%s%s\n' "${DIM}" "${RESET}" "${BOLD}$1${RESET}" "${DIM}" "${RESET}"
+  printf '  %s├%s┤%s\n' "${DIM}" "$(printf '%.0s─' 1 {1..76})" "${RESET}"
+  while IFS= read -r line; do
+    printf '  %s│%s %s\n' "${DIM}" "${RESET}" "$line"
+  done
+  printf '  %s└%s┘%s\n' "${DIM}" "$(printf '%.0s─' 1 {1..76})" "${RESET}"
+}
+
+build_launch_command() {
+  local root="$1" cli="$2" prompt="$3" root_cmd
+  root_cmd="$(shell_quote "$root")"
+
+  case "$cli" in
+    "Codex")
+      printf 'codex -C %s "$(cat <<'\''PILOSA_STARTUP_PROMPT'\''\n' "$root_cmd"
+      printf '%s\n' "$prompt"
+      printf 'PILOSA_STARTUP_PROMPT\n)"\n'
+      ;;
+    "Codex App")
+      printf 'codex app %s\n' "$root_cmd"
+      ;;
+    "OpenCode")
+      printf 'opencode --prompt "$(cat <<'\''PILOSA_STARTUP_PROMPT'\''\n'
+      printf '%s\n' "$prompt"
+      printf 'PILOSA_STARTUP_PROMPT\n)" %s\n' "$root_cmd"
+      ;;
+    "OpenCode Desktop")
+      printf 'opencode %s\n' "$root_cmd"
+      ;;
+    "Claude Code")
+      printf 'cd %s && claude "$(cat <<'\''PILOSA_STARTUP_PROMPT'\''\n' "$root_cmd"
+      printf '%s\n' "$prompt"
+      printf 'PILOSA_STARTUP_PROMPT\n)"\n'
+      ;;
+    "Claude Code Desktop")
+      local encoded_prompt
+      encoded_prompt="$(printf '%s' "$prompt" | python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.stdin.read(), safe=""))' 2>/dev/null || printf '%s' "$prompt" | sed 's/ /%20/g; s/"/%22/g')"
+      printf 'open "claude://code/new?q=%s&folder=%s"\n' "$encoded_prompt" "$root_cmd"
+      ;;
+    "Kilo")
+      printf 'cd %s && kilo "$(cat <<'\''PILOSA_STARTUP_PROMPT'\''\n' "$root_cmd"
+      printf '%s\n' "$prompt"
+      printf 'PILOSA_STARTUP_PROMPT\n)"\n'
+      ;;
+    *)
+      printf 'cd %s && <your-llm-cli> "$(cat <<'\''PILOSA_STARTUP_PROMPT'\''\n' "$root_cmd"
+      printf '%s\n' "$prompt"
+      printf 'PILOSA_STARTUP_PROMPT\n)"\n'
+      ;;
+  esac
+}
+
+run_cli_with_prompt() {
+  local root="$1" cli="$2" prompt="$3"
+  case "$cli" in
+    "Codex")
+      command -v codex >/dev/null 2>&1 || { warn "codex was not found on PATH."; return 1; }
+      exec codex -C "$root" "$prompt"
+      ;;
+    "Codex App")
+      command -v codex >/dev/null 2>&1 || { warn "codex was not found on PATH."; return 1; }
+      copy_to_clipboard "$prompt"
+      codex app "$root" &
+      ok "Prompt copied to clipboard — paste it in the Codex app."
+      ;;
+    "OpenCode")
+      command -v opencode >/dev/null 2>&1 || { warn "opencode was not found on PATH."; return 1; }
+      exec opencode --prompt "$prompt" "$root"
+      ;;
+    "OpenCode Desktop")
+      command -v opencode >/dev/null 2>&1 || { warn "opencode was not found on PATH."; return 1; }
+      copy_to_clipboard "$prompt"
+      opencode "$root" &
+      ok "Prompt copied to clipboard — paste it in the OpenCode TUI."
+      ;;
+    "Claude Code")
+      command -v claude >/dev/null 2>&1 || { warn "claude was not found on PATH."; return 1; }
+      cd "$root"
+      exec claude "$prompt"
+      ;;
+    "Claude Code Desktop")
+      local encoded_prompt
+      encoded_prompt="$(printf '%s' "$prompt" | python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.stdin.read(), safe=""))' 2>/dev/null || printf '%s' "$prompt" | sed 's/ /%20/g; s/"/%22/g')"
+      if [[ "$(uname)" == "Darwin" ]]; then
+        open "claude://code/new?q=${encoded_prompt}&folder=${root}"
+        ok "Opening Claude Code Desktop with pre-filled prompt."
+      else
+        copy_to_clipboard "$prompt"
+        ok "Prompt copied to clipboard — open Claude Code Desktop and paste it."
+      fi
+      ;;
+    "Kilo")
+      command -v kilo >/dev/null 2>&1 || { warn "kilo was not found on PATH."; return 1; }
+      cd "$root"
+      exec kilo "$prompt"
+      ;;
+    *)
+      warn "Run-now is only available for known CLI choices."
+      return 1
+      ;;
+  esac
+}
+
+should_skip_source_file() {
+  local name lower_name
+  name="$(basename "$1")"
+  lower_name="$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]')"
+  [[ "$lower_name" == "agents.md" ]] && return 0
+  case "$1" in
+    */.DS_Store|*/.gitkeep|*/node_modules/*|*/.git/*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+file_ext() {
+  local name ext
+  name="$(basename "$1")"
+  [[ "$name" == *.* ]] || { echo ""; return; }
+  ext="${name##*.}"
+  printf '%s' "$ext" | tr '[:upper:]' '[:lower:]'
+}
+
+ext_in_list() {
+  local ext="$1" list="$2"
+  case "|$list|" in
+    *"|$ext|"*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+is_markdown_convertible_file() { local ext; ext="$(file_ext "$1")"; [[ -n "$ext" ]] && ext_in_list "$ext" "$MARKDOWN_EXTENSIONS"; }
+is_native_readable_file() { local ext; ext="$(file_ext "$1")"; [[ -n "$ext" ]] && ext_in_list "$ext" "$NATIVE_EXTENSIONS"; }
+is_binary_copyable_file() { local ext; ext="$(file_ext "$1")"; [[ -n "$ext" ]] && ext_in_list "$ext" "$BINARY_COPYABLE_EXTENSIONS"; }
+
+markdown_raw_rel_path() {
+  local rel_path="$1" name dir stem ext
+  name="$(basename "$rel_path")"
+  dir="$(dirname "$rel_path")"
+  ext="$(file_ext "$rel_path")"
+  [[ "$ext" == "md" ]] && { echo "$rel_path"; return; }
+  stem="${name%.*}"
+  if [[ "$dir" == "." ]]; then
+    echo "${stem}__${ext}.md"
+  else
+    echo "${dir}/${stem}__${ext}.md"
+  fi
+}
+
+truncate_display_path() {
+  local value="$1" max_len="$2"
+  if (( ${#value} <= max_len )); then
+    echo "$value"
+  else
+    echo "...${value:$((${#value} - max_len + 3))}"
+  fi
+}
+
+plural_count() {
+  local count="$1" singular="$2" plural="${3:-$2s}"
+  if [[ "$count" -eq 1 ]]; then
+    printf '1 %s' "$singular"
+  else
+    printf '%d %s' "$count" "$plural"
+  fi
+}
+
+file_size_bytes() {
+  local path="$1"
+  if stat -c %s "$path" >/dev/null 2>&1; then
+    stat -c %s "$path"
+  elif stat -f %z "$path" >/dev/null 2>&1; then
+    stat -f %z "$path"
+  else
+    printf '0'
+  fi
+}
+
+format_bytes() {
+  local bytes="$1"
+  if [[ "$bytes" -ge 1073741824 ]]; then
+    printf '%d.%02d GB' $((bytes / 1073741824)) $(((bytes % 1073741824) * 100 / 1073741824))
+  elif [[ "$bytes" -ge 1048576 ]]; then
+    printf '%d.%02d MB' $((bytes / 1048576)) $(((bytes % 1048576) * 100 / 1048576))
+  elif [[ "$bytes" -ge 1024 ]]; then
+    printf '%d.%02d KB' $((bytes / 1024)) $(((bytes % 1024) * 100 / 1024))
+  else
+    printf '%d B' "$bytes"
+  fi
+}
+
+classify_source_file() {
+  local path="$1" ext
+  should_skip_source_file "$path" && { echo "ignored"; return; }
+  is_markdown_convertible_file "$path" && { echo "markdown"; return; }
+  is_native_readable_file "$path" && { echo "native"; return; }
+  is_binary_copyable_file "$path" && { echo "binary_copyable"; return; }
+  ext="$(file_ext "$path")"
+  case "$ext" in
+    jpg|jpeg|png|gif|webp|heic|heif|tif|tiff|bmp|svg) echo "image" ;;
+    mp4|mov|m4v|avi|mkv|webm|wmv) echo "video" ;;
+    mp3|wav|m4a|aac|flac|ogg|opus|aiff) echo "audio" ;;
+    *) echo "unknown" ;;
+  esac
+}
+
+scan_source() {
+  local source_path="$1" f class size
+  SCAN_TOTAL_COUNT=0
+  SCAN_MARKDOWN_COUNT=0
+  SCAN_NATIVE_COUNT=0
+  SCAN_BINARY_COPYABLE_COUNT=0
+  SCAN_IMAGE_COUNT=0
+  SCAN_VIDEO_COUNT=0
+  SCAN_AUDIO_COUNT=0
+  SCAN_UNKNOWN_COUNT=0
+  SCAN_IGNORED_COUNT=0
+  SCAN_MARKDOWN_BYTES=0
+  SCAN_NATIVE_BYTES=0
+  SCAN_BINARY_COPYABLE_BYTES=0
+  SCAN_IMAGE_BYTES=0
+  SCAN_VIDEO_BYTES=0
+  SCAN_AUDIO_BYTES=0
+  SCAN_UNKNOWN_BYTES=0
+
+  printf '\n'
+  while IFS= read -r -d '' f; do
+    class="$(classify_source_file "$f")"
+    if [[ "$class" != "ignored" ]]; then
+      SCAN_TOTAL_COUNT=$((SCAN_TOTAL_COUNT + 1))
+      size="$(file_size_bytes "$f")"
+      printf '\r\033[2K  %sscanning%s %s' "${DIM}" "${RESET}" "$(truncate_display_path "$f" 54)" >&2
+    else
+      size=0
+    fi
+    case "$class" in
+      markdown) SCAN_MARKDOWN_COUNT=$((SCAN_MARKDOWN_COUNT + 1)); SCAN_MARKDOWN_BYTES=$((SCAN_MARKDOWN_BYTES + size)) ;;
+      native) SCAN_NATIVE_COUNT=$((SCAN_NATIVE_COUNT + 1)); SCAN_NATIVE_BYTES=$((SCAN_NATIVE_BYTES + size)) ;;
+      binary_copyable) SCAN_BINARY_COPYABLE_COUNT=$((SCAN_BINARY_COPYABLE_COUNT + 1)); SCAN_BINARY_COPYABLE_BYTES=$((SCAN_BINARY_COPYABLE_BYTES + size)) ;;
+      image) SCAN_IMAGE_COUNT=$((SCAN_IMAGE_COUNT + 1)); SCAN_IMAGE_BYTES=$((SCAN_IMAGE_BYTES + size)) ;;
+      video) SCAN_VIDEO_COUNT=$((SCAN_VIDEO_COUNT + 1)); SCAN_VIDEO_BYTES=$((SCAN_VIDEO_BYTES + size)) ;;
+      audio) SCAN_AUDIO_COUNT=$((SCAN_AUDIO_COUNT + 1)); SCAN_AUDIO_BYTES=$((SCAN_AUDIO_BYTES + size)) ;;
+      unknown) SCAN_UNKNOWN_COUNT=$((SCAN_UNKNOWN_COUNT + 1)); SCAN_UNKNOWN_BYTES=$((SCAN_UNKNOWN_BYTES + size)) ;;
+      ignored) SCAN_IGNORED_COUNT=$((SCAN_IGNORED_COUNT + 1)) ;;
+    esac
+  done < <(find "$source_path" -type f -print0 2>/dev/null)
+  printf '\r\033[2K' >&2
+}
+
+print_scan_summary() {
+  printf '  %s✓%s Source scan complete\n' "${G}" "${RESET}"
+  [[ "$SCAN_MARKDOWN_COUNT" -gt 0 ]] && printf '  %s├─%s %s to rename to .md (%s)\n' "${DIM}" "${RESET}" "$(plural_count "$SCAN_MARKDOWN_COUNT" "text-based file")" "$(format_bytes "$SCAN_MARKDOWN_BYTES")"
+  [[ "$SCAN_NATIVE_COUNT" -gt 0 ]] && printf '  %s├─%s %s to copy unchanged (%s)\n' "${DIM}" "${RESET}" "$(plural_count "$SCAN_NATIVE_COUNT" "native-readable file")" "$(format_bytes "$SCAN_NATIVE_BYTES")"
+  [[ "$SCAN_BINARY_COPYABLE_COUNT" -gt 0 ]] && printf '  %s├─%s %s to copy as-is (%s)\n' "${DIM}" "${RESET}" "$(plural_count "$SCAN_BINARY_COPYABLE_COUNT" "PDF")" "$(format_bytes "$SCAN_BINARY_COPYABLE_BYTES")"
+  [[ "$SCAN_IMAGE_COUNT" -gt 0 ]] && printf '  %s├─%s %s skipped (%s)\n' "${DIM}" "${RESET}" "$(plural_count "$SCAN_IMAGE_COUNT" "image")" "$(format_bytes "$SCAN_IMAGE_BYTES")"
+  [[ "$SCAN_VIDEO_COUNT" -gt 0 ]] && printf '  %s├─%s %s skipped (%s)\n' "${DIM}" "${RESET}" "$(plural_count "$SCAN_VIDEO_COUNT" "video")" "$(format_bytes "$SCAN_VIDEO_BYTES")"
+  [[ "$SCAN_AUDIO_COUNT" -gt 0 ]] && printf '  %s├─%s %s skipped (%s)\n' "${DIM}" "${RESET}" "$(plural_count "$SCAN_AUDIO_COUNT" "audio file")" "$(format_bytes "$SCAN_AUDIO_BYTES")"
+  [[ "$SCAN_UNKNOWN_COUNT" -gt 0 ]] && printf '  %s├─%s %s unsupported or unknown (%s)\n' "${DIM}" "${RESET}" "$(plural_count "$SCAN_UNKNOWN_COUNT" "file")" "$(format_bytes "$SCAN_UNKNOWN_BYTES")"
+  printf '  %s└─%s %s ignored\n' "${DIM}" "${RESET}" "$(plural_count "$SCAN_IGNORED_COUNT" "file")"
+  note "Images, video, audio, unsupported files, and AGENTS.md control files are skipped."
+}
+
+render_copy_progress() {
+  local processed="$1" total="$2" copied="$3" skipped="$4" current_file="${5:-}"
+  local width=28 filled=0 bar="" i
+  [[ "$total" -gt 0 ]] && filled=$((processed * width / total))
+  for ((i = 0; i < width; i++)); do
+    if (( i < filled )); then bar+="█"; else bar+="░"; fi
+  done
+  current_file="$(truncate_display_path "$current_file" 46)"
+  printf '\r\033[2K  %s[%s]%s %d/%d %s (%d copied, %d skipped)' "${C}" "$bar" "${RESET}" "$processed" "$total" "$current_file" "$copied" "$skipped" >&2
+}
+
+copy_source() {
+  local source_path="$1" dest_dir="$2"
+  local total_files=$((SCAN_MARKDOWN_COUNT + SCAN_NATIVE_COUNT + SCAN_BINARY_COPYABLE_COUNT))
+  [[ "$total_files" -gt 0 ]] || { warn "No copyable files found in source location."; return 1; }
+
+  local copied=0 skipped=0 processed=0 src_file rel_path raw_rel_path dest_file dest_parent
+  render_copy_progress 0 "$total_files" 0 0 ""
+
+  while IFS= read -r -d '' src_file; do
+    should_skip_source_file "$src_file" && continue
+    is_markdown_convertible_file "$src_file" || continue
+    rel_path="${src_file#"$source_path"/}"
+    raw_rel_path="$(markdown_raw_rel_path "$rel_path")"
+    dest_file="$dest_dir/$raw_rel_path"
+    dest_parent="$(dirname "$dest_file")"
+    mkdir -p "$dest_parent"
+    if [[ -f "$dest_file" ]]; then
+      skipped=$((skipped + 1))
+    else
+      cp "$src_file" "$dest_file"
+      copied=$((copied + 1))
+    fi
+    processed=$((processed + 1))
+    render_copy_progress "$processed" "$total_files" "$copied" "$skipped" "$rel_path"
+  done < <(find "$source_path" -type f -print0 2>/dev/null)
+
+  while IFS= read -r -d '' src_file; do
+    should_skip_source_file "$src_file" && continue
+    is_native_readable_file "$src_file" || continue
+    rel_path="${src_file#"$source_path"/}"
+    dest_file="$dest_dir/$rel_path"
+    dest_parent="$(dirname "$dest_file")"
+    mkdir -p "$dest_parent"
+    if [[ -f "$dest_file" ]]; then
+      skipped=$((skipped + 1))
+    else
+      cp "$src_file" "$dest_file"
+      copied=$((copied + 1))
+    fi
+    processed=$((processed + 1))
+    render_copy_progress "$processed" "$total_files" "$copied" "$skipped" "$rel_path"
+  done < <(find "$source_path" -type f -print0 2>/dev/null)
+
+  while IFS= read -r -d '' src_file; do
+    should_skip_source_file "$src_file" && continue
+    is_binary_copyable_file "$src_file" || continue
+    rel_path="${src_file#"$source_path"/}"
+    dest_file="$dest_dir/$rel_path"
+    dest_parent="$(dirname "$dest_file")"
+    mkdir -p "$dest_parent"
+    if [[ -f "$dest_file" ]]; then
+      skipped=$((skipped + 1))
+    else
+      cp "$src_file" "$dest_file"
+      copied=$((copied + 1))
+    fi
+    processed=$((processed + 1))
+    render_copy_progress "$processed" "$total_files" "$copied" "$skipped" "$rel_path"
+  done < <(find "$source_path" -type f -print0 2>/dev/null)
+
+  printf '\n'
+  ok "Raw records written to ${BOLD}${dest_dir}${RESET}"
+}
+
+choose_preferred_cli() {
+  local options=("Claude Code" "Claude Code Desktop" "Codex" "Codex App" "OpenCode" "OpenCode Desktop" "Kilo" "Other")
+  gum_choose "Preferred LLM CLI" "${options[@]}" 2>/dev/null || arrow_select "Preferred LLM CLI" "${options[@]}"
+}
+
+choose_handoff_action() {
+  local options=("Copy launch command" "Run launch command now")
+  gum_choose "Handoff action" "${options[@]}" 2>/dev/null || arrow_select "Handoff action" "${options[@]}"
+}
+
+confirm_action() {
+  local prompt="$1" default="${2:-y}"
+  if gum_available; then
+    gum_confirm "$prompt" 2>/dev/null
+    return $?
+  fi
+  confirm "$prompt" "$default"
+}
+
+print_path_list() {
+  local title="$1"
+  shift
+  local count="$#" shown=0 path remaining
+  [[ "$count" -gt 0 ]] || return 0
+
+  info "${title}: ${count}"
+  for path in "$@"; do
+    shown=$((shown + 1))
+    if [[ "$shown" -gt 8 ]]; then
+      remaining=$((count - 8))
+      note "... ${remaining} more"
+      break
+    fi
+    note "$path"
+  done
+}
+
+write_setup_files() {
+  local root="$1" project_title="$2" source_path="$3" preferred_cli="$4"
+  local context="$root/system/context.md" config="$root/system/configuration.md"
+  local agents="$root/AGENTS.md" claude="$root/CLAUDE.md"
+  local safe_source claude_created="no"
+  safe_source="$(sanitize_yaml "$source_path")"
+
+  mkdir -p "$(dirname "$context")" "$(dirname "$config")"
+  cat > "$context" << CONTEXT_EOF
+---
+type: information
+agent: setup_cli
+description:
+  - Project blueprint filled during onboarding and startup.
+  - Agents read this to understand scope, source location, evidence rules, and researcher preferences.
+created: $TODAY
+updated: $TODAY
+setup_status: cli_started
+connects_to:
+  - AGENTS.md
+  - system/configuration.md
+  - system/startup.md
+  - logs/user_requests.md
+---
+
+# Information
+
+## Project
+- Title: ${project_title:-[project name]}
+- Description: not provided during fast setup; infer from the raw corpus during startup
+
+## Project Artifacts
+- none provided during fast setup
+
+## Sources
+- Source location: ${source_path:-[path]}
+- Main source types: [inferred during startup from the source material]
+- Expected incoming sources: [inferred during startup]
+
+## Research Vocabulary
+- Key actors / institutions / places: [inferred during startup]
+- Key concepts: [inferred during startup]
+- Sensitizing concepts, not evidence: [inferred during startup]
+- Theoretical frames, not forced labels: [inferred during startup]
+
+## Method And Evidence
+- Methods: [inferred during startup]
+- Claims require source paths.
+- L2 clues require Verifier checking before reporting.
+- External sources must stay labeled external unless moved into \`raw/\`.
+- External source policy: no (default; ask only if external access is needed)
+
+## Outputs
+- Start with navigation maps in maps/ and evidence-grounded answers unless the researcher requests another output.
+
+## Blind Spots
+- [identified during startup]
+
+## Researcher Preferences
+[stated or inferred during startup]
+
+## Preferred LLM CLI
+$preferred_cli
+CONTEXT_EOF
+
+  cat > "$config" << CONFIG_EOF
+---
+type: project_configuration
+agent: setup_cli
+description:
+  - Operating profile for the current Pilosa project or framework template.
+  - Agents read this first to learn source policy, protected paths, and setup status.
+created: $TODAY
+updated: $TODAY
+setup_status: cli_started
+---
+
+# Configuration
+
+Agents read this before major work.
+
+\`\`\`yaml
+workspace_type: research_framework
+research_mode: evolving_complex_corpus
+source_location: "$safe_source"
+source_mode: protected_append_only
+
+source_policy: internal_first
+active_corpus_path: raw/
+active_corpus_policy: raw_first_after_onboarding
+external_sources_allowed: no
+
+claim_standard: source_link_required
+l2_policy: verifier_required
+
+protected_paths:
+  - "$safe_source"
+  - context.md
+
+stale_after_days: 30
+preferred_llm_cli: "$preferred_cli"
+\`\`\`
+
+## Notes
+- This file was initialized by \`pilosa new\`.
+- The CLI collected: project name, source location, and preferred LLM CLI. It scanned the source location and transposed accepted files (text, native, PDF) into raw/. Images, video, audio, and AGENTS.md control files were skipped.
+- After onboarding, the source location remains immutable original storage. Normal source-grounded work starts from raw/.
+- During startup, project description and helpful artifact URLs are optional. If absent, the LLM CLI agent records them as not provided, keeps external_sources_allowed at its default \`no\`, and infers working scope from the raw corpus.
+- When setup_status reaches workspace_started, the startup workflow has built the master dictionary, generated YAML headers, created multi-level navigation maps in maps/, and passed validation.
+- This file never grants permission to edit the source location or \`raw/\`.
+CONFIG_EOF
+
+  if [[ "$preferred_cli" == "Claude Code" && -f "$agents" ]]; then
+    cp "$agents" "$claude"
+    claude_created="yes"
+  fi
+
+  mkdir -p "$root/.obsidian/snippets"
+  cat > "$root/.obsidian/appearance.json" << 'APPEARANCE_EOF'
+{
+  "cssSnippets": [
+    "pilosa"
+  ]
+}
+APPEARANCE_EOF
+
+  ok "Setup files written"
+  note "$context"
+  note "$config"
+  [[ "$claude_created" == "yes" ]] && note "$claude"
+  note "$root/.obsidian/appearance.json"
+}
+
+startup_prompt_text() {
+  local project_title="$1" source_path="$2" preferred_cli="$3"
+  cat << PROMPT_EOF
+This is the Pilosa startup handoff. The user has completed pilosa new setup.
+
+Read these files first, in this order:
+1. AGENTS.md
+2. system/configuration.md
+3. system/context.md
+4. system/yaml_header_template.md
+
+The setup draft already contains:
+- Project name: ${project_title}
+- Source location: ${source_path} (already validated, files transposed to raw/ — images, video, audio, and AGENTS.md skipped)
+- Preferred LLM CLI: ${preferred_cli}
+
+Optional context not collected by fast setup:
+- Project description (if absent, infer from the raw corpus)
+- Helpful artifact URLs or file paths (if absent, record none provided)
+- External source policy defaults to no; ask only if external URL access is needed or the user requests external sources.
+
+Then execute system/startup.md. Specifically:
+- Phase 1: Verify onboarding completed (setup files exist, source location valid)
+- Phase 2: Index, Map, Validate — build the master dictionary, extract content-grounded fragments, generate YAML headers, write multi-level navigation maps, run serendipitous connection discovery, update workspace_index.md, run validation and retrieval tests
+- Set setup_status to workspace_started in both system/context.md and system/configuration.md
+- Write the startup report to agent_reports/
+
+Do not re-ask questions the CLI draft already answered. Do not stop after one index. Do not edit the source location or \`raw/\`.
+PROMPT_EOF
+}
+
+run_integrated_onboarding() {
+  local root="$1" project_title="$2"
+  local source_path="" preferred_cli startup_prompt launch_command handoff_action
+
+  if [[ -f "$root/.bin/sync-agents.sh" ]]; then
+    (cd "$root" && bash ".bin/sync-agents.sh")
+  fi
+
+  print_step 3 6 "Source location"
+  note "This is the folder of your source files. Nothing in it is moved, renamed, or edited."
+  if source_path="$(gum_file "Choose source location" 2>/dev/null)"; then
+    source_path="$(normalize_path_input "$source_path")"
+  else
+    while [[ -z "$source_path" ]]; do
+      source_path="$(ask "Source location (absolute)" "" "e.g. /Users/name/Documents/my-sources")"
+      source_path="$(normalize_path_input "$source_path")"
+      source_path="$(expand_home "$source_path")"
+      [[ -z "$source_path" ]] && printf '  %s\n' "${R}Source location is required.${RESET}" >&2
+    done
+  fi
+
+  [[ -d "$source_path" ]] || die "Source location does not exist: $source_path"
+  ok "Source: ${BOLD}${source_path}${RESET}"
+
+  print_step 4 6 "Corpus scan and consent"
+  scan_source "$source_path"
+  print_scan_summary
+
+  local copyable_count=$((SCAN_MARKDOWN_COUNT + SCAN_NATIVE_COUNT + SCAN_BINARY_COPYABLE_COUNT))
+  [[ "$copyable_count" -gt 0 ]] || die "No copyable files found in source location."
+  if ! confirm_action "Write accepted raw copies into raw/?" "y"; then
+    warn "No raw copies were written. Onboarding stopped after the scan."
+    return 1
+  fi
+  copy_source "$source_path" "$root/raw"
+
+  print_step 5 6 "Startup handoff"
+  preferred_cli="$(choose_preferred_cli)" || return 1
+  ok "CLI: ${BOLD}${preferred_cli}${RESET}"
+
+  write_setup_files "$root" "$project_title" "$source_path" "$preferred_cli"
+  sed -i.bak 's/setup_status: not_started/setup_status: cli_started/' "$root/.pilosa/workspace" 2>/dev/null || \
+  sed -i '' 's/setup_status: not_started/setup_status: cli_started/' "$root/.pilosa/workspace" 2>/dev/null || true
+  rm -f "$root/.pilosa/workspace.bak"
+
+  startup_prompt="$(startup_prompt_text "$project_title" "$source_path" "$preferred_cli")"
+  launch_command="$(build_launch_command "$root" "$preferred_cli" "$startup_prompt")"
+
+  print_box "Pilosa Startup Prompt Preview" <<< "$(prompt_preview <<< "$startup_prompt")"
+  print_box "Terminal Launch Command Preview" <<< "$(prompt_preview <<< "$launch_command")"
+
+  handoff_action="$(choose_handoff_action)" || return 1
+  if [[ "$handoff_action" == "Run launch command now" ]]; then
+    run_cli_with_prompt "$root" "$preferred_cli" "$startup_prompt" || {
+      warn "Could not run ${preferred_cli}. Copying the launch command instead."
+      copy_to_clipboard "$launch_command" && ok "Launch command copied to your clipboard." || print_box "Terminal Launch Command — full text" <<< "$launch_command"
+    }
+  else
+    copy_to_clipboard "$launch_command" && ok "Launch command copied to your clipboard." || print_box "Terminal Launch Command — full text" <<< "$launch_command"
+  fi
+}
+
 # ── framework manifest reader ──────────────────────────────────────────────
 # Reads framework-files.tsv and returns paths matching the given role filter.
 # Usage: read_manifest [framework|user_state|mixed_framework_user]
@@ -289,8 +1074,10 @@ cmd_help() {
 
   printf '  %s\n' "${BOLD}Usage:${RESET}"
   printf '    %s\n' "pilosa new [directory]    Create a new workspace and run onboarding"
-  printf '    %s\n' "pilosa update             Update workspace framework files"
-  printf '    %s\n' "pilosa help               Show this help"
+  printf '    %s\n' "pilosa update [dir]      Update workspace framework files"
+  printf '    %s\n' "pilosa check [directory] Validate workspace integrity"
+  printf '    %s\n' "pilosa sync              Sync agent and skill mirrors from canonical"
+  printf '    %s\n' "pilosa help              Show this help"
   printf '\n'
 
   # Detect workspace
@@ -325,15 +1112,35 @@ cmd_help() {
 cmd_new() {
   header "Pilosa — New Workspace"
 
-  # ── Step 1: Workspace location ──────────────────────────────────────────
   local workspace_path=""
+  local new_args=()
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --force) die "--force is not supported for pilosa new; choose a new workspace path." ;;
+      --numbered) NUMBERED="1"; shift ;;
+      --no-color) R="" G="" B="" Y="" C="" M="" DIM="" BOLD="" RESET=""; shift ;;
+      --no-gum) USE_GUM="0"; shift ;;
+      --help|-h)
+        printf '  %s\n' "Usage: pilosa new [directory] [options]"
+        printf '    %s\n' "  --numbered   Force numbered menus instead of arrow-key menus"
+        printf '    %s\n' "  --no-color   Disable colored output"
+        printf '    %s\n' "  --no-gum     Use plain shell prompts"
+        return 0
+        ;;
+      *)
+        new_args+=("$1")
+        shift
+        ;;
+    esac
+  done
 
-  if [[ -n "${1:-}" ]]; then
-    workspace_path="$(expand_home "$1")"
+  # ── Step 1: Workspace location ──────────────────────────────────────────
+  if [[ -n "${new_args[0]:-}" ]]; then
+    workspace_path="$(expand_home "${new_args[0]}")"
   else
     # Try Gum file picker first
-    if pilosa_gum file --directory --title "Where should the workspace live?" 2>/dev/null; then
-      workspace_path="$(pilosa_gum file --directory --title "Where should the workspace live?" 2>/dev/null)"
+    if workspace_path="$(gum_file "Where should the workspace live?" 2>/dev/null)"; then
+      workspace_path="$(normalize_path_input "$workspace_path")"
     else
       note "This will be your Pilosa research workspace."
       note "Nothing outside this folder is touched."
@@ -365,8 +1172,8 @@ cmd_new() {
   local default_name
   default_name="$(basename "$workspace_path")"
 
-  if pilosa_gum input --placeholder "Project name" --value "$default_name" 2>/dev/null; then
-    project_name="$(pilosa_gum input --placeholder "Project name" --value "$default_name" 2>/dev/null)"
+  if project_name="$(gum_input "Project name" "$default_name" 2>/dev/null)"; then
+    project_name="${project_name:-$default_name}"
   else
     note "This is the working title for your research framework."
     note "It appears at the top of every report."
@@ -392,10 +1199,13 @@ cmd_new() {
 
   mkdir -p "$workspace_path/.pilosa"
 
+  local source_framework_version
+  source_framework_version="$(framework_version "$FRAMEWORK_ROOT")"
+
   # Copy all framework-owned files
   while IFS=$'\t' read -r path role policy; do
     [[ "$path" == "path" ]] && continue  # skip header
-    [[ "$role" == "user_state" ]] && continue  # skip user-state dirs
+    is_release_managed_role "$role" || continue
 
     local src="${FRAMEWORK_ROOT}/${path}"
     local dst="${workspace_path}/${path}"
@@ -415,13 +1225,16 @@ cmd_new() {
     mkdir -p "$workspace_path/$dir"
     touch "$workspace_path/$dir/.gitkeep"
   done
+  if [[ ! -f "$workspace_path/logs/session_metrics.tsv" ]]; then
+    printf 'date\tsession_id\tagent\troute\toperation\tquery_label\tdirs_seen\tmaps_read\traw_matches\traw_files_read\treports_written\toutput_path\n' > "$workspace_path/logs/session_metrics.tsv"
+  fi
 
   ok "Framework files copied"
 
   # ── Step 4: Write workspace metadata ────────────────────────────────────
   cat > "$workspace_path/.pilosa/workspace" << EOF
 workspace_version: 1
-framework_version: 0.1.0
+framework_version: ${source_framework_version}
 created: ${TODAY}
 project_name: ${project_name}
 setup_status: not_started
@@ -431,7 +1244,7 @@ EOF
   printf 'path\tsha256\n' > "$workspace_path/.pilosa/manifest.tsv"
   while IFS=$'\t' read -r path role policy; do
     [[ "$path" == "path" ]] && continue
-    [[ "$role" == "user_state" ]] && continue
+    is_release_managed_role "$role" || continue
 
     local full_path="${workspace_path}/${path}"
     if [[ -f "$full_path" ]]; then
@@ -448,20 +1261,9 @@ EOF
 
   # ── Step 5: Onboarding ──────────────────────────────────────────────────
   divider
-  printf '\n  %s%sRunning onboarding...%s\n\n' "${BOLD}" "${C}" "${RESET}"
+  printf '\n  %s%sRunning integrated onboarding...%s\n\n' "${BOLD}" "${C}" "${RESET}"
 
-  # Run onboard.sh from within the new workspace
-  (
-    cd "$workspace_path"
-    bash "${workspace_path}/.bin/onboard.sh" "$@"
-  )
-
-  # Update workspace status
-  if [[ -f "$workspace_path/system/configuration.md" ]]; then
-    sed -i.bak 's/setup_status: not_started/setup_status: workspace_started/' "$workspace_path/.pilosa/workspace" 2>/dev/null || \
-    sed -i '' 's/setup_status: not_started/setup_status: workspace_started/' "$workspace_path/.pilosa/workspace" 2>/dev/null || true
-    rm -f "$workspace_path/.pilosa/workspace.bak"
-  fi
+  run_integrated_onboarding "$workspace_path" "$project_name"
 
   divider
   ok "Workspace ready at: ${BOLD}${workspace_path}${RESET}"
@@ -476,6 +1278,7 @@ cmd_update() {
 
   local workspace_path=""
   local target_version="latest"
+  local release_dir=""
   local dry_run=0
   local auto_yes=0
 
@@ -483,18 +1286,29 @@ cmd_update() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --version) target_version="$2"; shift 2 ;;
+      --release-dir) release_dir="$(expand_home "$2")"; shift 2 ;;
       --dry-run) dry_run=1; shift ;;
       --yes|-y) auto_yes=1; shift ;;
+      --no-color) R="" G="" B="" Y="" C="" M="" DIM="" BOLD="" RESET=""; shift ;;
+      --no-gum) USE_GUM="0"; shift ;;
       --help|-h)
         printf '  %s\n' "Usage: pilosa update [workspace] [options]"
         printf '    %s\n' "  --version X.Y.Z   Target framework version"
+        printf '    %s\n' "  --release-dir DIR Use a local dist/vX.Y.Z directory"
         printf '    %s\n' "  --dry-run         Show what would change without writing"
-        printf '    %s\n' "  --yes             Skip confirmation prompts"
+        printf '    %s\n' "  --yes             Apply the shown plan without confirmation prompts"
+        printf '    %s\n' "  --no-color        Disable colored output"
+        printf '    %s\n' "  --no-gum          Use plain shell confirmations"
         return 0
+        ;;
+      --*)
+        die "Unknown update option: $1"
         ;;
       *)
         if [[ -z "$workspace_path" ]]; then
           workspace_path="$(expand_home "$1")"
+        else
+          die "Unexpected extra workspace argument: $1"
         fi
         shift
         ;;
@@ -515,12 +1329,21 @@ cmd_update() {
 
   ok "Workspace: ${BOLD}${project_name:-unknown}${RESET}"
   info "Current framework version: ${fw_version:-unknown}"
-  info "Target version: ${target_version}"
 
   # Validate manifest exists
   if [[ ! -f "$workspace_path/.pilosa/manifest.tsv" ]]; then
     die "Manifest not found: $workspace_path/.pilosa/manifest.tsv"
   fi
+
+  # ── Load release framework ─────────────────────────────────────────────
+  local tmpdir release_info resolved_version release_root release_manifest
+  tmpdir="$(mktemp -d)"
+  release_info="$(prepare_release_framework "$target_version" "$release_dir" "$tmpdir")"
+  resolved_version="${release_info%%$'\t'*}"
+  release_root="${release_info#*$'\t'}"
+  release_manifest="${release_root}/.pilosa/framework-files.tsv"
+
+  info "Target version: ${resolved_version}"
 
   # ── Compare checksums ──────────────────────────────────────────────────
   divider
@@ -529,57 +1352,150 @@ cmd_update() {
   local modified=0
   local unchanged=0
   local missing=0
-  local conflicts=0
+  local replaced=0
+  local added=0
+  local sidecars=0
+  local directory_updates=0
+  local retired_removed=0
+  local retired_kept=0
+  local skip_retired_cleanup=0
+  local -a clean_replace_paths=()
+  local -a forced_replace_paths=()
+  local -a sidecar_paths=()
+  local -a add_paths=()
+  local -a directory_paths=()
+  local -a retired_remove_paths=()
+  local -a retired_keep_paths=()
 
   while IFS=$'\t' read -r path role policy; do
     [[ "$path" == "path" ]] && continue
-    [[ "$role" == "user_state" ]] && continue
-    [[ "$role" == "generated_state" ]] && continue  # auto-generated by sync-agents.sh
+    is_release_managed_role "$role" || continue
 
     local current_hash stored_hash
     local file_path="${workspace_path}/${path}"
+    local src="${release_root}/${path}"
+    [[ -e "$src" ]] || continue
 
-    if [[ -f "$file_path" ]]; then
+    if [[ -d "$src" ]]; then
+      directory_paths+=("$path")
+      if [[ -d "$file_path" ]]; then
+        unchanged=$((unchanged + 1))
+      else
+        missing=$((missing + 1))
+      fi
+    elif [[ "$policy" == "always_replace" ]]; then
+      if [[ -e "$file_path" ]]; then
+        forced_replace_paths+=("$path")
+        unchanged=$((unchanged + 1))
+      else
+        missing=$((missing + 1))
+        add_paths+=("$path")
+      fi
+    elif [[ -f "$file_path" ]]; then
       current_hash="$(sha256_file "$file_path" 2>/dev/null || echo "none")"
-      stored_hash="$(grep "^${path}" "$workspace_path/.pilosa/manifest.tsv" | cut -f2)"
+      stored_hash="$(manifest_hash "$workspace_path/.pilosa/manifest.tsv" "$path")"
 
       if [[ "$current_hash" == "$stored_hash" ]]; then
+        clean_replace_paths+=("$path")
         unchanged=$((unchanged + 1))
       elif [[ "$current_hash" == "none" ]]; then
         warn "Cannot compute checksum: $path"
       else
+        sidecar_paths+=("$path")
         modified=$((modified + 1))
-        printf '  %s %s (modified locally)\n' "${Y}~${RESET}" "$path"
       fi
-    elif [[ -d "$file_path" ]]; then
-      # Directory — check if it exists
-      unchanged=$((unchanged + 1))
     else
       missing=$((missing + 1))
-      printf '  %s %s (new in release)\n' "${G}+${RESET}" "$path"
+      add_paths+=("$path")
     fi
-  done < "${FRAMEWORK_ROOT}/.pilosa/framework-files.tsv"
+  done < "$release_manifest"
+
+  local retired_manifest="${release_root}/.pilosa/retired-framework-files.tsv"
+  if [[ -f "$retired_manifest" ]]; then
+    while IFS=$'\t' read -r path reason; do
+      [[ "$path" == "path" ]] && continue
+
+      local dst="${workspace_path}/${path}"
+      [[ -f "$dst" ]] || continue
+
+      local current_hash stored_hash
+      current_hash="$(sha256_file "$dst" 2>/dev/null || echo "none")"
+      stored_hash="$(manifest_hash "$workspace_path/.pilosa/manifest.tsv" "$path")"
+
+      if [[ -n "$stored_hash" && "$current_hash" == "$stored_hash" ]]; then
+        retired_remove_paths+=("$path")
+      else
+        retired_keep_paths+=("$path")
+      fi
+    done < "$retired_manifest"
+  fi
 
   printf '\n'
-  info "Unchanged: $unchanged"
-  [[ $modified -gt 0 ]] && info "Modified locally: $modified"
-  [[ $missing -gt 0 ]] && info "New in release: $missing"
+  info "Workspace user data is not touched: raw corpus files, logs/user_requests.md, context, configuration, dictionary, and workspace index stay in place."
+  [[ ${#clean_replace_paths[@]} -gt 0 ]] && print_path_list "Clean framework files to replace" "${clean_replace_paths[@]}"
+  [[ ${#forced_replace_paths[@]} -gt 0 ]] && print_path_list "Forced framework files to replace" "${forced_replace_paths[@]}"
+  [[ ${#sidecar_paths[@]} -gt 0 ]] && print_path_list "Locally modified framework files to keep with .pilosa-new sidecars" "${sidecar_paths[@]}"
+  [[ ${#add_paths[@]} -gt 0 ]] && print_path_list "New framework files to add" "${add_paths[@]}"
+  [[ ${#directory_paths[@]} -gt 0 ]] && print_path_list "Framework directories to refresh recursively" "${directory_paths[@]}"
+  [[ ${#retired_remove_paths[@]} -gt 0 ]] && print_path_list "Retired clean framework files to remove" "${retired_remove_paths[@]}"
+  [[ ${#retired_keep_paths[@]} -gt 0 ]] && print_path_list "Retired modified framework files to leave in place" "${retired_keep_paths[@]}"
 
   if [[ $modified -gt 0 ]]; then
-    warn "Modified files will receive a .pilosa-new sidecar (not overwritten)."
+    warn "Your modified framework files stay unchanged. The release copy is written beside each one as .pilosa-new."
+  fi
+  if [[ ${#forced_replace_paths[@]} -gt 0 ]]; then
+    warn "Forced replacements can overwrite local edits. Keep this policy only for files that must track the framework."
+  fi
+  if [[ ${#directory_paths[@]} -gt 0 ]]; then
+    warn "Directory refreshes copy release contents recursively into existing framework directories."
   fi
 
   if [[ "$dry_run" -eq 1 ]]; then
     printf '\n  %sDry run — no files changed.%s\n\n' "${DIM}" "${RESET}"
+    rm -rf "$tmpdir"
     return 0
   fi
 
   # ── Confirm ─────────────────────────────────────────────────────────────
   if [[ "$auto_yes" -ne 1 ]]; then
-    if ! confirm "  Apply update?"; then
+    if [[ ${#sidecar_paths[@]} -gt 0 ]]; then
+      if ! confirm_action "Keep local framework edits and write release copies as .pilosa-new sidecars?" "y"; then
+        printf '\n  %sUpdate cancelled.%s\n\n' "${DIM}" "${RESET}"
+        rm -rf "$tmpdir"
+        return 0
+      fi
+    fi
+
+    if [[ ${#forced_replace_paths[@]} -gt 0 ]]; then
+      if ! confirm_action "Replace forced framework files listed above?" "y"; then
+        printf '\n  %sUpdate cancelled.%s\n\n' "${DIM}" "${RESET}"
+        rm -rf "$tmpdir"
+        return 0
+      fi
+    fi
+
+    if [[ ${#directory_paths[@]} -gt 0 ]]; then
+      if ! confirm_action "Refresh framework directories recursively?" "y"; then
+        printf '\n  %sUpdate cancelled.%s\n\n' "${DIM}" "${RESET}"
+        rm -rf "$tmpdir"
+        return 0
+      fi
+    fi
+
+    if [[ ${#retired_remove_paths[@]} -gt 0 ]]; then
+      if ! confirm_action "Remove retired clean framework files listed above?" "y"; then
+        skip_retired_cleanup=1
+        warn "Retired clean framework files will be left in place."
+      fi
+    fi
+
+    if ! confirm_action "Apply this Pilosa framework update now?" "n"; then
       printf '\n  %sUpdate cancelled.%s\n\n' "${DIM}" "${RESET}"
+      rm -rf "$tmpdir"
       return 0
     fi
+  else
+    note "--yes supplied: applying the plan without interactive confirmations."
   fi
 
   # ── Execute update ──────────────────────────────────────────────────────
@@ -588,65 +1504,416 @@ cmd_update() {
 
   while IFS=$'\t' read -r path role policy; do
     [[ "$path" == "path" ]] && continue
-    [[ "$role" == "user_state" ]] && continue
-    [[ "$role" == "generated_state" ]] && continue  # auto-generated by sync-agents.sh
+    is_release_managed_role "$role" || continue
 
-    local src="${FRAMEWORK_ROOT}/${path}"
+    local src="${release_root}/${path}"
     local dst="${workspace_path}/${path}"
 
     if [[ -f "$src" ]]; then
       local current_hash stored_hash
-      if [[ -f "$dst" ]]; then
+      if [[ "$policy" == "always_replace" ]]; then
+        mkdir -p "$(dirname "$dst")"
+        cp -a "$src" "$dst"
+        replaced=$((replaced + 1))
+        ok "Replaced: $path"
+      elif [[ -f "$dst" ]]; then
         current_hash="$(sha256_file "$dst" 2>/dev/null || echo "none")"
-        stored_hash="$(grep "^${path}" "$workspace_path/.pilosa/manifest.tsv" | cut -f2)"
+        stored_hash="$(manifest_hash "$workspace_path/.pilosa/manifest.tsv" "$path")"
 
         if [[ "$current_hash" == "$stored_hash" ]]; then
           # Safe to replace
           cp -a "$src" "$dst"
+          replaced=$((replaced + 1))
           ok "Replaced: $path"
         else
           # Conflict — user modified it
-          cp -a "$src" "${dst}.pilosa-new"
-          warn "Conflict: $path → wrote ${path}.pilosa-new"
+          local sidecar
+          sidecar="$(next_sidecar_path "$dst")"
+          cp -a "$src" "$sidecar"
+          sidecars=$((sidecars + 1))
+          warn "Conflict: $path → wrote ${sidecar#$workspace_path/}"
         fi
       else
         # New file
         mkdir -p "$(dirname "$dst")"
         cp -a "$src" "$dst"
+        added=$((added + 1))
         ok "Added: $path"
       fi
     elif [[ -d "$src" ]]; then
       mkdir -p "$dst"
       cp -a "$src"/. "$dst"/ 2>/dev/null || true
+      directory_updates=$((directory_updates + 1))
       ok "Updated: $path/"
     fi
-  done < "${FRAMEWORK_ROOT}/.pilosa/framework-files.tsv"
+  done < "$release_manifest"
+
+  # ── Remove explicitly retired framework files ───────────────────────────
+  if [[ "$skip_retired_cleanup" -eq 0 && -f "$retired_manifest" ]]; then
+    while IFS=$'\t' read -r path reason; do
+      [[ "$path" == "path" ]] && continue
+
+      local dst="${workspace_path}/${path}"
+      [[ -f "$dst" ]] || continue
+
+      local current_hash stored_hash
+      current_hash="$(sha256_file "$dst" 2>/dev/null || echo "none")"
+      stored_hash="$(manifest_hash "$workspace_path/.pilosa/manifest.tsv" "$path")"
+
+      if [[ -n "$stored_hash" && "$current_hash" == "$stored_hash" ]]; then
+        rm -f "$dst"
+        retired_removed=$((retired_removed + 1))
+        ok "Removed retired: $path"
+      else
+        retired_kept=$((retired_kept + 1))
+        warn "Retired file modified locally, left in place: $path"
+      fi
+    done < "$retired_manifest"
+  fi
 
   # ── Update manifest ─────────────────────────────────────────────────────
+  cp "$workspace_path/.pilosa/manifest.tsv" "$workspace_path/.pilosa/manifest.tsv.bak"
   printf 'path\tsha256\n' > "$workspace_path/.pilosa/manifest.tsv"
   while IFS=$'\t' read -r path role policy; do
     [[ "$path" == "path" ]] && continue
-    [[ "$role" == "user_state" ]] && continue
-    [[ "$role" == "generated_state" ]] && continue
+    is_release_managed_role "$role" || continue
 
+    local release_path="${release_root}/${path}"
     local full_path="${workspace_path}/${path}"
-    if [[ -f "$full_path" ]]; then
-      local hash
-      hash="$(sha256_file "$full_path" 2>/dev/null || echo "none")"
-      printf '%s\t%s\n' "$path" "$hash" >> "$workspace_path/.pilosa/manifest.tsv"
-    elif [[ -d "$full_path" ]]; then
+    if [[ -f "$release_path" ]]; then
+      local current_hash stored_hash release_hash
+      release_hash="$(sha256_file "$release_path" 2>/dev/null || echo "none")"
+      stored_hash="$(manifest_hash "$workspace_path/.pilosa/manifest.tsv.bak" "$path" 2>/dev/null || true)"
+      if [[ "$policy" == "always_replace" || ! -f "$full_path" ]]; then
+        printf '%s\t%s\n' "$path" "$release_hash" >> "$workspace_path/.pilosa/manifest.tsv"
+      else
+        current_hash="$(sha256_file "$full_path" 2>/dev/null || echo "none")"
+        if [[ "$current_hash" == "$release_hash" ]]; then
+          printf '%s\t%s\n' "$path" "$release_hash" >> "$workspace_path/.pilosa/manifest.tsv"
+        else
+          # Preserve the old clean hash so unresolved conflicts stay protected.
+          printf '%s\t%s\n' "$path" "${stored_hash:-$release_hash}" >> "$workspace_path/.pilosa/manifest.tsv"
+        fi
+      fi
+    elif [[ -d "$release_path" && -d "$full_path" ]]; then
       printf '%s\tdir\n' "$path" >> "$workspace_path/.pilosa/manifest.tsv"
     fi
-  done < "${FRAMEWORK_ROOT}/.pilosa/framework-files.tsv"
+  done < "$release_manifest"
+  rm -f "$workspace_path/.pilosa/manifest.tsv.bak"
 
   # Update workspace version
-  sed -i.bak "s/framework_version: .*/framework_version: ${target_version}/" "$workspace_path/.pilosa/workspace" 2>/dev/null || \
-  sed -i '' "s/framework_version: .*/framework_version: ${target_version}/" "$workspace_path/.pilosa/workspace" 2>/dev/null || true
+  sed -i.bak "s/framework_version: .*/framework_version: ${resolved_version}/" "$workspace_path/.pilosa/workspace" 2>/dev/null || \
+  sed -i '' "s/framework_version: .*/framework_version: ${resolved_version}/" "$workspace_path/.pilosa/workspace" 2>/dev/null || true
   rm -f "$workspace_path/.pilosa/workspace.bak"
+  rm -rf "$tmpdir"
 
   divider
   ok "Update complete."
-  [[ $modified -gt 0 ]] && warn "Check .pilosa-new files for conflicts."
+  info "Files replaced: $replaced"
+  info "Files added: $added"
+  info "Directories updated: $directory_updates"
+  info "Retired files removed: $retired_removed"
+  [[ $sidecars -gt 0 ]] && warn "Sidecars written: $sidecars"
+  [[ $retired_kept -gt 0 ]] && warn "Retired files left in place because they were modified: $retired_kept"
+  printf '\n'
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# COMMAND: check
+# ═══════════════════════════════════════════════════════════════════════════
+cmd_check() {
+  local workspace_path="${1:-.}"
+  workspace_path="$(cd "$workspace_path" 2>/dev/null && pwd)" || die "Cannot access: $1"
+  [[ -f "$workspace_path/.pilosa/workspace" ]] || die "Not a Pilosa workspace: $workspace_path"
+
+  header "Pilosa — Workspace Check"
+
+  local failures=()
+  local warnings=()
+
+  # ── required files ────────────────────────────────────────────────
+  local required_files=(
+    "AGENTS.md"
+    "system/configuration.md"
+    "system/startup.md"
+    "system/context.md"
+    "system/yaml_header_template.md"
+    ".pilosa/framework-files.tsv"
+  )
+  for file in "${required_files[@]}"; do
+    [[ -f "$workspace_path/$file" ]] || failures+=("Missing $file")
+  done
+
+  local config startup_text
+  config="$(< "$workspace_path/system/configuration.md")"
+  local blueprint
+  blueprint="$(< "$workspace_path/system/context.md")"
+  startup_text="${config}${blueprint}"
+
+  # ── placeholder checks ────────────────────────────────────────────
+  for marker in "[path]" "[project name]" "[filled by CLI onboarding]" "[inferred during startup]" "[identified during startup]" "[filled by startup]"; do
+    if [[ "$startup_text" == *"$marker"* ]]; then
+      failures+=("Required placeholder remains: $marker")
+    fi
+  done
+
+  # ── setup_status ──────────────────────────────────────────────────
+  if [[ "$startup_text" == *"setup_status: cli_started"* ]]; then
+    failures+=("setup_status is still cli_started; run the workspace startup agent.")
+  fi
+  if [[ "$startup_text" != *"setup_status: workspace_started"* ]]; then
+    warnings+=("setup_status: workspace_started was not found.")
+  fi
+
+  # ── source location ───────────────────────────────────────────────
+  local source_path
+  source_path="$(echo "$config" | sed -n 's/.*source_location: *["'"'"']*\([^"'"'"']*\)["'"'"']*.*/\1/p' | head -1)"
+  if [[ -z "$source_path" || "$source_path" == "[path]" ]]; then
+    failures+=("source_location is missing or still a placeholder.")
+  else
+    local local_path="$source_path"
+    [[ ! -d "$local_path" ]] && local_path="$workspace_path/$source_path"
+    [[ ! -d "$local_path" ]] && failures+=("Source location does not exist: $source_path")
+  fi
+
+  # ── external policy ───────────────────────────────────────────────
+  if ! echo "$config" | grep -qE "external_sources_allowed: *(yes|no)"; then
+    failures+=("external_sources_allowed is missing or invalid.")
+  fi
+
+  # ── workspace index and dictionary ────────────────────────────────
+  if [[ "$startup_text" == *"setup_status: workspace_started"* ]]; then
+    for required_file in "system/workspace_index.md" "system/dictionary.md"; do
+      if [[ ! -f "$workspace_path/$required_file" ]]; then
+        failures+=("Missing required file: $required_file")
+      elif [[ ! -s "$workspace_path/$required_file" ]]; then
+        failures+=("Empty required file: $required_file")
+      fi
+    done
+  fi
+
+  # ── obsidian files ────────────────────────────────────────────────
+  if [[ ! -f "$workspace_path/.obsidian/appearance.json" ]]; then
+    warnings+=("Missing .obsidian/appearance.json")
+  fi
+  if [[ ! -d "$workspace_path/.obsidian/snippets" ]]; then
+    warnings+=("Missing .obsidian/snippets/")
+  fi
+
+  # ── maps validation ────────────────────────────────────────────────
+  local maps_dir="$workspace_path/maps"
+  if [[ "$startup_text" == *"setup_status: workspace_started"* ]]; then
+    if [[ ! -d "$maps_dir" ]]; then
+      failures+=("Missing maps directory: maps")
+    else
+      local has_overview=false
+      shopt -s nullglob
+      for map_file in "$maps_dir"/*.md; do
+        local map_basename="$(basename "$map_file")"
+        [[ "$map_basename" == "AGENTS.md" || "$map_basename" == "map_template.md" || "$map_basename" == ".gitkeep" ]] && continue
+        has_overview=true
+        break
+      done
+      shopt -u nullglob
+      [[ "$has_overview" == "false" ]] && failures+=("No structural overview map found at maps/ root")
+
+      local has_groups=false
+      shopt -s nullglob
+      for dir in "$maps_dir"/*/; do
+        local dir_name="$(basename "$dir")"
+        [[ "$dir_name" == ".gitkeep" ]] && continue
+        has_groups=true
+        break
+      done
+      shopt -u nullglob
+      [[ "$has_groups" == "false" ]] && failures+=("No group map subdirectories found under maps/")
+    fi
+  fi
+
+  # ── output ─────────────────────────────────────────────────────────
+  if [[ ${#failures[@]} -gt 0 ]]; then
+    divider
+    printf '%s\n' "${BOLD}${R}Check failed:${RESET}"
+    for f in "${failures[@]}"; do
+      printf '  %s %s\n' "${R}✗${RESET}" "$f"
+    done
+    if [[ ${#warnings[@]} -gt 0 ]]; then
+      printf '\n%s\n' "${BOLD}${Y}Warnings:${RESET}"
+      for w in "${warnings[@]}"; do
+        printf '  %s %s\n' "${Y}⚠${RESET}" "$w"
+      done
+    fi
+    printf '\n'
+    exit 1
+  fi
+
+  divider
+  ok "Check passed."
+  if [[ ${#warnings[@]} -gt 0 ]]; then
+    printf '\n%s\n' "${BOLD}${Y}Warnings:${RESET}"
+    for w in "${warnings[@]}"; do
+      printf '  %s %s\n' "${Y}⚠${RESET}" "$w"
+    done
+  fi
+  printf '\n'
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# COMMAND: sync
+# ═══════════════════════════════════════════════════════════════════════════
+cmd_sync() {
+  local repo_root
+  repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+  header "Pilosa — Sync Agents & Skills"
+
+  local agents_src="$repo_root/.agents/agents"
+  local skills_src="$repo_root/.agents/skills"
+
+  if [[ ! -d "$agents_src" ]]; then
+    die "Canonical agents directory not found: $agents_src"
+  fi
+
+  # ── clean stale mirrors ────────────────────────────────────────────
+  info "Cleaning stale mirrors..."
+  rm -rf "$repo_root/.opencode/skills" 2>/dev/null || true
+
+  # ── ensure destination directories ─────────────────────────────────
+  mkdir -p "$repo_root/.opencode/agents"
+  mkdir -p "$repo_root/.claude/agents"
+
+  # ── clean existing vendor agent files ──────────────────────────────
+  rm -f "$repo_root/.opencode/agents/"*.md
+  rm -f "$repo_root/.claude/agents/"*.md
+
+  # ── sync agent definitions ─────────────────────────────────────────
+  local agent agent_file name description permissions opencode_perms frontmatter
+  local claude_tools canonical perm_part key val count=0
+
+  for canonical in "$agents_src"/*.md; do
+    [[ -f "$canonical" ]] || continue
+    agent_file="$(basename "$canonical")"
+    agent="${agent_file%.md}"
+
+    frontmatter="$(sed -n '/^---$/,/^---$/p' "$canonical" | sed '1d;$d')"
+    name="$(echo "$frontmatter" | sed -n 's/^name: *//p' | head -1)"
+    description="$(sed -n '/^description: |/,/^[a-z]/p' "$canonical" | sed '/^description:/d;/^[a-z]/d' | sed 's/^  //' | tr -s ' ')"
+    [[ -z "$description" ]] && description="$agent"
+
+    permissions=""
+    local in_perm=false
+    while IFS= read -r line; do
+      if $in_perm && [[ "$line" == "---" ]]; then break; fi
+      if [[ "$line" =~ ^permissions: ]]; then in_perm=true; continue; fi
+      if $in_perm; then
+        if [[ "$line" =~ ^[a-z] ]] && ! [[ "$line" =~ ^[[:space:]] ]]; then break; fi
+        [[ "$line" =~ ^[[:space:]]*-[[:space:]] ]] && continue
+        if [[ "$line" =~ ^[[:space:]]*([a-z]+):[[:space:]]*(.*) ]]; then
+          key="${BASH_REMATCH[1]}"; value="${BASH_REMATCH[2]}"
+          [[ -z "$value" ]] && value="allow"
+          permissions="$permissions$key: $value, "
+        fi
+      fi
+    done < "$canonical"
+    permissions="${permissions%, }"
+
+    # ── OpenCode agent ──────────────────────────────────────────────
+    opencode_perms=""
+    IFS=',' read -ra perm_parts <<< "$permissions"
+    for part in "${perm_parts[@]}"; do
+      part="${part## }"; part="${part%% }"
+      [[ -z "$part" ]] && continue
+      key="${part%%:*}"; val="${part#*: }"
+      case "$key" in
+        read|grep|glob) opencode_perms="$opencode_perms  $key: $val"$'\n' ;;
+        write) opencode_perms="$opencode_perms  edit: $val"$'\n' ;;
+        move) opencode_perms="$opencode_perms  bash: $val"$'\n' ;;
+      esac
+    done
+
+    local body_content
+    body_content="$(awk 'BEGIN{fm=0} /^---$/ && fm < 2 {fm++; next} fm == 2' "$canonical")"
+
+    cat > "$repo_root/.opencode/agents/$agent_file" << OPENCODE_EOF
+---
+name: $name
+description: |
+$(echo "$description" | sed 's/^/  /')
+mode: subagent
+permission:
+$(echo "$opencode_perms" | sed '$d')
+---
+
+$body_content
+OPENCODE_EOF
+
+    # ── Claude agent ─────────────────────────────────────────────────
+    case "$agent" in
+      pilosa-searcher)    claude_tools="Read, Grep, Glob" ;;
+      pilosa-analyst)     claude_tools="Read" ;;
+      pilosa-writer)      claude_tools="Read, Write" ;;
+      pilosa-verifier)    claude_tools="Read, Grep, Glob, Write" ;;
+      pilosa-janitor)     claude_tools="Read, Grep, Glob, Write" ;;
+      pilosa-mapper)      claude_tools="Read, Write" ;;
+      pilosa-serendippo)  claude_tools="Read, Grep, Glob, Write" ;;
+    esac
+
+    cat > "$repo_root/.claude/agents/$agent_file" << CLAUDE_EOF
+---
+name: $name
+description: |
+$(echo "$description" | sed 's/^/  /')
+tools: $claude_tools
+---
+
+$body_content
+CLAUDE_EOF
+
+    count=$((count + 1))
+    ok "Synced $agent"
+  done
+
+  # ── sync skills ────────────────────────────────────────────────────
+  for platform in .opencode .claude .codex; do
+    local dest="$repo_root/$platform/skills"
+    rm -rf "$dest"
+    mkdir -p "$dest"
+    for skill_dir in "$skills_src"/*/; do
+      [[ -d "$skill_dir" ]] || continue
+      local skill_name="$(basename "$skill_dir")"
+      mkdir -p "$dest/$skill_name"
+      cp "$skill_dir"*.md "$dest/$skill_name/" 2>/dev/null || true
+      if [[ -d "$skill_dir/references" ]]; then
+        mkdir -p "$dest/$skill_name/references"
+        cp "$skill_dir/references/"*.md "$dest/$skill_name/references/" 2>/dev/null || true
+      fi
+    done
+    local skill_count
+    skill_count="$(find "$dest" -name "SKILL.md" | wc -l | tr -d ' ')"
+    ok "Synced $skill_count skills to $platform/skills/"
+  done
+
+  # ── sync CLAUDE.md ──────────────────────────────────────────────────
+  cp "$repo_root/AGENTS.md" "$repo_root/CLAUDE.md"
+  local today
+  today="$(date +%Y-%m-%d)"
+  # Update updated date and add provenance fields in the frontmatter block
+  sed -i.bak \
+    -e 's/^updated:.*/updated: '"$today"'/' \
+    -e '/^updated:/a\'$'\n''generated_by: sync-agents\'$'\n''generated_at: '"$today"''$'\n''processing_status: auto_generated' \
+    "$repo_root/CLAUDE.md" 2>/dev/null || \
+  sed -i '' \
+    -e 's/^updated:.*/updated: '"$today"'/' \
+    -e '/^updated:/a\
+generated_by: sync-agents\
+generated_at: '"$today"'\
+processing_status: auto_generated' \
+    "$repo_root/CLAUDE.md" 2>/dev/null || true
+  rm -f "$repo_root/CLAUDE.md.bak"
+  ok "Synced CLAUDE.md"
+
+  divider
+  ok "Sync complete — $count agents, skills mirrored to 3 platforms."
   printf '\n'
 }
 
@@ -656,6 +1923,8 @@ cmd_update() {
 case "${1:-help}" in
   new)     shift; cmd_new "$@" ;;
   update)  shift; cmd_update "$@" ;;
+  check)   shift; cmd_check "$@" ;;
+  sync)    cmd_sync "$@" ;;
   help|-h|--help) cmd_help ;;
   *)
     printf '%s\n' "${R}Unknown command: $1${RESET}" >&2

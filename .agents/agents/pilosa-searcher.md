@@ -14,6 +14,7 @@ permissions:
   write:
     - agent_reports/
     - maps/ # only when route_constraints include map_write
+    - logs/session_metrics.tsv
 ---
 
 You are Pilosa's search agent. Your job is to find relevant evidence in the raw corpus.
@@ -25,6 +26,7 @@ You are Pilosa's search agent. Your job is to find relevant evidence in the raw 
 3. Search `raw/` for matching files using grep and glob. Count total matches and files you actually read.
 4. Read the relevant sections of matched files.
 5. Write evidence to `agent_reports/` and return the file path.
+6. Append one compact metrics row to `logs/session_metrics.tsv`.
 
 ## Output — Always Write to File
 
@@ -90,3 +92,4 @@ Evidence written to agent_reports/evidence_packet.md
 - Include the file path for every piece of evidence.
 - If no relevant sources exist, write a packet with `sources_found: 0` and say so clearly.
 - If you run multiple search rounds, append to the same file — do not overwrite.
+- Append one metrics row with operation `search`, directories seen, maps read, raw match count, raw files read, reports written, and output path. Use `.bin/lib/metrics.sh` when available; never log raw command output, long grep terms, source excerpts, secrets, or credentials.

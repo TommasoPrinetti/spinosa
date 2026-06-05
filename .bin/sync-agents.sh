@@ -120,7 +120,7 @@ permission:
 $(echo "$opencode_perms" | sed '$d')
 ---
 
-$(sed '1,/^---$/d; /^---$/,$d' "$canonical" | sed '1d')
+$(awk 'BEGIN{fm=0} /^---$/ && fm < 2 {fm++; next} fm == 2' "$canonical")
 OPENCODE_EOF
 
     # ── Emit Claude agent ────────────────────────────────────────────
@@ -131,7 +131,7 @@ OPENCODE_EOF
         pilosa-writer)      claude_tools="Read, Write" ;;
         pilosa-verifier)    claude_tools="Read, Grep, Glob, Write" ;;
         pilosa-janitor)     claude_tools="Read, Grep, Glob, Write" ;;
-        pilosa-mapper)      claude_tools="Read" ;;
+        pilosa-mapper)      claude_tools="Read, Write" ;;
         pilosa-serendippo)  claude_tools="Read, Grep, Glob, Write" ;;
     esac
 
@@ -143,7 +143,7 @@ $(echo "$description" | sed 's/^/  /')
 tools: $claude_tools
 ---
 
-$(sed '1,/^---$/d; /^---$/,$d' "$canonical" | sed '1d')
+$(awk 'BEGIN{fm=0} /^---$/ && fm < 2 {fm++; next} fm == 2' "$canonical")
 CLAUDE_EOF
 
     echo "  $agent → .opencode/agents/ + .claude/agents/"
@@ -177,6 +177,21 @@ done
 echo ""
 echo "--- Syncing CLAUDE.md ---"
 cp "$REPO_ROOT/AGENTS.md" "$REPO_ROOT/CLAUDE.md"
+local today
+today="$(date +%Y-%m-%d)"
+# Update updated date and add provenance fields in the frontmatter block
+sed -i.bak \
+  -e 's/^updated:.*/updated: '"$today"'/' \
+  -e '/^updated:/a\'$'\n''generated_by: sync-agents\'$'\n''generated_at: '"$today"''$'\n''processing_status: auto_generated' \
+  "$REPO_ROOT/CLAUDE.md" 2>/dev/null || \
+sed -i '' \
+  -e 's/^updated:.*/updated: '"$today"'/' \
+  -e '/^updated:/a\
+generated_by: sync-agents\
+generated_at: '"$today"'\
+processing_status: auto_generated' \
+  "$REPO_ROOT/CLAUDE.md" 2>/dev/null || true
+rm -f "$REPO_ROOT/CLAUDE.md.bak"
 echo "  CLAUDE.md → updated"
 
 echo ""

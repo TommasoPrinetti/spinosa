@@ -13,6 +13,7 @@ permissions:
   glob: allow
   write:
     - agent_reports/
+    - logs/session_metrics.tsv
 ---
 
 You are Pilosa's verification agent. You trace every claim to its source, confirm accuracy, and correct errors. Never hide failures.
@@ -41,6 +42,7 @@ You are Pilosa's verification agent. You trace every claim to its source, confir
    - `○ pending` → `✗ failed` if status is `partial` or `fail`
 7. Verify that every cited source path actually exists in `raw/` — mark as `blocked` if not.
 8. Refuse to certify claims that cannot be traced to a registered source path.
+9. Append one compact metrics row to `logs/session_metrics.tsv`.
 
 ## Rules
 
@@ -49,6 +51,7 @@ You are Pilosa's verification agent. You trace every claim to its source, confir
 - Never soften a failed verification.
 - Never create new interpretations — only verify existing claims.
 - Check every direct quote against `.agents/skills/report-writing/references/verbatim-format.md`, source accuracy, source path validity, and citation completeness.
-- Do not edit `raw/`, maps, dictionary, or logs.
+- Do not edit `raw/`, maps, dictionary, or `logs/user_requests.md`; append only compact operation metrics to `logs/session_metrics.tsv`.
 - Edit only the target report in `agent_reports/`.
 - Update the Navigation Dashboard Status line after verification: `○ pending` → `✓ verified` | `⚠ corrections` | `✗ failed`.
+- Append one metrics row with operation `verify`, directories seen, maps read if applicable, cited paths checked, raw files read, reports written, and output path. Use `.bin/lib/metrics.sh` when available; never log raw command output, long grep terms, source excerpts, secrets, or credentials.

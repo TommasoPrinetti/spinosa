@@ -20,7 +20,7 @@ Startup.md is the only authority that can mark setup complete. `.bin/check-start
 
 ## What Onboarding Already Did
 
-The CLI onboarding script (`bash .bin/onboard.sh`) has already:
+The CLI command (`pilosa new`) has already:
 
 - Collected project name, source location, and preferred LLM CLI
 - Scanned the source corpus and copied accepted files into `raw/` (text, native-readable, PDFs)

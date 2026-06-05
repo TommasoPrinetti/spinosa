@@ -1,10 +1,11 @@
 ---
 type: context
-agent: startup
+role: startup
 scope: project_context
+status: active
 description: Read by Writer for synthesis; updated by startup during indexing.
 created: 2026-05-26
-updated: 2026-06-04
+updated: 2026-06-05
 setup_status: not_started
 connects_to:
   - AGENTS.md

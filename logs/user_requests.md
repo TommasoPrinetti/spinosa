@@ -19,3 +19,4 @@ Short routing log for user prompts. Log the request before deciding whether to a
 | Date       | Request summary                     | Route     | Status | Output                                 |
 | ---------- | ----------------------------------- | --------- | ------ | -------------------------------------- |
 
+| 2026-06-05 | Thoroughly audit the Pilosa framework structure (YAML frontmatter, links, content, missing AGENTS.md, framework-files.tsv) | verification | done | audit report at agent_reports/01_framework_audit_report.md — 14 issues found across 27 files |
