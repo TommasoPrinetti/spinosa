@@ -80,7 +80,7 @@ By default, the installer uses a **pinned stable version** (not `latest`). This 
 bash install-pilosa.sh
 
 # Explicit version
-bash install-pilosa.sh --version 0.1.0
+bash install-pilosa.sh --version 0.2.0
 
 # Bleeding edge (not recommended for production)
 bash install-pilosa.sh --latest

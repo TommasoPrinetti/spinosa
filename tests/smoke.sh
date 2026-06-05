@@ -224,8 +224,8 @@ fi
 echo ""
 echo "Test 7: install.sh version pinning"
 HELP_OUTPUT="$(bash "$REPO_ROOT/install.sh" --help 2>/dev/null || true)"
-if echo "$HELP_OUTPUT" | grep -q "default: 0.1.0"; then
-  pass "install.sh defaults to pinned version 0.1.0"
+if echo "$HELP_OUTPUT" | grep -q "default: 0.2.0"; then
+  pass "install.sh defaults to pinned version 0.2.0"
 else
   fail "install.sh does not default to pinned version"
 fi
