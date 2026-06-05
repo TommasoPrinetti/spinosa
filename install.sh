@@ -9,7 +9,7 @@ set -eu
 #   sh install-pilosa.sh
 #
 # Or with options:
-#   sh install-pilosa.sh --version 0.2.0
+#   sh install-pilosa.sh --version 0.2.1
 #   sh install-pilosa.sh --dry-run
 #   sh install-pilosa.sh --no-gum
 #   sh install-pilosa.sh --prefix /custom/path
@@ -20,7 +20,7 @@ set -eu
 
 # ── defaults ────────────────────────────────────────────────────────────────
 # Pinned stable version. Update this when cutting a new release.
-PINNED_VERSION="0.2.0"
+PINNED_VERSION="0.2.1"
 VERSION="${VERSION:-$PINNED_VERSION}"
 DRY_RUN=0
 VERIFY_ONLY=0

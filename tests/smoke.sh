@@ -224,8 +224,8 @@ fi
 echo ""
 echo "Test 7: install.sh version pinning"
 HELP_OUTPUT="$(bash "$REPO_ROOT/install.sh" --help 2>/dev/null || true)"
-if echo "$HELP_OUTPUT" | grep -q "default: 0.2.0"; then
-  pass "install.sh defaults to pinned version 0.2.0"
+if echo "$HELP_OUTPUT" | grep -q "default: 0.2.1"; then
+  pass "install.sh defaults to pinned version 0.2.1"
 else
   fail "install.sh does not default to pinned version"
 fi
@@ -315,7 +315,7 @@ DASH_WS="$TMPDIR/dash-test"
 mkdir -p "$DASH_WS/.pilosa" "$DASH_WS/raw" "$DASH_WS/maps"
 cat > "$DASH_WS/.pilosa/workspace" << 'EOF'
 workspace_version: 1
-framework_version: 0.2.0
+framework_version: 0.2.1
 created: 2026-06-05
 project_name: Dashboard Test
 setup_status: workspace_started

@@ -72,16 +72,16 @@ After that, ask research questions normally. The orchestrator will route them th
 One command. Zero dependencies.
 
 ```bash
-curl -fsSL https://github.com/TommasoPrinetti/pilosa/releases/download/v0.2.0/install.sh | bash
+curl -fsSL https://github.com/TommasoPrinetti/pilosa/releases/download/v0.2.1/install.sh | bash
 ```
 
-This installs the **pinned stable version** (`0.2.0`). No npm, no Python, no Go — fully autonomous.
+This installs the **pinned stable version** (`0.2.1`). No npm, no Python, no Go — fully autonomous.
 
 For options (specific version, security flags, etc.), download first:
 
 ```bash
-curl -fsSL https://github.com/TommasoPrinetti/pilosa/releases/download/v0.2.0/install.sh -o install-pilosa.sh
-bash install-pilosa.sh --version 0.2.0
+curl -fsSL https://github.com/TommasoPrinetti/pilosa/releases/download/v0.2.1/install.sh -o install-pilosa.sh
+bash install-pilosa.sh --version 0.2.1
 bash install-pilosa.sh --min-days 7
 bash install-pilosa.sh --verify-only
 ```
