@@ -172,6 +172,77 @@ fi
 
 echo "  All exclusions OK"
 
+# ── Bundle vendor binaries (Gum + pdf2md) ─────────────────────────────────────
+echo "Bundling vendor binaries..."
+
+GUM_VERSION="0.14.0"
+PDF2MD_VERSION="0.1.1"
+VENDOR_DIR="${FRAMEWORK_DIR}/.bin/lib/vendor"
+mkdir -p "$VENDOR_DIR"
+
+bundle_platform_binary() {
+  local name="$1" version="$2" url="$3" suffix="$4"
+  local tmpdir="$(mktemp -d)"
+  echo "  Downloading ${name} ${suffix}..."
+  if curl -fsSL "$url" -o "${tmpdir}/archive.tar.gz" 2>/dev/null; then
+    tar -xzf "${tmpdir}/archive.tar.gz" -C "$tmpdir" 2>/dev/null
+    # Find the binary inside the extracted contents
+    local bin_path
+    bin_path="$(find "$tmpdir" -name "$name" -type f 2>/dev/null | head -1)"
+    if [[ -n "$bin_path" ]]; then
+      cp "$bin_path" "${VENDOR_DIR}/${name}-${suffix}"
+      chmod +x "${VENDOR_DIR}/${name}-${suffix}"
+      echo "    Bundled ${name}-${suffix}"
+    else
+      echo "    WARNING: ${name} binary not found in downloaded archive"
+    fi
+  else
+    echo "    WARNING: Could not download ${name} ${suffix}"
+  fi
+  rm -rf "$tmpdir"
+}
+
+# Gum — all platforms
+bundle_platform_binary "gum" "$GUM_VERSION" \
+  "https://github.com/charmbracelet/gum/releases/download/v${GUM_VERSION}/gum_${GUM_VERSION}_Darwin_arm64.tar.gz" \
+  "darwin-arm64"
+
+bundle_platform_binary "gum" "$GUM_VERSION" \
+  "https://github.com/charmbracelet/gum/releases/download/v${GUM_VERSION}/gum_${GUM_VERSION}_Darwin_x86_64.tar.gz" \
+  "darwin-amd64"
+
+bundle_platform_binary "gum" "$GUM_VERSION" \
+  "https://github.com/charmbracelet/gum/releases/download/v${GUM_VERSION}/gum_${GUM_VERSION}_Linux_arm64.tar.gz" \
+  "linux-arm64"
+
+bundle_platform_binary "gum" "$GUM_VERSION" \
+  "https://github.com/charmbracelet/gum/releases/download/v${GUM_VERSION}/gum_${GUM_VERSION}_Linux_x86_64.tar.gz" \
+  "linux-amd64"
+
+bundle_platform_binary "gum" "$GUM_VERSION" \
+  "https://github.com/charmbracelet/gum/releases/download/v${GUM_VERSION}/gum_${GUM_VERSION}_Linux_i386.tar.gz" \
+  "linux-i386"
+
+# pdf2md — all platforms
+bundle_platform_binary "pdf2md" "$PDF2MD_VERSION" \
+  "https://github.com/fjacquet/pdf2md/releases/download/v${PDF2MD_VERSION}/pdf2md_${PDF2MD_VERSION}_macos_arm64.tar.gz" \
+  "darwin-arm64"
+
+bundle_platform_binary "pdf2md" "$PDF2MD_VERSION" \
+  "https://github.com/fjacquet/pdf2md/releases/download/v${PDF2MD_VERSION}/pdf2md_${PDF2MD_VERSION}_macos_x86_64.tar.gz" \
+  "darwin-amd64"
+
+bundle_platform_binary "pdf2md" "$PDF2MD_VERSION" \
+  "https://github.com/fjacquet/pdf2md/releases/download/v${PDF2MD_VERSION}/pdf2md_${PDF2MD_VERSION}_linux_arm64.tar.gz" \
+  "linux-arm64"
+
+bundle_platform_binary "pdf2md" "$PDF2MD_VERSION" \
+  "https://github.com/fjacquet/pdf2md/releases/download/v${PDF2MD_VERSION}/pdf2md_${PDF2MD_VERSION}_linux_x86_64.tar.gz" \
+  "linux-amd64"
+
+echo "  Vendor binaries bundled"
+echo ""
+
 # ── Create tarball ──────────────────────────────────────────────────────────
 echo "Creating archive..."
 

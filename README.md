@@ -35,7 +35,7 @@ git push -u origin my-project-name
 
 ### 3. Create and onboard a workspace
 
-The CLI creates a workspace, collects your project name and source location, scans the corpus, asks for consent before writing raw records, then asks which LLM CLI should receive the startup handoff. It copies markdown-convertible files into `raw/` with `.md` names, copies native-readable files unchanged, copies PDFs as-is, and skips images, video, audio, and `AGENTS.md` control files. Startup then creates detailed Obsidian-wikilink maps in `maps/`. Optional context such as project description and artifact URLs can be inferred or added later.
+The CLI creates a workspace, collects your project name and source location, scans the corpus, asks for consent before writing raw records, then asks which LLM CLI should receive the startup handoff. It copies markdown-convertible files into `raw/` with `.md` names, copies native-readable files unchanged, converts PDFs to Markdown when `pdf2md` is installed (otherwise copies as-is), and skips images, video, audio, and `AGENTS.md` control files. Startup then creates detailed Obsidian-wikilink maps in `maps/`. Optional context such as project description and artifact URLs can be inferred or added later.
 
 ```bash
 pilosa new /path/to/workspace
@@ -45,6 +45,7 @@ What happens:
 - Flow: workspace location → project name → source location → scan summary → consent → raw record writing → CLI handoff.
 - Scan summary shows counts for text files, images, videos, audio files, PDFs, unknown files, ignored files, and byte totals by major class where available.
 - Non-text media stays at the source location; images, video, audio, and `AGENTS.md` control files are skipped during onboarding.
+- PDFs are converted to Markdown when `pdf2md` is installed; otherwise copied as-is.
 - Startup creates `maps/` with map files that contain detailed retrieval summaries and Obsidian wikilinks into raw files.
 - Gum is used for prompts when installed; plain shell prompts and numbered menus are used as fallback.
 - A startup prompt is written to your clipboard and printed to the terminal.
@@ -65,6 +66,16 @@ Open Claude Code, Codex, OpenCode, or whichever CLI you picked, point it at this
 4. Write a startup report to `agent_reports/`.
 
 After that, ask research questions normally. The orchestrator will route them through the right sub-agents.
+
+## Re-onboarding an Existing Workspace
+
+To re-run the onboarding flow on a workspace that was created but never indexed, or to start fresh:
+
+```bash
+pilosa onboard /path/to/existing/workspace
+```
+
+This skips the workspace creation step and goes straight to source selection, corpus scan, and startup handoff. The existing project name and framework files are preserved.
 
 ## Updating A Workspace
 
@@ -97,7 +108,15 @@ pilosa sync
 
 This rebuilds `.opencode/agents/`, `.claude/agents/`, all skill mirrors across `.opencode/skills/`, `.claude/skills/`, and `.codex/skills/`, and updates `CLAUDE.md` with provenance fields.
 
-Local edits to normal framework files are preserved. The release version is written beside them as `.pilosa-new`, so you can compare and merge manually. User state such as `raw/`, `logs/user_requests.md`, `system/context.md`, `system/configuration.md`, `system/dictionary.md`, and `system/workspace_index.md` is not replaced by update.
+## Uninstalling
+
+Remove Pilosa from your system (does not affect any research workspaces):
+
+```bash
+pilosa uninstall
+```
+
+This removes `~/.pilosa/` (framework + binary) and the `~/.local/bin/pilosa` shim. Add `--yes` to skip the confirmation prompt.
 
 ## How the workspace is Organized
 
@@ -107,7 +126,7 @@ pilosa/
 ├── README.md                    This file
 ├── .bin/
 │   ├── AGENTS.md                 Guidance for .bin/ scripts
-│   ├── pilosa                    CLI entry point (new, update, check, sync, help)
+│   ├── pilosa                    CLI entry point (new, onboard, update, check, sync, uninstall, help)
 │   ├── check-startup.sh          Legacy dev validator (superseded by pilosa check)
 │   ├── sync-agents.sh            Legacy sync script (superseded by pilosa sync)
 │   └── lib/

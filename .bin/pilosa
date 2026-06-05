@@ -2,13 +2,15 @@
 set -euo pipefail
 
 # ── pilosa — CLI entry point ────────────────────────────────────────────────
-# Usage: pilosa [new|update|check|sync|help]
+# Usage: pilosa [new|onboard|update|check|sync|uninstall|help]
 #
 # Commands:
 #   new       Create a new Pilosa workspace and run onboarding
+#   onboard   Run onboarding on an existing workspace
 #   update    Update workspace framework files from a release
 #   check     Validate workspace integrity and configuration
 #   sync      Sync agent and skill mirrors from canonical sources
+#   uninstall Remove Pilosa from this system
 #   help      Show this help
 
 # ── ANSI colors (zero dependencies) ─────────────────────────────────────────
@@ -30,6 +32,7 @@ USE_GUM="1"
 MARKDOWN_EXTENSIONS="txt|rtf|textile|wiki|mediawiki|dokuwiki|pmwiki|outliner|workflowy|dynalist"
 NATIVE_EXTENSIONS="md|csv|json|yaml|yml|toml|xml|html|css|js|ts|py|rb|sh|log|ini|cfg|conf|tex|bib|org|adoc|rst|tiddlywiki|logseq|roam|obsidian"
 BINARY_COPYABLE_EXTENSIONS="pdf"
+PDF_CONVERTIBLE_EXTENSIONS="pdf"
 
 # Resolve framework root:
 #   - Dev mode: binary is in .bin/ of the repo → FRAMEWORK_ROOT is repo root
@@ -80,32 +83,42 @@ die()       { printf '\n  %s %s\n\n' "${R}✗${RESET}" "$1" >&2; exit 1; }
 print_step(){ printf '\n  %s%s[%s/%s] %s%s\n' "${BOLD}" "${C}" "$1" "$2" "$3" "${RESET}"; }
 
 gum_available() {
-  [[ "$USE_GUM" == "1" && -x "${PILOSA_HOME}/bin/gum" && -t 0 ]]
+  [[ "$USE_GUM" == "1" && -t 0 ]] || return 1
+  [[ -x "${PILOSA_HOME}/bin/gum" ]] && return 0
+  command -v gum >/dev/null 2>&1
+}
+
+gum_bin() {
+  if [[ -x "${PILOSA_HOME}/bin/gum" ]]; then
+    echo "${PILOSA_HOME}/bin/gum"
+  else
+    command -v gum 2>/dev/null
+  fi
 }
 
 gum_input() {
-  local prompt="$1" value="${2:-}"
-  gum_available || return 127
-  "${PILOSA_HOME}/bin/gum" input --placeholder "$prompt" --value "$value"
+  local prompt="$1" value="${2:-}" bin
+  bin="$(gum_bin)" || return 127
+  "$bin" input --placeholder "$prompt" --value "$value"
 }
 
 gum_file() {
-  local title="$1"
-  gum_available || return 127
-  "${PILOSA_HOME}/bin/gum" file --directory --title "$title"
+  local title="$1" bin
+  bin="$(gum_bin)" || return 127
+  "$bin" file --directory --title "$title"
 }
 
 gum_choose() {
-  local prompt="$1"
+  local prompt="$1" bin
   shift
-  gum_available || return 127
-  "${PILOSA_HOME}/bin/gum" choose --header "$prompt" "$@"
+  bin="$(gum_bin)" || return 127
+  "$bin" choose --header "$prompt" "$@"
 }
 
 gum_confirm() {
-  local prompt="$1"
-  gum_available || return 127
-  "${PILOSA_HOME}/bin/gum" confirm "$prompt"
+  local prompt="$1" bin
+  bin="$(gum_bin)" || return 127
+  "$bin" confirm "$prompt"
 }
 
 ask() {
@@ -571,6 +584,20 @@ ext_in_list() {
 is_markdown_convertible_file() { local ext; ext="$(file_ext "$1")"; [[ -n "$ext" ]] && ext_in_list "$ext" "$MARKDOWN_EXTENSIONS"; }
 is_native_readable_file() { local ext; ext="$(file_ext "$1")"; [[ -n "$ext" ]] && ext_in_list "$ext" "$NATIVE_EXTENSIONS"; }
 is_binary_copyable_file() { local ext; ext="$(file_ext "$1")"; [[ -n "$ext" ]] && ext_in_list "$ext" "$BINARY_COPYABLE_EXTENSIONS"; }
+is_pdf_convertible_file() { local ext; ext="$(file_ext "$1")"; [[ -n "$ext" ]] && ext_in_list "$ext" "$PDF_CONVERTIBLE_EXTENSIONS"; }
+
+pdf_converter_available() {
+  [[ -x "${PILOSA_HOME}/bin/pdf2md" ]] && return 0
+  command -v pdf2md >/dev/null 2>&1
+}
+
+pdf2md_bin() {
+  if [[ -x "${PILOSA_HOME}/bin/pdf2md" ]]; then
+    echo "${PILOSA_HOME}/bin/pdf2md"
+  else
+    command -v pdf2md 2>/dev/null
+  fi
+}
 
 markdown_raw_rel_path() {
   local rel_path="$1" name dir stem ext
@@ -633,7 +660,14 @@ classify_source_file() {
   should_skip_source_file "$path" && { echo "ignored"; return; }
   is_markdown_convertible_file "$path" && { echo "markdown"; return; }
   is_native_readable_file "$path" && { echo "native"; return; }
-  is_binary_copyable_file "$path" && { echo "binary_copyable"; return; }
+  if is_pdf_convertible_file "$path"; then
+    if pdf_converter_available; then
+      echo "pdf_convertible"
+    else
+      echo "binary_copyable"
+    fi
+    return
+  fi
   ext="$(file_ext "$path")"
   case "$ext" in
     jpg|jpeg|png|gif|webp|heic|heif|tif|tiff|bmp|svg) echo "image" ;;
@@ -649,6 +683,7 @@ scan_source() {
   SCAN_MARKDOWN_COUNT=0
   SCAN_NATIVE_COUNT=0
   SCAN_BINARY_COPYABLE_COUNT=0
+  SCAN_PDF_CONVERTIBLE_COUNT=0
   SCAN_IMAGE_COUNT=0
   SCAN_VIDEO_COUNT=0
   SCAN_AUDIO_COUNT=0
@@ -657,6 +692,7 @@ scan_source() {
   SCAN_MARKDOWN_BYTES=0
   SCAN_NATIVE_BYTES=0
   SCAN_BINARY_COPYABLE_BYTES=0
+  SCAN_PDF_CONVERTIBLE_BYTES=0
   SCAN_IMAGE_BYTES=0
   SCAN_VIDEO_BYTES=0
   SCAN_AUDIO_BYTES=0
@@ -676,6 +712,7 @@ scan_source() {
       markdown) SCAN_MARKDOWN_COUNT=$((SCAN_MARKDOWN_COUNT + 1)); SCAN_MARKDOWN_BYTES=$((SCAN_MARKDOWN_BYTES + size)) ;;
       native) SCAN_NATIVE_COUNT=$((SCAN_NATIVE_COUNT + 1)); SCAN_NATIVE_BYTES=$((SCAN_NATIVE_BYTES + size)) ;;
       binary_copyable) SCAN_BINARY_COPYABLE_COUNT=$((SCAN_BINARY_COPYABLE_COUNT + 1)); SCAN_BINARY_COPYABLE_BYTES=$((SCAN_BINARY_COPYABLE_BYTES + size)) ;;
+      pdf_convertible) SCAN_PDF_CONVERTIBLE_COUNT=$((SCAN_PDF_CONVERTIBLE_COUNT + 1)); SCAN_PDF_CONVERTIBLE_BYTES=$((SCAN_PDF_CONVERTIBLE_BYTES + size)) ;; 
       image) SCAN_IMAGE_COUNT=$((SCAN_IMAGE_COUNT + 1)); SCAN_IMAGE_BYTES=$((SCAN_IMAGE_BYTES + size)) ;;
       video) SCAN_VIDEO_COUNT=$((SCAN_VIDEO_COUNT + 1)); SCAN_VIDEO_BYTES=$((SCAN_VIDEO_BYTES + size)) ;;
       audio) SCAN_AUDIO_COUNT=$((SCAN_AUDIO_COUNT + 1)); SCAN_AUDIO_BYTES=$((SCAN_AUDIO_BYTES + size)) ;;
@@ -690,6 +727,9 @@ print_scan_summary() {
   printf '  %s✓%s Source scan complete\n' "${G}" "${RESET}"
   [[ "$SCAN_MARKDOWN_COUNT" -gt 0 ]] && printf '  %s├─%s %s to rename to .md (%s)\n' "${DIM}" "${RESET}" "$(plural_count "$SCAN_MARKDOWN_COUNT" "text-based file")" "$(format_bytes "$SCAN_MARKDOWN_BYTES")"
   [[ "$SCAN_NATIVE_COUNT" -gt 0 ]] && printf '  %s├─%s %s to copy unchanged (%s)\n' "${DIM}" "${RESET}" "$(plural_count "$SCAN_NATIVE_COUNT" "native-readable file")" "$(format_bytes "$SCAN_NATIVE_BYTES")"
+  if [[ "$SCAN_PDF_CONVERTIBLE_COUNT" -gt 0 ]]; then
+    printf '  %s├─%s %s to convert to Markdown (%s)\n' "${DIM}" "${RESET}" "$(plural_count "$SCAN_PDF_CONVERTIBLE_COUNT" "PDF")" "$(format_bytes "$SCAN_PDF_CONVERTIBLE_BYTES")"
+  fi
   [[ "$SCAN_BINARY_COPYABLE_COUNT" -gt 0 ]] && printf '  %s├─%s %s to copy as-is (%s)\n' "${DIM}" "${RESET}" "$(plural_count "$SCAN_BINARY_COPYABLE_COUNT" "PDF")" "$(format_bytes "$SCAN_BINARY_COPYABLE_BYTES")"
   [[ "$SCAN_IMAGE_COUNT" -gt 0 ]] && printf '  %s├─%s %s skipped (%s)\n' "${DIM}" "${RESET}" "$(plural_count "$SCAN_IMAGE_COUNT" "image")" "$(format_bytes "$SCAN_IMAGE_BYTES")"
   [[ "$SCAN_VIDEO_COUNT" -gt 0 ]] && printf '  %s├─%s %s skipped (%s)\n' "${DIM}" "${RESET}" "$(plural_count "$SCAN_VIDEO_COUNT" "video")" "$(format_bytes "$SCAN_VIDEO_BYTES")"
@@ -712,10 +752,12 @@ render_copy_progress() {
 
 copy_source() {
   local source_path="$1" dest_dir="$2"
-  local total_files=$((SCAN_MARKDOWN_COUNT + SCAN_NATIVE_COUNT + SCAN_BINARY_COPYABLE_COUNT))
+  local total_files=$((SCAN_MARKDOWN_COUNT + SCAN_NATIVE_COUNT + SCAN_PDF_CONVERTIBLE_COUNT + SCAN_BINARY_COPYABLE_COUNT))
   [[ "$total_files" -gt 0 ]] || { warn "No copyable files found in source location."; return 1; }
 
-  local copied=0 skipped=0 processed=0 src_file rel_path raw_rel_path dest_file dest_parent
+  local copied=0 skipped=0 processed=0 converted=0 src_file rel_path raw_rel_path dest_file dest_parent
+  local md_name md_dest pdf_converter_found
+  pdf_converter_found="$(pdf_converter_available && echo 1 || echo 0)"
   render_copy_progress 0 "$total_files" 0 0 ""
 
   while IFS= read -r -d '' src_file; do
@@ -753,8 +795,49 @@ copy_source() {
     render_copy_progress "$processed" "$total_files" "$copied" "$skipped" "$rel_path"
   done < <(find "$source_path" -type f -print0 2>/dev/null)
 
+  # PDF conversion pass — convert PDFs to Markdown when pdf2md is available
+  if [[ "$pdf_converter_found" -eq 1 && "$SCAN_PDF_CONVERTIBLE_COUNT" -gt 0 ]]; then
+    local pdf_files
+    pdf_files=()
+    while IFS= read -r -d '' src_file; do
+      should_skip_source_file "$src_file" && continue
+      is_pdf_convertible_file "$src_file" || continue
+      pdf_files+=("$src_file")
+    done < <(find "$source_path" -type f -print0 2>/dev/null)
+
+    if [[ ${#pdf_files[@]} -gt 0 ]]; then
+      info "Converting ${#pdf_files[@]} PDFs to Markdown..."
+      for src_file in "${pdf_files[@]}"; do
+        rel_path="${src_file#"$source_path"/}"
+        md_name="$(basename "${rel_path%.pdf}")"
+        md_dest="$dest_dir/$(dirname "$rel_path")/${md_name}.md"
+        dest_parent="$(dirname "$md_dest")"
+        mkdir -p "$dest_parent"
+        if [[ -f "$md_dest" ]]; then
+          skipped=$((skipped + 1))
+        else
+          local pdf2md_cmd
+          pdf2md_cmd="$(pdf2md_bin)"
+          if [[ -n "$pdf2md_cmd" ]] && "$pdf2md_cmd" "$src_file" "$md_dest" 2>/dev/null; then
+            converted=$((converted + 1))
+            copied=$((copied + 1))
+          else
+            warn "Failed to convert: $(basename "$src_file") — copying as-is"
+            cp "$src_file" "$dest_dir/$rel_path"
+            copied=$((copied + 1))
+          fi
+        fi
+        processed=$((processed + 1))
+        render_copy_progress "$processed" "$total_files" "$copied" "$skipped" "$rel_path"
+      done
+    fi
+  fi
+
+  # Binary copyable pass (non-PDF, or when converter unavailable)
   while IFS= read -r -d '' src_file; do
     should_skip_source_file "$src_file" && continue
+    # Skip PDFs already handled by the PDF conversion pass above
+    [[ "$pdf_converter_found" -eq 1 ]] && is_pdf_convertible_file "$src_file" && continue
     is_binary_copyable_file "$src_file" || continue
     rel_path="${src_file#"$source_path"/}"
     dest_file="$dest_dir/$rel_path"
@@ -979,11 +1062,7 @@ run_integrated_onboarding() {
   local root="$1" project_title="$2"
   local source_path="" preferred_cli startup_prompt launch_command handoff_action
 
-  if [[ -f "$root/.bin/sync-agents.sh" ]]; then
-    (cd "$root" && bash ".bin/sync-agents.sh")
-  fi
-
-  print_step 3 6 "Source location"
+  print_step 1 3 "Source location"
   note "This is the folder of your source files. Nothing in it is moved, renamed, or edited."
   if source_path="$(gum_file "Choose source location" 2>/dev/null)"; then
     source_path="$(normalize_path_input "$source_path")"
@@ -999,11 +1078,17 @@ run_integrated_onboarding() {
   [[ -d "$source_path" ]] || die "Source location does not exist: $source_path"
   ok "Source: ${BOLD}${source_path}${RESET}"
 
-  print_step 4 6 "Corpus scan and consent"
+  print_step 2 3 "Corpus scan and consent"
   scan_source "$source_path"
   print_scan_summary
 
-  local copyable_count=$((SCAN_MARKDOWN_COUNT + SCAN_NATIVE_COUNT + SCAN_BINARY_COPYABLE_COUNT))
+  if pdf_converter_available; then
+    [[ "$SCAN_PDF_CONVERTIBLE_COUNT" -gt 0 ]] && ok "pdf2md found — $(plural_count "$SCAN_PDF_CONVERTIBLE_COUNT" "PDF") will be converted to Markdown"
+  else
+    [[ "$SCAN_BINARY_COPYABLE_COUNT" -gt 0 ]] && note "PDFs will be copied as-is. Re-run the installer to add pdf2md for PDF-to-Markdown conversion."
+  fi
+
+  local copyable_count=$((SCAN_MARKDOWN_COUNT + SCAN_NATIVE_COUNT + SCAN_PDF_CONVERTIBLE_COUNT + SCAN_BINARY_COPYABLE_COUNT))
   [[ "$copyable_count" -gt 0 ]] || die "No copyable files found in source location."
   if ! confirm_action "Write accepted raw copies into raw/?" "y"; then
     warn "No raw copies were written. Onboarding stopped after the scan."
@@ -1011,7 +1096,7 @@ run_integrated_onboarding() {
   fi
   copy_source "$source_path" "$root/raw"
 
-  print_step 5 6 "Startup handoff"
+  print_step 3 3 "Startup handoff"
   preferred_cli="$(choose_preferred_cli)" || return 1
   ok "CLI: ${BOLD}${preferred_cli}${RESET}"
 
@@ -1055,7 +1140,8 @@ read_manifest() {
 
 # ── detect installed LLM CLIs ──────────────────────────────────────────────
 detect_llm_clis() {
-  local clis=()
+  local clis
+  clis=()
   command -v claude >/dev/null 2>&1 && clis+=("Claude Code")
   command -v codex >/dev/null 2>&1 && clis+=("Codex")
   command -v opencode >/dev/null 2>&1 && clis+=("OpenCode")
@@ -1067,6 +1153,55 @@ detect_llm_clis() {
 }
 
 # ═══════════════════════════════════════════════════════════════════════════
+# COMMAND: uninstall
+# ═══════════════════════════════════════════════════════════════════════════
+cmd_uninstall() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --no-color) R="" G="" B="" Y="" C="" M="" DIM="" BOLD="" RESET=""; shift ;;
+      --yes|-y) FORCE_YES="1"; shift ;;
+      --help|-h) echo "Usage: pilosa uninstall [--yes]" >&2; return 0 ;;
+      -*) die "Unknown option: $1" ;;
+      *) shift ;;
+    esac
+  done
+
+  local bin_dir="${PILOSA_BIN_DIR:-$HOME/.local/bin}"
+
+  header "Pilosa — Uninstall"
+
+  if [[ ! -d "$PILOSA_HOME" ]]; then
+    info "Pilosa is not installed (${PILOSA_HOME} not found)."
+    [[ -f "$bin_dir/pilosa" ]] && info "Found stray shim at ${bin_dir}/pilosa" || return 0
+  fi
+
+  echo ""
+  info "This will remove:"
+  [[ -d "$PILOSA_HOME" ]] && info "  ${PILOSA_HOME}/  (framework + binary)"
+  [[ -f "$bin_dir/pilosa" ]] && info "  ${bin_dir}/pilosa  (shim)"
+  echo ""
+  warn "Research workspaces are NOT affected."
+  echo ""
+
+  if [[ "${FORCE_YES:-}" != "1" ]]; then
+    if ! confirm "Remove Pilosa from this system?"; then
+      info "Uninstall cancelled."
+      return 0
+    fi
+  fi
+
+  [[ -d "$PILOSA_HOME" ]] && rm -rf "$PILOSA_HOME" && ok "Removed ${PILOSA_HOME}"
+  [[ -f "$bin_dir/pilosa" ]] && rm -f "$bin_dir/pilosa" && ok "Removed ${bin_dir}/pilosa"
+
+  divider
+  ok "Pilosa uninstalled."
+  echo ""
+  info "Any research workspaces you created are still intact."
+  info "To remove a workspace, delete its directory."
+  echo ""
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
 # COMMAND: help
 # ═══════════════════════════════════════════════════════════════════════════
 cmd_help() {
@@ -1074,9 +1209,11 @@ cmd_help() {
 
   printf '  %s\n' "${BOLD}Usage:${RESET}"
   printf '    %s\n' "pilosa new [directory]    Create a new workspace and run onboarding"
+  printf '    %s\n' "pilosa onboard [dir]     Run onboarding on an existing workspace"
   printf '    %s\n' "pilosa update [dir]      Update workspace framework files"
   printf '    %s\n' "pilosa check [directory] Validate workspace integrity"
   printf '    %s\n' "pilosa sync              Sync agent and skill mirrors from canonical"
+  printf '    %s\n' "pilosa uninstall         Remove Pilosa from this system"
   printf '    %s\n' "pilosa help              Show this help"
   printf '\n'
 
@@ -1107,13 +1244,59 @@ cmd_help() {
 }
 
 # ═══════════════════════════════════════════════════════════════════════════
+# COMMAND: onboard
+# ═══════════════════════════════════════════════════════════════════════════
+cmd_onboard() {
+  local workspace_path=""
+  local onboard_args
+  onboard_args=()
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --no-color) R="" G="" B="" Y="" C="" M="" DIM="" BOLD="" RESET=""; shift ;;
+      --no-gum) USE_GUM="0"; shift ;;
+      --help|-h) echo "Usage: pilosa onboard [workspace-directory]" >&2; return 0 ;;
+      -*) die "Unknown option: $1" ;;
+      *) onboard_args+=("$1"); shift ;;
+    esac
+  done
+
+  if [[ ${#onboard_args[@]} -gt 0 ]]; then
+    workspace_path="${onboard_args[0]}"
+    [[ -d "$workspace_path" ]] || die "Not a directory: $workspace_path"
+    workspace_path="$(cd "$workspace_path" 2>/dev/null && pwd)"
+  else
+    workspace_path="$(pwd)"
+  fi
+
+  [[ -f "$workspace_path/.pilosa/workspace" ]] || die "Not a Pilosa workspace: $workspace_path"
+  [[ -f "$workspace_path/AGENTS.md" ]] || die "AGENTS.md not found — is this a Pilosa workspace?"
+
+  header "Pilosa — Onboard Workspace"
+
+  # Extract existing project name from workspace metadata, or prompt
+  local project_name
+  project_name="$(grep 'project_name:' "$workspace_path/.pilosa/workspace" 2>/dev/null | sed 's/project_name: *//' | head -1 || echo "")"
+  if [[ -z "$project_name" ]]; then
+    local default_name
+    default_name="$(basename "$workspace_path")"
+    project_name="$(gum_input "Project name" "$default_name")"
+    sed -i.bak "s/project_name:.*/project_name: ${project_name}/" "$workspace_path/.pilosa/workspace" 2>/dev/null || \
+    sed -i '' "s/project_name:.*/project_name: ${project_name}/" "$workspace_path/.pilosa/workspace" 2>/dev/null || true
+    rm -f "$workspace_path/.pilosa/workspace.bak"
+  fi
+
+  run_integrated_onboarding "$workspace_path" "$project_name"
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
 # COMMAND: new
 # ═══════════════════════════════════════════════════════════════════════════
 cmd_new() {
   header "Pilosa — New Workspace"
 
   local workspace_path=""
-  local new_args=()
+  local new_args
+  new_args=()
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --force) die "--force is not supported for pilosa new; choose a new workspace path." ;;
@@ -1359,13 +1542,20 @@ cmd_update() {
   local retired_removed=0
   local retired_kept=0
   local skip_retired_cleanup=0
-  local -a clean_replace_paths=()
-  local -a forced_replace_paths=()
-  local -a sidecar_paths=()
-  local -a add_paths=()
-  local -a directory_paths=()
-  local -a retired_remove_paths=()
-  local -a retired_keep_paths=()
+  local clean_replace_paths
+  clean_replace_paths=()
+  local forced_replace_paths
+  forced_replace_paths=()
+  local sidecar_paths
+  sidecar_paths=()
+  local add_paths
+  add_paths=()
+  local directory_paths
+  directory_paths=()
+  local retired_remove_paths
+  retired_remove_paths=()
+  local retired_keep_paths
+  retired_keep_paths=()
 
   while IFS=$'\t' read -r path role policy; do
     [[ "$path" == "path" ]] && continue
@@ -1628,11 +1818,14 @@ cmd_check() {
 
   header "Pilosa — Workspace Check"
 
-  local failures=()
-  local warnings=()
+  local failures
+  failures=()
+  local warnings
+  warnings=()
 
   # ── required files ────────────────────────────────────────────────
-  local required_files=(
+  local required_files
+  required_files=(
     "AGENTS.md"
     "system/configuration.md"
     "system/startup.md"
@@ -1921,10 +2114,12 @@ processing_status: auto_generated' \
 # MAIN
 # ═══════════════════════════════════════════════════════════════════════════
 case "${1:-help}" in
-  new)     shift; cmd_new "$@" ;;
-  update)  shift; cmd_update "$@" ;;
-  check)   shift; cmd_check "$@" ;;
-  sync)    cmd_sync "$@" ;;
+  new)       shift; cmd_new "$@" ;;
+  onboard)   shift; cmd_onboard "$@" ;;
+  update)    shift; cmd_update "$@" ;;
+  check)     shift; cmd_check "$@" ;;
+  sync)      shift; cmd_sync ;;
+  uninstall) shift; cmd_uninstall "$@" ;;
   help|-h|--help) cmd_help ;;
   *)
     printf '%s\n' "${R}Unknown command: $1${RESET}" >&2

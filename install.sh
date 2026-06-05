@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env bash
 set -eu
 
 # ── install.sh — Pilosa Framework Installer ─────────────────────────────────
@@ -25,7 +25,6 @@ NO_GUM=0
 PILOSA_HOME="${PILOSA_HOME:-$HOME/.pilosa}"
 PILOSA_BIN_DIR="${PILOSA_BIN_DIR:-$HOME/.local/bin}"
 REPO="TommasoPrinetti/pilosa"
-GUM_VERSION="0.14.0"
 
 # ── colors (only if terminal) ──────────────────────────────────────────────
 if [ -t 2 ] && [ "${NO_COLOR:-}" != "1" ]; then
@@ -53,7 +52,7 @@ while [ $# -gt 0 ]; do
       echo "Usage: sh install-pilosa.sh [options]"
       echo "  --version X.Y.Z   Install specific version (default: latest)"
       echo "  --dry-run         Show what would happen without doing it"
-      echo "  --no-gum          Skip Gum installation"
+      echo "  --no-gum          Skip bundled binary installation (Gum, pdf2md)"
       echo "  --prefix PATH     Install root (default: ~/.pilosa)"
       echo "  --bin-dir PATH    Shim directory (default: ~/.local/bin)"
       exit 0
@@ -158,9 +157,6 @@ main() {
     info "Dry run — would download:"
     info "  ${base_url}/${archive_name}"
     info "  ${base_url}/checksums.txt"
-    if [ "$NO_GUM" -eq 0 ]; then
-      info "  Gum v${GUM_VERSION} for ${PLATFORM}"
-    fi
     info "Would install to: ${PILOSA_HOME}/versions/${VERSION}/"
     info "Would create shim: ${PILOSA_BIN_DIR}/pilosa"
     echo ""
@@ -210,9 +206,36 @@ main() {
     die "pilosa CLI not found in archive"
   fi
 
-  # ── install Gum (optional) ──────────────────────────────────────────────
+  # ── install bundled binaries ───────────────────────────────────────────
   if [ "$NO_GUM" -eq 0 ]; then
-    install_gum "$tmpdir"
+    local vendor_src="${PILOSA_HOME}/versions/${VERSION}/pilosa-framework-${VERSION}/.bin/lib/vendor"
+    if [[ -d "$vendor_src" ]]; then
+      # Detect platform suffix (e.g. darwin-arm64, linux-amd64)
+      local os arch suffix
+      case "$(uname -s)" in
+        Darwin) os="darwin" ;;
+        Linux)  os="linux" ;;
+        *)      os="" ;;
+      esac
+      case "$(uname -m)" in
+        arm64|aarch64) arch="arm64" ;;
+        x86_64|amd64)  arch="amd64" ;;
+        i386|i686)     arch="i386" ;;
+        *)             arch="" ;;
+      esac
+      suffix="${os}-${arch}"
+
+      for bin_name in gum pdf2md; do
+        local src_bin="${vendor_src}/${bin_name}-${suffix}"
+        if [[ -f "$src_bin" ]]; then
+          cp "$src_bin" "${PILOSA_HOME}/bin/${bin_name}"
+          chmod +x "${PILOSA_HOME}/bin/${bin_name}"
+          ok "Installed ${bin_name}"
+        else
+          warn "No ${bin_name} binary for ${suffix}"
+        fi
+      done
+    fi
   fi
 
   # ── create shim ─────────────────────────────────────────────────────────
@@ -258,47 +281,6 @@ SHIM_EOF
   info "Run ${BOLD}pilosa new${RESET} to create a research workspace"
   info "Run ${BOLD}pilosa help${RESET} to see available commands"
   echo ""
-}
-
-# ── Gum installation ────────────────────────────────────────────────────────
-install_gum() {
-  tmpdir="$1"
-
-  local gum_archive="gum_${GUM_VERSION}_${OS}_${ARCH}.tar.gz"
-  local gum_url="https://github.com/charmbracelet/gum/releases/download/v${GUM_VERSION}/${gum_archive}"
-
-  info "Downloading Gum v${GUM_VERSION}..."
-
-  if ! download "$gum_url" "${tmpdir}/${gum_archive}" 2>/dev/null; then
-    warn "Could not download Gum for ${PLATFORM}. Pilosa will use plain shell prompts."
-    return 0
-  fi
-
-  # Verify Gum checksum if available
-  local gum_expected
-  gum_expected="$(grep "${gum_archive}" "${tmpdir}/checksums.txt" 2>/dev/null | awk '{print $1}')"
-  if [ -n "$gum_expected" ] && [ "$gum_expected" != "no_checksum_tool" ]; then
-    if verify_checksum "${tmpdir}/${gum_archive}" "$gum_expected"; then
-      ok "Gum checksum verified"
-    else
-      warn "Gum checksum mismatch — skipping Gum install"
-      return 0
-    fi
-  fi
-
-  # Extract gum binary
-  tar -xzf "${tmpdir}/${gum_archive}" -C "${tmpdir}" gum 2>/dev/null || {
-    warn "Could not extract Gum. Pilosa will use plain shell prompts."
-    return 0
-  }
-
-  if [ -f "${tmpdir}/gum" ]; then
-    cp "${tmpdir}/gum" "${PILOSA_HOME}/bin/gum"
-    chmod +x "${PILOSA_HOME}/bin/gum"
-    ok "Installed Gum v${GUM_VERSION}"
-  else
-    warn "Gum binary not found in archive. Pilosa will use plain shell prompts."
-  fi
 }
 
 # ── helpers ─────────────────────────────────────────────────────────────────
