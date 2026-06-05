@@ -26,7 +26,7 @@ PILOSA_HOME="${PILOSA_HOME:-$HOME/.pilosa}"
 PILOSA_REPO="${PILOSA_REPO:-TommasoPrinetti/pilosa}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TODAY="$(date +%Y-%m-%d)"
-USE_GUM="1"
+USE_GUM="${USE_GUM:-0}"
 
 # Source file classes used by integrated onboarding.
 MARKDOWN_EXTENSIONS="txt|rtf|textile|wiki|mediawiki|dokuwiki|pmwiki|outliner|workflowy|dynalist"
@@ -1059,23 +1059,37 @@ PROMPT_EOF
 }
 
 run_integrated_onboarding() {
-  local root="$1" project_title="$2"
+  local root="$1" project_title="$2" preselected_source="${3:-}"
   local source_path="" preferred_cli startup_prompt launch_command handoff_action
 
-  print_step 1 3 "Source location"
-  note "This is the folder of your source files. Nothing in it is moved, renamed, or edited."
-  if source_path="$(gum_file "Choose source location" 2>/dev/null)"; then
-    source_path="$(normalize_path_input "$source_path")"
-  else
+  print_step 1 3 "Source files folder"
+  note "Specify the folder containing your research materials (documents, PDFs, notes)."
+  note "These files will be COPIED into the workspace's raw/ directory."
+  note "Nothing in the original folder is moved, renamed, or edited."
+
+  # Use pre-selected source if provided (e.g. via --source-dir)
+  if [[ -n "$preselected_source" ]]; then
+    source_path="$(normalize_path_input "$preselected_source")"
+    source_path="$(expand_home "$source_path")"
+    info "Using pre-selected source: ${source_path}"
+  elif gum_available; then
+    if source_path="$(gum_file "Select source folder" 2>/dev/null)"; then
+      source_path="$(normalize_path_input "$source_path")"
+      # Validate Gum output — if it's not a real directory, discard it
+      [[ -d "$source_path" ]] || source_path=""
+    fi
+  fi
+
+  if [[ -z "$source_path" ]]; then
     while [[ -z "$source_path" ]]; do
-      source_path="$(ask "Source location (absolute)" "" "e.g. /Users/name/Documents/my-sources")"
+      source_path="$(ask "Source folder (absolute path)" "" "e.g. /home/user/Documents/my-sources")"
       source_path="$(normalize_path_input "$source_path")"
       source_path="$(expand_home "$source_path")"
-      [[ -z "$source_path" ]] && printf '  %s\n' "${R}Source location is required.${RESET}" >&2
+      [[ -z "$source_path" ]] && printf '  %s\n' "${R}Source folder is required.${RESET}" >&2
     done
   fi
 
-  [[ -d "$source_path" ]] || die "Source location does not exist: $source_path"
+  [[ -d "$source_path" ]] || die "Source folder does not exist: $source_path"
   ok "Source: ${BOLD}${source_path}${RESET}"
 
   print_step 2 3 "Corpus scan and consent"
@@ -1248,13 +1262,20 @@ cmd_help() {
 # ═══════════════════════════════════════════════════════════════════════════
 cmd_onboard() {
   local workspace_path=""
+  local source_dir=""
   local onboard_args
   onboard_args=()
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --no-color) R="" G="" B="" Y="" C="" M="" DIM="" BOLD="" RESET=""; shift ;;
-      --no-gum) USE_GUM="0"; shift ;;
-      --help|-h) echo "Usage: pilosa onboard [workspace-directory]" >&2; return 0 ;;
+      --gum)     USE_GUM="1"; shift ;;
+      --no-gum)  USE_GUM="0"; shift ;;
+      --source-dir) source_dir="$2"; shift 2 ;;
+      --help|-h)
+        echo "Usage: pilosa onboard [workspace-directory] [options]" >&2
+        echo "  --source-dir PATH  Pre-select source folder (skip prompt)" >&2
+        return 0
+        ;;
       -*) die "Unknown option: $1" ;;
       *) onboard_args+=("$1"); shift ;;
     esac
@@ -1285,7 +1306,7 @@ cmd_onboard() {
     rm -f "$workspace_path/.pilosa/workspace.bak"
   fi
 
-  run_integrated_onboarding "$workspace_path" "$project_name"
+  run_integrated_onboarding "$workspace_path" "$project_name" "$source_dir"
 }
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1302,12 +1323,14 @@ cmd_new() {
       --force) die "--force is not supported for pilosa new; choose a new workspace path." ;;
       --numbered) NUMBERED="1"; shift ;;
       --no-color) R="" G="" B="" Y="" C="" M="" DIM="" BOLD="" RESET=""; shift ;;
-      --no-gum) USE_GUM="0"; shift ;;
+      --gum)     USE_GUM="1"; shift ;;
+      --no-gum)  USE_GUM="0"; shift ;;
       --help|-h)
         printf '  %s\n' "Usage: pilosa new [directory] [options]"
         printf '    %s\n' "  --numbered   Force numbered menus instead of arrow-key menus"
         printf '    %s\n' "  --no-color   Disable colored output"
-        printf '    %s\n' "  --no-gum     Use plain shell prompts"
+        printf '    %s\n' "  --gum        Use interactive Gum prompts (if installed)"
+        printf '    %s\n' "  --no-gum     Use plain shell prompts (default)"
         return 0
         ;;
       *)
@@ -1473,7 +1496,8 @@ cmd_update() {
       --dry-run) dry_run=1; shift ;;
       --yes|-y) auto_yes=1; shift ;;
       --no-color) R="" G="" B="" Y="" C="" M="" DIM="" BOLD="" RESET=""; shift ;;
-      --no-gum) USE_GUM="0"; shift ;;
+      --gum)     USE_GUM="1"; shift ;;
+      --no-gum)  USE_GUM="0"; shift ;;
       --help|-h)
         printf '  %s\n' "Usage: pilosa update [workspace] [options]"
         printf '    %s\n' "  --version X.Y.Z   Target framework version"
@@ -1481,7 +1505,8 @@ cmd_update() {
         printf '    %s\n' "  --dry-run         Show what would change without writing"
         printf '    %s\n' "  --yes             Apply the shown plan without confirmation prompts"
         printf '    %s\n' "  --no-color        Disable colored output"
-        printf '    %s\n' "  --no-gum          Use plain shell confirmations"
+        printf '    %s\n' "  --gum             Use interactive Gum prompts (if installed)"
+        printf '    %s\n' "  --no-gum          Use plain shell confirmations (default)"
         return 0
         ;;
       --*)
