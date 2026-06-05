@@ -220,6 +220,59 @@ else
   fail "pilosa failed to load with pdf2md on PATH"
 fi
 
+# ── Test 7: install.sh version pinning ──────────────────────────────────────
+echo ""
+echo "Test 7: install.sh version pinning"
+HELP_OUTPUT="$(bash "$REPO_ROOT/install.sh" --help 2>/dev/null || true)"
+if echo "$HELP_OUTPUT" | grep -q "default: 0.1.0"; then
+  pass "install.sh defaults to pinned version 0.1.0"
+else
+  fail "install.sh does not default to pinned version"
+fi
+
+# ── Test 8: install.sh --min-days on old release ──────────────────────────
+echo ""
+echo "Test 8: install.sh --min-days on old release"
+# v0.1.0 should be older than 1 day
+MIN_DAYS_OUTPUT="$(bash "$REPO_ROOT/install.sh" --version 0.1.0 --min-days 1 --dry-run 2>/dev/null || true)"
+if echo "$MIN_DAYS_OUTPUT" | grep -q "Dry run"; then
+  pass "--min-days 1 passes for old release v0.1.0"
+else
+  fail "--min-days 1 failed for old release v0.1.0"
+  echo "    Output: $MIN_DAYS_OUTPUT" | head -3
+fi
+
+# ── Test 9: install.sh --verify-only ────────────────────────────────────────
+echo ""
+echo "Test 9: install.sh --verify-only"
+FAKE_INSTALL="$TMPDIR/fake-verify"
+mkdir -p "$FAKE_INSTALL/.pilosa/versions/0.1.0/pilosa-framework-0.1.0/metadata"
+mkdir -p "$FAKE_INSTALL/.pilosa/versions/0.1.0/pilosa-framework-0.1.0/.bin/lib/vendor"
+
+# Create a fake binary and its checksum
+FAKE_GUM="$FAKE_INSTALL/.pilosa/versions/0.1.0/pilosa-framework-0.1.0/.bin/lib/vendor/gum-darwin-arm64"
+cat > "$FAKE_GUM" << 'EOF'
+#!/bin/sh
+echo "fake gum"
+EOF
+chmod +x "$FAKE_GUM"
+
+# Compute checksum and write manifest (3-field format: hash name suffix)
+GUM_HASH="$(sha256sum "$FAKE_GUM" 2>/dev/null | awk '{print $1}' || shasum -a 256 "$FAKE_GUM" 2>/dev/null | awk '{print $1}')"
+printf '%s  %s  %s\n' "$GUM_HASH" "gum" "darwin-arm64" > "$FAKE_INSTALL/.pilosa/versions/0.1.0/pilosa-framework-0.1.0/metadata/vendor-checksums.txt"
+
+# Also install the binary in the expected location (renamed to base name)
+mkdir -p "$FAKE_INSTALL/.pilosa/bin"
+cp "$FAKE_GUM" "$FAKE_INSTALL/.pilosa/bin/gum"
+
+VERIFY_OUTPUT="$(HOME="$FAKE_INSTALL" PILOSA_HOME="$FAKE_INSTALL/.pilosa" bash "$REPO_ROOT/install.sh" --verify-only 2>/dev/null || true)"
+if echo "$VERIFY_OUTPUT" | grep -q "Verification complete"; then
+  pass "--verify-only verifies installed binaries"
+else
+  fail "--verify-only did not complete successfully"
+  echo "    Output: $VERIFY_OUTPUT" | head -3
+fi
+
 # ── Summary ─────────────────────────────────────────────────────────────────
 echo ""
 echo "═══════════════════════════════════════════════════════════════════════════"

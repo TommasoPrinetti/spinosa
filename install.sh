@@ -19,9 +19,13 @@ set -eu
 # Zero npm, zero Python, zero Go, zero Homebrew, zero Git.
 
 # ── defaults ────────────────────────────────────────────────────────────────
-VERSION="${VERSION:-latest}"
+# Pinned stable version. Update this when cutting a new release.
+PINNED_VERSION="0.1.0"
+VERSION="${VERSION:-$PINNED_VERSION}"
 DRY_RUN=0
+VERIFY_ONLY=0
 NO_GUM=0
+MIN_DAYS=""
 PILOSA_HOME="${PILOSA_HOME:-$HOME/.pilosa}"
 PILOSA_BIN_DIR="${PILOSA_BIN_DIR:-$HOME/.local/bin}"
 REPO="TommasoPrinetti/pilosa"
@@ -43,14 +47,24 @@ die()   { printf '\n  %s %s\n\n' "${R}✗${RESET}" "$1" >&2; exit 1; }
 # ── parse flags ─────────────────────────────────────────────────────────────
 while [ $# -gt 0 ]; do
   case "$1" in
-    --version)   VERSION="$2"; shift 2 ;;
-    --dry-run)   DRY_RUN=1; shift ;;
-    --no-gum)    NO_GUM=1; shift ;;
-    --prefix)    PILOSA_HOME="$2"; shift 2 ;;
-    --bin-dir)   PILOSA_BIN_DIR="$2"; shift 2 ;;
+    --version)    VERSION="$2"; shift 2 ;;
+    --latest)     VERSION="latest"; shift ;;
+    --dry-run)    DRY_RUN=1; shift ;;
+    --verify-only) VERIFY_ONLY=1; shift ;;
+    --no-gum)     NO_GUM=1; shift ;;
+    --min-days)   MIN_DAYS="$2"; shift 2 ;;
+    --prefix)     PILOSA_HOME="$2"; shift 2 ;;
+    --bin-dir)    PILOSA_BIN_DIR="$2"; shift 2 ;;
     --help|-h)
-      echo "Usage: sh install-pilosa.sh [options]"
-      echo "  --version X.Y.Z   Install specific version (default: latest)"
+      echo "Usage: bash install-pilosa.sh [options]"
+      echo ""
+      echo "Security:"
+      echo "  --version X.Y.Z   Install specific version (default: $PINNED_VERSION)"
+      echo "  --latest          Use latest release instead of pinned version"
+      echo "  --min-days N      Reject releases newer than N days old"
+      echo "  --verify-only     Verify installed binaries, do not install"
+      echo ""
+      echo "Install:"
       echo "  --dry-run         Show what would happen without doing it"
       echo "  --no-gum          Skip bundled binary installation (Gum, pdf2md)"
       echo "  --prefix PATH     Install root (default: ~/.pilosa)"
@@ -124,6 +138,108 @@ verify_checksum() {
   fi
 }
 
+# ── release age check ───────────────────────────────────────────────────────
+# Rejects releases that are too fresh. Helps avoid zero-day compromised uploads.
+check_release_age() {
+  local version="$1" min_days="$2"
+  [ -n "$min_days" ] || return 0
+  [ "$min_days" -gt 0 ] 2>/dev/null || die "--min-days must be a positive integer"
+
+  local api_url="https://api.github.com/repos/${REPO}/releases/tags/v${version}"
+  local published_at
+  published_at="$(curl -fsSL "$api_url" 2>/dev/null | grep '"published_at":' | head -1 | sed 's/.*"published_at": "\([^"]*\)".*/\1/')"
+
+  if [ -z "$published_at" ]; then
+    if [ "$VERSION" = "latest" ] || [ -n "$MIN_DAYS" ]; then
+      die "Could not verify release age. GitHub API may be rate-limited. Use --version to specify a known version, or omit --min-days."
+    fi
+    warn "Could not verify release age — skipping check"
+    return 0
+  fi
+
+  local release_ts current_ts
+  release_ts="$(date -d "$published_at" +%s 2>/dev/null || date -j -f "%Y-%m-%dT%H:%M:%SZ" "$published_at" +%s 2>/dev/null)"
+  if [ -z "$release_ts" ]; then
+    warn "Could not parse release date '$published_at' — skipping age check"
+    return 0
+  fi
+
+  current_ts="$(date +%s)"
+  local days_old=$(( (current_ts - release_ts) / 86400 ))
+
+  if [ "$days_old" -lt "$min_days" ]; then
+    die "Release v${version} is only ${days_old} day(s) old. Minimum required: ${min_days} day(s). Use --latest to override, or wait."
+  fi
+
+  ok "Release age verified: ${days_old} day(s) old (minimum: ${min_days})"
+}
+
+# ── vendor binary verification ────────────────────────────────────────────────
+# Verifies SHA-256 checksums of installed vendor binaries against the manifest
+# bundled in the framework release.
+verify_vendor_binaries() {
+  local framework_root="$1"
+  local checksums_file="${framework_root}/metadata/vendor-checksums.txt"
+
+  if [ ! -f "$checksums_file" ]; then
+    warn "No vendor checksums found in release — skipping binary verification"
+    return 0
+  fi
+
+  # Determine current platform suffix to match the right checksum entry
+  local os arch suffix
+  case "$(uname -s)" in
+    Darwin) os="darwin" ;;
+    Linux)  os="linux" ;;
+    *)      os="" ;;
+  esac
+  case "$(uname -m)" in
+    arm64|aarch64) arch="arm64" ;;
+    x86_64|amd64)  arch="amd64" ;;
+    i386|i686)     arch="i386" ;;
+    *)             arch="" ;;
+  esac
+  suffix="${os}-${arch}"
+
+  info "Verifying vendor binary checksums..."
+  local verified=0 failed=0
+
+  while IFS= read -r line; do
+    # Skip comments and blank lines
+    case "$line" in
+      ''|\#*) continue ;;
+    esac
+
+    local expected_hash bin_name plat_suffix
+    expected_hash="$(printf '%s' "$line" | awk '{print $1}')"
+    bin_name="$(printf '%s' "$line" | awk '{print $2}')"
+    plat_suffix="$(printf '%s' "$line" | awk '{print $3}')"
+
+    # Only verify binaries for this platform
+    [ "$plat_suffix" = "$suffix" ] || continue
+
+    local installed_bin="${PILOSA_HOME}/bin/${bin_name}"
+    if [ ! -f "$installed_bin" ]; then
+      continue
+    fi
+
+    if verify_checksum "$installed_bin" "$expected_hash"; then
+      verified=$((verified + 1))
+    else
+      failed=$((failed + 1))
+      warn "Checksum mismatch: ${bin_name} (${plat_suffix})"
+    fi
+  done < "$checksums_file"
+
+  if [ "$failed" -gt 0 ]; then
+    die "${failed} vendor binary checksum(s) failed. Remove ${PILOSA_HOME} and re-install, or use --no-gum."
+  fi
+
+  if [ "$verified" -gt 0 ]; then
+    ok "${verified} vendor binary checksum(s) verified"
+  fi
+}
+
 # ── resolve version ────────────────────────────────────────────────────────
 resolve_version() {
   if [ "$VERSION" = "latest" ]; then
@@ -144,6 +260,7 @@ main() {
 
   detect_platform
   resolve_version
+  check_release_age "$VERSION" "$MIN_DAYS"
 
   local base_url="https://github.com/${REPO}/releases/download/v${VERSION}"
   local archive_name="pilosa-framework-${VERSION}.tar.gz"
@@ -152,6 +269,24 @@ main() {
   info "Install root: ${PILOSA_HOME}"
   info "Bin directory: ${PILOSA_BIN_DIR}"
   echo ""
+
+  # ── verify-only mode ──────────────────────────────────────────────────
+  if [ "$VERIFY_ONLY" -eq 1 ]; then
+    local existing_version
+    existing_version="$(ls -1 "${PILOSA_HOME}/versions" 2>/dev/null | sort -t. -k1,1n -k2,2n -k3,3n | tail -1)"
+    if [ -z "$existing_version" ]; then
+      die "No Pilosa installation found at ${PILOSA_HOME}"
+    fi
+    local fw_dir="${PILOSA_HOME}/versions/${existing_version}"
+    local fw_subdir
+    fw_subdir="$(find "$fw_dir" -maxdepth 1 -type d -name 'pilosa-framework-*' 2>/dev/null | head -1)"
+    if [ -z "$fw_subdir" ]; then
+      die "Could not find installed framework"
+    fi
+    verify_vendor_binaries "$fw_subdir"
+    ok "Verification complete"
+    return 0
+  fi
 
   if [ "$DRY_RUN" -eq 1 ]; then
     info "Dry run — would download:"
@@ -236,6 +371,10 @@ main() {
         fi
       done
     fi
+
+    # Verify vendor binary checksums against the release manifest
+    local fw_root="${PILOSA_HOME}/versions/${VERSION}/pilosa-framework-${VERSION}"
+    verify_vendor_binaries "$fw_root"
   fi
 
   # ── create shim ─────────────────────────────────────────────────────────

@@ -67,6 +67,66 @@ Open Claude Code, Codex, OpenCode, or whichever CLI you picked, point it at this
 
 After that, ask research questions normally. The orchestrator will route them through the right sub-agents.
 
+## Security Model
+
+Pilosa is designed with supply-chain paranoia in mind. There are zero npm, Python, Java, Go, or Homebrew dependencies in the core install.
+
+### Version pinning
+
+By default, the installer uses a **pinned stable version** (not `latest`). This prevents a compromised fresh release from auto-installing on every `curl | sh` run.
+
+```bash
+# Default: installs the pinned stable version
+bash install-pilosa.sh
+
+# Explicit version
+bash install-pilosa.sh --version 0.1.0
+
+# Bleeding edge (not recommended for production)
+bash install-pilosa.sh --latest
+```
+
+### Checksum verification
+
+Every release includes two layers of checksums:
+
+1. **Framework tarball**: SHA-256 of `pilosa-framework-<version>.tar.gz` is verified against `checksums.txt` before unpacking.
+2. **Vendor binaries**: Each platform-specific Gum and pdf2md binary has an embedded SHA-256 manifest in `metadata/vendor-checksums.txt`. The installer verifies the copied binary against this manifest after installation.
+
+A mismatch aborts the install with an error.
+
+### Minimum release age
+
+Reject releases that are too fresh. This gives the community time to detect a compromised upload.
+
+```bash
+# Only install if the release is at least 7 days old
+bash install-pilosa.sh --min-days 7
+
+# The check queries the GitHub API for the release date.
+# If the API is unreachable and you specified --min-days, the install aborts.
+```
+
+### Verify-only mode
+
+Audit an existing installation without reinstalling:
+
+```bash
+bash install-pilosa.sh --verify-only
+```
+
+This checks all installed vendor binaries against their embedded checksum manifest and reports status.
+
+### What we download
+
+| Asset | Source | Verified |
+|-------|--------|----------|
+| Framework tarball | GitHub releases | SHA-256 against `checksums.txt` |
+| Gum binary | charmbracelet/gum releases | SHA-256 against embedded manifest |
+| pdf2md binary | fjacquet/pdf2md releases | SHA-256 against embedded manifest |
+
+All downloads use `curl -fsSL` (fail on error, follow redirects, silent).
+
 ## Re-onboarding an Existing Workspace
 
 To re-run the onboarding flow on a workspace that was created but never indexed, or to start fresh:
