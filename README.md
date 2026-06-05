@@ -38,11 +38,11 @@ git push -u origin my-project-name
 The CLI creates a workspace, collects your project name and source location, scans the corpus, asks for consent before writing raw records, then asks which LLM CLI should receive the startup handoff. It copies markdown-convertible files into `raw/` with `.md` names, copies native-readable files unchanged, converts PDFs to Markdown when `pdf2md` is installed (otherwise copies as-is), and skips images, video, audio, and `AGENTS.md` control files. Startup then creates detailed Obsidian-wikilink maps in `maps/`. Optional context such as project description and artifact URLs can be inferred or added later.
 
 ```bash
-pilosa new /path/to/workspace
+pilosa new /path/to/my-research
 ```
 
 What happens:
-- Flow: workspace location → project name → source location → scan summary → consent → raw record writing → CLI handoff.
+- Flow: corpus root → auto-generated sibling workspace → project name → scan summary → consent → raw record writing → CLI handoff.
 - Scan summary shows counts for text files, images, videos, audio files, PDFs, unknown files, ignored files, and byte totals by major class where available.
 - Non-text media stays at the source location; images, video, audio, and `AGENTS.md` control files are skipped during onboarding.
 - PDFs are converted to Markdown when `pdf2md` is installed; otherwise copied as-is.

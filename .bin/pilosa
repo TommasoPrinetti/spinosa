@@ -151,6 +151,10 @@ confirm() {
   done
 }
 
+reset_terminal() {
+  stty sane 2>/dev/null || true
+}
+
 select_menu() {
   local prompt="$1"
   shift
@@ -1062,35 +1066,36 @@ run_integrated_onboarding() {
   local root="$1" project_title="$2" preselected_source="${3:-}"
   local source_path="" preferred_cli startup_prompt launch_command handoff_action
 
-  print_step 1 3 "Source files folder"
-  note "Specify the folder containing your research materials (documents, PDFs, notes)."
-  note "These files will be COPIED into the workspace's raw/ directory."
-  note "Nothing in the original folder is moved, renamed, or edited."
-
-  # Use pre-selected source if provided (e.g. via --source-dir)
+  # ── Step 1: Source folder ─────────────────────────────────────────────
   if [[ -n "$preselected_source" ]]; then
-    source_path="$(normalize_path_input "$preselected_source")"
-    source_path="$(expand_home "$source_path")"
-    info "Using pre-selected source: ${source_path}"
-  elif gum_available; then
-    if source_path="$(gum_file "Select source folder" 2>/dev/null)"; then
-      source_path="$(normalize_path_input "$source_path")"
-      # Validate Gum output — if it's not a real directory, discard it
-      [[ -d "$source_path" ]] || source_path=""
+    # Corpus was already selected during workspace creation — skip prompt
+    source_path="$preselected_source"
+    info "Source: ${BOLD}${source_path}${RESET}"
+  else
+    print_step 1 3 "Source files folder"
+    note "Specify the folder containing your research materials (documents, PDFs, notes)."
+    note "These files will be COPIED into the workspace's raw/ directory."
+    note "Nothing in the original folder is moved, renamed, or edited."
+
+    if gum_available; then
+      if source_path="$(gum_file "Select source folder" 2>/dev/null)"; then
+        source_path="$(normalize_path_input "$source_path")"
+        [[ -d "$source_path" ]] || source_path=""
+      fi
     fi
-  fi
 
-  if [[ -z "$source_path" ]]; then
-    while [[ -z "$source_path" ]]; do
-      source_path="$(ask "Source folder (absolute path)" "" "e.g. /home/user/Documents/my-sources")"
-      source_path="$(normalize_path_input "$source_path")"
-      source_path="$(expand_home "$source_path")"
-      [[ -z "$source_path" ]] && printf '  %s\n' "${R}Source folder is required.${RESET}" >&2
-    done
-  fi
+    if [[ -z "$source_path" ]]; then
+      while [[ -z "$source_path" ]]; do
+        source_path="$(ask "Source folder (absolute path)" "" "e.g. /home/user/Documents/my-sources")"
+        source_path="$(normalize_path_input "$source_path")"
+        source_path="$(expand_home "$source_path")"
+        [[ -z "$source_path" ]] && printf '  %s\n' "${R}Source folder is required.${RESET}" >&2
+      done
+    fi
 
-  [[ -d "$source_path" ]] || die "Source folder does not exist: $source_path"
-  ok "Source: ${BOLD}${source_path}${RESET}"
+    [[ -d "$source_path" ]] || die "Source folder does not exist: $source_path"
+    ok "Source: ${BOLD}${source_path}${RESET}"
+  fi
 
   print_step 2 3 "Corpus scan and consent"
   scan_source "$source_path"
@@ -1309,27 +1314,40 @@ cmd_onboard() {
     rm -f "$workspace_path/.pilosa/workspace.bak"
   fi
 
+  # If no --source-dir, read source_location from workspace metadata
+  if [[ -z "$source_dir" ]]; then
+    source_dir="$(grep 'source_location:' "$workspace_path/.pilosa/workspace" 2>/dev/null | sed 's/source_location: *//' | head -1 || echo "")"
+    if [[ -n "$source_dir" && -d "$source_dir" ]]; then
+      info "Previous source location found: ${source_dir}"
+    elif [[ -n "$source_dir" && ! -d "$source_dir" ]]; then
+      warn "Previous source location no longer exists: ${source_dir}"
+      source_dir=""
+    fi
+  fi
+
   run_integrated_onboarding "$workspace_path" "$project_name" "$source_dir"
 }
 
 # ═══════════════════════════════════════════════════════════════════════════
 # COMMAND: new
 # ═══════════════════════════════════════════════════════════════════════════
+# Flow: select corpus root → auto-create sibling workspace → project name → onboard
 cmd_new() {
   header "Pilosa — New Workspace"
 
+  local corpus_path=""
   local workspace_path=""
   local new_args
   new_args=()
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --force) die "--force is not supported for pilosa new; choose a new workspace path." ;;
+      --force) die "--force is not supported for pilosa new." ;;
       --numbered) NUMBERED="1"; shift ;;
       --no-color) R="" G="" B="" Y="" C="" M="" DIM="" BOLD="" RESET=""; shift ;;
       --gum)     USE_GUM="1"; shift ;;
       --no-gum)  USE_GUM="0"; shift ;;
       --help|-h)
-        printf '  %s\n' "Usage: pilosa new [directory] [options]"
+        printf '  %s\n' "Usage: pilosa new [corpus-directory] [options]"
         printf '    %s\n' "  --numbered   Force numbered menus instead of arrow-key menus"
         printf '    %s\n' "  --no-color   Disable colored output"
         printf '    %s\n' "  --gum        Use interactive Gum prompts (default, if installed)"
@@ -1343,68 +1361,75 @@ cmd_new() {
     esac
   done
 
-  # ── Step 1: Workspace location ──────────────────────────────────────────
+  # ── Step 1: Corpus root ────────────────────────────────────────────────
   if [[ -n "${new_args[0]:-}" ]]; then
-    workspace_path="$(expand_home "${new_args[0]}")"
+    corpus_path="$(expand_home "${new_args[0]}")"
   else
-    note "This will be your Pilosa research workspace."
-    note "Nothing outside this folder is touched."
+    note "Where is your research corpus?"
+    note "This is the folder containing your source documents, PDFs, notes, etc."
+    note "A sibling workspace folder will be created next to it."
     if gum_available; then
-      workspace_path="$(gum_input "Workspace path" "~/pilosa-workspace")"
-      workspace_path="$(normalize_path_input "$workspace_path")"
-      workspace_path="$(expand_home "$workspace_path")"
+      corpus_path="$(gum_input "Corpus folder (absolute path)" "~/Documents/my-research")"
+      reset_terminal
+      corpus_path="$(normalize_path_input "$corpus_path")"
+      corpus_path="$(expand_home "$corpus_path")"
     fi
-    if [[ -z "$workspace_path" ]]; then
-      while [[ -z "$workspace_path" ]]; do
-        workspace_path="$(ask "Workspace path (absolute)" "" "e.g. ~/Projects/my-research")"
-        workspace_path="$(normalize_path_input "$workspace_path")"
-        workspace_path="$(expand_home "$workspace_path")"
-        [[ -z "$workspace_path" ]] && printf '  %s\n' "${R}Workspace path is required.${RESET}" >&2
+    if [[ -z "$corpus_path" ]]; then
+      while [[ -z "$corpus_path" ]]; do
+        corpus_path="$(ask "Corpus folder (absolute path)" "" "e.g. ~/Documents/my-research")"
+        corpus_path="$(normalize_path_input "$corpus_path")"
+        corpus_path="$(expand_home "$corpus_path")"
+        [[ -z "$corpus_path" ]] && printf '  %s\n' "${R}Corpus folder is required.${RESET}" >&2
       done
     fi
   fi
 
-  # Validate
-  if [[ -e "$workspace_path" ]]; then
-    if [[ -f "$workspace_path" ]]; then
-      die "Path exists but is a file, not a directory: $workspace_path"
-    fi
-    if [[ -f "$workspace_path/.pilosa/workspace" ]]; then
-      die "A Pilosa workspace already exists at: $workspace_path"
-    fi
-  fi
+  # Validate corpus
+  [[ -d "$corpus_path" ]] || die "Not a directory: $corpus_path"
+  corpus_path="$(cd "$corpus_path" 2>/dev/null && pwd)"
+  ok "Corpus: ${BOLD}${corpus_path}${RESET}"
 
-  ok "Workspace: ${BOLD}${workspace_path}${RESET}"
+  # ── Step 2: Auto-generate workspace path ────────────────────────────────
+  local corpus_name
+  corpus_name="$(basename "$corpus_path")"
+  local parent_dir
+  parent_dir="$(dirname "$corpus_path")"
+  local suffix="-pilosa"
+  local candidate="${parent_dir}/${corpus_name}${suffix}"
+  local n=1
+  while [[ -e "$candidate" ]]; do
+    n=$((n + 1))
+    candidate="${parent_dir}/${corpus_name}${suffix}-${n}"
+  done
+  workspace_path="$candidate"
 
-  # ── Step 2: Project name ────────────────────────────────────────────────
+  # ── Step 3: Project name ────────────────────────────────────────────────
   local project_name=""
   local default_name
-  default_name="$(basename "$workspace_path")"
+  default_name="$corpus_name"
 
-  if project_name="$(gum_input "Project name" "$default_name" 2>/dev/null)"; then
-    project_name="${project_name:-$default_name}"
-  else
-    note "This is the working title for your research framework."
-    note "It appears at the top of every report."
-    project_name=""
+  if gum_available; then
+    project_name="$(gum_input "Project name" "$default_name")"
+    reset_terminal
+  fi
+  if [[ -z "$project_name" ]]; then
     while [[ -z "$project_name" ]]; do
-      project_name="$(ask "Project name" "$default_name" "e.g. My Research Project")"
+      project_name="$(ask "Project name" "$default_name")"
       [[ -z "$project_name" ]] && printf '  %s\n' "${R}Project name is required.${RESET}" >&2
     done
   fi
+  project_name="${project_name:-$default_name}"
 
-  ok "Project: ${BOLD}${project_name}${RESET}"
+  ok "Workspace: ${BOLD}${workspace_path}${RESET}"
+  ok "Project:   ${BOLD}${project_name}${RESET}"
 
-  # ── Step 3: Copy framework ──────────────────────────────────────────────
+  # ── Step 4: Create workspace and copy framework ──────────────────────────
   if [[ -z "$FRAMEWORK_ROOT" ]]; then
     die "Framework not found. Is Pilosa installed? Check ${PILOSA_HOME}/versions/"
   fi
   if [[ ! -f "${FRAMEWORK_ROOT}/.pilosa/framework-files.tsv" ]]; then
     die "Framework manifest not found: ${FRAMEWORK_ROOT}/.pilosa/framework-files.tsv"
   fi
-
-  divider
-  printf '\n  %s%sCopying framework files...%s\n\n' "${BOLD}" "${C}" "${RESET}"
 
   mkdir -p "$workspace_path/.pilosa"
 
@@ -1413,7 +1438,7 @@ cmd_new() {
 
   # Copy all framework-owned files
   while IFS=$'\t' read -r path role policy; do
-    [[ "$path" == "path" ]] && continue  # skip header
+    [[ "$path" == "path" ]] && continue
     is_release_managed_role "$role" || continue
 
     local src="${FRAMEWORK_ROOT}/${path}"
@@ -1421,7 +1446,6 @@ cmd_new() {
 
     if [[ -d "$src" ]]; then
       mkdir -p "$dst"
-      # Copy contents, not just the directory
       cp -a "$src"/. "$dst"/ 2>/dev/null || true
     elif [[ -f "$src" ]]; then
       mkdir -p "$(dirname "$dst")"
@@ -1438,14 +1462,15 @@ cmd_new() {
     printf 'date\tsession_id\tagent\troute\toperation\tquery_label\tdirs_seen\tmaps_read\traw_matches\traw_files_read\treports_written\toutput_path\n' > "$workspace_path/logs/session_metrics.tsv"
   fi
 
-  ok "Framework files copied"
+  ok "Framework copied"
 
-  # ── Step 4: Write workspace metadata ────────────────────────────────────
+  # ── Step 5: Write workspace metadata ────────────────────────────────────
   cat > "$workspace_path/.pilosa/workspace" << EOF
 workspace_version: 1
 framework_version: ${source_framework_version}
 created: ${TODAY}
 project_name: ${project_name}
+source_location: ${corpus_path}
 setup_status: not_started
 EOF
 
@@ -1461,21 +1486,16 @@ EOF
       hash="$(sha256_file "$full_path" 2>/dev/null || echo "none")"
       printf '%s\t%s\n' "$path" "$hash" >> "$workspace_path/.pilosa/manifest.tsv"
     elif [[ -d "$full_path" ]]; then
-      # For directories, record as "dir"
       printf '%s\tdir\n' "$path" >> "$workspace_path/.pilosa/manifest.tsv"
     fi
   done < "${FRAMEWORK_ROOT}/.pilosa/framework-files.tsv"
 
-  ok "Workspace metadata written"
+  ok "Metadata written"
 
-  # ── Step 5: Onboarding ──────────────────────────────────────────────────
-  divider
-  printf '\n  %s%sRunning integrated onboarding...%s\n\n' "${BOLD}" "${C}" "${RESET}"
+  # ── Step 6: Onboarding (continuous flow) ────────────────────────────────
+  run_integrated_onboarding "$workspace_path" "$project_name" "$corpus_path"
 
-  run_integrated_onboarding "$workspace_path" "$project_name"
-
-  divider
-  ok "Workspace ready at: ${BOLD}${workspace_path}${RESET}"
+  ok "Workspace ready: ${BOLD}${workspace_path}${RESET}"
   printf '\n'
 }
 
