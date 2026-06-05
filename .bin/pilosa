@@ -1398,6 +1398,7 @@ cmd_new() {
   # Validate corpus
   [[ -d "$corpus_path" ]] || die "Not a directory: $corpus_path"
   corpus_path="$(cd "$corpus_path" 2>/dev/null && pwd)"
+  ok "Corpus: ${BOLD}${corpus_path}${RESET}"
 
   # ── Step 2: Auto-generate workspace path ────────────────────────────────
   local corpus_name
@@ -1412,8 +1413,9 @@ cmd_new() {
     candidate="${parent_dir}/${corpus_name}${suffix}-${n}"
   done
   workspace_path="$candidate"
+  ok "Workspace: ${BOLD}${workspace_path}${RESET}"
 
-  # ── Step 3: Project name (prompt BEFORE confirmations) ──────────────────
+  # ── Step 3: Project name ────────────────────────────────────────────────
   local project_name=""
   local default_name
   default_name="$corpus_name"
@@ -1429,10 +1431,6 @@ cmd_new() {
     done
   fi
   project_name="${project_name:-$default_name}"
-
-  # Print all confirmations together after prompts are done
-  ok "Corpus:   ${BOLD}${corpus_path}${RESET}"
-  ok "Workspace: ${BOLD}${workspace_path}${RESET}"
   ok "Project:   ${BOLD}${project_name}${RESET}"
 
   # ── Step 4: Create workspace and copy framework ──────────────────────────
