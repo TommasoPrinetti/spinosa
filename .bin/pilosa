@@ -93,6 +93,30 @@ read_from_tty() {
   fi
 }
 
+spinner_start() {
+  local msg="$1"
+  SPINNER_PID=""
+  [[ -t 1 ]] || return 0
+  (
+    local frames=("▁" "▃" "▄" "▅" "▆" "▇" "█" "▇" "▆" "▅" "▄" "▃")
+    local i=0
+    while true; do
+      printf '\r\033[2K  %s%s%s %s' "${C}" "${frames[$((i % 12))]}" "${RESET}" "$msg" >&2
+      i=$((i + 1))
+      sleep 0.1
+    done
+  ) &
+  SPINNER_PID=$!
+}
+
+spinner_stop() {
+  [[ -n "${SPINNER_PID:-}" ]] || return 0
+  kill "$SPINNER_PID" 2>/dev/null || true
+  wait "$SPINNER_PID" 2>/dev/null || true
+  SPINNER_PID=""
+  printf '\r\033[2K' >&2
+}
+
 gum_available() {
   [[ "$USE_GUM" == "1" && -t 0 ]] || return 1
   local bin
@@ -848,7 +872,9 @@ resolve_latest_release_version() {
   if ! command -v curl >/dev/null 2>&1; then
     die "curl is required to resolve latest. Use --version X.Y.Z instead."
   fi
+  spinner_start "Resolving latest version" >&2
   url="$(curl -fsSL -o /dev/null -w '%{url_effective}' "https://github.com/${PILOSA_REPO}/releases/latest" 2>/dev/null || true)"
+  spinner_stop >&2
   [[ -n "$url" && "$url" != */latest ]] || die "Could not resolve latest version. Use --version X.Y.Z instead."
   basename "$url" | sed 's/^v//'
 }
@@ -885,9 +911,10 @@ prepare_release_framework() {
     cp "${release_dir}/checksums.txt" "$checksums_path"
   else
     local base_url="${PILOSA_RELEASE_BASE_URL:-https://github.com/${PILOSA_REPO}/releases/download/v${version}}"
-    info "Downloading release: v${version}" >&2
+    spinner_start "Downloading framework v${version}" >&2
     download_file "${base_url}/${archive_name}" "$archive_path"
     download_file "${base_url}/checksums.txt" "$checksums_path"
+    spinner_stop >&2
   fi
 
   expected="$(awk -v f="$archive_name" '$2 == f { print $1; exit }' "$checksums_path")"
@@ -3090,7 +3117,9 @@ cmd_health() {
   fi
 
   local ws_count
+  spinner_start "Discovering workspaces"
   ws_count="$(discover_workspaces | wc -l | tr -d ' ')"
+  spinner_stop
   if [[ "$ws_count" -gt 0 ]]; then
     ok "${ws_count} workspace(s) discovered"
   else
@@ -3153,17 +3182,24 @@ cmd_upgrade() {
   local installer="${tmpdir}/install-pilosa.sh"
 
   # Resolve latest version from GitHub
+  spinner_start "Resolving latest version"
   local latest_version
   latest_version="$(curl -fsSL -o /dev/null -w '%{url_effective}' "https://github.com/${PILOSA_REPO}/releases/latest" 2>/dev/null | sed 's|.*/tag/v||' || echo "")"
+  spinner_stop
   
   if [[ -n "$latest_version" ]]; then
+    spinner_start "Downloading installer v${latest_version}"
     if ! curl -fsSL "https://github.com/${PILOSA_REPO}/releases/download/v${latest_version}/install.sh" -o "$installer" 2>/dev/null; then
+      spinner_stop
       warn "Could not download release installer. Falling back to raw main branch..."
+      spinner_start "Downloading from main branch"
       curl -fsSL "https://raw.githubusercontent.com/${PILOSA_REPO}/main/install.sh" -o "$installer" || die "Could not download installer"
     fi
+    spinner_stop
   else
-    warn "Could not resolve latest version. Falling back to raw main branch..."
+    spinner_start "Downloading from main branch"
     curl -fsSL "https://raw.githubusercontent.com/${PILOSA_REPO}/main/install.sh" -o "$installer" || die "Could not download installer"
+    spinner_stop
   fi
 
   ok "Installer downloaded"
@@ -3210,9 +3246,11 @@ cmd_dashboard() {
     printf '  %sFramework:%s v%s\n' "${BOLD}" "${RESET}" "${fw_version:-unknown}"
   else
     # Discover workspaces
+    spinner_start "Discovering workspaces"
     while IFS= read -r ws; do
       [[ -n "$ws" ]] && discovered_workspaces+=("$ws")
     done < <(discover_workspaces)
+    spinner_stop
 
     if [[ ${#discovered_workspaces[@]} -gt 0 ]]; then
       printf '  %sDiscovered workspaces:%s %d\n' "${BOLD}" "${RESET}" "${#discovered_workspaces[@]}"
@@ -3235,8 +3273,10 @@ cmd_dashboard() {
   printf '\n'
 
   # ── LLM CLIs ──────────────────────────────────────────────────────────
+  spinner_start "Detecting LLM CLIs"
   local cli_output
   cli_output="$(detect_llm_clis)"
+  spinner_stop
   if [[ -n "$cli_output" ]]; then
     while IFS= read -r line; do
       [[ -n "$line" ]] && cli_labels+=("$line")

@@ -20,7 +20,7 @@ set -eu
 
 # ── defaults ────────────────────────────────────────────────────────────────
 # Pinned stable version. Update this when cutting a new release.
-PINNED_VERSION="0.2.5"
+PINNED_VERSION="0.2.6"
 VERSION="${VERSION:-$PINNED_VERSION}"
 DRY_RUN=0
 VERIFY_ONLY=0
@@ -56,6 +56,30 @@ read_from_tty() {
   else
     return 1
   fi
+}
+
+spinner_start() {
+  local msg="$1"
+  SPINNER_PID=""
+  [ -t 1 ] || return 0
+  (
+    local frames=("▁" "▃" "▄" "▅" "▆" "▇" "█" "▇" "▆" "▅" "▄" "▃")
+    local i=0
+    while true; do
+      printf '\r\033[2K  %s%s%s %s' "${C}" "${frames[$((i % 12))]}" "${RESET}" "$msg" >&2
+      i=$((i + 1))
+      sleep 0.1
+    done
+  ) &
+  SPINNER_PID=$!
+}
+
+spinner_stop() {
+  [ -n "${SPINNER_PID:-}" ] || return 0
+  kill "$SPINNER_PID" 2>/dev/null || true
+  wait "$SPINNER_PID" 2>/dev/null || true
+  SPINNER_PID=""
+  printf '\r\033[2K' >&2
 }
 
 # ── parse flags ─────────────────────────────────────────────────────────────
@@ -475,14 +499,15 @@ main() {
   mkdir -p "${PILOSA_BIN_DIR}"
 
   # ── download framework ──────────────────────────────────────────────────
-  info "Downloading framework archive..."
   local tmpdir
   tmpdir="$(mktemp -d)"
+  spinner_start "Downloading framework v${VERSION}"
   download "${base_url}/${archive_name}" "${tmpdir}/${archive_name}"
 
   # ── verify checksum ─────────────────────────────────────────────────────
-  info "Downloading checksums..."
-  if download "${base_url}/checksums.txt" "${tmpdir}/checksums.txt" 2>/dev/null; then
+  download "${base_url}/checksums.txt" "${tmpdir}/checksums.txt" 2>/dev/null
+  spinner_stop
+  if [ -f "${tmpdir}/checksums.txt" ]; then
     local expected_hash
     expected_hash="$(grep "${archive_name}" "${tmpdir}/checksums.txt" 2>/dev/null | awk '{print $1}')"
     if [ -n "$expected_hash" ]; then
