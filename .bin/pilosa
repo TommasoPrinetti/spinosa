@@ -31,8 +31,9 @@ USE_GUM="${USE_GUM:-0}"
 # Source file classes used by integrated onboarding.
 MARKDOWN_EXTENSIONS="txt|rtf|textile|wiki|mediawiki|dokuwiki|pmwiki|outliner|workflowy|dynalist"
 NATIVE_EXTENSIONS="md|csv|json|yaml|yml|toml|xml|html|css|js|ts|py|rb|sh|log|ini|cfg|conf|tex|bib|org|adoc|rst|tiddlywiki|logseq|roam|obsidian"
-BINARY_COPYABLE_EXTENSIONS="pdf"
+BINARY_COPYABLE_EXTENSIONS=""
 PDF_CONVERTIBLE_EXTENSIONS="pdf"
+OPTION_SEP=$'\t'
 
 # Resolve framework root:
 #   - Dev mode: binary is in .bin/ of the repo → FRAMEWORK_ROOT is repo root
@@ -122,6 +123,17 @@ gum_choose() {
   "$bin" choose --header "$prompt" "$@"
 }
 
+gum_multi_choose() {
+  local prompt="$1" selected_csv="$2" bin
+  shift 2
+  bin="$(gum_bin)" || return 127
+  if [[ -n "$selected_csv" ]]; then
+    "$bin" choose --header "$prompt" --no-limit --ordered --selected="$selected_csv" "$@"
+  else
+    "$bin" choose --header "$prompt" --no-limit --ordered "$@"
+  fi
+}
+
 gum_confirm() {
   local prompt="$1" bin
   bin="$(gum_bin)" || return 127
@@ -152,19 +164,168 @@ prompt_directory() {
   echo "$value"
 }
 
+option_spec() {
+  local value="$1" label="${2:-$1}" description="${3:-}"
+  printf '%s%s%s%s%s' "$value" "$OPTION_SEP" "$label" "$OPTION_SEP" "$description"
+}
+
+option_value() {
+  local spec="$1"
+  if [[ "$spec" == *"$OPTION_SEP"* ]]; then
+    printf '%s' "${spec%%"$OPTION_SEP"*}"
+  else
+    printf '%s' "$spec"
+  fi
+}
+
+option_rest() {
+  local spec="$1"
+  if [[ "$spec" == *"$OPTION_SEP"* ]]; then
+    printf '%s' "${spec#*"$OPTION_SEP"}"
+  else
+    printf ''
+  fi
+}
+
+option_label() {
+  local rest label
+  rest="$(option_rest "$1")"
+  if [[ "$rest" == *"$OPTION_SEP"* ]]; then
+    label="${rest%%"$OPTION_SEP"*}"
+    printf '%s' "${label:-$(option_value "$1")}"
+  elif [[ -n "$rest" ]]; then
+    printf '%s' "$rest"
+  else
+    printf '%s' "$(option_value "$1")"
+  fi
+}
+
+option_description() {
+  local rest
+  rest="$(option_rest "$1")"
+  if [[ "$rest" == *"$OPTION_SEP"* ]]; then
+    printf '%s' "${rest#*"$OPTION_SEP"}"
+  else
+    printf ''
+  fi
+}
+
+option_display() {
+  local spec="$1" selected="${2:-0}" label desc
+  label="$(option_label "$spec")"
+  desc="$(option_description "$spec")"
+  if [[ -n "$desc" ]]; then
+    if [[ "$selected" == "1" ]]; then
+      printf '%s%s%s %s- %s%s' "${BOLD}" "$label" "${RESET}" "${DIM}" "$desc" "${RESET}"
+    else
+      printf '%s %s- %s%s' "$label" "${DIM}" "$desc" "${RESET}"
+    fi
+  elif [[ "$selected" == "1" ]]; then
+    printf '%s%s%s' "${BOLD}" "$label" "${RESET}"
+  else
+    printf '%s' "$label"
+  fi
+}
+
+option_gum_display() {
+  local spec="$1" label desc
+  label="$(option_label "$spec")"
+  desc="$(option_description "$spec")"
+  if [[ -n "$desc" ]]; then
+    printf '%s - %s' "$label" "$desc"
+  else
+    printf '%s' "$label"
+  fi
+}
+
 prompt_choose() {
   local prompt="$1"
   shift
+  local options=("$@")
   if gum_available; then
-    local choice=""
-    if choice="$(gum_choose "$prompt" "$@" 2>/dev/null)"; then
+    local choice="" displays=() i
+    for i in "${!options[@]}"; do
+      displays+=("$(option_gum_display "${options[$i]}")")
+    done
+    if choice="$(gum_choose "$prompt" "${displays[@]}" 2>/dev/null)"; then
       reset_terminal
+      for i in "${!displays[@]}"; do
+        if [[ "${displays[$i]}" == "$choice" ]]; then
+          echo "$(option_value "${options[$i]}")"
+          return 0
+        fi
+      done
       echo "$choice"
       return 0
     fi
     reset_terminal
   fi
-  arrow_select "$prompt" "$@"
+  arrow_select "$prompt" "${options[@]}"
+}
+
+multi_values_contains() {
+  local needle="$1"
+  shift || true
+  local item
+  for item in "$@"; do
+    [[ "$item" == "$needle" ]] && return 0
+  done
+  return 1
+}
+
+prompt_multi_choose() {
+  local prompt="$1"
+  shift
+  local options=("$@")
+  MULTI_CHOOSE_RESULTS=()
+  MULTI_CHOOSE_OPTIONS=("${options[@]}")
+  MULTI_CHOOSE_SELECTED=()
+
+  local option value
+  for option in "${options[@]}"; do
+    value="$(option_value "$option")"
+    [[ "$value" == "__all__" ]] && continue
+    MULTI_CHOOSE_SELECTED+=("$value")
+  done
+
+  if gum_available; then
+    local displays=() preselected=() choice value
+    for option in "${options[@]}"; do
+      value="$(option_value "$option")"
+      displays+=("$(option_gum_display "$option")")
+      [[ "$value" == "__all__" ]] || preselected+=("$(option_gum_display "$option")")
+    done
+    local selected_csv=""
+    if [[ ${#preselected[@]} -gt 0 ]]; then
+      selected_csv="$(join_by "," "${preselected[@]}")"
+    fi
+    local gum_output=""
+    if gum_output="$(gum_multi_choose "$prompt" "$selected_csv" "${displays[@]}" 2>/dev/null)"; then
+      reset_terminal
+      MULTI_CHOOSE_SELECTED=()
+      local line i
+      while IFS= read -r line; do
+        [[ -n "$line" ]] || continue
+        for i in "${!displays[@]}"; do
+          if [[ "${displays[$i]}" == "$line" ]]; then
+            value="$(option_value "${options[$i]}")"
+            [[ "$value" == "__all__" ]] || MULTI_CHOOSE_SELECTED+=("$value")
+            break
+          fi
+        done
+      done <<< "$gum_output"
+      MULTI_CHOOSE_RESULTS=()
+      local selected_value
+      for selected_value in "${MULTI_CHOOSE_SELECTED[@]-}"; do
+        [[ -n "$selected_value" ]] && MULTI_CHOOSE_RESULTS+=("$selected_value")
+      done
+      return 0
+    fi
+    reset_terminal
+    return 1
+  fi
+
+  multi_arrow_select "$prompt" "${options[@]}"
 }
 
 prompt_confirm() {
@@ -180,6 +341,20 @@ prompt_confirm() {
     return "$status"
   fi
   confirm "$prompt" "$default"
+}
+
+join_by() {
+  local sep="$1"
+  shift
+  local out="" item
+  for item in "$@"; do
+    if [[ -z "$out" ]]; then
+      out="$item"
+    else
+      out="${out}${sep}${item}"
+    fi
+  done
+  printf '%s' "$out"
 }
 
 ask() {
@@ -223,7 +398,7 @@ select_menu() {
 
   printf '%s\n' "${BOLD}${prompt}${RESET}" >&2
   for i in "${!options[@]}"; do
-    printf '  %s %s\n' "${DIM}$((i+1)).${RESET}" "${options[$i]}" >&2
+    printf '  %s %s\n' "${DIM}$((i+1)).${RESET}" "$(option_display "${options[$i]}")" >&2
   done
 
   local choice
@@ -231,7 +406,7 @@ select_menu() {
     printf '%s' "${DIM}  Enter number [1-${#options[@]}]: ${RESET}" >&2
     IFS= read -r choice || choice="1"
     if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#options[@]} )); then
-      echo "${options[$((choice-1))]}"
+      echo "$(option_value "${options[$((choice-1))]}")"
       return
     fi
     printf '  %s\n' "${R}Invalid choice. Try again.${RESET}" >&2
@@ -263,9 +438,9 @@ arrow_select() {
     local i
     for i in "${!options[@]}"; do
       if (( i == current )); then
-        printf '\r\033[2K  %s %s %s\n' "${C}" "▶" "${BOLD}${options[$i]}${RESET}" >&2
+        printf '\r\033[2K  %s %s %s\n' "${C}" "▶" "$(option_display "${options[$i]}" 1)" >&2
       else
-        printf '\r\033[2K    %s\n' "${options[$i]}" >&2
+        printf '\r\033[2K    %s\n' "$(option_display "${options[$i]}")" >&2
       fi
     done
   }
@@ -327,11 +502,237 @@ arrow_select() {
         ;;
       ''|$'\r'|$'\n')
         cleanup_arrow
-        echo "${options[$current]}"
+        echo "$(option_value "${options[$current]}")"
         return
         ;;
       q|Q)
         cleanup_arrow
+        printf '\n  Cancelled.\n' >&2
+        return 1
+        ;;
+    esac
+  done
+}
+
+multi_option_is_selected() {
+  local value="$1"
+  if [[ "$value" == "__all__" ]]; then
+    local option regular_value
+    for option in "${MULTI_CHOOSE_OPTIONS[@]}"; do
+      regular_value="$(option_value "$option")"
+      [[ "$regular_value" == "__all__" ]] && continue
+      multi_values_contains "$regular_value" "${MULTI_CHOOSE_SELECTED[@]-}" || return 1
+    done
+    return 0
+  fi
+  multi_values_contains "$value" "${MULTI_CHOOSE_SELECTED[@]-}"
+}
+
+toggle_multi_option() {
+  local value="$1"
+  local option regular_value updated=()
+  if [[ "$value" == "__all__" ]]; then
+    if multi_option_is_selected "__all__"; then
+      MULTI_CHOOSE_SELECTED=()
+    else
+      MULTI_CHOOSE_SELECTED=()
+      for option in "${MULTI_CHOOSE_OPTIONS[@]}"; do
+        regular_value="$(option_value "$option")"
+        [[ "$regular_value" == "__all__" ]] && continue
+        MULTI_CHOOSE_SELECTED+=("$regular_value")
+      done
+    fi
+    return
+  fi
+
+  if multi_values_contains "$value" "${MULTI_CHOOSE_SELECTED[@]-}"; then
+    for regular_value in "${MULTI_CHOOSE_SELECTED[@]-}"; do
+      [[ "$regular_value" == "$value" ]] || updated+=("$regular_value")
+    done
+    MULTI_CHOOSE_SELECTED=("${updated[@]}")
+  else
+    MULTI_CHOOSE_SELECTED+=("$value")
+  fi
+}
+
+render_multi_option_line() {
+  local option="$1" selected="${2:-0}" prefix="${3:-    }" current="${4:-0}"
+  local marker="○"
+  [[ "$selected" == "1" ]] && marker="●"
+  printf '%s%s %s\n' "$prefix" "$marker" "$(option_display "$option" "$current")" >&2
+}
+
+multi_select_menu() {
+  local prompt="$1"
+  shift
+  local options=("$@")
+  local choice continue_index=$(( ${#options[@]} + 1 )) cancel_index=$(( ${#options[@]} + 2 ))
+
+  while true; do
+    printf '%s\n' "${BOLD}${prompt}${RESET}" >&2
+    printf '  %s\n' "${DIM}Toggle file types, then continue with the selected batches.${RESET}" >&2
+    local i option value
+    for i in "${!options[@]}"; do
+      option="${options[$i]}"
+      value="$(option_value "$option")"
+      printf '  %s ' "${DIM}$((i+1)).${RESET}" >&2
+      if multi_option_is_selected "$value"; then
+        render_multi_option_line "$option" 1 "" 0
+      else
+        render_multi_option_line "$option" 0 "" 0
+      fi
+    done
+    printf '  %s %s\n' "${DIM}${continue_index}.${RESET}" "Continue with selected file types" >&2
+    printf '  %s %s\n' "${DIM}${cancel_index}.${RESET}" "Cancel selection" >&2
+    printf '%s' "${DIM}  Enter number to toggle or continue: ${RESET}" >&2
+    IFS= read -r choice || choice="$continue_index"
+    if [[ "$choice" =~ ^[0-9]+$ ]]; then
+      if (( choice >= 1 && choice <= ${#options[@]} )); then
+        toggle_multi_option "$(option_value "${options[$((choice-1))]}")"
+        printf '\n' >&2
+        continue
+      fi
+      if (( choice == continue_index )); then
+        MULTI_CHOOSE_RESULTS=()
+        local selected_value
+        for selected_value in "${MULTI_CHOOSE_SELECTED[@]-}"; do
+          [[ -n "$selected_value" ]] && MULTI_CHOOSE_RESULTS+=("$selected_value")
+        done
+        return 0
+      fi
+      if (( choice == cancel_index )); then
+        return 1
+      fi
+    fi
+    printf '  %s\n\n' "${R}Invalid choice. Try again.${RESET}" >&2
+  done
+}
+
+multi_arrow_select() {
+  local prompt="$1"
+  shift
+  local options=("$@")
+
+  if [[ "${NUMBERED:-0}" == "1" ]] || [[ ! -t 0 ]]; then
+    multi_select_menu "$prompt" "${options[@]}"
+    return
+  fi
+
+  if ! command -v stty >/dev/null 2>&1; then
+    multi_select_menu "$prompt" "${options[@]}"
+    return
+  fi
+
+  local total_rows=$(( ${#options[@]} + 2 ))
+  local current=0 key seq part
+  local old_stty
+  old_stty=$(stty -g 2>/dev/null) || { multi_select_menu "$prompt" "${options[@]}"; return; }
+
+  render_multi_arrow_rows() {
+    local i option value
+    for ((i = 0; i < total_rows; i++)); do
+      if (( i < ${#options[@]} )); then
+        option="${options[$i]}"
+        value="$(option_value "$option")"
+        local row="    "
+        (( i == current )) && row="  ${C}▶${RESET} "
+        if multi_option_is_selected "$value"; then
+          render_multi_option_line "$option" 1 "$row" $(( i == current ? 1 : 0 ))
+        else
+          render_multi_option_line "$option" 0 "$row" $(( i == current ? 1 : 0 ))
+        fi
+      elif (( i == ${#options[@]} )); then
+        if (( i == current )); then
+          printf '\r\033[2K  %s▶%s %sContinue with selected file types%s\n' "${C}" "${RESET}" "${BOLD}" "${RESET}" >&2
+        else
+          printf '\r\033[2K    Continue with selected file types\n' >&2
+        fi
+      else
+        if (( i == current )); then
+          printf '\r\033[2K  %s▶%s %sCancel selection%s\n' "${C}" "${RESET}" "${BOLD}" "${RESET}" >&2
+        else
+          printf '\r\033[2K    Cancel selection\n' >&2
+        fi
+      fi
+    done
+  }
+
+  clear_multi_arrow_rows() {
+    local i
+    printf '\033[%dF' "$total_rows" >&2
+    for ((i = 0; i < total_rows; i++)); do
+      printf '\r\033[2K\n' >&2
+    done
+  }
+
+  printf '\n  %s\n' "${BOLD}${prompt}${RESET}" >&2
+  printf '  %s\n' "${DIM}↑/↓ to move, Space or Enter to toggle, Enter on Continue to confirm, q to cancel${RESET}" >&2
+  render_multi_arrow_rows
+
+  if ! stty raw -echo 2>/dev/null; then
+    clear_multi_arrow_rows
+    printf '\n  %s arrow-key mode failed, falling back to numbered menu\n' "${Y}⚠${RESET}" >&2
+    multi_select_menu "$prompt" "${options[@]}"
+    return
+  fi
+
+  local old_int_trap old_term_trap old_exit_trap
+  old_int_trap="$(trap -p INT || true)"
+  old_term_trap="$(trap -p TERM || true)"
+  old_exit_trap="$(trap -p EXIT || true)"
+
+  restore_multi_arrow_traps() {
+    if [[ -n "$old_int_trap" ]]; then eval "$old_int_trap"; else trap - INT; fi
+    if [[ -n "$old_term_trap" ]]; then eval "$old_term_trap"; else trap - TERM; fi
+    if [[ -n "$old_exit_trap" ]]; then eval "$old_exit_trap"; else trap - EXIT; fi
+  }
+
+  cleanup_multi_arrow() {
+    stty "$old_stty" 2>/dev/null || true
+    printf '\033[?25h' >&2
+    restore_multi_arrow_traps
+  }
+  trap 'cleanup_multi_arrow; printf "\n  Cancelled.\n" >&2; exit 1' INT TERM
+  trap 'cleanup_multi_arrow' EXIT
+
+  while true; do
+    IFS= read -r -n 1 -s key 2>/dev/null || { cleanup_multi_arrow; return 1; }
+    case "$key" in
+      $'\x1b')
+        seq=""
+        while IFS= read -r -n 1 -s -t 1 part 2>/dev/null; do
+          seq+="$part"
+          [[ ${#seq} -ge 2 ]] && break
+        done
+        case "$seq" in
+          '[A'|'OA') ((current--)); ((current < 0)) && current=$((total_rows - 1)) ;;
+          '[B'|'OB') ((current++)); ((current >= total_rows)) && current=0 ;;
+          *) continue ;;
+        esac
+        printf '\033[%dF' "$total_rows" >&2
+        render_multi_arrow_rows
+        ;;
+      ' '|''|$'\r'|$'\n')
+        if (( current < ${#options[@]} )); then
+          toggle_multi_option "$(option_value "${options[$current]}")"
+          printf '\033[%dF' "$total_rows" >&2
+          render_multi_arrow_rows
+        elif (( current == ${#options[@]} )); then
+          cleanup_multi_arrow
+          MULTI_CHOOSE_RESULTS=()
+          local selected_value
+          for selected_value in "${MULTI_CHOOSE_SELECTED[@]-}"; do
+            [[ -n "$selected_value" ]] && MULTI_CHOOSE_RESULTS+=("$selected_value")
+          done
+          return 0
+        else
+          cleanup_multi_arrow
+          printf '\n  Cancelled.\n' >&2
+          return 1
+        fi
+        ;;
+      q|Q)
+        cleanup_multi_arrow
         printf '\n  Cancelled.\n' >&2
         return 1
         ;;
@@ -529,38 +930,60 @@ print_box() {
   printf '  %s└%s┘%s\n' "${DIM}" "$(printf '%.0s─' 1 {1..76})" "${RESET}"
 }
 
+preferred_cli_name() {
+  case "$1" in
+    claude_code) echo "Claude Code" ;;
+    claude_code_desktop) echo "Claude Code Desktop" ;;
+    codex) echo "Codex" ;;
+    codex_app) echo "Codex App" ;;
+    opencode) echo "OpenCode" ;;
+    opencode_desktop) echo "OpenCode Desktop" ;;
+    kilo) echo "Kilo" ;;
+    other) echo "Other" ;;
+    *) echo "$1" ;;
+  esac
+}
+
+handoff_action_label() {
+  case "$1" in
+    copy_command) echo "Copy launch command" ;;
+    run_now) echo "Run launch command now" ;;
+    *) echo "$1" ;;
+  esac
+}
+
 build_launch_command() {
   local root="$1" cli="$2" prompt="$3" root_cmd
   root_cmd="$(shell_quote "$root")"
 
   case "$cli" in
-    "Codex")
+    codex)
       printf 'codex -C %s "$(cat <<'\''PILOSA_STARTUP_PROMPT'\''\n' "$root_cmd"
       printf '%s\n' "$prompt"
       printf 'PILOSA_STARTUP_PROMPT\n)"\n'
       ;;
-    "Codex App")
+    codex_app)
       printf 'codex app %s\n' "$root_cmd"
       ;;
-    "OpenCode")
+    opencode)
       printf 'opencode --prompt "$(cat <<'\''PILOSA_STARTUP_PROMPT'\''\n'
       printf '%s\n' "$prompt"
       printf 'PILOSA_STARTUP_PROMPT\n)" %s\n' "$root_cmd"
       ;;
-    "OpenCode Desktop")
+    opencode_desktop)
       printf 'opencode %s\n' "$root_cmd"
       ;;
-    "Claude Code")
+    claude_code)
       printf 'cd %s && claude "$(cat <<'\''PILOSA_STARTUP_PROMPT'\''\n' "$root_cmd"
       printf '%s\n' "$prompt"
       printf 'PILOSA_STARTUP_PROMPT\n)"\n'
       ;;
-    "Claude Code Desktop")
+    claude_code_desktop)
       local encoded_prompt
       encoded_prompt="$(printf '%s' "$prompt" | python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.stdin.read(), safe=""))' 2>/dev/null || printf '%s' "$prompt" | sed 's/ /%20/g; s/"/%22/g')"
       printf 'open "claude://code/new?q=%s&folder=%s"\n' "$encoded_prompt" "$root_cmd"
       ;;
-    "Kilo")
+    kilo)
       printf 'cd %s && kilo "$(cat <<'\''PILOSA_STARTUP_PROMPT'\''\n' "$root_cmd"
       printf '%s\n' "$prompt"
       printf 'PILOSA_STARTUP_PROMPT\n)"\n'
@@ -576,32 +999,32 @@ build_launch_command() {
 run_cli_with_prompt() {
   local root="$1" cli="$2" prompt="$3"
   case "$cli" in
-    "Codex")
+    codex)
       command -v codex >/dev/null 2>&1 || { warn "codex was not found on PATH."; return 1; }
       exec codex -C "$root" "$prompt"
       ;;
-    "Codex App")
+    codex_app)
       command -v codex >/dev/null 2>&1 || { warn "codex was not found on PATH."; return 1; }
       copy_to_clipboard "$prompt"
       codex app "$root" &
       ok "Prompt copied to clipboard — paste it in the Codex app."
       ;;
-    "OpenCode")
+    opencode)
       command -v opencode >/dev/null 2>&1 || { warn "opencode was not found on PATH."; return 1; }
       exec opencode --prompt "$prompt" "$root"
       ;;
-    "OpenCode Desktop")
+    opencode_desktop)
       command -v opencode >/dev/null 2>&1 || { warn "opencode was not found on PATH."; return 1; }
       copy_to_clipboard "$prompt"
       opencode "$root" &
       ok "Prompt copied to clipboard — paste it in the OpenCode TUI."
       ;;
-    "Claude Code")
+    claude_code)
       command -v claude >/dev/null 2>&1 || { warn "claude was not found on PATH."; return 1; }
       cd "$root"
       exec claude "$prompt"
       ;;
-    "Claude Code Desktop")
+    claude_code_desktop)
       local encoded_prompt
       encoded_prompt="$(printf '%s' "$prompt" | python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.stdin.read(), safe=""))' 2>/dev/null || printf '%s' "$prompt" | sed 's/ /%20/g; s/"/%22/g')"
       if [[ "$(uname)" == "Darwin" ]]; then
@@ -612,7 +1035,7 @@ run_cli_with_prompt() {
         ok "Prompt copied to clipboard — open Claude Code Desktop and paste it."
       fi
       ;;
-    "Kilo")
+    kilo)
       command -v kilo >/dev/null 2>&1 || { warn "kilo was not found on PATH."; return 1; }
       cd "$root"
       exec kilo "$prompt"
@@ -656,6 +1079,14 @@ is_native_readable_file() { local ext; ext="$(file_ext "$1")"; [[ -n "$ext" ]] &
 is_binary_copyable_file() { local ext; ext="$(file_ext "$1")"; [[ -n "$ext" ]] && ext_in_list "$ext" "$BINARY_COPYABLE_EXTENSIONS"; }
 is_pdf_convertible_file() { local ext; ext="$(file_ext "$1")"; [[ -n "$ext" ]] && ext_in_list "$ext" "$PDF_CONVERTIBLE_EXTENSIONS"; }
 
+pdf_text_extractor_available() {
+  command -v pdftotext >/dev/null 2>&1
+}
+
+pdftotext_bin() {
+  command -v pdftotext 2>/dev/null
+}
+
 pdf_converter_available() {
   [[ -x "${PILOSA_HOME}/bin/pdf2md" ]] && return 0
   command -v pdf2md >/dev/null 2>&1
@@ -667,6 +1098,27 @@ pdf2md_bin() {
   else
     command -v pdf2md 2>/dev/null
   fi
+}
+
+import_pdf_as_text_markdown() {
+  local src_file="$1" md_dest="$2"
+  local text_cmd tmp_text title
+  text_cmd="$(pdftotext_bin)"
+  [[ -n "$text_cmd" ]] || return 1
+  tmp_text="$(mktemp "${TMPDIR:-/tmp}/pilosa-pdf-text.XXXXXX")" || return 1
+  if "$text_cmd" -layout -nopgbrk "$src_file" - > "$tmp_text" 2>/dev/null; then
+    title="$(basename "$src_file")"
+    title="${title%.*}"
+    {
+      printf '# %s\n\n' "$title"
+      cat "$tmp_text"
+      printf '\n'
+    } > "$md_dest"
+    rm -f "$tmp_text"
+    return 0
+  fi
+  rm -f "$tmp_text"
+  return 1
 }
 
 markdown_raw_rel_path() {
@@ -725,10 +1177,125 @@ format_bytes() {
   fi
 }
 
+available_disk_bytes() {
+  local path="$1"
+  local value
+  value="$(df -Pk "$path" 2>/dev/null | awk 'NR==2 {print $4}')" || value=""
+  if [[ "$value" =~ ^[0-9]+$ ]]; then
+    printf '%d' $((value * 1024))
+  else
+    printf '0'
+  fi
+}
+
 spinner_frame() {
   local index="$1"
   local frames=("◐" "◓" "◑" "◒")
   printf '%s' "${frames[$((index % ${#frames[@]}))]}"
+}
+
+file_type_color() {
+  local kind="$1"
+  case "$kind" in
+    markdown) printf '%s' "${G}" ;;
+    native) printf '%s' "${C}" ;;
+    pdf) printf '%s' "${M}" ;;
+    image) printf '%s' "${Y}" ;;
+    video) printf '%s' "${B}" ;;
+    audio) printf '%s' "${R}" ;;
+    unknown) printf '%s' "${BOLD}${R}" ;;
+    ignored) printf '%s' "${DIM}" ;;
+    *) printf '%s' "${DIM}" ;;
+  esac
+}
+
+file_type_label() {
+  local kind="$1" label="$2"
+  printf '%s%s%s' "$(file_type_color "$kind")" "$label" "${RESET}"
+}
+
+reset_import_batches() {
+  IMPORT_BATCH_EXTENSIONS=()
+  IMPORT_BATCH_COUNTS=()
+  IMPORT_BATCH_BYTES=()
+  SELECTED_IMPORT_EXTENSIONS=()
+}
+
+import_batch_index() {
+  local ext="$1" i
+  for i in "${!IMPORT_BATCH_EXTENSIONS[@]}"; do
+    [[ "${IMPORT_BATCH_EXTENSIONS[$i]}" == "$ext" ]] && { printf '%s' "$i"; return 0; }
+  done
+  return 1
+}
+
+record_import_batch() {
+  local ext="$1" size="$2" idx=""
+  idx="$(import_batch_index "$ext" 2>/dev/null || true)"
+  if [[ -n "$idx" ]]; then
+    IMPORT_BATCH_COUNTS[$idx]=$((IMPORT_BATCH_COUNTS[$idx] + 1))
+    IMPORT_BATCH_BYTES[$idx]=$((IMPORT_BATCH_BYTES[$idx] + size))
+  else
+    IMPORT_BATCH_EXTENSIONS+=("$ext")
+    IMPORT_BATCH_COUNTS+=("1")
+    IMPORT_BATCH_BYTES+=("$size")
+  fi
+}
+
+sort_import_batches() {
+  local i j tmp_ext tmp_count tmp_bytes
+  for ((i = 1; i < ${#IMPORT_BATCH_EXTENSIONS[@]}; i++)); do
+    tmp_ext="${IMPORT_BATCH_EXTENSIONS[$i]}"
+    tmp_count="${IMPORT_BATCH_COUNTS[$i]}"
+    tmp_bytes="${IMPORT_BATCH_BYTES[$i]}"
+    j=$i
+    while (( j > 0 )) && [[ "${IMPORT_BATCH_EXTENSIONS[$((j-1))]}" > "$tmp_ext" ]]; do
+      IMPORT_BATCH_EXTENSIONS[$j]="${IMPORT_BATCH_EXTENSIONS[$((j-1))]}"
+      IMPORT_BATCH_COUNTS[$j]="${IMPORT_BATCH_COUNTS[$((j-1))]}"
+      IMPORT_BATCH_BYTES[$j]="${IMPORT_BATCH_BYTES[$((j-1))]}"
+      j=$((j - 1))
+    done
+    IMPORT_BATCH_EXTENSIONS[$j]="$tmp_ext"
+    IMPORT_BATCH_COUNTS[$j]="$tmp_count"
+    IMPORT_BATCH_BYTES[$j]="$tmp_bytes"
+  done
+}
+
+select_all_import_batches() {
+  SELECTED_IMPORT_EXTENSIONS=("${IMPORT_BATCH_EXTENSIONS[@]}")
+}
+
+import_extension_selected() {
+  local ext="$1"
+  multi_values_contains "$ext" "${SELECTED_IMPORT_EXTENSIONS[@]-}"
+}
+
+selected_import_count() {
+  local total=0 i
+  for i in "${!IMPORT_BATCH_EXTENSIONS[@]}"; do
+    if import_extension_selected "${IMPORT_BATCH_EXTENSIONS[$i]}"; then
+      total=$((total + IMPORT_BATCH_COUNTS[$i]))
+    fi
+  done
+  printf '%d' "$total"
+}
+
+selected_import_bytes() {
+  local total=0 i
+  for i in "${!IMPORT_BATCH_EXTENSIONS[@]}"; do
+    if import_extension_selected "${IMPORT_BATCH_EXTENSIONS[$i]}"; then
+      total=$((total + IMPORT_BATCH_BYTES[$i]))
+    fi
+  done
+  printf '%d' "$total"
+}
+
+selected_import_extensions_label() {
+  local labels=() ext
+  for ext in "${SELECTED_IMPORT_EXTENSIONS[@]-}"; do
+    labels+=(".${ext}")
+  done
+  join_by ", " "${labels[@]}"
 }
 
 classify_source_file() {
@@ -737,10 +1304,10 @@ classify_source_file() {
   is_markdown_convertible_file "$path" && { echo "markdown"; return; }
   is_native_readable_file "$path" && { echo "native"; return; }
   if is_pdf_convertible_file "$path"; then
-    if pdf_converter_available; then
+    if pdf_text_extractor_available; then
       echo "pdf_convertible"
     else
-      echo "binary_copyable"
+      echo "pdf_unavailable"
     fi
     return
   fi
@@ -754,12 +1321,14 @@ classify_source_file() {
 }
 
 scan_source() {
-  local source_path="$1" f class size spin=0 frame
+  local source_path="$1" f class size spin=0 frame ext
+  reset_import_batches
   SCAN_TOTAL_COUNT=0
   SCAN_MARKDOWN_COUNT=0
   SCAN_NATIVE_COUNT=0
   SCAN_BINARY_COPYABLE_COUNT=0
   SCAN_PDF_CONVERTIBLE_COUNT=0
+  SCAN_PDF_UNAVAILABLE_COUNT=0
   SCAN_IMAGE_COUNT=0
   SCAN_VIDEO_COUNT=0
   SCAN_AUDIO_COUNT=0
@@ -769,6 +1338,7 @@ scan_source() {
   SCAN_NATIVE_BYTES=0
   SCAN_BINARY_COPYABLE_BYTES=0
   SCAN_PDF_CONVERTIBLE_BYTES=0
+  SCAN_PDF_UNAVAILABLE_BYTES=0
   SCAN_IMAGE_BYTES=0
   SCAN_VIDEO_BYTES=0
   SCAN_AUDIO_BYTES=0
@@ -787,10 +1357,26 @@ scan_source() {
       size=0
     fi
     case "$class" in
-      markdown) SCAN_MARKDOWN_COUNT=$((SCAN_MARKDOWN_COUNT + 1)); SCAN_MARKDOWN_BYTES=$((SCAN_MARKDOWN_BYTES + size)) ;;
-      native) SCAN_NATIVE_COUNT=$((SCAN_NATIVE_COUNT + 1)); SCAN_NATIVE_BYTES=$((SCAN_NATIVE_BYTES + size)) ;;
+      markdown)
+        SCAN_MARKDOWN_COUNT=$((SCAN_MARKDOWN_COUNT + 1))
+        SCAN_MARKDOWN_BYTES=$((SCAN_MARKDOWN_BYTES + size))
+        ext="$(file_ext "$f")"
+        [[ -n "$ext" ]] && record_import_batch "$ext" "$size"
+        ;;
+      native)
+        SCAN_NATIVE_COUNT=$((SCAN_NATIVE_COUNT + 1))
+        SCAN_NATIVE_BYTES=$((SCAN_NATIVE_BYTES + size))
+        ext="$(file_ext "$f")"
+        [[ -n "$ext" ]] && record_import_batch "$ext" "$size"
+        ;;
       binary_copyable) SCAN_BINARY_COPYABLE_COUNT=$((SCAN_BINARY_COPYABLE_COUNT + 1)); SCAN_BINARY_COPYABLE_BYTES=$((SCAN_BINARY_COPYABLE_BYTES + size)) ;;
-      pdf_convertible) SCAN_PDF_CONVERTIBLE_COUNT=$((SCAN_PDF_CONVERTIBLE_COUNT + 1)); SCAN_PDF_CONVERTIBLE_BYTES=$((SCAN_PDF_CONVERTIBLE_BYTES + size)) ;; 
+      pdf_convertible)
+        SCAN_PDF_CONVERTIBLE_COUNT=$((SCAN_PDF_CONVERTIBLE_COUNT + 1))
+        SCAN_PDF_CONVERTIBLE_BYTES=$((SCAN_PDF_CONVERTIBLE_BYTES + size))
+        ext="$(file_ext "$f")"
+        [[ -n "$ext" ]] && record_import_batch "$ext" "$size"
+        ;;
+      pdf_unavailable) SCAN_PDF_UNAVAILABLE_COUNT=$((SCAN_PDF_UNAVAILABLE_COUNT + 1)); SCAN_PDF_UNAVAILABLE_BYTES=$((SCAN_PDF_UNAVAILABLE_BYTES + size)) ;;
       image) SCAN_IMAGE_COUNT=$((SCAN_IMAGE_COUNT + 1)); SCAN_IMAGE_BYTES=$((SCAN_IMAGE_BYTES + size)) ;;
       video) SCAN_VIDEO_COUNT=$((SCAN_VIDEO_COUNT + 1)); SCAN_VIDEO_BYTES=$((SCAN_VIDEO_BYTES + size)) ;;
       audio) SCAN_AUDIO_COUNT=$((SCAN_AUDIO_COUNT + 1)); SCAN_AUDIO_BYTES=$((SCAN_AUDIO_BYTES + size)) ;;
@@ -798,23 +1384,61 @@ scan_source() {
       ignored) SCAN_IGNORED_COUNT=$((SCAN_IGNORED_COUNT + 1)) ;;
     esac
   done < <(find "$source_path" -type f -print0 2>/dev/null)
+  sort_import_batches
+  select_all_import_batches
   printf '\r\033[2K' >&2
 }
 
 print_scan_summary() {
   printf '  %s✓%s Source scan complete\n' "${G}" "${RESET}"
-  [[ "$SCAN_MARKDOWN_COUNT" -gt 0 ]] && printf '  %s├─%s %s to rename to .md (%s)\n' "${DIM}" "${RESET}" "$(plural_count "$SCAN_MARKDOWN_COUNT" "text-based file")" "$(format_bytes "$SCAN_MARKDOWN_BYTES")"
-  [[ "$SCAN_NATIVE_COUNT" -gt 0 ]] && printf '  %s├─%s %s to copy unchanged (%s)\n' "${DIM}" "${RESET}" "$(plural_count "$SCAN_NATIVE_COUNT" "native-readable file")" "$(format_bytes "$SCAN_NATIVE_BYTES")"
+  [[ "$SCAN_MARKDOWN_COUNT" -gt 0 ]] && printf '  %s├─%s %s to rename to .md (%s)\n' "${DIM}" "${RESET}" "$(file_type_label markdown "$(plural_count "$SCAN_MARKDOWN_COUNT" "text-based file")")" "$(format_bytes "$SCAN_MARKDOWN_BYTES")"
+  [[ "$SCAN_NATIVE_COUNT" -gt 0 ]] && printf '  %s├─%s %s to copy unchanged (%s)\n' "${DIM}" "${RESET}" "$(file_type_label native "$(plural_count "$SCAN_NATIVE_COUNT" "native-readable file")")" "$(format_bytes "$SCAN_NATIVE_BYTES")"
   if [[ "$SCAN_PDF_CONVERTIBLE_COUNT" -gt 0 ]]; then
-    printf '  %s├─%s %s%s%s to translate into Markdown (%s)\n' "${DIM}" "${RESET}" "${M}" "$(plural_count "$SCAN_PDF_CONVERTIBLE_COUNT" "PDF")" "${RESET}" "$(format_bytes "$SCAN_PDF_CONVERTIBLE_BYTES")"
+    printf '  %s├─%s %s to import as plain-text Markdown (%s)\n' "${DIM}" "${RESET}" "$(file_type_label pdf "$(plural_count "$SCAN_PDF_CONVERTIBLE_COUNT" "PDF")")" "$(format_bytes "$SCAN_PDF_CONVERTIBLE_BYTES")"
   fi
-  [[ "$SCAN_BINARY_COPYABLE_COUNT" -gt 0 ]] && printf '  %s├─%s %s to copy as-is (%s)\n' "${DIM}" "${RESET}" "$(plural_count "$SCAN_BINARY_COPYABLE_COUNT" "PDF")" "$(format_bytes "$SCAN_BINARY_COPYABLE_BYTES")"
-  [[ "$SCAN_IMAGE_COUNT" -gt 0 ]] && printf '  %s├─%s %s skipped (%s)\n' "${DIM}" "${RESET}" "$(plural_count "$SCAN_IMAGE_COUNT" "image")" "$(format_bytes "$SCAN_IMAGE_BYTES")"
-  [[ "$SCAN_VIDEO_COUNT" -gt 0 ]] && printf '  %s├─%s %s skipped (%s)\n' "${DIM}" "${RESET}" "$(plural_count "$SCAN_VIDEO_COUNT" "video")" "$(format_bytes "$SCAN_VIDEO_BYTES")"
-  [[ "$SCAN_AUDIO_COUNT" -gt 0 ]] && printf '  %s├─%s %s skipped (%s)\n' "${DIM}" "${RESET}" "$(plural_count "$SCAN_AUDIO_COUNT" "audio file")" "$(format_bytes "$SCAN_AUDIO_BYTES")"
-  [[ "$SCAN_UNKNOWN_COUNT" -gt 0 ]] && printf '  %s├─%s %s unsupported or unknown (%s)\n' "${DIM}" "${RESET}" "$(plural_count "$SCAN_UNKNOWN_COUNT" "file")" "$(format_bytes "$SCAN_UNKNOWN_BYTES")"
-  printf '  %s└─%s %s ignored\n' "${DIM}" "${RESET}" "$(plural_count "$SCAN_IGNORED_COUNT" "file")"
+  [[ "$SCAN_PDF_UNAVAILABLE_COUNT" -gt 0 ]] && printf '  %s├─%s %s skipped until pdftotext is installed (%s)\n' "${DIM}" "${RESET}" "$(file_type_label pdf "$(plural_count "$SCAN_PDF_UNAVAILABLE_COUNT" "PDF")")" "$(format_bytes "$SCAN_PDF_UNAVAILABLE_BYTES")"
+  [[ "$SCAN_BINARY_COPYABLE_COUNT" -gt 0 ]] && printf '  %s├─%s %s to copy as-is (%s)\n' "${DIM}" "${RESET}" "$(file_type_label pdf "$(plural_count "$SCAN_BINARY_COPYABLE_COUNT" "PDF")")" "$(format_bytes "$SCAN_BINARY_COPYABLE_BYTES")"
+  [[ "$SCAN_IMAGE_COUNT" -gt 0 ]] && printf '  %s├─%s %s skipped (%s)\n' "${DIM}" "${RESET}" "$(file_type_label image "$(plural_count "$SCAN_IMAGE_COUNT" "image")")" "$(format_bytes "$SCAN_IMAGE_BYTES")"
+  [[ "$SCAN_VIDEO_COUNT" -gt 0 ]] && printf '  %s├─%s %s skipped (%s)\n' "${DIM}" "${RESET}" "$(file_type_label video "$(plural_count "$SCAN_VIDEO_COUNT" "video")")" "$(format_bytes "$SCAN_VIDEO_BYTES")"
+  [[ "$SCAN_AUDIO_COUNT" -gt 0 ]] && printf '  %s├─%s %s skipped (%s)\n' "${DIM}" "${RESET}" "$(file_type_label audio "$(plural_count "$SCAN_AUDIO_COUNT" "audio file")")" "$(format_bytes "$SCAN_AUDIO_BYTES")"
+  [[ "$SCAN_UNKNOWN_COUNT" -gt 0 ]] && printf '  %s├─%s %s unsupported or unknown (%s)\n' "${DIM}" "${RESET}" "$(file_type_label unknown "$(plural_count "$SCAN_UNKNOWN_COUNT" "file")")" "$(format_bytes "$SCAN_UNKNOWN_BYTES")"
+  printf '  %s└─%s %s ignored\n' "${DIM}" "${RESET}" "$(file_type_label ignored "$(plural_count "$SCAN_IGNORED_COUNT" "file")")"
   note "Images, video, audio, unsupported files, and AGENTS.md control files are skipped."
+}
+
+scan_copyable_bytes() {
+  printf '%d' "$(selected_import_bytes)"
+}
+
+print_onboarding_preflight() {
+  local root="$1"
+  local raw_dir="$root/raw"
+  local free_bytes cli_output
+  local cli_labels=()
+
+  [[ -d "$raw_dir" ]] || die "Workspace raw/ directory is missing: $raw_dir"
+  [[ -w "$raw_dir" ]] || die "Workspace raw/ directory is not writable: $raw_dir"
+
+  info "Environment preflight"
+  ok "Workspace writable: ${BOLD}${root}${RESET}"
+  if pdf_text_extractor_available; then
+    ok "${M}PDF → text${RESET} extractor available"
+  else
+    note "pdftotext not available — PDFs will be skipped during onboarding."
+  fi
+
+  free_bytes="$(available_disk_bytes "$root")"
+  if [[ "$free_bytes" -gt 0 ]]; then
+    note "Free space near workspace: $(format_bytes "$free_bytes")"
+  fi
+
+  cli_output="$(detect_llm_clis)"
+  while IFS= read -r line; do
+    [[ -n "$line" ]] && cli_labels+=("$line")
+  done <<< "$cli_output"
+  if [[ ${#cli_labels[@]} -gt 0 ]]; then
+    note "Detected handoff targets: $(join_by ", " "${cli_labels[@]}")"
+  fi
 }
 
 render_copy_progress() {
@@ -836,22 +1460,29 @@ render_pdf_progress() {
     if (( i < filled )); then bar+="◆"; else bar+="◇"; fi
   done
   current_file="$(truncate_display_path "$current_file" 44)"
-  printf '\r\033[2K  %s%s PDF → MD%s %s[%s]%s %d/%d %s (%d converted, %d skipped)' "${M}" "$(spinner_frame "$processed")" "${RESET}" "${M}" "$bar" "${RESET}" "$processed" "$total" "$current_file" "$converted" "$skipped" >&2
+  printf '\r\033[2K  %s%s PDF → text%s %s[%s]%s %d/%d %s (%d imported, %d skipped)' "${M}" "$(spinner_frame "$processed")" "${RESET}" "${M}" "$bar" "${RESET}" "$processed" "$total" "$current_file" "$converted" "$skipped" >&2
 }
 
 copy_source() {
   local source_path="$1" dest_dir="$2"
-  local total_files=$((SCAN_MARKDOWN_COUNT + SCAN_NATIVE_COUNT + SCAN_PDF_CONVERTIBLE_COUNT + SCAN_BINARY_COPYABLE_COUNT))
+  local total_files
+  total_files="$(selected_import_count)"
   [[ "$total_files" -gt 0 ]] || { warn "No copyable files found in source location."; return 1; }
 
-  local copied=0 skipped=0 processed=0 converted=0 src_file rel_path raw_rel_path dest_file dest_parent
-  local md_name md_dest pdf_converter_found
-  pdf_converter_found="$(pdf_converter_available && echo 1 || echo 0)"
+  local copied=0 skipped=0 processed=0 converted=0 pdf_skipped=0 src_file rel_path raw_rel_path dest_file dest_parent
+  local md_name md_dest pdf_text_found
+  COPY_TOTAL_COUNT="$total_files"
+  COPY_COPIED_COUNT=0
+  COPY_SKIPPED_COUNT=0
+  COPY_PDF_CONVERTED_COUNT=0
+  COPY_PDF_SKIPPED_COUNT=0
+  pdf_text_found="$(pdf_text_extractor_available && echo 1 || echo 0)"
   render_copy_progress 0 "$total_files" 0 0 ""
 
   while IFS= read -r -d '' src_file; do
     should_skip_source_file "$src_file" && continue
     is_markdown_convertible_file "$src_file" || continue
+    import_extension_selected "$(file_ext "$src_file")" || continue
     rel_path="${src_file#"$source_path"/}"
     raw_rel_path="$(markdown_raw_rel_path "$rel_path")"
     dest_file="$dest_dir/$raw_rel_path"
@@ -870,6 +1501,7 @@ copy_source() {
   while IFS= read -r -d '' src_file; do
     should_skip_source_file "$src_file" && continue
     is_native_readable_file "$src_file" || continue
+    import_extension_selected "$(file_ext "$src_file")" || continue
     rel_path="${src_file#"$source_path"/}"
     dest_file="$dest_dir/$rel_path"
     dest_parent="$(dirname "$dest_file")"
@@ -884,20 +1516,21 @@ copy_source() {
     render_copy_progress "$processed" "$total_files" "$copied" "$skipped" "$rel_path"
   done < <(find "$source_path" -type f -print0 2>/dev/null)
 
-  # PDF conversion pass — when pdf2md is available, raw/ receives Markdown only.
-  if [[ "$pdf_converter_found" -eq 1 && "$SCAN_PDF_CONVERTIBLE_COUNT" -gt 0 ]]; then
+  # PDF text-import pass — raw/ receives Markdown without image extraction.
+  if [[ "$pdf_text_found" -eq 1 && "$SCAN_PDF_CONVERTIBLE_COUNT" -gt 0 ]]; then
     local pdf_files
     local pdf_processed=0 pdf_converted=0 pdf_skipped=0
     pdf_files=()
     while IFS= read -r -d '' src_file; do
       should_skip_source_file "$src_file" && continue
       is_pdf_convertible_file "$src_file" || continue
+      import_extension_selected "$(file_ext "$src_file")" || continue
       pdf_files+=("$src_file")
     done < <(find "$source_path" -type f -print0 2>/dev/null)
 
     if [[ ${#pdf_files[@]} -gt 0 ]]; then
       printf '\n'
-      info "${M}PDF → MD${RESET} Translating ${#pdf_files[@]} PDFs into Markdown..."
+      info "${M}PDF → text${RESET} Importing ${#pdf_files[@]} PDFs as plain-text Markdown..."
       render_pdf_progress 0 "${#pdf_files[@]}" "$pdf_converted" "$pdf_skipped" ""
       for src_file in "${pdf_files[@]}"; do
         rel_path="${src_file#"$source_path"/}"
@@ -910,15 +1543,13 @@ copy_source() {
           skipped=$((skipped + 1))
           pdf_skipped=$((pdf_skipped + 1))
         else
-          local pdf2md_cmd
-          pdf2md_cmd="$(pdf2md_bin)"
-          if [[ -n "$pdf2md_cmd" ]] && "$pdf2md_cmd" "$src_file" "$md_dest" 2>/dev/null; then
+          if import_pdf_as_text_markdown "$src_file" "$md_dest"; then
             converted=$((converted + 1))
             pdf_converted=$((pdf_converted + 1))
             copied=$((copied + 1))
           else
             printf '\n' >&2
-            warn "Failed to convert PDF, leaving original out of raw/: $(basename "$src_file")"
+            warn "Failed to import PDF as text, not adding it to the workspace copy: $(basename "$src_file")"
             skipped=$((skipped + 1))
             pdf_skipped=$((pdf_skipped + 1))
           fi
@@ -934,9 +1565,10 @@ copy_source() {
   # Binary copyable pass (non-PDF, or when converter unavailable)
   while IFS= read -r -d '' src_file; do
     should_skip_source_file "$src_file" && continue
-    # Skip PDFs already handled by the PDF conversion pass above
-    [[ "$pdf_converter_found" -eq 1 ]] && is_pdf_convertible_file "$src_file" && continue
+    # PDFs are only imported through the text-import pass above.
+    is_pdf_convertible_file "$src_file" && continue
     is_binary_copyable_file "$src_file" || continue
+    import_extension_selected "$(file_ext "$src_file")" || continue
     rel_path="${src_file#"$source_path"/}"
     dest_file="$dest_dir/$rel_path"
     dest_parent="$(dirname "$dest_file")"
@@ -951,17 +1583,69 @@ copy_source() {
     render_copy_progress "$processed" "$total_files" "$copied" "$skipped" "$rel_path"
   done < <(find "$source_path" -type f -print0 2>/dev/null)
 
+  COPY_COPIED_COUNT="$copied"
+  COPY_SKIPPED_COUNT="$skipped"
+  COPY_PDF_CONVERTED_COUNT="$converted"
+  COPY_PDF_SKIPPED_COUNT="$pdf_skipped"
+
   printf '\n'
-  ok "Raw records written to ${BOLD}${dest_dir}${RESET}"
+  ok "Workspace source copy prepared in ${BOLD}$(dirname "$dest_dir")${RESET}"
 }
 
 choose_preferred_cli() {
-  local options=("Claude Code" "Claude Code Desktop" "Codex" "Codex App" "OpenCode" "OpenCode Desktop" "Kilo" "Other")
+  local options=(
+    "$(option_spec "claude_code" "Claude Code" "run the terminal CLI in this workspace")"
+    "$(option_spec "claude_code_desktop" "Claude Code Desktop" "open the desktop app with the prompt ready")"
+    "$(option_spec "codex" "Codex" "run the Codex terminal CLI in this workspace")"
+    "$(option_spec "codex_app" "Codex App" "open the Codex app and paste the copied prompt")"
+    "$(option_spec "opencode" "OpenCode" "run the OpenCode CLI with the startup prompt")"
+    "$(option_spec "opencode_desktop" "OpenCode Desktop" "open OpenCode and paste the copied prompt")"
+    "$(option_spec "kilo" "Kilo" "run the Kilo terminal CLI in this workspace")"
+    "$(option_spec "other" "Other" "copy a generic launch command for another tool")"
+  )
   prompt_choose "Preferred LLM CLI" "${options[@]}"
 }
 
+choose_import_batches() {
+  [[ ${#IMPORT_BATCH_EXTENSIONS[@]} -gt 0 ]] || return 0
+
+  local options=() i count ext
+  options+=("$(option_spec "__all__" "All supported files" "toggle every supported file type on or off")")
+  for i in "${!IMPORT_BATCH_EXTENSIONS[@]}"; do
+    ext="${IMPORT_BATCH_EXTENSIONS[$i]}"
+    count="${IMPORT_BATCH_COUNTS[$i]}"
+    options+=("$(option_spec "$ext" ".${ext}" "$(plural_count "$count" "file")")")
+  done
+
+  while true; do
+    note "Choose which file types to import into the workspace copy."
+    prompt_multi_choose "Selectable file-type batches" "${options[@]}" || return 1
+    SELECTED_IMPORT_EXTENSIONS=("${MULTI_CHOOSE_RESULTS[@]}")
+    if [[ ${#SELECTED_IMPORT_EXTENSIONS[@]} -gt 0 ]]; then
+      return 0
+    fi
+    warn "Select at least one file type to enable import."
+  done
+}
+
+choose_scan_action() {
+  local copyable_count="$1"
+  local options=()
+  if [[ "$copyable_count" -gt 0 ]]; then
+    options+=("$(option_spec "import" "Import these files into the workspace" "prepare a working copy for analysis")")
+  fi
+  options+=(
+    "$(option_spec "rescan" "Choose another source folder" "rescan a different folder before importing anything")"
+    "$(option_spec "cancel" "Cancel onboarding" "stop here without preparing a workspace copy")"
+  )
+  prompt_choose "Next step" "${options[@]}"
+}
+
 choose_handoff_action() {
-  local options=("Copy launch command" "Run launch command now")
+  local options=(
+    "$(option_spec "copy_command" "Copy launch command" "keep the command in your clipboard and run it yourself")"
+    "$(option_spec "run_now" "Run launch command now" "open the selected CLI immediately when supported")"
+  )
   prompt_choose "Handoff action" "${options[@]}"
 }
 
@@ -1093,7 +1777,7 @@ preferred_llm_cli: "$preferred_cli"
 
 ## Notes
 - This file was initialized by \`pilosa new\`.
-- The CLI collected: project name, source location, and preferred LLM CLI. It scanned the source location and transposed accepted files (text, native, PDF) into raw/. Images, video, audio, and AGENTS.md control files were skipped.
+- The CLI collected: project name, source location, and preferred LLM CLI. It scanned the source location and transposed accepted files (text, native, and plain-text PDF imports) into raw/. Images, video, audio, and AGENTS.md control files were skipped.
 - After onboarding, the source location remains immutable original storage. Normal source-grounded work starts from raw/.
 - During startup, project description and helpful artifact URLs are optional. If absent, the LLM CLI agent records them as not provided, keeps external_sources_allowed at its default \`no\`, and infers working scope from the raw corpus.
 - When setup_status reaches workspace_started, the startup workflow has built the master dictionary, generated YAML headers, created multi-level navigation maps in maps/, and passed validation.
@@ -1119,6 +1803,66 @@ APPEARANCE_EOF
   note "$config"
   [[ "$claude_created" == "yes" ]] && note "$claude"
   note "$root/.obsidian/appearance.json"
+}
+
+write_onboarding_summary() {
+  local root="$1" project_title="$2" source_path="$3" preferred_cli="$4" handoff_action="$5" handoff_result="$6"
+  local summary_path="$root/.pilosa/onboarding-summary.md"
+  local pdf_mode="not_applicable"
+  if multi_values_contains "pdf" "${SELECTED_IMPORT_EXTENSIONS[@]-}"; then
+    if [[ "${COPY_PDF_CONVERTED_COUNT:-0}" -gt 0 ]]; then
+      pdf_mode="plain_text_markdown"
+    elif [[ "${COPY_PDF_SKIPPED_COUNT:-0}" -gt 0 ]]; then
+      pdf_mode="text_import_skipped"
+    elif pdf_text_extractor_available; then
+      pdf_mode="plain_text_markdown"
+    else
+      pdf_mode="skipped_without_pdftotext"
+    fi
+  fi
+
+  cat > "$summary_path" << SUMMARY_EOF
+---
+type: onboarding_summary
+created: $TODAY
+updated: $TODAY
+---
+
+# Onboarding Summary
+
+## Workspace
+- Project: ${project_title}
+- Workspace: ${root}
+- Source location: ${source_path}
+
+## Scan Summary
+- Text-based files to rename to Markdown: ${SCAN_MARKDOWN_COUNT} ($(format_bytes "$SCAN_MARKDOWN_BYTES"))
+- Native-readable files to copy unchanged: ${SCAN_NATIVE_COUNT} ($(format_bytes "$SCAN_NATIVE_BYTES"))
+- PDFs to import as plain-text Markdown: ${SCAN_PDF_CONVERTIBLE_COUNT} ($(format_bytes "$SCAN_PDF_CONVERTIBLE_BYTES"))
+- PDFs skipped until pdftotext is installed: ${SCAN_PDF_UNAVAILABLE_COUNT:-0} ($(format_bytes "${SCAN_PDF_UNAVAILABLE_BYTES:-0}"))
+- Images skipped: ${SCAN_IMAGE_COUNT} ($(format_bytes "$SCAN_IMAGE_BYTES"))
+- Videos skipped: ${SCAN_VIDEO_COUNT} ($(format_bytes "$SCAN_VIDEO_BYTES"))
+- Audio skipped: ${SCAN_AUDIO_COUNT} ($(format_bytes "$SCAN_AUDIO_BYTES"))
+- Unsupported or unknown files: ${SCAN_UNKNOWN_COUNT} ($(format_bytes "$SCAN_UNKNOWN_BYTES"))
+- Ignored files: ${SCAN_IGNORED_COUNT}
+
+## Workspace Import Result
+- Candidate files: ${COPY_TOTAL_COUNT:-0}
+- Selected extension batches: $(selected_import_extensions_label)
+- Files imported into workspace: ${COPY_COPIED_COUNT:-0}
+- Files skipped during import: ${COPY_SKIPPED_COUNT:-0}
+- PDFs imported as text: ${COPY_PDF_CONVERTED_COUNT:-0}
+- PDFs skipped during text import: ${COPY_PDF_SKIPPED_COUNT:-0}
+- PDF handling mode: ${pdf_mode}
+
+## Handoff
+- Preferred CLI: ${preferred_cli}
+- Handoff action: ${handoff_action}
+- Handoff result: ${handoff_result}
+SUMMARY_EOF
+
+  ok "Onboarding summary written"
+  note "$summary_path"
 }
 
 startup_prompt_text() {
@@ -1154,76 +1898,119 @@ PROMPT_EOF
 
 run_integrated_onboarding() {
   local root="$1" project_title="$2" preselected_source="${3:-}"
-  local source_path="" preferred_cli startup_prompt launch_command handoff_action
+  local source_path="" preferred_cli preferred_cli_label startup_prompt launch_command handoff_action handoff_action_text handoff_result
+  local copyable_count estimated_bytes free_bytes scan_action source_prompt_shown=0
 
   # ── Step 1: Source folder ─────────────────────────────────────────────
   if [[ -n "$preselected_source" ]]; then
     # Corpus was already selected during workspace creation — skip prompt
     source_path="$preselected_source"
     info "Source: ${BOLD}${source_path}${RESET}"
-  else
-    print_step 1 3 "Source files folder"
-    note "Specify the folder containing your research materials (documents, PDFs, notes)."
-    note "These files will be COPIED into the workspace's raw/ directory."
-    note "Nothing in the original folder is moved, renamed, or edited."
-
-    while [[ -z "$source_path" ]]; do
-      source_path="$(prompt_directory "Source folder (absolute path)" "" "e.g. /home/user/Documents/my-sources")"
-      source_path="$(normalize_path_input "$source_path")"
-      source_path="$(expand_home "$source_path")"
-      [[ -z "$source_path" ]] && printf '  %s\n' "${R}Source folder is required.${RESET}" >&2
-    done
-
-    [[ -d "$source_path" ]] || die "Source folder does not exist: $source_path"
-    ok "Source: ${BOLD}${source_path}${RESET}"
   fi
 
-  print_step 2 3 "Corpus scan and consent"
-  scan_source "$source_path"
-  print_scan_summary
+  while true; do
+    if [[ -z "$source_path" ]]; then
+      print_step 1 3 "Source files folder"
+      if [[ "$source_prompt_shown" -eq 0 ]]; then
+        note "Specify the folder containing your research materials (documents, PDFs, notes)."
+        note "These files will be copied into the workspace for analysis."
+        note "Nothing in the original folder is moved, renamed, or edited."
+      else
+        note "Choose another source folder and Pilosa will rescan it before writing anything."
+      fi
+      source_prompt_shown=1
 
-  if pdf_converter_available; then
-    [[ "$SCAN_PDF_CONVERTIBLE_COUNT" -gt 0 ]] && ok "${M}PDF → MD${RESET} pdf2md found — $(plural_count "$SCAN_PDF_CONVERTIBLE_COUNT" "PDF") will be translated into Markdown"
-  else
-    [[ "$SCAN_BINARY_COPYABLE_COUNT" -gt 0 ]] && note "PDFs will be copied as-is. Re-run the installer to add pdf2md for PDF-to-Markdown conversion."
-  fi
+      while [[ -z "$source_path" ]]; do
+        source_path="$(prompt_directory "Source folder (absolute path)" "" "e.g. /home/user/Documents/my-sources")"
+        source_path="$(normalize_path_input "$source_path")"
+        source_path="$(expand_home "$source_path")"
+        [[ -z "$source_path" ]] && printf '  %s\n' "${R}Source folder is required.${RESET}" >&2
+      done
 
-  local copyable_count=$((SCAN_MARKDOWN_COUNT + SCAN_NATIVE_COUNT + SCAN_PDF_CONVERTIBLE_COUNT + SCAN_BINARY_COPYABLE_COUNT))
-  [[ "$copyable_count" -gt 0 ]] || die "No copyable files found in source location."
-  echo ""
-  note "Ready to copy ${copyable_count} files into raw/. This does not modify your source."
-  echo ""
-  if ! confirm_action "Proceed with copy?" "y"; then
-    warn "No raw copies were written. Onboarding stopped after the scan."
-    return 1
-  fi
+      [[ -d "$source_path" ]] || die "Source folder does not exist: $source_path"
+      ok "Source: ${BOLD}${source_path}${RESET}"
+    fi
+
+    print_step 2 3 "Corpus scan and consent"
+    print_onboarding_preflight "$root"
+    scan_source "$source_path"
+    print_scan_summary
+
+    if pdf_text_extractor_available; then
+      [[ "$SCAN_PDF_CONVERTIBLE_COUNT" -gt 0 ]] && ok "${M}PDF → text${RESET} pdftotext found — $(plural_count "$SCAN_PDF_CONVERTIBLE_COUNT" "PDF") will be imported as plain-text Markdown"
+    else
+      [[ "${SCAN_PDF_UNAVAILABLE_COUNT:-0}" -gt 0 ]] && note "PDFs will be skipped during onboarding until pdftotext is installed."
+    fi
+
+    choose_import_batches || return 1
+    copyable_count="$(selected_import_count)"
+    estimated_bytes="$(scan_copyable_bytes)"
+    free_bytes="$(available_disk_bytes "$root")"
+    if [[ "$free_bytes" -gt 0 ]]; then
+      if (( estimated_bytes > free_bytes )); then
+        warn "Estimated import size is $(format_bytes "$estimated_bytes"), but only $(format_bytes "$free_bytes") is free near the workspace."
+      else
+        note "Estimated import size: $(format_bytes "$estimated_bytes")"
+      fi
+    fi
+
+    echo ""
+    if [[ "$copyable_count" -gt 0 ]]; then
+      note "Ready to import ${copyable_count} files into the workspace. This does not modify your source."
+      note "Selected file types: $(selected_import_extensions_label)"
+    else
+      warn "No file types are selected for import."
+    fi
+    echo ""
+
+    scan_action="$(choose_scan_action "$copyable_count")" || return 1
+    case "$scan_action" in
+      import) break ;;
+      rescan)
+        source_path=""
+        continue
+        ;;
+      *)
+        warn "No workspace copy was prepared. Onboarding stopped after the scan."
+        return 1
+        ;;
+    esac
+  done
+
   copy_source "$source_path" "$root/raw"
 
   print_step 3 3 "Startup handoff"
   reset_terminal
   preferred_cli="$(choose_preferred_cli)" || return 1
-  ok "CLI: ${BOLD}${preferred_cli}${RESET}"
+  preferred_cli_label="$(preferred_cli_name "$preferred_cli")"
+  ok "CLI: ${BOLD}${preferred_cli_label}${RESET}"
 
-  write_setup_files "$root" "$project_title" "$source_path" "$preferred_cli"
+  write_setup_files "$root" "$project_title" "$source_path" "$preferred_cli_label"
   sed -i.bak 's/setup_status: not_started/setup_status: cli_started/' "$root/.pilosa/workspace" 2>/dev/null || \
   sed -i '' 's/setup_status: not_started/setup_status: cli_started/' "$root/.pilosa/workspace" 2>/dev/null || true
   rm -f "$root/.pilosa/workspace.bak"
 
-  startup_prompt="$(startup_prompt_text "$project_title" "$source_path" "$preferred_cli")"
+  startup_prompt="$(startup_prompt_text "$project_title" "$source_path" "$preferred_cli_label")"
   launch_command="$(build_launch_command "$root" "$preferred_cli" "$startup_prompt")"
 
   print_box "Pilosa Startup Prompt Preview" <<< "$(prompt_preview <<< "$startup_prompt")"
   print_box "Terminal Launch Command Preview" <<< "$(prompt_preview <<< "$launch_command")"
 
   handoff_action="$(choose_handoff_action)" || return 1
-  if [[ "$handoff_action" == "Run launch command now" ]]; then
+  handoff_action_text="$(handoff_action_label "$handoff_action")"
+  handoff_result="launch_command_copied"
+  if [[ "$handoff_action" == "run_now" ]]; then
     run_cli_with_prompt "$root" "$preferred_cli" "$startup_prompt" || {
-      warn "Could not run ${preferred_cli}. Copying the launch command instead."
+      handoff_result="run_failed_command_copied"
+      warn "Could not run ${preferred_cli_label}. Copying the launch command instead."
       copy_to_clipboard "$launch_command" && ok "Launch command copied to your clipboard." || print_box "Terminal Launch Command — full text" <<< "$launch_command"
     }
+    [[ "$handoff_result" != "run_failed_command_copied" ]] && handoff_result="run_requested"
   else
     copy_to_clipboard "$launch_command" && ok "Launch command copied to your clipboard." || print_box "Terminal Launch Command — full text" <<< "$launch_command"
   fi
+
+  write_onboarding_summary "$root" "$project_title" "$source_path" "$preferred_cli_label" "$handoff_action_text" "$handoff_result"
 }
 
 # ── framework manifest reader ──────────────────────────────────────────────
@@ -2092,14 +2879,20 @@ cmd_sync() {
   # ── ensure destination directories ─────────────────────────────────
   mkdir -p "$repo_root/.opencode/agents"
   mkdir -p "$repo_root/.claude/agents"
+  mkdir -p "$repo_root/.codex/agents"
 
   # ── clean existing vendor agent files ──────────────────────────────
   rm -f "$repo_root/.opencode/agents/"*.md
   rm -f "$repo_root/.claude/agents/"*.md
+  rm -f "$repo_root/.codex/agents/"*.toml
 
   # ── sync agent definitions ─────────────────────────────────────────
   local agent agent_file name description permissions opencode_perms frontmatter
-  local claude_tools canonical perm_part key val count=0
+  local claude_tools canonical perm_part key val count=0 body_content
+
+  toml_escape() {
+    printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+  }
 
   for canonical in "$agents_src"/*.md; do
     [[ -f "$canonical" ]] || continue
@@ -2142,7 +2935,6 @@ cmd_sync() {
       esac
     done
 
-    local body_content
     body_content="$(awk 'BEGIN{fm=0} /^---$/ && fm < 2 {fm++; next} fm == 2' "$canonical")"
 
     cat > "$repo_root/.opencode/agents/$agent_file" << OPENCODE_EOF
@@ -2179,6 +2971,14 @@ tools: $claude_tools
 
 $body_content
 CLAUDE_EOF
+
+    cat > "$repo_root/.codex/agents/${agent}.toml" << CODEX_EOF
+name = "$(toml_escape "$name")"
+description = "$(toml_escape "$description")"
+developer_instructions = '''
+$body_content
+'''
+CODEX_EOF
 
     count=$((count + 1))
     ok "Synced $agent"
@@ -2270,10 +3070,10 @@ cmd_health() {
     note "Gum not available — plain prompts will be used"
   fi
 
-  if pdf_converter_available; then
-    ok "pdf2md available"
+  if pdf_text_extractor_available; then
+    ok "pdftotext available for onboarding PDF imports"
   else
-    note "pdf2md not available — PDFs will be copied as-is"
+    note "pdftotext not available — onboarding will skip PDF text import"
   fi
 
   local ws_count

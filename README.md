@@ -31,22 +31,26 @@ git checkout -b my-project-name
 git push -u origin my-project-name
 ```
 
-> Why a branch? Onboarding rewrites `system/configuration.md` and `system/context.md` and copies source files unchanged into `raw/`. Keeping that on a project branch lets you re-onboard, re-index, or wipe the project without touching the framework.
+> Why a branch? Onboarding rewrites `system/configuration.md` and `system/context.md` and prepares a working copy of your source files inside the workspace. Keeping that on a project branch lets you re-onboard, re-index, or wipe the project without touching the framework.
 
 ### 3. Create and onboard a workspace
 
-The CLI creates a workspace, collects your project name and source location, scans the corpus, asks for consent before writing raw records, then asks which LLM CLI should receive the startup handoff. It copies markdown-convertible files into `raw/` with `.md` names, copies native-readable files unchanged, translates PDFs to Markdown when `pdf2md` is installed (otherwise copies PDFs as-is), and skips images, video, audio, and `AGENTS.md` control files. Startup then creates detailed Obsidian-wikilink maps in `maps/`. Optional context such as project description and artifact URLs can be inferred or added later.
+The CLI creates a workspace, collects your project name and source location, runs a small environment preflight, scans the corpus, lets you choose which file-type batches to import into the workspace copy, then asks which LLM CLI should receive the startup handoff. It renames markdown-convertible files to `.md`, copies native-readable files unchanged, imports PDFs as plain-text Markdown when `pdftotext` is available, and skips images, video, audio, and `AGENTS.md` control files. Startup then creates detailed Obsidian-wikilink maps in `maps/`. Optional context such as project description and artifact URLs can be inferred or added later.
 
 ```bash
 pilosa new /path/to/my-research
 ```
 
 What happens:
-- Flow: corpus root → auto-generated sibling workspace → project name → scan summary → consent → raw record writing → CLI handoff.
+- Flow: corpus root → auto-generated sibling workspace → project name → preflight → scan summary → file-type batch picker → import/choose-another-source decision → workspace copy preparation → CLI handoff.
 - Scan summary shows counts for text files, images, videos, audio files, PDFs, unknown files, ignored files, and byte totals by major class where available.
+- Choice menus include short inline hints so first-time users can tell what each action does before selecting it.
+- After the scan, a multi-select picker shows extension batches like `.csv`, `.json`, and `.pdf` with file counts so you can import only the types you want.
 - Non-text media stays at the source location; images, video, audio, and `AGENTS.md` control files are skipped during onboarding.
-- PDFs are translated to Markdown when `pdf2md` is installed; the original PDF is not duplicated into `raw/` in that path. Without `pdf2md`, PDFs are copied as-is.
-- Startup creates `maps/` with map files that contain detailed retrieval summaries and Obsidian wikilinks into raw files.
+- PDFs are imported as plain-text Markdown when `pdftotext` is available; the original PDF is not duplicated into the workspace copy in that path. Without `pdftotext`, PDFs are skipped during onboarding.
+- Each successful onboarding writes `.pilosa/onboarding-summary.md` with the scan counts, workspace import result, and handoff choice.
+- Startup creates `maps/` with map files that contain detailed retrieval summaries and Obsidian wikilinks into the imported source files.
+- Advanced: after onboarding, you can inspect the exact working copy Pilosa analyzes in `raw/`.
 - Plain shell prompts are used by default; Gum prompts are available with `--gum`.
 - A startup prompt is written to your clipboard and printed to the terminal.
 
@@ -73,16 +77,16 @@ After that, ask research questions normally. The orchestrator will route them th
 One command. Zero dependencies.
 
 ```bash
-curl -fsSL https://github.com/TommasoPrinetti/pilosa/releases/download/v0.2.1/install.sh | bash
+curl -fsSL https://github.com/TommasoPrinetti/pilosa/releases/download/v0.2.2/install.sh | bash
 ```
 
-This installs the **pinned stable version** (`0.2.1`). No npm, no Python, no Go — fully autonomous.
+This installs the **pinned stable version** (`0.2.2`). No npm, no Python, no Go — fully autonomous.
 
 For options (specific version, security flags, etc.), download first:
 
 ```bash
-curl -fsSL https://github.com/TommasoPrinetti/pilosa/releases/download/v0.2.1/install.sh -o install-pilosa.sh
-bash install-pilosa.sh --version 0.2.1
+curl -fsSL https://github.com/TommasoPrinetti/pilosa/releases/download/v0.2.2/install.sh -o install-pilosa.sh
+bash install-pilosa.sh --version 0.2.2
 bash install-pilosa.sh --min-days 7
 bash install-pilosa.sh --verify-only
 ```

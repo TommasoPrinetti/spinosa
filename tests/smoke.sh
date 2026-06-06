@@ -218,6 +218,21 @@ cat > "$FAKE_BIN/pdf2md" << 'EOF'
 printf '# Converted PDF\n\nsource: %s\n' "$1" > "$2"
 EOF
 chmod +x "$FAKE_BIN/pdf2md"
+cat > "$FAKE_BIN/pdftotext" << 'EOF'
+#!/bin/sh
+input=""
+for arg in "$@"; do
+  case "$arg" in
+    -layout|-nopgbrk|-) ;;
+    *)
+      input="$arg"
+      break
+      ;;
+  esac
+done
+printf 'Extracted text from %s\n' "$input"
+EOF
+chmod +x "$FAKE_BIN/pdftotext"
 
 if PATH="$FAKE_BIN:$PATH" "$REPO_ROOT/.bin/pilosa" help >/dev/null 2>&1; then
   # We can't easily test internal functions, but we can verify the script loads
@@ -254,28 +269,103 @@ cat > "$NEW_CORPUS/paper.pdf" << 'EOF'
 fake pdf bytes
 EOF
 
-NEW_OUTPUT="$(printf '\ny\n3\n1\n' | PILOSA_HOME="$FAKE_PILOSA_HOME" PATH="$FAKE_BIN:$PATH" "$REPO_ROOT/.bin/pilosa" new "$NEW_CORPUS" --numbered --no-color 2>&1 || true)"
+NEW_OUTPUT="$(printf '\n4\n1\n3\n1\n' | PILOSA_HOME="$FAKE_PILOSA_HOME" PATH="$FAKE_BIN:$PATH" "$REPO_ROOT/.bin/pilosa" new "$NEW_CORPUS" --numbered --no-color 2>&1 || true)"
 NEW_WS="$TMPDIR/new-corpus-pilosa"
-if [[ -f "$NEW_WS/.pilosa/workspace" ]] && [[ -f "$NEW_WS/raw/note__txt.md" ]] && [[ -f "$NEW_WS/raw/paper.md" ]] && [[ ! -f "$NEW_WS/raw/paper.pdf" ]] && [[ ! -f "$FAKE_GUM_MARKER" ]]; then
-  pass "pilosa new completed without implicit Gum and translated PDFs to Markdown only"
+if [[ -f "$NEW_WS/.pilosa/workspace" ]] && [[ -f "$NEW_WS/raw/note__txt.md" ]] && [[ -f "$NEW_WS/raw/paper.md" ]] && [[ ! -f "$NEW_WS/raw/paper.pdf" ]] && [[ -f "$NEW_WS/.pilosa/onboarding-summary.md" ]] && [[ ! -f "$FAKE_GUM_MARKER" ]] && echo "$NEW_OUTPUT" | grep -q "● All supported files" && echo "$NEW_OUTPUT" | grep -q "● \.pdf" && echo "$NEW_OUTPUT" | grep -q "Import these files into the workspace" && echo "$NEW_OUTPUT" | grep -q "prepare a working copy for analysis" && echo "$NEW_OUTPUT" | grep -q "Ready to import 2 files into the workspace" && ! echo "$NEW_OUTPUT" | grep -q "Copy into raw/" && grep -q "Selected extension batches: .pdf, .txt" "$NEW_WS/.pilosa/onboarding-summary.md" && grep -q "Files imported into workspace: 2" "$NEW_WS/.pilosa/onboarding-summary.md" && grep -q "Extracted text from $NEW_CORPUS/paper.pdf" "$NEW_WS/raw/paper.md"; then
+  pass "pilosa new completed without implicit Gum, imported PDF text into Markdown, and wrote onboarding summary"
 else
   fail "pilosa new plain default failed"
   echo "    Output: $NEW_OUTPUT" | head -5
 fi
 
-# ── Test 8: install.sh version pinning ──────────────────────────────────────
+# ── Test 8: pilosa new can rescan another source before copy ─────────────────
 echo ""
-echo "Test 8: install.sh version pinning"
+echo "Test 8: pilosa new rescan source choice"
+ALT_SOURCE_A="$TMPDIR/alt-source-a"
+ALT_SOURCE_B="$TMPDIR/alt-source-b"
+mkdir -p "$ALT_SOURCE_A" "$ALT_SOURCE_B"
+cat > "$ALT_SOURCE_A/first.txt" << 'EOF'
+first source
+EOF
+cat > "$ALT_SOURCE_B/second.txt" << 'EOF'
+second source
+EOF
+
+ALT_OUTPUT="$(printf '\n3\n2\n%s\n3\n1\n3\n1\n' "$ALT_SOURCE_B" | PILOSA_HOME="$FAKE_PILOSA_HOME" PATH="$FAKE_BIN:$PATH" "$REPO_ROOT/.bin/pilosa" new "$ALT_SOURCE_A" --numbered --no-color 2>&1 || true)"
+ALT_WS="$TMPDIR/alt-source-a-pilosa"
+if [[ -f "$ALT_WS/raw/second__txt.md" ]] && [[ ! -f "$ALT_WS/raw/first__txt.md" ]] && grep -q "Source location: $ALT_SOURCE_B" "$ALT_WS/.pilosa/onboarding-summary.md"; then
+  pass "pilosa new can switch source folders after scan and writes the chosen source to summary"
+else
+  fail "pilosa new rescan source choice failed"
+  echo "    Output: $ALT_OUTPUT" | head -5
+fi
+
+# ── Test 9: pilosa new can import only chosen extension batches ─────────────
+echo ""
+echo "Test 9: pilosa new extension batch filtering"
+FILTER_CORPUS="$TMPDIR/filter-corpus"
+mkdir -p "$FILTER_CORPUS"
+cat > "$FILTER_CORPUS/note.txt" << 'EOF'
+text source note
+EOF
+cat > "$FILTER_CORPUS/table.csv" << 'EOF'
+col
+row
+EOF
+cat > "$FILTER_CORPUS/paper.pdf" << 'EOF'
+fake pdf bytes
+EOF
+
+FILTER_OUTPUT="$(printf '\n1\n4\n5\n1\n3\n1\n' | PILOSA_HOME="$FAKE_PILOSA_HOME" PATH="$FAKE_BIN:$PATH" "$REPO_ROOT/.bin/pilosa" new "$FILTER_CORPUS" --numbered --no-color 2>&1 || true)"
+FILTER_WS="$TMPDIR/filter-corpus-pilosa"
+if [[ -f "$FILTER_WS/raw/note__txt.md" ]] && [[ ! -f "$FILTER_WS/raw/table.csv" ]] && [[ ! -f "$FILTER_WS/raw/paper.md" ]] && echo "$FILTER_OUTPUT" | grep -q "Ready to import 1 files into the workspace" && grep -q "Selected extension batches: \.txt" "$FILTER_WS/.pilosa/onboarding-summary.md"; then
+  pass "pilosa new imports only the selected extension batches"
+else
+  fail "pilosa new extension batch filtering failed"
+  echo "    Output: $FILTER_OUTPUT" | head -5
+fi
+
+# ── Test 10: pilosa new skips PDFs when pdftotext fails ───────────────────────
+echo ""
+echo "Test 10: pilosa new PDF text-import failure"
+FAIL_BIN="$TMPDIR/fail-bin"
+mkdir -p "$FAIL_BIN"
+cat > "$FAIL_BIN/pdftotext" << 'EOF'
+#!/bin/sh
+exit 1
+EOF
+chmod +x "$FAIL_BIN/pdftotext"
+FAIL_CORPUS="$TMPDIR/fail-corpus"
+mkdir -p "$FAIL_CORPUS"
+cat > "$FAIL_CORPUS/note.txt" << 'EOF'
+fallback source note
+EOF
+cat > "$FAIL_CORPUS/paper.pdf" << 'EOF'
+broken pdf bytes
+EOF
+
+FAIL_OUTPUT="$(printf '\n4\n1\n3\n1\n' | PILOSA_HOME="$FAKE_PILOSA_HOME" PATH="$FAIL_BIN:$FAKE_BIN:$PATH" "$REPO_ROOT/.bin/pilosa" new "$FAIL_CORPUS" --numbered --no-color 2>&1 || true)"
+FAIL_WS="$TMPDIR/fail-corpus-pilosa"
+if [[ -f "$FAIL_WS/raw/note__txt.md" ]] && [[ ! -f "$FAIL_WS/raw/paper.md" ]] && echo "$FAIL_OUTPUT" | grep -q "Failed to import PDF as text" && grep -q "PDFs skipped during text import: 1" "$FAIL_WS/.pilosa/onboarding-summary.md"; then
+  pass "pilosa new skips PDFs cleanly when text import fails"
+else
+  fail "pilosa new PDF text-import failure handling failed"
+  echo "    Output: $FAIL_OUTPUT" | head -5
+fi
+
+# ── Test 11: install.sh version pinning ──────────────────────────────────────
+echo ""
+echo "Test 11: install.sh version pinning"
 HELP_OUTPUT="$(bash "$REPO_ROOT/install.sh" --help 2>/dev/null || true)"
-if echo "$HELP_OUTPUT" | grep -q "default: 0.2.1"; then
-  pass "install.sh defaults to pinned version 0.2.1"
+if echo "$HELP_OUTPUT" | grep -q "default: 0.2.2"; then
+  pass "install.sh defaults to pinned version 0.2.2"
 else
   fail "install.sh does not default to pinned version"
 fi
 
-# ── Test 9: install.sh --upgrade and --reinstall flags ──────────────────────
+# ── Test 12: install.sh --upgrade and --reinstall flags ──────────────────────
 echo ""
-echo "Test 9: install.sh --upgrade and --reinstall flags"
+echo "Test 12: install.sh --upgrade and --reinstall flags"
 HELP_OUTPUT="$(bash "$REPO_ROOT/install.sh" --help 2>/dev/null || true)"
 if echo "$HELP_OUTPUT" | grep -q "\-\-upgrade"; then
   pass "install.sh has --upgrade flag"
@@ -288,9 +378,9 @@ else
   fail "install.sh missing --reinstall flag"
 fi
 
-# ── Test 10: install.sh --min-days on old release ─────────────────────────
+# ── Test 13: install.sh --min-days on old release ─────────────────────────
 echo ""
-echo "Test 10: install.sh --min-days on old release"
+echo "Test 13: install.sh --min-days on old release"
 # v0.1.0 should be older than 1 day
 MIN_DAYS_OUTPUT="$(bash "$REPO_ROOT/install.sh" --version 0.1.0 --min-days 1 --dry-run 2>/dev/null || true)"
 if echo "$MIN_DAYS_OUTPUT" | grep -q "Dry run"; then
@@ -300,9 +390,9 @@ else
   echo "    Output: $MIN_DAYS_OUTPUT" | head -3
 fi
 
-# ── Test 11: install.sh --verify-only ───────────────────────────────────────
+# ── Test 14: install.sh --verify-only ───────────────────────────────────────
 echo ""
-echo "Test 11: install.sh --verify-only"
+echo "Test 14: install.sh --verify-only"
 FAKE_INSTALL="$TMPDIR/fake-verify"
 mkdir -p "$FAKE_INSTALL/.pilosa/versions/0.1.0/pilosa-framework-0.1.0/metadata"
 mkdir -p "$FAKE_INSTALL/.pilosa/versions/0.1.0/pilosa-framework-0.1.0/.bin/lib/vendor"
@@ -331,9 +421,9 @@ else
   echo "    Output: $VERIFY_OUTPUT" | head -3
 fi
 
-# ── Test 12: pilosa upgrade --help ─────────────────────────────────────────
+# ── Test 15: pilosa upgrade --help ─────────────────────────────────────────
 echo ""
-echo "Test 12: pilosa upgrade --help"
+echo "Test 15: pilosa upgrade --help"
 UPGRADE_HELP="$($REPO_ROOT/.bin/pilosa upgrade --help 2>/dev/null || true)"
 if echo "$UPGRADE_HELP" | grep -q "pilosa upgrade"; then
   pass "upgrade command has help"

@@ -80,7 +80,7 @@ For each sub-agent in the sequence:
 
 Searcher and Analyst run in parallel when both are in the sequence. Writer waits for both before synthesizing.
 
-Canonical definitions live in `.agents/agents/`. Vendor agent directories are generated mirrors, except `.codex/agents/` which is a tracked TOML expansion. The orchestrator playbook lives in `AGENTS.md`.
+Canonical definitions live in `.agents/agents/`. Vendor agent directories are generated mirrors, including `.codex/agents/` as generated TOML wrappers. The orchestrator playbook lives in `AGENTS.md`.
 
 ### File-Based Handoff
 

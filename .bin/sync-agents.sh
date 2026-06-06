@@ -9,12 +9,12 @@
 # Destinations (generated, platform-specific frontmatter):
 #   - .opencode/agents/   — mode: subagent, permission: (singular)
 #   - .claude/agents/     — tools: (comma-separated)
+#   - .codex/agents/      — Codex-native TOML generated from canonical body
 #   - .claude/skills/
 #   - .codex/skills/
 #   - CLAUDE.md
 #
 # Not synced (manually maintained):
-#   - .codex/agents/*.toml  — Codex-native TOML agent definitions
 #   - .github/copilot-instructions.md — Copilot-specific instructions
 #
 # Usage: bash .bin/sync-agents.sh
@@ -40,10 +40,12 @@ echo "--- Syncing agent definitions ---"
 # Ensure destination directories exist
 mkdir -p "$REPO_ROOT/.opencode/agents"
 mkdir -p "$REPO_ROOT/.claude/agents"
+mkdir -p "$REPO_ROOT/.codex/agents"
 
 # Clean existing vendor agent files
 rm -f "$REPO_ROOT/.opencode/agents/"*.md
 rm -f "$REPO_ROOT/.claude/agents/"*.md
+rm -f "$REPO_ROOT/.codex/agents/"*.toml
 
 for canonical in "$REPO_ROOT/.agents/agents/"*.md; do
     [ -f "$canonical" ] || continue
@@ -64,6 +66,10 @@ for canonical in "$REPO_ROOT/.agents/agents/"*.md; do
     # Parse multiline description (description: | through next top-level key)
     description=$(sed -n '/^description: |/,/^[a-z]/p' "$canonical" | sed '/^description:/d;/^[a-z]/d' | sed 's/^  //' | tr -s ' ')
     [ -z "$description" ] && description="$agent"
+
+    toml_escape() {
+        printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+    }
 
     # Parse permissions (skip list items starting with dashes)
     in_permissions=false
@@ -146,7 +152,18 @@ tools: $claude_tools
 $(awk 'BEGIN{fm=0} /^---$/ && fm < 2 {fm++; next} fm == 2' "$canonical")
 CLAUDE_EOF
 
-    echo "  $agent → .opencode/agents/ + .claude/agents/"
+    # ── Emit Codex agent ─────────────────────────────────────────────
+    body_content="$(awk 'BEGIN{fm=0} /^---$/ && fm < 2 {fm++; next} fm == 2' "$canonical")"
+
+    cat > "$REPO_ROOT/.codex/agents/${agent}.toml" << CODEX_EOF
+name = "$(toml_escape "$name")"
+description = "$(toml_escape "$description")"
+developer_instructions = '''
+$body_content
+'''
+CODEX_EOF
+
+    echo "  $agent → .opencode/agents/ + .claude/agents/ + .codex/agents/"
 done
 
 # ── Sync skills ──────────────────────────────────────────────────────
@@ -177,7 +194,7 @@ done
 echo ""
 echo "--- Syncing CLAUDE.md ---"
 cp "$REPO_ROOT/AGENTS.md" "$REPO_ROOT/CLAUDE.md"
-local today
+today=""
 today="$(date +%Y-%m-%d)"
 # Update updated date and add provenance fields in the frontmatter block
 sed -i.bak \
