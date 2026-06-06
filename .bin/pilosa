@@ -3144,6 +3144,115 @@ cmd_upgrade() {
 }
 
 # ═══════════════════════════════════════════════════════════════════════════
+# COMMAND: dashboard
+# ═══════════════════════════════════════════════════════════════════════════
+cmd_dashboard() {
+  local version
+  version="$(framework_version "$FRAMEWORK_ROOT")"
+  [[ -z "$version" || "$version" == "dev" ]] && version="dev"
+  local in_workspace=0
+  local project_name="" setup_status="" fw_version=""
+  local discovered_workspaces=()
+  local cli_labels=()
+
+  header "Pilosa — Research Framework"
+  printf '  %s v%s%s\n\n' "${BOLD}" "$version" "${RESET}"
+
+  # ── Workspace context ─────────────────────────────────────────────────
+  if [[ -f ".pilosa/workspace" ]]; then
+    in_workspace=1
+    project_name="$(grep 'project_name:' .pilosa/workspace 2>/dev/null | sed 's/project_name: *//' | head -1)"
+    setup_status="$(grep 'setup_status:' .pilosa/workspace 2>/dev/null | sed 's/setup_status: *//' | head -1)"
+    fw_version="$(grep 'framework_version:' .pilosa/workspace 2>/dev/null | sed 's/framework_version: *//' | head -1)"
+  fi
+
+  if [[ "$in_workspace" -eq 1 ]]; then
+    printf '  %sWorkspace:%s %s\n' "${BOLD}" "${RESET}" "${project_name:-unknown}"
+    printf '  %sStatus:%s    %s\n' "${BOLD}" "${RESET}" "${setup_status:-unknown}"
+    printf '  %sFramework:%s v%s\n' "${BOLD}" "${RESET}" "${fw_version:-unknown}"
+  else
+    # Discover workspaces
+    while IFS= read -r ws; do
+      [[ -n "$ws" ]] && discovered_workspaces+=("$ws")
+    done < <(discover_workspaces)
+
+    if [[ ${#discovered_workspaces[@]} -gt 0 ]]; then
+      printf '  %sDiscovered workspaces:%s %d\n' "${BOLD}" "${RESET}" "${#discovered_workspaces[@]}"
+      local i ws_path ws_name
+      for i in "${!discovered_workspaces[@]}"; do
+        ws_path="${discovered_workspaces[$i]}"
+        ws_name="$(basename "$ws_path")"
+        if [[ $i -lt 3 ]]; then
+          printf '    %s %s\n' "${DIM}•${RESET}" "$ws_name"
+        fi
+      done
+      if [[ ${#discovered_workspaces[@]} -gt 3 ]]; then
+        printf '    %s ... and %d more\n' "${DIM}" "$((${#discovered_workspaces[@]} - 3))"
+      fi
+    else
+      printf '  %sNo workspaces yet — start with New workspace%s\n' "${DIM}" "${RESET}"
+    fi
+  fi
+
+  printf '\n'
+
+  # ── LLM CLIs ──────────────────────────────────────────────────────────
+  local cli_output
+  cli_output="$(detect_llm_clis)"
+  if [[ -n "$cli_output" ]]; then
+    while IFS= read -r line; do
+      [[ -n "$line" ]] && cli_labels+=("$line")
+    done <<< "$cli_output"
+  fi
+
+  if [[ ${#cli_labels[@]} -gt 0 ]]; then
+    printf '  %sLLM CLIs:%s ' "${BOLD}" "${RESET}"
+    local i
+    for i in "${!cli_labels[@]}"; do
+      if [[ $i -gt 0 ]]; then
+        printf ', '
+      fi
+      printf '%s %s' "${G}✓${RESET}" "${cli_labels[$i]}"
+    done
+    printf '\n'
+  fi
+
+  printf '\n'
+  divider
+  printf '\n'
+
+  # ── Menu ──────────────────────────────────────────────────────────────
+  local options=()
+  options+=("$(option_spec "new" "New workspace" "Create a new workspace and run onboarding")")
+  options+=("$(option_spec "onboard" "Onboard workspace" "Run onboarding on an existing workspace")")
+  options+=("$(option_spec "update" "Update workspace" "Update workspace framework files")")
+  options+=("$(option_spec "check" "Check workspace" "Validate workspace integrity")")
+  options+=("$(option_spec "sync" "Sync agents" "Sync agent and skill mirrors")")
+  options+=("$(option_spec "upgrade" "Upgrade Pilosa" "Upgrade to latest release")")
+  options+=("$(option_spec "health" "System health" "Check system health and environment")")
+  options+=("$(option_spec "uninstall" "Uninstall" "Remove Pilosa from this system")")
+  options+=("$(option_spec "help" "Help" "Show help information")")
+
+  local choice
+  choice="$(prompt_choose "What would you like to do?" "${options[@]}")" || return 0
+
+  printf '\n'
+
+  case "$choice" in
+    new)       cmd_new "$@" ;;
+    onboard)   cmd_onboard "$@" ;;
+    update)    cmd_update "$@" ;;
+    check)     cmd_check "$@" ;;
+    sync)      cmd_sync ;;
+    upgrade)   cmd_upgrade ;;
+    health)    cmd_health ;;
+    uninstall) cmd_uninstall "$@" ;;
+    help)      cmd_help ;;
+    *)         return 0 ;;
+  esac
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
 # MAIN
 # ═══════════════════════════════════════════════════════════════════════════
 case "${1:-}" in
@@ -3155,7 +3264,7 @@ case "${1:-}" in
   sync)      shift; cmd_sync ;;
   uninstall) shift; cmd_uninstall "$@" ;;
   help|-h|--help) cmd_help ;;
-  "") cmd_help ;;
+  "") cmd_dashboard ;;
   *)
     printf '%s\n' "${R}Unknown command: $1${RESET}" >&2
     cmd_help
