@@ -2201,18 +2201,14 @@ cmd_onboard() {
     esac
   done
 
-  if [[ ${#onboard_args[@]} -gt 0 ]]; then
-    workspace_path="${onboard_args[0]}"
-    [[ -d "$workspace_path" ]] || die "Not a directory: $workspace_path"
-    workspace_path="$(cd "$workspace_path" 2>/dev/null && pwd)"
+  # Resolve workspace path
+  local workspace_path
+  if [[ -n "${onboard_args[0]:-}" ]]; then
+    workspace_path="$(require_workspace "${onboard_args[0]}")" || return $?
   else
-    workspace_path="$(pwd)"
+    workspace_path="$(require_workspace)" || return $?
   fi
-
-  [[ -f "$workspace_path/.pilosa/workspace" ]] || die "Not a Pilosa workspace: $workspace_path"
-  [[ -f "$workspace_path/AGENTS.md" ]] || die "AGENTS.md not found — is this a Pilosa workspace?"
-
-  header "Pilosa — Onboard Workspace"
+  cd "$workspace_path" || die "Cannot change to workspace: $workspace_path"
 
   # Extract existing project name from workspace metadata, or prompt
   local project_name
@@ -2443,13 +2439,14 @@ cmd_update() {
     esac
   done
 
-  # Default to current directory
-  [[ -z "$workspace_path" ]] && workspace_path="$(pwd)"
-
-  # Validate workspace
-  if [[ ! -f "$workspace_path/.pilosa/workspace" ]]; then
-    die "Not a Pilosa workspace (missing .pilosa/workspace): $workspace_path"
+  # Resolve workspace path
+  local workspace_path
+  if [[ -n "${update_args[0]:-}" ]]; then
+    workspace_path="$(require_workspace "${update_args[0]}")" || return $?
+  else
+    workspace_path="$(require_workspace)" || return $?
   fi
+  cd "$workspace_path" || die "Cannot change to workspace: $workspace_path"
 
   local fw_version project_name
   fw_version="$(grep 'framework_version:' "$workspace_path/.pilosa/workspace" | awk '{print $2}')"
@@ -2757,9 +2754,16 @@ cmd_update() {
 # COMMAND: check
 # ═══════════════════════════════════════════════════════════════════════════
 cmd_check() {
-  local workspace_path="${1:-.}"
-  workspace_path="$(cd "$workspace_path" 2>/dev/null && pwd)" || die "Cannot access: $1"
-  [[ -f "$workspace_path/.pilosa/workspace" ]] || die "Not a Pilosa workspace: $workspace_path"
+  local provided_path="${1:-}"
+  
+  # Resolve workspace path
+  local workspace_path
+  if [[ -n "$provided_path" ]]; then
+    workspace_path="$(require_workspace "$provided_path")" || return $?
+  else
+    workspace_path="$(require_workspace)" || return $?
+  fi
+  cd "$workspace_path" || die "Cannot change to workspace: $workspace_path"
 
   header "Pilosa — Workspace Check"
 
@@ -3069,15 +3073,99 @@ processing_status: auto_generated' \
 }
 
 # ═══════════════════════════════════════════════════════════════════════════
-# DASHBOARD
+# WORKSPACE DISCOVERY & CONFIGURATION
 # ═══════════════════════════════════════════════════════════════════════════
 
-discover_workspaces() {
-  local seen
-  seen=()
-  local search_roots
-  search_roots=("$HOME/Projects" "$HOME/Work" "$HOME/Documents" "$HOME")
-  for root in "${search_roots[@]}"; do
+PILOSA_CONFIG="${PILOSA_HOME}/config.yaml"
+PILOSA_CACHE="${PILOSA_HOME}/workspace_cache.txt"
+DEFAULT_SCAN_ROOTS=("$HOME/Projects" "$HOME/Work" "$HOME/Documents")
+CACHE_TTL=3600  # 1 hour
+
+# Load config from ~/.pilosa/config.yaml
+load_config() {
+  [[ -f "$PILOSA_CONFIG" ]] || return 1
+  
+  SCAN_PERMISSION=""
+  SCAN_ROOTS=()
+  
+  while IFS= read -r line; do
+    case "$line" in
+      scan_permission:*)
+        SCAN_PERMISSION="${line#scan_permission: }"
+        SCAN_PERMISSION="${SCAN_PERMISSION//\"/}"
+        ;;
+      scan_roots:*)
+        # Next lines will be the roots
+        ;;
+      "  - "*)
+        if [[ -z "$SCAN_PERMISSION" ]]; then
+          continue
+        fi
+        local root="${line#  - }"
+        root="${root//\"/}"
+        root="${root//\~/$HOME}"
+        SCAN_ROOTS+=("$root")
+        ;;
+    esac
+  done < "$PILOSA_CONFIG"
+  
+  # Set defaults if not found
+  [[ -z "$SCAN_PERMISSION" ]] && SCAN_PERMISSION="unknown"
+  [[ ${#SCAN_ROOTS[@]} -eq 0 ]] && SCAN_ROOTS=("${DEFAULT_SCAN_ROOTS[@]}")
+}
+
+# Save config to ~/.pilosa/config.yaml
+save_config() {
+  local permission="${1:-unknown}"
+  shift
+  local roots=("$@")
+  
+  mkdir -p "$PILOSA_HOME"
+  
+  {
+    echo "scan_permission: \"$permission\""
+    echo "scan_roots:"
+    for root in "${roots[@]}"; do
+      echo "  - \"$root\""
+    done
+  } > "$PILOSA_CONFIG"
+}
+
+# Ask permission on first run
+ask_scan_permission() {
+  printf '\n%s\n' "${BOLD}Pilosa needs to discover your workspaces.${RESET}"
+  printf '\n%s\n' "Scan common directories (~/Projects, ~/Work, ~/Documents) for Pilosa workspaces?"
+  printf '%s\n' "This runs \`find\` with maxdepth 3 and caches results for 1 hour."
+  printf '\n'
+  
+  if confirm "Allow workspace discovery?" "y"; then
+    save_config "granted" "${DEFAULT_SCAN_ROOTS[@]}"
+    return 0
+  else
+    save_config "denied" "${DEFAULT_SCAN_ROOTS[@]}"
+    return 1
+  fi
+}
+
+# Check if cache is fresh (< TTL)
+cache_is_fresh() {
+  [[ -f "$PILOSA_CACHE" ]] || return 1
+  
+  local cache_time
+  cache_time="$(stat -f %m "$PILOSA_CACHE" 2>/dev/null || stat -c %Y "$PILOSA_CACHE" 2>/dev/null || echo 0)"
+  local current_time
+  current_time="$(date +%s)"
+  local age=$((current_time - cache_time))
+  
+  [[ $age -lt $CACHE_TTL ]]
+}
+
+# Scan workspaces and return paths
+scan_workspaces() {
+  local roots=("$@")
+  local seen=()
+  
+  for root in "${roots[@]}"; do
     [[ -d "$root" ]] || continue
     while IFS= read -r -d '' ws_file; do
       local ws_dir
@@ -3092,6 +3180,166 @@ discover_workspaces() {
     done < <(find "$root" -maxdepth 3 -name "workspace" -path "*/.pilosa/workspace" -print0 2>/dev/null)
   done
 }
+
+# Update cache with discovered workspaces
+update_cache() {
+  local workspaces=("$@")
+  
+  mkdir -p "$PILOSA_HOME"
+  
+  {
+    for ws in "${workspaces[@]}"; do
+      local project
+      project="$(grep 'project_name:' "$ws/.pilosa/workspace" 2>/dev/null | sed 's/project_name: *//' | head -1)"
+      echo "$ws|$project"
+    done
+  } > "$PILOSA_CACHE"
+}
+
+# Load workspaces from cache
+load_cached_workspaces() {
+  [[ -f "$PILOSA_CACHE" ]] || return 1
+  
+  while IFS='|' read -r path project; do
+    [[ -d "$path/.pilosa" ]] || continue  # Validate still exists
+    printf '%s|%s\n' "$path" "$project"
+  done < "$PILOSA_CACHE"
+}
+
+# Main discovery function with permission and caching
+discover_workspaces_with_permission() {
+  load_config
+  
+  # Check permission
+  if [[ "$SCAN_PERMISSION" == "unknown" ]]; then
+    # First run - ask permission
+    if ! ask_scan_permission; then
+      return 1
+    fi
+    load_config  # Reload after saving
+  elif [[ "$SCAN_PERMISSION" == "denied" ]]; then
+    return 1
+  fi
+  
+  # Check cache
+  if cache_is_fresh; then
+    load_cached_workspaces
+    return 0
+  fi
+  
+  # Scan and cache
+  local workspaces=()
+  while IFS= read -r ws; do
+    [[ -n "$ws" ]] && workspaces+=("$ws")
+  done < <(scan_workspaces "${SCAN_ROOTS[@]}")
+  
+  update_cache "${workspaces[@]}"
+  
+  # Return results
+  for ws in "${workspaces[@]}"; do
+    local project
+    project="$(grep 'project_name:' "$ws/.pilosa/workspace" 2>/dev/null | sed 's/project_name: *//' | head -1)"
+    printf '%s|%s\n' "$ws" "$project"
+  done
+}
+
+# Legacy function for backward compatibility
+discover_workspaces() {
+  discover_workspaces_with_permission | cut -d'|' -f1
+}
+
+# Validate workspace path
+validate_workspace() {
+  local path="$1"
+  [[ -d "$path" ]] || return 1
+  [[ -f "$path/.pilosa/workspace" ]] || return 1
+  return 0
+}
+
+# Main helper - returns workspace path or prompts for selection
+require_workspace() {
+  local provided_path="${1:-}"
+  
+  # If path provided, validate it
+  if [[ -n "$provided_path" ]]; then
+    provided_path="$(expand_home "$provided_path")"
+    if validate_workspace "$provided_path"; then
+      echo "$provided_path"
+      return 0
+    else
+      die "Not a valid Pilosa workspace: $provided_path"
+    fi
+  fi
+  
+  # Check if current directory is a workspace
+  if validate_workspace "$(pwd)"; then
+    echo "$(pwd)"
+    return 0
+  fi
+  
+  # Not in a workspace - discover and prompt
+  local discovered=()
+  local workspace_data
+  
+  spinner_start "Discovering workspaces"
+  workspace_data="$(discover_workspaces_with_permission 2>/dev/null)"
+  spinner_stop
+  
+  if [[ -z "$workspace_data" ]]; then
+    # Discovery failed or denied
+    printf '\n%s\n' "${Y}Not in a Pilosa workspace.${RESET}"
+    printf '%s\n' "Specify path: pilosa <command> /path/to/workspace"
+    printf '%s\n' "Or run: pilosa new"
+    return 1
+  fi
+  
+  # Parse discovered workspaces
+  while IFS='|' read -r ws_path project; do
+    [[ -n "$ws_path" ]] && discovered+=("$ws_path|$project")
+  done <<< "$workspace_data"
+  
+  if [[ ${#discovered[@]} -eq 0 ]]; then
+    printf '\n%s\n' "${Y}No workspaces found.${RESET}"
+    printf '%s\n' "Run: pilosa new"
+    return 1
+  fi
+  
+  # Build options for selection
+  local options=()
+  for entry in "${discovered[@]}"; do
+    local ws_path="${entry%%|*}"
+    local project="${entry#*|}"
+    local ws_name
+    ws_name="$(basename "$ws_path")"
+    
+    if [[ -n "$project" ]]; then
+      options+=("$(option_spec "$ws_path" "$ws_name" "$project")")
+    else
+      options+=("$(option_spec "$ws_path" "$ws_path" "")")
+    fi
+  done
+  options+=("$(option_spec "__enter__" "Enter path manually" "type a workspace path")")
+  
+  local choice
+  choice="$(prompt_choose "Select a workspace" "${options[@]}")" || return 1
+  
+  if [[ "$choice" == "__enter__" ]]; then
+    local manual_path
+    manual_path="$(prompt_input "Workspace path")"
+    [[ -n "$manual_path" ]] || die "Path is required"
+    manual_path="$(expand_home "$manual_path")"
+    if ! validate_workspace "$manual_path"; then
+      die "Not a valid Pilosa workspace: $manual_path"
+    fi
+    echo "$manual_path"
+  else
+    echo "$choice"
+  fi
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# DASHBOARD
+# ═══════════════════════════════════════════════════════════════════════════
 
 cmd_health() {
   header "Pilosa — System Health"
@@ -3118,7 +3366,13 @@ cmd_health() {
 
   local ws_count
   spinner_start "Discovering workspaces"
-  ws_count="$(discover_workspaces | wc -l | tr -d ' ')"
+  local workspace_data
+  workspace_data="$(discover_workspaces_with_permission 2>/dev/null)"
+  if [[ -n "$workspace_data" ]]; then
+    ws_count="$(echo "$workspace_data" | wc -l | tr -d ' ')"
+  else
+    ws_count=0
+  fi
   spinner_stop
   if [[ "$ws_count" -gt 0 ]]; then
     ok "${ws_count} workspace(s) discovered"
@@ -3245,21 +3499,32 @@ cmd_dashboard() {
     printf '  %sStatus:%s    %s\n' "${BOLD}" "${RESET}" "${setup_status:-unknown}"
     printf '  %sFramework:%s v%s\n' "${BOLD}" "${RESET}" "${fw_version:-unknown}"
   else
-    # Discover workspaces
+    # Discover workspaces with permission and caching
     spinner_start "Discovering workspaces"
-    while IFS= read -r ws; do
-      [[ -n "$ws" ]] && discovered_workspaces+=("$ws")
-    done < <(discover_workspaces)
+    local workspace_data
+    workspace_data="$(discover_workspaces_with_permission 2>/dev/null)"
     spinner_stop
+    
+    if [[ -n "$workspace_data" ]]; then
+      while IFS='|' read -r ws_path project; do
+        [[ -n "$ws_path" ]] && discovered_workspaces+=("$ws_path|$project")
+      done <<< "$workspace_data"
+    fi
 
     if [[ ${#discovered_workspaces[@]} -gt 0 ]]; then
       printf '  %sDiscovered workspaces:%s %d\n' "${BOLD}" "${RESET}" "${#discovered_workspaces[@]}"
-      local i ws_path ws_name
+      local i entry ws_path project ws_name
       for i in "${!discovered_workspaces[@]}"; do
-        ws_path="${discovered_workspaces[$i]}"
+        entry="${discovered_workspaces[$i]}"
+        ws_path="${entry%%|*}"
+        project="${entry#*|}"
         ws_name="$(basename "$ws_path")"
         if [[ $i -lt 3 ]]; then
-          printf '    %s %s\n' "${DIM}•${RESET}" "$ws_name"
+          if [[ -n "$project" ]]; then
+            printf '    %s %s %s(%s)%s\n' "${DIM}•${RESET}" "$ws_name" "${DIM}" "$project" "${RESET}"
+          else
+            printf '    %s %s\n' "${DIM}•${RESET}" "$ws_name"
+          fi
         fi
       done
       if [[ ${#discovered_workspaces[@]} -gt 3 ]]; then
