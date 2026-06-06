@@ -99,10 +99,9 @@ print_step(){ printf '\n  %s%s[%s/%s] %s%s\n' "${BOLD}" "${C}" "$1" "$2" "$3" "$
 read_from_tty() {
   if [[ -t 0 ]]; then
     IFS= read -r "$@"
-  elif [[ -r /dev/tty ]]; then
-    IFS= read -r "$@" < /dev/tty
   else
-    return 1
+    # Try to read from /dev/tty if available, suppress all errors
+    { [[ -r /dev/tty ]] && IFS= read -r "$@" < /dev/tty; } 2>/dev/null || return 1
   fi
 }
 
@@ -411,7 +410,10 @@ ask() {
   [[ -n "$hint" ]] && printf '  %s %s\n' "${DIM}↳${RESET}" "$hint" >&2
   printf '%s' "${BOLD}${prompt}${RESET}${fb}${DIM}: ${RESET}" >&2
   local reply
-  read_from_tty reply || true
+  if ! read_from_tty reply; then
+    # If read_from_tty fails (no tty), try reading from stdin
+    IFS= read -r reply || reply=""
+  fi
   reply="${reply:-$default}"
   echo "$reply"
 }
@@ -424,8 +426,12 @@ confirm() {
   while true; do
     printf '%s' "${BOLD}${prompt}${RESET} ${DIM}${hint}${RESET}: " >&2
     if ! read_from_tty reply; then
-      printf '\n  %s\n' "${R}Cannot read from terminal.${RESET}" >&2
-      return 1
+      # If read_from_tty fails (no tty), try reading from stdin
+      if ! IFS= read -r reply; then
+        # If stdin also fails (EOF), use default
+        printf '\n  %s\n' "${R}Cannot read from terminal.${RESET}" >&2
+        reply="$default"
+      fi
     fi
     reply="${reply:-$default}"
     normalized="$(printf '%s' "$reply" | tr '[:upper:]' '[:lower:]')"
@@ -454,7 +460,13 @@ select_menu() {
   local choice
   while true; do
     printf '%s' "${DIM}  Enter number [1-${#options[@]}]: ${RESET}" >&2
-    read_from_tty choice || choice="1"
+    if ! read_from_tty choice; then
+      # If read_from_tty fails (no tty), try reading from stdin
+      if ! IFS= read -r choice; then
+        # If stdin also fails (EOF), default to 1
+        choice="1"
+      fi
+    fi
     if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#options[@]} )); then
       echo "$(option_value "${options[$((choice-1))]}")"
       return
@@ -3099,10 +3111,10 @@ CACHE_TTL=3600  # 1 hour
 
 # Load config from ~/.pilosa/config.yaml
 load_config() {
-  [[ -f "$PILOSA_CONFIG" ]] || return 1
+  SCAN_PERMISSION="unknown"
+  SCAN_ROOTS=("${DEFAULT_SCAN_ROOTS[@]}")
   
-  SCAN_PERMISSION=""
-  SCAN_ROOTS=()
+  [[ -f "$PILOSA_CONFIG" ]] || return 0
   
   while IFS= read -r line; do
     if [[ "$line" == scan_permission:* ]]; then
@@ -3123,8 +3135,8 @@ load_config() {
   done < "$PILOSA_CONFIG"
   
   # Set defaults if not found
-  [[ -z "$SCAN_PERMISSION" ]] && SCAN_PERMISSION="unknown"
-  [[ ${#SCAN_ROOTS[@]} -eq 0 ]] && SCAN_ROOTS=("${DEFAULT_SCAN_ROOTS[@]}")
+  [[ -z "$SCAN_PERMISSION" ]] && SCAN_PERMISSION="unknown" || true
+  [[ ${#SCAN_ROOTS[@]} -eq 0 ]] && SCAN_ROOTS=("${DEFAULT_SCAN_ROOTS[@]}") || true
 }
 
 # Save config to ~/.pilosa/config.yaml
@@ -3178,6 +3190,9 @@ scan_workspaces() {
   local roots=("$@")
   local seen=()
   
+  # Handle empty roots array
+  [[ ${#roots[@]} -gt 0 ]] || return 0
+  
   for root in "${roots[@]}"; do
     [[ -d "$root" ]] || continue
     while IFS= read -r -d '' ws_file; do
@@ -3220,17 +3235,12 @@ load_cached_workspaces() {
 }
 
 # Main discovery function with permission and caching
+# Note: This function does NOT ask for permission - caller must handle that
 discover_workspaces_with_permission() {
   load_config
   
-  # Check permission
-  if [[ "$SCAN_PERMISSION" == "unknown" ]]; then
-    # First run - ask permission
-    if ! ask_scan_permission; then
-      return 1
-    fi
-    load_config  # Reload after saving
-  elif [[ "$SCAN_PERMISSION" == "denied" ]]; then
+  # Check permission (don't ask, just check)
+  if [[ "$SCAN_PERMISSION" != "granted" ]]; then
     return 1
   fi
   
@@ -3245,16 +3255,20 @@ discover_workspaces_with_permission() {
     [[ -n "$ws" ]] && workspaces+=("$ws")
   done < <(scan_workspaces "${SCAN_ROOTS[@]}")
   
-  # Update both cache and registry
-  update_cache "${workspaces[@]}"
-  update_registry "${workspaces[@]}"
+  # Update both cache and registry (only if workspaces found)
+  if [[ ${#workspaces[@]} -gt 0 ]]; then
+    update_cache "${workspaces[@]}"
+    update_registry "${workspaces[@]}"
+  fi
   
   # Return results
-  for ws in "${workspaces[@]}"; do
-    local project
-    project="$(grep 'project_name:' "$ws/.pilosa/workspace" 2>/dev/null | sed 's/project_name: *//' | head -1)"
-    printf '%s|%s\n' "$ws" "$project"
-  done
+  if [[ ${#workspaces[@]} -gt 0 ]]; then
+    for ws in "${workspaces[@]}"; do
+      local project
+      project="$(grep 'project_name:' "$ws/.pilosa/workspace" 2>/dev/null | sed 's/project_name: *//' | head -1)"
+      printf '%s|%s\n' "$ws" "$project"
+    done
+  fi
 }
 
 # Load workspaces from persistent registry
@@ -3662,10 +3676,26 @@ cmd_dashboard() {
     printf '  %sFramework:%s v%s\n' "${BOLD}" "${RESET}" "${fw_version:-unknown}"
   else
     # Discover workspaces with permission and caching
-    spinner_start "Discovering workspaces"
-    local workspace_data
-    workspace_data="$(discover_workspaces_with_permission 2>/dev/null)"
-    spinner_stop
+    # First check if we need permission (without spinner)
+    load_config
+    if [[ "$SCAN_PERMISSION" == "unknown" ]]; then
+      # Need to ask permission - do it without spinner
+      if ! ask_scan_permission; then
+        info "Workspace discovery denied. You can manually specify workspace paths."
+      else
+        load_config  # Reload after saving
+      fi
+    fi
+    
+    # Now discover workspaces with spinner
+    if [[ "$SCAN_PERMISSION" == "granted" ]]; then
+      spinner_start "Discovering workspaces"
+      local workspace_data
+      workspace_data="$(discover_workspaces_with_permission 2>/dev/null)"
+      spinner_stop
+    else
+      local workspace_data=""
+    fi
     
     if [[ -n "$workspace_data" ]]; then
       while IFS='|' read -r ws_path project; do
