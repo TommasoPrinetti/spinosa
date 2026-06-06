@@ -83,6 +83,16 @@ note()      { printf '  %s↳%s %s\n' "${DIM}" "${RESET}" "$1"; }
 die()       { printf '\n  %s %s\n\n' "${R}✗${RESET}" "$1" >&2; exit 1; }
 print_step(){ printf '\n  %s%s[%s/%s] %s%s\n' "${BOLD}" "${C}" "$1" "$2" "$3" "${RESET}"; }
 
+read_from_tty() {
+  if [[ -t 0 ]]; then
+    IFS= read -r "$@"
+  elif [[ -r /dev/tty ]]; then
+    IFS= read -r "$@" < /dev/tty
+  else
+    return 1
+  fi
+}
+
 gum_available() {
   [[ "$USE_GUM" == "1" && -t 0 ]] || return 1
   local bin
@@ -364,7 +374,7 @@ ask() {
   [[ -n "$hint" ]] && printf '  %s %s\n' "${DIM}↳${RESET}" "$hint" >&2
   printf '%s' "${BOLD}${prompt}${RESET}${fb}${DIM}: ${RESET}" >&2
   local reply
-  IFS= read -r reply || true
+  read_from_tty reply || true
   reply="${reply:-$default}"
   echo "$reply"
 }
@@ -376,7 +386,10 @@ confirm() {
   local reply normalized
   while true; do
     printf '%s' "${BOLD}${prompt}${RESET} ${DIM}${hint}${RESET}: " >&2
-    IFS= read -r reply || reply="$default"
+    if ! read_from_tty reply; then
+      printf '\n  %s\n' "${R}Cannot read from terminal.${RESET}" >&2
+      return 1
+    fi
     reply="${reply:-$default}"
     normalized="$(printf '%s' "$reply" | tr '[:upper:]' '[:lower:]')"
     case "$normalized" in
@@ -404,7 +417,7 @@ select_menu() {
   local choice
   while true; do
     printf '%s' "${DIM}  Enter number [1-${#options[@]}]: ${RESET}" >&2
-    IFS= read -r choice || choice="1"
+    read_from_tty choice || choice="1"
     if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#options[@]} )); then
       echo "$(option_value "${options[$((choice-1))]}")"
       return
@@ -585,7 +598,7 @@ multi_select_menu() {
     printf '  %s %s\n' "${DIM}${continue_index}.${RESET}" "Continue with selected file types" >&2
     printf '  %s %s\n' "${DIM}${cancel_index}.${RESET}" "Cancel selection" >&2
     printf '%s' "${DIM}  Enter number to toggle or continue: ${RESET}" >&2
-    IFS= read -r choice || choice="$continue_index"
+    read_from_tty choice || choice="$continue_index"
     if [[ "$choice" =~ ^[0-9]+$ ]]; then
       if (( choice >= 1 && choice <= ${#options[@]} )); then
         toggle_multi_option "$(option_value "${options[$((choice-1))]}")"
@@ -3106,12 +3119,15 @@ cmd_health() {
 # ═══════════════════════════════════════════════════════════════════════════
 cmd_upgrade() {
   local target_version="latest"
+  local auto_yes=0
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --version) target_version="$2"; shift 2 ;;
+      --yes|-y) auto_yes=1; shift ;;
       --help|-h)
         printf '  %s\n' "Usage: pilosa upgrade [options]"
         printf '    %s\n' "  --version X.Y.Z   Upgrade to specific version (default: latest)"
+        printf '    %s\n' "  --yes             Skip confirmation prompt"
         printf '    %s\n' "  --help            Show this help"
         return 0
         ;;
@@ -3121,24 +3137,46 @@ cmd_upgrade() {
   done
 
   header "Pilosa — Upgrade"
+
+  # Confirm before downloading and running installer
+  if [[ "$auto_yes" -ne 1 ]]; then
+    if ! confirm "Download and run the Pilosa installer to upgrade?" "y"; then
+      info "Upgrade cancelled."
+      return 0
+    fi
+  fi
+
   info "Downloading latest installer..."
 
   local tmpdir
   tmpdir="$(mktemp -d)"
   local installer="${tmpdir}/install-pilosa.sh"
 
-  if ! curl -fsSL "https://github.com/${PILOSA_REPO}/releases/download/v${PINNED_VERSION}/install.sh" -o "$installer" 2>/dev/null; then
-    warn "Could not download release installer. Falling back to raw main branch..."
+  # Resolve latest version from GitHub
+  local latest_version
+  latest_version="$(curl -fsSL -o /dev/null -w '%{url_effective}' "https://github.com/${PILOSA_REPO}/releases/latest" 2>/dev/null | sed 's|.*/tag/v||' || echo "")"
+  
+  if [[ -n "$latest_version" ]]; then
+    if ! curl -fsSL "https://github.com/${PILOSA_REPO}/releases/download/v${latest_version}/install.sh" -o "$installer" 2>/dev/null; then
+      warn "Could not download release installer. Falling back to raw main branch..."
+      curl -fsSL "https://raw.githubusercontent.com/${PILOSA_REPO}/main/install.sh" -o "$installer" || die "Could not download installer"
+    fi
+  else
+    warn "Could not resolve latest version. Falling back to raw main branch..."
     curl -fsSL "https://raw.githubusercontent.com/${PILOSA_REPO}/main/install.sh" -o "$installer" || die "Could not download installer"
   fi
 
   ok "Installer downloaded"
 
-  if [ "$target_version" = "latest" ]; then
-    bash "$installer" --upgrade
-  else
-    bash "$installer" --upgrade --version "$target_version"
+  local upgrade_args=("--upgrade")
+  if [[ "$target_version" != "latest" ]]; then
+    upgrade_args+=("--version" "$target_version")
   fi
+  if [[ "$auto_yes" -eq 1 ]]; then
+    upgrade_args+=("--yes")
+  fi
+
+  bash "$installer" "${upgrade_args[@]}"
 
   rm -rf "$tmpdir"
 }

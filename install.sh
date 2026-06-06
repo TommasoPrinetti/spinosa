@@ -20,7 +20,7 @@ set -eu
 
 # ── defaults ────────────────────────────────────────────────────────────────
 # Pinned stable version. Update this when cutting a new release.
-PINNED_VERSION="0.2.4"
+PINNED_VERSION="0.2.5"
 VERSION="${VERSION:-$PINNED_VERSION}"
 DRY_RUN=0
 VERIFY_ONLY=0
@@ -28,6 +28,7 @@ NO_GUM=0
 UPGRADE=0
 REINSTALL=0
 MIN_DAYS=""
+YES=0
 PILOSA_HOME="${PILOSA_HOME:-$HOME/.pilosa}"
 PILOSA_BIN_DIR="${PILOSA_BIN_DIR:-$HOME/.local/bin}"
 REPO="TommasoPrinetti/pilosa"
@@ -46,6 +47,17 @@ ok()    { printf '  %s %s\n' "${G}✦${RESET}" "$1"; }
 warn()  { printf '  %s %s\n' "${Y}⚠${RESET}" "$1"; }
 die()   { printf '\n  %s %s\n\n' "${R}✗${RESET}" "$1" >&2; exit 1; }
 
+# ── read from TTY (works with piped input) ──────────────────────────────────
+read_from_tty() {
+  if [ -t 0 ]; then
+    IFS= read -r "$@"
+  elif [ -r /dev/tty ]; then
+    IFS= read -r "$@" < /dev/tty
+  else
+    return 1
+  fi
+}
+
 # ── parse flags ─────────────────────────────────────────────────────────────
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -59,6 +71,7 @@ while [ $# -gt 0 ]; do
     --min-days)   MIN_DAYS="$2"; shift 2 ;;
     --prefix)     PILOSA_HOME="$2"; shift 2 ;;
     --bin-dir)    PILOSA_BIN_DIR="$2"; shift 2 ;;
+    --yes|-y)     YES=1; shift ;;
     --help|-h)
       echo "Usage: bash install-pilosa.sh [options]"
       echo ""
@@ -69,6 +82,7 @@ while [ $# -gt 0 ]; do
       echo "  --reinstall       Reinstall even if same version"
       echo "  --dry-run         Show what would happen without doing it"
       echo "  --verify-only     Verify installed binaries, do not install"
+      echo "  --yes             Skip all confirmation prompts (for automation)"
       echo ""
       echo "Security:"
       echo "  --min-days N      Reject releases newer than N days old"
@@ -301,6 +315,10 @@ prompt_upgrade() {
   if [ "$cmp" -eq 0 ]; then
     # Same version
     if [ "$REINSTALL" -eq 1 ]; then
+      if [ "$YES" -eq 1 ]; then
+        info "Reinstalling v${target} (--yes)..."
+        return 0
+      fi
       info "Reinstalling v${target}..."
       return 0
     fi
@@ -309,9 +327,15 @@ prompt_upgrade() {
       return 1
     fi
     printf '  %sPilosa v%s is already installed.%s\n' "${Y}" "$installed" "${RESET}"
-    printf '  %sReinstall?%s ' "${BOLD}" "${RESET}"
+    if [ "$YES" -eq 1 ]; then
+      info "Skipping reinstall prompt (--yes)."
+      return 1
+    fi
+    printf '  %sReinstall?%s [y/N]: ' "${BOLD}" "${RESET}"
     local reply
-    IFS= read -r reply
+    if ! read_from_tty reply; then
+      die "Cannot read from terminal. Use --yes to skip prompts."
+    fi
     case "$reply" in
       y|Y|yes|YES) return 0 ;;
       *) info "Install cancelled." ; return 1 ;;
@@ -319,6 +343,10 @@ prompt_upgrade() {
   elif [ "$cmp" -eq 1 ]; then
     # Target is newer
     if [ "$UPGRADE" -eq 1 ]; then
+      if [ "$YES" -eq 1 ]; then
+        info "Upgrading v${installed} → v${target} (--yes)..."
+        return 0
+      fi
       info "Upgrading v${installed} → v${target}..."
       return 0
     fi
@@ -327,9 +355,15 @@ prompt_upgrade() {
       return 0
     fi
     printf '  %sPilosa v%s is installed. v%s is available.%s\n' "${G}" "$installed" "$target" "${RESET}"
+    if [ "$YES" -eq 1 ]; then
+      info "Auto-upgrading (--yes)."
+      return 0
+    fi
     printf '  %sUpgrade?%s [Y/n]: ' "${BOLD}" "${RESET}"
     local reply
-    IFS= read -r reply
+    if ! read_from_tty reply; then
+      die "Cannot read from terminal. Use --yes to skip prompts."
+    fi
     reply="${reply:-Y}"
     case "$reply" in
       n|N|no|NO) info "Upgrade cancelled." ; return 1 ;;
@@ -342,13 +376,23 @@ prompt_upgrade() {
       return 1
     fi
     if [ "$REINSTALL" -eq 1 ]; then
+      if [ "$YES" -eq 1 ]; then
+        info "Downgrading v${installed} → v${target} (--yes)..."
+        return 0
+      fi
       info "Downgrading v${installed} → v${target}..."
       return 0
     fi
     printf '  %sInstalled v%s is newer than target v%s.%s\n' "${Y}" "$installed" "$target" "${RESET}"
+    if [ "$YES" -eq 1 ]; then
+      info "Skipping downgrade (--yes)."
+      return 1
+    fi
     printf '  %sDowngrade?%s [y/N]: ' "${BOLD}" "${RESET}"
     local reply
-    IFS= read -r reply
+    if ! read_from_tty reply; then
+      die "Cannot read from terminal. Use --yes to skip prompts."
+    fi
     case "$reply" in
       y|Y|yes|YES) return 0 ;;
       *) info "Install cancelled." ; return 1 ;;
@@ -380,6 +424,19 @@ main() {
     if [ -n "$installed_version" ]; then
       if ! prompt_upgrade "$installed_version" "$VERSION"; then
         return 0
+      fi
+    else
+      # Fresh install — confirm unless --yes
+      if [ "$YES" -eq 0 ]; then
+        printf '  %sInstall Pilosa v%s?%s [Y/n]: ' "${BOLD}" "$VERSION" "${RESET}"
+        local reply
+        if ! read_from_tty reply; then
+          die "Cannot read from terminal. Use --yes to skip prompts."
+        fi
+        reply="${reply:-Y}"
+        case "$reply" in
+          n|N|no|NO) info "Install cancelled." ; return 0 ;;
+        esac
       fi
     fi
   fi
