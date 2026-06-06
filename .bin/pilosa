@@ -3089,24 +3089,21 @@ load_config() {
   SCAN_ROOTS=()
   
   while IFS= read -r line; do
-    case "$line" in
-      scan_permission:*)
-        SCAN_PERMISSION="${line#scan_permission: }"
-        SCAN_PERMISSION="${SCAN_PERMISSION//\"/}"
-        ;;
-      scan_roots:*)
-        # Next lines will be the roots
-        ;;
-      "  - "*)
-        if [[ -z "$SCAN_PERMISSION" ]]; then
-          continue
-        fi
-        local root="${line#  - }"
-        root="${root//\"/}"
-        root="${root//\~/$HOME}"
-        SCAN_ROOTS+=("$root")
-        ;;
-    esac
+    if [[ "$line" == scan_permission:* ]]; then
+      SCAN_PERMISSION="${line#scan_permission: }"
+      SCAN_PERMISSION="${SCAN_PERMISSION//\"/}"
+    elif [[ "$line" == scan_roots:* ]]; then
+      # Next lines will be the roots
+      :
+    elif [[ "$line" == "  - "* ]]; then
+      if [[ -z "$SCAN_PERMISSION" ]]; then
+        continue
+      fi
+      local root="${line#  - }"
+      root="${root//\"/}"
+      root="${root//\~/$HOME}"
+      SCAN_ROOTS+=("$root")
+    fi
   done < "$PILOSA_CONFIG"
   
   # Set defaults if not found
