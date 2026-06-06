@@ -381,9 +381,17 @@ fi
 # ── Test 13: install.sh --min-days on old release ─────────────────────────
 echo ""
 echo "Test 13: install.sh --min-days on old release"
-# v0.1.0 should be older than 1 day
-MIN_DAYS_OUTPUT="$(bash "$REPO_ROOT/install.sh" --version 0.1.0 --min-days 1 --dry-run 2>/dev/null || true)"
-if echo "$MIN_DAYS_OUTPUT" | grep -q "Dry run"; then
+# Mock the GitHub release API so this stays deterministic offline.
+MIN_DAYS_BIN="$TMPDIR/min-days-bin"
+mkdir -p "$MIN_DAYS_BIN"
+cat > "$MIN_DAYS_BIN/curl" << 'EOF'
+#!/bin/sh
+printf '{"published_at": "2026-01-01T00:00:00Z"}\n'
+EOF
+chmod +x "$MIN_DAYS_BIN/curl"
+
+MIN_DAYS_OUTPUT="$(PATH="$MIN_DAYS_BIN:$PATH" bash "$REPO_ROOT/install.sh" --version 0.1.0 --min-days 1 --dry-run 2>/dev/null || true)"
+if echo "$MIN_DAYS_OUTPUT" | grep -q "Release age verified" && echo "$MIN_DAYS_OUTPUT" | grep -q "Dry run"; then
   pass "--min-days 1 passes for old release v0.1.0"
 else
   fail "--min-days 1 failed for old release v0.1.0"

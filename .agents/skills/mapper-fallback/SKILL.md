@@ -42,9 +42,28 @@ Fallback instruction set for `pilosa-mapper` when native sub-agent dispatch is u
 For every file, extract:
 
 1. **One-paragraph summary** (3-5 sentences): what the file is about, what arguments it makes, what evidence it provides.
-2. **Key passages** (2-5): short quotes or close paraphrases with file path and line references.
+2. **Key passages** (2-5): short quotes or close paraphrases with wikilinks and line references: `[[raw/path/file]]` L12-L15.
 3. **Concept signals** (2-5): which recurring concepts appear in this file. Use dictionary canonical terms.
-4. **Connections**: which other files relate to the same concepts.
+4. **Connections**: which other files relate to the same concepts, as wikilinks: `[[raw/path/related_file]]`.
+
+## Obsidian Graph Connectivity
+
+Maps are Obsidian-native. Every reference to a raw file or another map in the map body MUST use Obsidian wikilinks to create graph edges. Obsidian only creates graph connections from wikilinks in the body, not from YAML frontmatter.
+
+### Wikilink Convention
+
+- Raw files: `[[raw/path/filename]]` (no `.md` extension)
+- Group maps: `[[maps/group/map_name]]`
+- Hub map: `[[corpus_overview]]`
+- Theme maps: `[[maps/themes/theme_name]]`
+- Line references go AFTER the wikilink: `[[raw/path/file]]` L12-L15
+
+### Hub Map Rules
+
+- `corpus_overview.md` (Level 0) is the central hub of the Obsidian graph. It MUST contain wikilinks to every group map and theme map.
+- Every group map MUST contain a wikilink back to `[[corpus_overview]]`.
+- Theme maps MUST link to relevant group maps via wikilinks.
+- Group maps SHOULD link to related group maps when cross-references exist.
 
 ## Map Writing
 

@@ -20,7 +20,7 @@ set -eu
 
 # ── defaults ────────────────────────────────────────────────────────────────
 # Pinned stable version. Update this when cutting a new release.
-PINNED_VERSION="0.2.2"
+PINNED_VERSION="0.2.3"
 VERSION="${VERSION:-$PINNED_VERSION}"
 DRY_RUN=0
 VERIFY_ONLY=0
@@ -159,7 +159,7 @@ check_release_age() {
 
   if [ -z "$published_at" ]; then
     if [ "$VERSION" = "latest" ] || [ -n "$MIN_DAYS" ]; then
-      die "Could not verify release age. GitHub API may be rate-limited. Use --version to specify a known version, or omit --min-days."
+      die "Could not verify release age. GitHub API may be rate-limited. Retry later, or omit --min-days."
     fi
     warn "Could not verify release age — skipping check"
     return 0

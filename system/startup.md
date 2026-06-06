@@ -130,9 +130,9 @@ Each batch reads files and extracts:
 **For content-grounded extraction (same pass):**
 
 9. **One-paragraph summary** (3-5 sentences): what the file is about, what arguments it makes, what evidence it provides. Content-grounded — must reflect actual content.
-10. **Key passages** (2-5): short quotes or close paraphrases with file path and line references.
+10. **Key passages** (2-5): short quotes or close paraphrases with wikilinks and line references: `[[raw/path/file]]` L12-L15.
 11. **Concept signals** (2-5): which recurring concepts appear in this file. Use dictionary canonical terms.
-12. **Connections**: which other files relate to the same concepts.
+12. **Connections**: which other files relate to the same concepts, as wikilinks: `[[raw/path/related_file]]`.
 
 **Multilingual rule:** Keywords must appear in the language they were found in. If a source is in French, French keywords are recorded. If in English, English keywords. If a concept appears in multiple languages, list all language variants as aliases.
 
@@ -183,12 +183,14 @@ Record the identified groups and their organizing principle. This becomes the st
 
 ### Step 2: Write Structural Overview
 
-Write one map at the root of `maps/` (e.g., `maps/corpus_overview.md`). This is the Level 0 map.
+Write one map at the root of `maps/` (e.g., `maps/corpus_overview.md`). This is the Level 0 map and the **central hub** of the Obsidian graph.
+
+The structural overview MUST use wikilinks for every reference: wikilinks to group maps (`[[maps/group_name/group_map]]`), wikilinks to theme maps (`[[maps/themes/theme_name]]`), and wikilinks for key file pointers (`[[raw/path/file]]`). This creates the star topology that makes the corpus navigable in Obsidian's graph view.
 
 For each natural group:
 - 2-4 sentence description of what the group contains (synthesized from per-file summaries)
 - File count
-- Key file pointers (3-5 files that best represent the group)
+- Key file pointers as wikilinks (3-5 files that best represent the group)
 
 ### Step 3: Write Group Maps
 
@@ -203,7 +205,8 @@ Each group map contains:
 
 - H2 "What this group is about" — synthesized understanding from reading files
 - H2 "Recurring concepts" — patterns across files within the group, with key passages
-- Each concept: description + examples with file path + line references + quote or paraphrase
+- Each concept: description + examples with wikilinks and line references: `[[raw/path/file]]` L12-L15 + quote or paraphrase
+- Wikilink back to hub: `[[corpus_overview]]`
 
 ### Step 4: Write Theme Maps
 
@@ -217,7 +220,8 @@ Identify concepts that recur across multiple groups. For each cross-cutting them
 Each theme map contains:
 
 - H2 with theme name + definition
-- H3 per group where the theme appears + key passages
+- H3 per group where the theme appears + key passages with wikilinks: `[[raw/path/file]]` L12-L15
+- Wikilinks to relevant group maps: `[[maps/group_name/group_map]]`
 - H2 "Trajectory" — how the theme evolves across groups
 
 ### Step 5: Verify Coverage

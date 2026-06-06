@@ -9,9 +9,9 @@ connects_to:
   - system/configuration.md
   - system/context.md
 created: 2026-05-26
-updated: 2026-06-05
+updated: 2026-06-06
 generated_by: sync-agents
-generated_at: 2026-06-05
+generated_at: 2026-06-06
 processing_status: auto_generated
 ---
 # Pilosa Framework
@@ -145,7 +145,7 @@ fallback_skill: .agents/skills/evidence-search/SKILL.md
 | `pilosa-verifier`   | Verifies claims, quotes, and paths                                                    |
 | `pilosa-janitor`    | Audits hygiene and archives stale files                                               |
 
-Canonical agent definitions live in `.agents/agents/`. Vendor directories (`.opencode/agents/`, `.claude/agents/`) are generated mirrors with platform-specific frontmatter. `.codex/agents/` contains Codex-native TOML agents (manually maintained, not part of the sync script).
+Canonical agent definitions live in `.agents/agents/`. Vendor directories (`.opencode/agents/`, `.claude/agents/`, `.codex/agents/`) are generated mirrors with platform-specific frontmatter or TOML wrappers.
 Fallback SKILL.md files live in `.agents/skills/`; vendor skill directories are generated mirrors. The orchestrator may reference `orchestrator-dispatch` for chain selection.
 
 ### 4.1 Continue IF

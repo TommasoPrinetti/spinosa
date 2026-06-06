@@ -40,13 +40,15 @@ updated: YYYY-MM-DD
 
 ## Level 0: Structural Overview
 
-One file at the root of maps/. Describes the corpus structure and provides some entry points.
+One file at the root of maps/. This is the **central hub** of the Obsidian graph. It MUST use wikilinks to every group map, theme map, and key raw file pointers.
 
 Format:
 
 - H2 per natural group
 - Each H2: 2-4 sentence description of what the group contains
-- File count and key file pointers (not exhaustive lists)
+- File count and key file pointers as wikilinks: `[[raw/path/file1]]`, `[[raw/path/file2]]`
+- Wikilinks to group maps: `[[maps/group_name/group_map]]`
+- Wikilinks to theme maps: `[[maps/themes/theme_name]]`
 - The mapper decides what the groups are based on what it finds
 
 ## Level 1: Group Map
@@ -57,7 +59,9 @@ Format:
 
 - H2 "What this group is about" — synthesized understanding from reading files
 - H2 "Recurring concepts" — patterns across files within the group
-- Each concept: 1-2 sentence description + examples with file path + line references + short quote or paraphrase
+- Each concept: 1-2 sentence description + examples with wikilinks and line references: `[[raw/path/file]]` L12-L15
+- Wikilink back to hub: `[[corpus_overview]]`
+- Wikilinks to related group maps when cross-references exist
 
 ## Level 2: Theme Map
 
@@ -67,7 +71,8 @@ Format:
 
 - H2 with theme name + 1-2 sentence definition
 - H3 per group where the theme appears
-- Each H3: how the theme manifests in that group + key passages with file paths
+- Each H3: how the theme manifests in that group + key passages with wikilinks: `[[raw/path/file]]` L12-L15
+- Wikilinks to relevant group maps: `[[maps/group_name/group_map]]`
 - H2 "Trajectory" — how the theme evolves across groups
 
 ## Key Principle

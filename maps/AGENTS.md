@@ -27,7 +27,9 @@ updated: 2026-06-04
 - Maps evolve: startup does initial pass; maps deepen as more files are read.
 - Do not map `AGENTS.md` files; they are control instructions, not source evidence.
 - Use `raw/` relative paths only.
-- Use Obsidian wikilinks for internal references.
+- **Wikilinks are mandatory** for all references to raw files and other maps in the map body. Obsidian only creates graph edges from wikilinks in the body, not from YAML frontmatter.
+- **Wikilink convention:** `[[raw/path/filename]]` for raw files (no `.md` extension), `[[maps/group/map_name]]` for group maps, `[[corpus_overview]]` for the hub, `[[maps/themes/theme_name]]` for theme maps. Line references go after the wikilink: `[[raw/path/file]]` L12-L15.
+- **Hub map rules:** `corpus_overview.md` (Level 0) is the central hub. It MUST contain wikilinks to every group map and theme map. Every group map MUST link back to `[[corpus_overview]]`. Theme maps MUST link to relevant group maps. Group maps SHOULD link to related group maps.
 - Keep key passages short and effective to act as anchors for different concepts.
 
 ## Who Writes Maps

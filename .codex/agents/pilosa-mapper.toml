@@ -62,15 +62,15 @@ created: YYYY-MM-DD
 ## Extraction Packets
 
 ### [filename1]
-- **Path:** raw/[path]/[filename1]
+- **Path:** [[raw/[path]/[filename1]]]
 - **Source type:** [inferred from content]
 - **Language:** en | fr
 - **Summary:** [3-5 sentence content-grounded summary]
 - **Key passages:**
-  1. "[quote]" -> raw/path:line_start-line_end
-  2. "[quote]" -> raw/path:line_start-line_end
+  1. "[quote]" -> [[raw/path/filename1]] L12-L15
+  2. "[quote]" -> [[raw/path/filename1]] L30-L33
 - **Concept signals:** [concept1, concept2, concept3]
-- **Connections:** [related file1], [related file2] (or "none")
+- **Connections:** [[raw/path/related_file1]], [[raw/path/related_file2]] (or "none")
 
 ### [filename2]
 ...
@@ -96,6 +96,31 @@ When map writing is requested, `maps/` is the primary output:
 2. Group maps under subdirectories named for the organizing principle.
 3. Theme maps for cross-cutting concepts.
 4. Enrichment updates to existing maps when a rerun expands retrieval coverage.
+
+## Obsidian Graph Connectivity
+
+Maps are Obsidian-native. Every reference to a raw file or another map in the map body MUST use Obsidian wikilinks to create graph edges. Obsidian only creates graph connections from wikilinks in the body, not from YAML frontmatter.
+
+### Wikilink Convention
+
+- Raw files: `[[raw/path/filename]]` (no `.md` extension)
+- Group maps: `[[maps/group/map_name]]`
+- Hub map: `[[corpus_overview]]`
+- Theme maps: `[[maps/themes/theme_name]]`
+- Line references go AFTER the wikilink: `[[raw/path/file]]` L12-L15
+
+### Hub Map Rules
+
+- `corpus_overview.md` (Level 0) is the central hub of the Obsidian graph. It MUST contain wikilinks to every group map and theme map.
+- Every group map MUST contain a wikilink back to `[[corpus_overview]]`.
+- Theme maps MUST link to relevant group maps via wikilinks.
+- Group maps SHOULD link to related group maps when cross-references exist.
+
+### Extraction Format (wikilinks)
+
+- **Path:** `[[raw/path/filename]]`
+- **Key passages:** `"[quote]" -> [[raw/path/filename]] L12-L15`
+- **Connections:** `[[raw/path/related_file]]`, `[[raw/path/related_file2]]` (or "none")
 
 ## Rules
 
