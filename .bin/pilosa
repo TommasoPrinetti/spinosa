@@ -3560,24 +3560,29 @@ display_release_notes() {
   published_at="$(echo "$release_data" | cut -d'|' -f2)"
   body="$(echo "$release_data" | cut -d'|' -f3-)"
   
+  local w=77
+  local border
+  border="$(printf '%.0s─' $(seq 1 $w))"
+  
   printf '\n'
-  print_box "Release Notes: ${tag_name}"
+  printf '  %s┌%s┐%s\n' "${DIM}" "$border" "${RESET}"
+  printf '  %s│%s %sRelease Notes: %s%s%s\n' "${DIM}" "${RESET}" "${BOLD}" "$tag_name" "${RESET}" "${DIM}"
   
   if [[ -n "$published_at" ]]; then
-    printf '  %sPublished:%s %s\n' "${DIM}" "${RESET}" "$published_at"
+    printf '  %s│%s %sPublished:%s %s\n' "${DIM}" "${RESET}" "${DIM}" "${RESET}" "$published_at"
   fi
   
-  printf '\n'
+  printf '  %s├%s┤%s\n' "${DIM}" "$border" "${RESET}"
   
   if [[ -n "$body" ]]; then
-    # Display body with proper indentation
     echo "$body" | while IFS= read -r line; do
-      printf '  %s\n' "$line"
+      printf '  %s│%s %s\n' "${DIM}" "${RESET}" "$line"
     done
   else
-    printf '  %sNo release notes available.%s\n' "${DIM}" "${RESET}"
+    printf '  %s│%s %sNo release notes available.%s\n' "${DIM}" "${RESET}" "${DIM}" "${RESET}"
   fi
   
+  printf '  %s└%s┘%s\n' "${DIM}" "$border" "${RESET}"
   printf '\n'
   divider
   printf '\n'
