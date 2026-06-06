@@ -3394,6 +3394,63 @@ cmd_health() {
 
 
 
+# Fetch release notes from GitHub API
+fetch_release_notes() {
+  local version="${1:-latest}"
+  local api_url
+  
+  if [[ "$version" == "latest" ]]; then
+    api_url="https://api.github.com/repos/${PILOSA_REPO}/releases/latest"
+  else
+    api_url="https://api.github.com/repos/${PILOSA_REPO}/releases/tags/v${version}"
+  fi
+  
+  # Use Python for reliable JSON parsing
+  curl -fsSL "$api_url" 2>/dev/null | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    tag = data.get('tag_name', '')
+    published = data.get('published_at', '').replace('T', ' ').replace('Z', '')
+    body = data.get('body', '')
+    print(f'{tag}|{published}|{body}')
+except:
+    pass
+" 2>/dev/null
+}
+
+# Display release notes in a formatted way
+display_release_notes() {
+  local release_data="$1"
+  local tag_name published_at body
+  
+  tag_name="$(echo "$release_data" | cut -d'|' -f1)"
+  published_at="$(echo "$release_data" | cut -d'|' -f2)"
+  body="$(echo "$release_data" | cut -d'|' -f3-)"
+  
+  printf '\n'
+  print_box "Release Notes: ${tag_name}"
+  
+  if [[ -n "$published_at" ]]; then
+    printf '  %sPublished:%s %s\n' "${DIM}" "${RESET}" "$published_at"
+  fi
+  
+  printf '\n'
+  
+  if [[ -n "$body" ]]; then
+    # Display body with proper indentation
+    echo "$body" | while IFS= read -r line; do
+      printf '  %s\n' "$line"
+    done
+  else
+    printf '  %sNo release notes available.%s\n' "${DIM}" "${RESET}"
+  fi
+  
+  printf '\n'
+  divider
+  printf '\n'
+}
+
 # ═══════════════════════════════════════════════════════════════════════════
 # COMMAND: upgrade
 # ═══════════════════════════════════════════════════════════════════════════
@@ -3417,6 +3474,21 @@ cmd_upgrade() {
   done
 
   header "Pilosa — Upgrade"
+
+  # Fetch and display release notes before confirmation
+  if [[ "$auto_yes" -ne 1 ]]; then
+    spinner_start "Fetching release notes"
+    local release_data
+    release_data="$(fetch_release_notes "$target_version")"
+    spinner_stop
+    
+    if [[ -n "$release_data" ]]; then
+      display_release_notes "$release_data"
+    else
+      warn "Could not fetch release notes"
+      printf '\n'
+    fi
+  fi
 
   # Confirm before downloading and running installer
   if [[ "$auto_yes" -ne 1 ]]; then
