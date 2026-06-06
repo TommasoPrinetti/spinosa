@@ -28,6 +28,19 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TODAY="$(date +%Y-%m-%d)"
 USE_GUM="${USE_GUM:-0}"
 
+# ── global cleanup trap ────────────────────────────────────────────────────
+cleanup_on_exit() {
+  # Kill spinner if running
+  if [[ -n "${SPINNER_PID:-}" ]]; then
+    kill "$SPINNER_PID" 2>/dev/null || true
+    wait "$SPINNER_PID" 2>/dev/null || true
+  fi
+  # Reset terminal
+  stty sane 2>/dev/null || true
+}
+
+trap cleanup_on_exit EXIT INT TERM
+
 # Source file classes used by integrated onboarding.
 MARKDOWN_EXTENSIONS="txt|rtf|textile|wiki|mediawiki|dokuwiki|pmwiki|outliner|workflowy|dynalist"
 NATIVE_EXTENSIONS="md|csv|json|yaml|yml|toml|xml|html|css|js|ts|py|rb|sh|log|ini|cfg|conf|tex|bib|org|adoc|rst|tiddlywiki|logseq|roam|obsidian"
@@ -2385,6 +2398,9 @@ EOF
 
   ok "Metadata written"
 
+  # Register workspace in global registry
+  register_workspace "$workspace_path" "$project_name"
+
   # ── Step 6: Onboarding (continuous flow) ────────────────────────────────
   run_integrated_onboarding "$workspace_path" "$project_name" "$corpus_path"
 
@@ -3218,25 +3234,76 @@ discover_workspaces_with_permission() {
     return 1
   fi
   
-  # Check cache
-  if cache_is_fresh; then
-    load_cached_workspaces
+  # Try registry first (instant)
+  if load_registry; then
     return 0
   fi
   
-  # Scan and cache
+  # Fallback to scan
   local workspaces=()
   while IFS= read -r ws; do
     [[ -n "$ws" ]] && workspaces+=("$ws")
   done < <(scan_workspaces "${SCAN_ROOTS[@]}")
   
+  # Update both cache and registry
   update_cache "${workspaces[@]}"
+  update_registry "${workspaces[@]}"
   
   # Return results
   for ws in "${workspaces[@]}"; do
     local project
     project="$(grep 'project_name:' "$ws/.pilosa/workspace" 2>/dev/null | sed 's/project_name: *//' | head -1)"
     printf '%s|%s\n' "$ws" "$project"
+  done
+}
+
+# Load workspaces from persistent registry
+load_registry() {
+  local registry="${PILOSA_HOME}/workspaces.txt"
+  [[ -f "$registry" ]] || return 1
+  
+  local found=0
+  while IFS='|' read -r path project created; do
+    [[ -d "$path/.pilosa" ]] || continue  # Validate still exists
+    printf '%s|%s\n' "$path" "$project"
+    found=1
+  done < "$registry"
+  
+  [[ $found -eq 1 ]]
+}
+
+# Register a workspace in the persistent registry
+register_workspace() {
+  local path="$1"
+  local project="${2:-}"
+  local registry="${PILOSA_HOME}/workspaces.txt"
+  
+  mkdir -p "$PILOSA_HOME"
+  
+  # Remove if already exists
+  if [[ -f "$registry" ]]; then
+    grep -v "^${path}|" "$registry" > "${registry}.tmp" 2>/dev/null || true
+    mv "${registry}.tmp" "$registry"
+  fi
+  
+  # Add new entry
+  echo "${path}|${project}|$(date +%Y-%m-%d)" >> "$registry"
+}
+
+# Update registry with discovered workspaces
+update_registry() {
+  local workspaces=("$@")
+  local registry="${PILOSA_HOME}/workspaces.txt"
+  
+  mkdir -p "$PILOSA_HOME"
+  
+  for ws in "${workspaces[@]}"; do
+    local project
+    project="$(grep 'project_name:' "$ws/.pilosa/workspace" 2>/dev/null | sed 's/project_name: *//' | head -1)"
+    # Only add if not already in registry
+    if ! grep -q "^${ws}|" "$registry" 2>/dev/null; then
+      echo "${ws}|${project}|$(date +%Y-%m-%d)" >> "$registry"
+    fi
   done
 }
 
@@ -3315,12 +3382,38 @@ require_workspace() {
       options+=("$(option_spec "$ws_path" "$ws_path" "")")
     fi
   done
+  options+=("$(option_spec "__scan__" "Find other workspaces" "scan directories for workspaces")")
   options+=("$(option_spec "__enter__" "Enter path manually" "type a workspace path")")
   
   local choice
   choice="$(prompt_choose "Select a workspace" "${options[@]}")" || return 1
   
-  if [[ "$choice" == "__enter__" ]]; then
+  if [[ "$choice" == "__scan__" ]]; then
+    spinner_start "Scanning for workspaces"
+    local scanned=()
+    while IFS= read -r ws; do
+      [[ -n "$ws" ]] && scanned+=("$ws")
+    done < <(scan_workspaces "${SCAN_ROOTS[@]}")
+    spinner_stop
+    
+    local new_count=0
+    for ws in "${scanned[@]}"; do
+      if ! grep -q "^${ws}|" "${PILOSA_HOME}/workspaces.txt" 2>/dev/null; then
+        new_count=$((new_count + 1))
+      fi
+    done
+    
+    update_registry "${scanned[@]}"
+    
+    if [[ $new_count -gt 0 ]]; then
+      ok "Found ${new_count} new workspace(s), registry updated"
+    else
+      info "No new workspaces found"
+    fi
+    
+    # Re-prompt with updated list
+    exec "$0" "${BASH_ARGV[@]}"
+  elif [[ "$choice" == "__enter__" ]]; then
     local manual_path
     manual_path="$(prompt_input "Workspace path")"
     [[ -n "$manual_path" ]] || die "Path is required"
