@@ -18,7 +18,12 @@ each page is rendered to an image and OCR'd separately.
 import sys
 import os
 import argparse
+import logging
 from pathlib import Path
+
+# Suppress RapidOCR and ONNX Runtime verbose logging
+logging.getLogger("RapidOCR").setLevel(logging.WARNING)
+logging.getLogger("onnxruntime").setLevel(logging.WARNING)
 
 def log(msg: str) -> None:
     """Print status message to stderr."""
@@ -116,7 +121,6 @@ def ocr_pdf_file(engine, pdf_path: str) -> str:
 
     all_text = []
     for page_num, image in images:
-        log(f"OCR page {page_num}/{len(images)}...")
         text = ocr_pil_image(engine, image)
         if text.strip():
             all_text.append(f"## Page {page_num}\n\n{text}")
@@ -160,12 +164,8 @@ def main():
         error(f"Unsupported file type: {input_path}")
         sys.exit(1)
 
-    log(f"Processing {file_type}: {os.path.basename(input_path)}")
-
     try:
-        log(f"Initializing RapidOCR engine (lang={args.lang})...")
         engine = create_engine(args.lang)
-        log("Engine initialized successfully")
 
         # Process file
         if is_pdf(input_path):
@@ -187,7 +187,6 @@ def main():
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(markdown)
 
-        log(f"Output written to: {output_path}")
         sys.exit(0)
 
     except ImportError as e:
