@@ -1304,6 +1304,19 @@ selected_import_count() {
   printf '%d' "$total"
 }
 
+selected_copy_count() {
+  local total=0 i ext
+  for i in "${!IMPORT_BATCH_EXTENSIONS[@]}"; do
+    ext="${IMPORT_BATCH_EXTENSIONS[$i]}"
+    if import_extension_selected "$ext"; then
+      if [[ "$ext" != "pdf" ]] && ! ext_in_list "$ext" "$IMAGE_EXTENSIONS"; then
+        total=$((total + IMPORT_BATCH_COUNTS[$i]))
+      fi
+    fi
+  done
+  printf '%d' "$total"
+}
+
 selected_import_bytes() {
   local total=0 i
   for i in "${!IMPORT_BATCH_EXTENSIONS[@]}"; do
@@ -1495,7 +1508,7 @@ render_ocr_progress() {
 copy_source() {
   local source_path="$1" dest_dir="$2"
   local total_files
-  total_files="$(selected_import_count)"
+  total_files="$(selected_copy_count)"
   [[ "$total_files" -gt 0 ]] || { warn "No copyable files found in source location."; return 1; }
 
   local copied=0 skipped=0 processed=0 converted=0 ocr_converted=0 ocr_skipped=0 src_file rel_path raw_rel_path dest_file dest_parent
