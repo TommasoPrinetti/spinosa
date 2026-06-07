@@ -2117,18 +2117,8 @@ run_integrated_onboarding() {
     fi
     echo ""
 
-    scan_action="$(choose_scan_action "$copyable_count")" || return 1
-    case "$scan_action" in
-      import) break ;;
-      rescan)
-        source_path=""
-        continue
-        ;;
-      *)
-        warn "No workspace copy was prepared. Onboarding stopped after the scan."
-        return 1
-        ;;
-    esac
+    [[ "$copyable_count" -gt 0 ]] || { warn "No workspace copy was prepared. Onboarding stopped after the scan."; return 1; }
+    break
   done
 
   copy_source "$source_path" "$root/raw"
