@@ -104,7 +104,7 @@ if gh release view "$TAG" >/dev/null 2>&1; then
   gh release upload "$TAG" "${UPLOAD_ASSETS[@]}" --clobber
 else
   gh release create "$TAG" "${UPLOAD_ASSETS[@]}" \
-    --target "$CURRENT_SHA" \
+    --target "$CURRENT_BRANCH" \
     --title "Pilosa Framework ${TAG}" \
     --notes-file "$BODY"
 fi
