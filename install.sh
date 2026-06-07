@@ -112,7 +112,7 @@ while [ $# -gt 0 ]; do
       echo "  --min-days N      Reject releases newer than N days old"
       echo ""
       echo "Paths:"
-      echo "  --no-gum          Skip bundled binary installation (Gum, pdf2md)"
+      echo "  --no-gum          Skip bundled binary installation (Gum)"
       echo "  --prefix PATH     Install root (default: ~/.pilosa)"
       echo "  --bin-dir PATH    Shim directory (default: ~/.local/bin)"
       exit 0
@@ -556,7 +556,7 @@ main() {
       esac
       suffix="${os}-${arch}"
 
-      for bin_name in gum pdf2md; do
+      for bin_name in gum; do
         local src_bin="${vendor_src}/${bin_name}-${suffix}"
         if [[ -f "$src_bin" ]]; then
           cp "$src_bin" "${PILOSA_HOME}/bin/${bin_name}"
@@ -566,6 +566,28 @@ main() {
           warn "No ${bin_name} binary for ${suffix}"
         fi
       done
+    fi
+
+    # ── install RapidOCR vendor ───────────────────────────────────────────
+    local rapidocr_src="${vendor_src}/rapidocr-${suffix}"
+    if [[ -d "$rapidocr_src" ]]; then
+      local rapidocr_dest="${PILOSA_HOME}/vendor/rapidocr/${suffix}"
+      mkdir -p "$rapidocr_dest"
+      cp -r "${rapidocr_src}/"* "$rapidocr_dest/"
+      chmod +x "${rapidocr_dest}/rapidocr-cli" 2>/dev/null || true
+      ok "Installed RapidOCR"
+    else
+      # Check for tarball
+      local rapidocr_tarball="${vendor_src}/rapidocr-${suffix}.tar.gz"
+      if [[ -f "$rapidocr_tarball" ]]; then
+        local rapidocr_dest="${PILOSA_HOME}/vendor/rapidocr/${suffix}"
+        mkdir -p "$rapidocr_dest"
+        tar -xzf "$rapidocr_tarball" -C "$rapidocr_dest"
+        chmod +x "${rapidocr_dest}/rapidocr-cli" 2>/dev/null || true
+        ok "Installed RapidOCR"
+      else
+        warn "No RapidOCR for ${suffix} (PDF/image OCR will not be available)"
+      fi
     fi
 
     # Verify vendor binary checksums against the release manifest

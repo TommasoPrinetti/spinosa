@@ -20,3 +20,4 @@ Short routing log for user prompts. Log the request before deciding whether to a
 | ---------- | ----------------------------------- | --------- | ------ | -------------------------------------- |
 
 | 2026-06-05 | Thoroughly audit the Pilosa framework structure (YAML frontmatter, links, content, missing AGENTS.md, framework-files.tsv) | verification | done | audit report at agent_reports/01_framework_audit_report.md — 14 issues found across 27 files |
+| 2026-06-07 | Test RapidOCR on test vault, replace Florence-2 | fast_path | done | RapidOCR implemented and tested on images and PDFs |

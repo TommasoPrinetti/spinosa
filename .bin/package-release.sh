@@ -172,11 +172,10 @@ fi
 
 echo "  All exclusions OK"
 
-# ── Bundle vendor binaries (Gum + pdf2md) ─────────────────────────────────────
+# ── Bundle vendor binaries (Gum) ─────────────────────────────────────
 echo "Bundling vendor binaries..."
 
 GUM_VERSION="0.14.0"
-PDF2MD_VERSION="0.1.1"
 VENDOR_DIR="${FRAMEWORK_DIR}/.bin/lib/vendor"
 mkdir -p "$VENDOR_DIR"
 
@@ -223,22 +222,17 @@ bundle_platform_binary "gum" "$GUM_VERSION" \
   "https://github.com/charmbracelet/gum/releases/download/v${GUM_VERSION}/gum_${GUM_VERSION}_Linux_i386.tar.gz" \
   "linux-i386"
 
-# pdf2md — all platforms
-bundle_platform_binary "pdf2md" "$PDF2MD_VERSION" \
-  "https://github.com/fjacquet/pdf2md/releases/download/v${PDF2MD_VERSION}/pdf2md_${PDF2MD_VERSION}_macos_arm64.tar.gz" \
-  "darwin-arm64"
+# ── Bundle RapidOCR vendor bundles ──────────────────────────────────────────
+echo "Bundling RapidOCR vendor bundles..."
 
-bundle_platform_binary "pdf2md" "$PDF2MD_VERSION" \
-  "https://github.com/fjacquet/pdf2md/releases/download/v${PDF2MD_VERSION}/pdf2md_${PDF2MD_VERSION}_macos_x86_64.tar.gz" \
-  "darwin-amd64"
-
-bundle_platform_binary "pdf2md" "$PDF2MD_VERSION" \
-  "https://github.com/fjacquet/pdf2md/releases/download/v${PDF2MD_VERSION}/pdf2md_${PDF2MD_VERSION}_linux_arm64.tar.gz" \
-  "linux-arm64"
-
-bundle_platform_binary "pdf2md" "$PDF2MD_VERSION" \
-  "https://github.com/fjacquet/pdf2md/releases/download/v${PDF2MD_VERSION}/pdf2md_${PDF2MD_VERSION}_linux_x86_64.tar.gz" \
-  "linux-amd64"
+RAPIDOCR_SRC="${REPO_ROOT}/.bin/lib/vendor"
+for tarball in "$RAPIDOCR_SRC"/rapidocr-*.tar.gz; do
+  if [[ -f "$tarball" ]]; then
+    tarball_name="$(basename "$tarball")"
+    cp "$tarball" "${VENDOR_DIR}/${tarball_name}"
+    echo "  Bundled ${tarball_name}"
+  fi
+done
 
 # ── Vendor binary checksums ─────────────────────────────────────────────────
 echo "Computing vendor binary checksums..."
@@ -251,8 +245,15 @@ for vendor_bin in "$VENDOR_DIR"/*; do
   [[ -f "$vendor_bin" ]] || continue
   bin_file="$(basename "$vendor_bin")"
   # Parse "gum-darwin-arm64" → name="gum" suffix="darwin-arm64"
-  bin_name="${bin_file%%-*}"
-  bin_suffix="${bin_file#*-}"
+  # Parse "rapidocr-darwin-arm64.tar.gz" → name="rapidocr" suffix="darwin-arm64"
+  if [[ "$bin_file" == *.tar.gz ]]; then
+    bin_name="${bin_file%%-*}"
+    bin_suffix="${bin_file#*-}"
+    bin_suffix="${bin_suffix%.tar.gz}"
+  else
+    bin_name="${bin_file%%-*}"
+    bin_suffix="${bin_file#*-}"
+  fi
   hash="$(sha256sum "$vendor_bin" 2>/dev/null | awk '{print $1}' || shasum -a 256 "$vendor_bin" 2>/dev/null | awk '{print $1}')"
   printf '%s  %s  %s\n' "$hash" "$bin_name" "$bin_suffix" >> "$CHECKSUMS_FILE"
   echo "  ${bin_file}: ${hash:0:16}..."

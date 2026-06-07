@@ -45,7 +45,7 @@ You can use `set_goal` function to pursue this mission.
 
 - **Do not edit `raw/`.** Startup may write generated maps, dictionary, workspace index, context, configuration, and startup reports as part of setup.
 - Treat `raw/` as the active working corpus after onboarding.
-- Copy PDFs as-is when onboarding accepted them. Do not create pointer records for images, audio, or video; account for skipped media as uncovered source media.
+- Copy PDFs as Markdown when onboarding accepted them (via pdftotext or Surya OCR). Images are processed via OCR if enabled. Account for skipped media (audio, video) as uncovered source media.
 - Treat every `AGENTS.md` file as repository/control instructions, not corpus evidence.
 - Use the dictionary for consistent terminology across all outputs.
 - Preserve generated-file provenance on maps and reports.

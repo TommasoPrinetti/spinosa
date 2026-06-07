@@ -45,7 +45,6 @@ trap cleanup_on_exit EXIT INT TERM
 MARKDOWN_EXTENSIONS="txt|rtf|textile|wiki|mediawiki|dokuwiki|pmwiki|outliner|workflowy|dynalist"
 NATIVE_EXTENSIONS="md|csv|json|yaml|yml|toml|xml|html|css|js|ts|py|rb|sh|log|ini|cfg|conf|tex|bib|org|adoc|rst|tiddlywiki|logseq|roam|obsidian"
 BINARY_COPYABLE_EXTENSIONS=""
-PDF_CONVERTIBLE_EXTENSIONS="pdf"
 OPTION_SEP=$'\t'
 
 # Resolve framework root:
@@ -423,6 +422,7 @@ confirm() {
   local hint="Y/n"
   [[ "$default" == "n" ]] && hint="y/N"
   local reply normalized
+  trap 'printf "\n  Cancelled.\n" >&2; exit 1' INT
   while true; do
     printf '%s' "${BOLD}${prompt}${RESET} ${DIM}${hint}${RESET}: " >&2
     if ! read_from_tty reply; then
@@ -1142,49 +1142,8 @@ ext_in_list() {
 is_markdown_convertible_file() { local ext; ext="$(file_ext "$1")"; [[ -n "$ext" ]] && ext_in_list "$ext" "$MARKDOWN_EXTENSIONS"; }
 is_native_readable_file() { local ext; ext="$(file_ext "$1")"; [[ -n "$ext" ]] && ext_in_list "$ext" "$NATIVE_EXTENSIONS"; }
 is_binary_copyable_file() { local ext; ext="$(file_ext "$1")"; [[ -n "$ext" ]] && ext_in_list "$ext" "$BINARY_COPYABLE_EXTENSIONS"; }
-is_pdf_convertible_file() { local ext; ext="$(file_ext "$1")"; [[ -n "$ext" ]] && ext_in_list "$ext" "$PDF_CONVERTIBLE_EXTENSIONS"; }
 
-pdf_text_extractor_available() {
-  command -v pdftotext >/dev/null 2>&1
-}
 
-pdftotext_bin() {
-  command -v pdftotext 2>/dev/null
-}
-
-pdf_converter_available() {
-  [[ -x "${PILOSA_HOME}/bin/pdf2md" ]] && return 0
-  command -v pdf2md >/dev/null 2>&1
-}
-
-pdf2md_bin() {
-  if [[ -x "${PILOSA_HOME}/bin/pdf2md" ]]; then
-    echo "${PILOSA_HOME}/bin/pdf2md"
-  else
-    command -v pdf2md 2>/dev/null
-  fi
-}
-
-import_pdf_as_text_markdown() {
-  local src_file="$1" md_dest="$2"
-  local text_cmd tmp_text title
-  text_cmd="$(pdftotext_bin)"
-  [[ -n "$text_cmd" ]] || return 1
-  tmp_text="$(mktemp "${TMPDIR:-/tmp}/pilosa-pdf-text.XXXXXX")" || return 1
-  if "$text_cmd" -layout -nopgbrk "$src_file" - > "$tmp_text" 2>/dev/null; then
-    title="$(basename "$src_file")"
-    title="${title%.*}"
-    {
-      printf '# %s\n\n' "$title"
-      cat "$tmp_text"
-      printf '\n'
-    } > "$md_dest"
-    rm -f "$tmp_text"
-    return 0
-  fi
-  rm -f "$tmp_text"
-  return 1
-}
 
 markdown_raw_rel_path() {
   local rel_path="$1" name dir stem ext
@@ -1368,17 +1327,13 @@ classify_source_file() {
   should_skip_source_file "$path" && { echo "ignored"; return; }
   is_markdown_convertible_file "$path" && { echo "markdown"; return; }
   is_native_readable_file "$path" && { echo "native"; return; }
-  if is_pdf_convertible_file "$path"; then
-    if pdf_text_extractor_available; then
-      echo "pdf_convertible"
-    else
-      echo "pdf_unavailable"
-    fi
+  if is_rapidocr_pdf "$path"; then
+    echo "ocr_convertible"
     return
   fi
   ext="$(file_ext "$path")"
   case "$ext" in
-    jpg|jpeg|png|gif|webp|heic|heif|tif|tiff|bmp|svg) echo "image" ;;
+    jpg|jpeg|png|gif|webp|heic|heif|tif|tiff|bmp|svg) echo "ocr_convertible" ;;
     mp4|mov|m4v|avi|mkv|webm|wmv) echo "video" ;;
     mp3|wav|m4a|aac|flac|ogg|opus|aiff) echo "audio" ;;
     *) echo "unknown" ;;
@@ -1392,9 +1347,7 @@ scan_source() {
   SCAN_MARKDOWN_COUNT=0
   SCAN_NATIVE_COUNT=0
   SCAN_BINARY_COPYABLE_COUNT=0
-  SCAN_PDF_CONVERTIBLE_COUNT=0
-  SCAN_PDF_UNAVAILABLE_COUNT=0
-  SCAN_IMAGE_COUNT=0
+  SCAN_OCR_CONVERTIBLE_COUNT=0
   SCAN_VIDEO_COUNT=0
   SCAN_AUDIO_COUNT=0
   SCAN_UNKNOWN_COUNT=0
@@ -1402,9 +1355,7 @@ scan_source() {
   SCAN_MARKDOWN_BYTES=0
   SCAN_NATIVE_BYTES=0
   SCAN_BINARY_COPYABLE_BYTES=0
-  SCAN_PDF_CONVERTIBLE_BYTES=0
-  SCAN_PDF_UNAVAILABLE_BYTES=0
-  SCAN_IMAGE_BYTES=0
+  SCAN_OCR_CONVERTIBLE_BYTES=0
   SCAN_VIDEO_BYTES=0
   SCAN_AUDIO_BYTES=0
   SCAN_UNKNOWN_BYTES=0
@@ -1435,14 +1386,12 @@ scan_source() {
         [[ -n "$ext" ]] && record_import_batch "$ext" "$size"
         ;;
       binary_copyable) SCAN_BINARY_COPYABLE_COUNT=$((SCAN_BINARY_COPYABLE_COUNT + 1)); SCAN_BINARY_COPYABLE_BYTES=$((SCAN_BINARY_COPYABLE_BYTES + size)) ;;
-      pdf_convertible)
-        SCAN_PDF_CONVERTIBLE_COUNT=$((SCAN_PDF_CONVERTIBLE_COUNT + 1))
-        SCAN_PDF_CONVERTIBLE_BYTES=$((SCAN_PDF_CONVERTIBLE_BYTES + size))
+      ocr_convertible)
+        SCAN_OCR_CONVERTIBLE_COUNT=$((SCAN_OCR_CONVERTIBLE_COUNT + 1))
+        SCAN_OCR_CONVERTIBLE_BYTES=$((SCAN_OCR_CONVERTIBLE_BYTES + size))
         ext="$(file_ext "$f")"
         [[ -n "$ext" ]] && record_import_batch "$ext" "$size"
         ;;
-      pdf_unavailable) SCAN_PDF_UNAVAILABLE_COUNT=$((SCAN_PDF_UNAVAILABLE_COUNT + 1)); SCAN_PDF_UNAVAILABLE_BYTES=$((SCAN_PDF_UNAVAILABLE_BYTES + size)) ;;
-      image) SCAN_IMAGE_COUNT=$((SCAN_IMAGE_COUNT + 1)); SCAN_IMAGE_BYTES=$((SCAN_IMAGE_BYTES + size)) ;;
       video) SCAN_VIDEO_COUNT=$((SCAN_VIDEO_COUNT + 1)); SCAN_VIDEO_BYTES=$((SCAN_VIDEO_BYTES + size)) ;;
       audio) SCAN_AUDIO_COUNT=$((SCAN_AUDIO_COUNT + 1)); SCAN_AUDIO_BYTES=$((SCAN_AUDIO_BYTES + size)) ;;
       unknown) SCAN_UNKNOWN_COUNT=$((SCAN_UNKNOWN_COUNT + 1)); SCAN_UNKNOWN_BYTES=$((SCAN_UNKNOWN_BYTES + size)) ;;
@@ -1458,17 +1407,19 @@ print_scan_summary() {
   printf '  %s✓%s Source scan complete\n' "${G}" "${RESET}"
   [[ "$SCAN_MARKDOWN_COUNT" -gt 0 ]] && printf '  %s├─%s %s to rename to .md (%s)\n' "${DIM}" "${RESET}" "$(file_type_label markdown "$(plural_count "$SCAN_MARKDOWN_COUNT" "text-based file")")" "$(format_bytes "$SCAN_MARKDOWN_BYTES")"
   [[ "$SCAN_NATIVE_COUNT" -gt 0 ]] && printf '  %s├─%s %s to copy unchanged (%s)\n' "${DIM}" "${RESET}" "$(file_type_label native "$(plural_count "$SCAN_NATIVE_COUNT" "native-readable file")")" "$(format_bytes "$SCAN_NATIVE_BYTES")"
-  if [[ "$SCAN_PDF_CONVERTIBLE_COUNT" -gt 0 ]]; then
-    printf '  %s├─%s %s to import as plain-text Markdown (%s)\n' "${DIM}" "${RESET}" "$(file_type_label pdf "$(plural_count "$SCAN_PDF_CONVERTIBLE_COUNT" "PDF")")" "$(format_bytes "$SCAN_PDF_CONVERTIBLE_BYTES")"
+  if [[ "$SCAN_OCR_CONVERTIBLE_COUNT" -gt 0 ]]; then
+    if rapidocr_ocr_available; then
+      printf '  %s├─%s %s available for OCR (%s)\n' "${DIM}" "${RESET}" "$(file_type_label ocr "$(plural_count "$SCAN_OCR_CONVERTIBLE_COUNT" "PDF and image")")" "$(format_bytes "$SCAN_OCR_CONVERTIBLE_BYTES")"
+    else
+      printf '  %s├─%s %s skipped — RapidOCR OCR not bundled (%s)\n' "${DIM}" "${RESET}" "$(file_type_label ocr "$(plural_count "$SCAN_OCR_CONVERTIBLE_COUNT" "PDF and image")")" "$(format_bytes "$SCAN_OCR_CONVERTIBLE_BYTES")"
+    fi
   fi
-  [[ "$SCAN_PDF_UNAVAILABLE_COUNT" -gt 0 ]] && printf '  %s├─%s %s skipped until pdftotext is installed (%s)\n' "${DIM}" "${RESET}" "$(file_type_label pdf "$(plural_count "$SCAN_PDF_UNAVAILABLE_COUNT" "PDF")")" "$(format_bytes "$SCAN_PDF_UNAVAILABLE_BYTES")"
   [[ "$SCAN_BINARY_COPYABLE_COUNT" -gt 0 ]] && printf '  %s├─%s %s to copy as-is (%s)\n' "${DIM}" "${RESET}" "$(file_type_label pdf "$(plural_count "$SCAN_BINARY_COPYABLE_COUNT" "PDF")")" "$(format_bytes "$SCAN_BINARY_COPYABLE_BYTES")"
-  [[ "$SCAN_IMAGE_COUNT" -gt 0 ]] && printf '  %s├─%s %s skipped (%s)\n' "${DIM}" "${RESET}" "$(file_type_label image "$(plural_count "$SCAN_IMAGE_COUNT" "image")")" "$(format_bytes "$SCAN_IMAGE_BYTES")"
   [[ "$SCAN_VIDEO_COUNT" -gt 0 ]] && printf '  %s├─%s %s skipped (%s)\n' "${DIM}" "${RESET}" "$(file_type_label video "$(plural_count "$SCAN_VIDEO_COUNT" "video")")" "$(format_bytes "$SCAN_VIDEO_BYTES")"
   [[ "$SCAN_AUDIO_COUNT" -gt 0 ]] && printf '  %s├─%s %s skipped (%s)\n' "${DIM}" "${RESET}" "$(file_type_label audio "$(plural_count "$SCAN_AUDIO_COUNT" "audio file")")" "$(format_bytes "$SCAN_AUDIO_BYTES")"
   [[ "$SCAN_UNKNOWN_COUNT" -gt 0 ]] && printf '  %s├─%s %s unsupported or unknown (%s)\n' "${DIM}" "${RESET}" "$(file_type_label unknown "$(plural_count "$SCAN_UNKNOWN_COUNT" "file")")" "$(format_bytes "$SCAN_UNKNOWN_BYTES")"
   printf '  %s└─%s %s ignored\n' "${DIM}" "${RESET}" "$(file_type_label ignored "$(plural_count "$SCAN_IGNORED_COUNT" "file")")"
-  note "Images, video, audio, unsupported files, and AGENTS.md control files are skipped."
+  note "RapidOCR OCR handles PDFs and images. Other files are skipped."
 }
 
 scan_copyable_bytes() {
@@ -1486,10 +1437,10 @@ print_onboarding_preflight() {
 
   info "Environment preflight"
   ok "Workspace writable: ${BOLD}${root}${RESET}"
-  if pdf_text_extractor_available; then
-    ok "${M}PDF → text${RESET} extractor available"
+  if rapidocr_ocr_available; then
+    ok "${M}OCR${RESET} RapidOCR available for PDFs and images"
   else
-    note "pdftotext not available — PDFs will be skipped during onboarding."
+    note "RapidOCR OCR not bundled — PDFs and images will be skipped."
   fi
 
   free_bytes="$(available_disk_bytes "$root")"
@@ -1534,14 +1485,11 @@ copy_source() {
   total_files="$(selected_import_count)"
   [[ "$total_files" -gt 0 ]] || { warn "No copyable files found in source location."; return 1; }
 
-  local copied=0 skipped=0 processed=0 converted=0 pdf_skipped=0 src_file rel_path raw_rel_path dest_file dest_parent
-  local md_name md_dest pdf_text_found
+  local copied=0 skipped=0 processed=0 converted=0 ocr_converted=0 ocr_skipped=0 src_file rel_path raw_rel_path dest_file dest_parent
+  local md_name md_dest
   COPY_TOTAL_COUNT="$total_files"
   COPY_COPIED_COUNT=0
   COPY_SKIPPED_COUNT=0
-  COPY_PDF_CONVERTED_COUNT=0
-  COPY_PDF_SKIPPED_COUNT=0
-  pdf_text_found="$(pdf_text_extractor_available && echo 1 || echo 0)"
   render_copy_progress 0 "$total_files" 0 0 ""
 
   while IFS= read -r -d '' src_file; do
@@ -1581,57 +1529,58 @@ copy_source() {
     render_copy_progress "$processed" "$total_files" "$copied" "$skipped" "$rel_path"
   done < <(find "$source_path" -type f -print0 2>/dev/null)
 
-  # PDF text-import pass — raw/ receives Markdown without image extraction.
-  if [[ "$pdf_text_found" -eq 1 && "$SCAN_PDF_CONVERTIBLE_COUNT" -gt 0 ]]; then
-    local pdf_files
-    local pdf_processed=0 pdf_converted=0 pdf_skipped=0
-    pdf_files=()
-    while IFS= read -r -d '' src_file; do
-      should_skip_source_file "$src_file" && continue
-      is_pdf_convertible_file "$src_file" || continue
-      import_extension_selected "$(file_ext "$src_file")" || continue
-      pdf_files+=("$src_file")
-    done < <(find "$source_path" -type f -print0 2>/dev/null)
-
-    if [[ ${#pdf_files[@]} -gt 0 ]]; then
-      printf '\n'
-      info "${M}PDF → text${RESET} Importing ${#pdf_files[@]} PDFs as plain-text Markdown..."
-      render_pdf_progress 0 "${#pdf_files[@]}" "$pdf_converted" "$pdf_skipped" ""
-      for src_file in "${pdf_files[@]}"; do
-        rel_path="${src_file#"$source_path"/}"
-        md_name="$(basename "$rel_path")"
-        md_name="${md_name%.*}"
-        md_dest="$dest_dir/$(dirname "$rel_path")/${md_name}.md"
-        dest_parent="$(dirname "$md_dest")"
-        mkdir -p "$dest_parent"
-        if [[ -f "$md_dest" ]]; then
-          skipped=$((skipped + 1))
-          pdf_skipped=$((pdf_skipped + 1))
-        else
-          if import_pdf_as_text_markdown "$src_file" "$md_dest"; then
-            converted=$((converted + 1))
-            pdf_converted=$((pdf_converted + 1))
-            copied=$((copied + 1))
-          else
-            printf '\n' >&2
-            warn "Failed to import PDF as text, not adding it to the workspace copy: $(basename "$src_file")"
-            skipped=$((skipped + 1))
-            pdf_skipped=$((pdf_skipped + 1))
-          fi
+  # RapidOCR OCR pass — PDFs and images → structured Markdown
+  if [[ "${SCAN_OCR_CHOICE:-no}" == "yes" ]]; then
+    if ! rapidocr_ocr_available; then
+      warn "RapidOCR OCR not available — skipping OCR pass"
+    else
+      local ocr_files=() ocr_processed=0
+      while IFS= read -r -d '' src_file; do
+        should_skip_source_file "$src_file" && continue
+        if is_rapidocr_pdf "$src_file" || is_rapidocr_image "$src_file"; then
+          import_extension_selected "$(file_ext "$src_file")" || continue
+          ocr_files+=("$src_file")
         fi
-        processed=$((processed + 1))
-        pdf_processed=$((pdf_processed + 1))
-        render_pdf_progress "$pdf_processed" "${#pdf_files[@]}" "$pdf_converted" "$pdf_skipped" "$rel_path"
-      done
-      printf '\n'
+      done < <(find "$source_path" -type f -print0 2>/dev/null)
+
+      if [[ ${#ocr_files[@]} -gt 0 ]]; then
+        printf '\n'
+        info "${M}OCR${RESET} Processing ${#ocr_files[@]} files with RapidOCR..."
+        for src_file in "${ocr_files[@]}"; do
+          rel_path="${src_file#"$source_path"/}"
+          md_name="$(basename "$rel_path")"
+          md_name="${md_name%.*}"
+          md_dest="$dest_dir/$(dirname "$rel_path")/${md_name}.md"
+          dest_parent="$(dirname "$md_dest")"
+          mkdir -p "$dest_parent"
+          if [[ -f "$md_dest" ]]; then
+            skipped=$((skipped + 1))
+            ocr_skipped=$((ocr_skipped + 1))
+          else
+            if run_rapidocr_ocr "$src_file" "$md_dest"; then
+              converted=$((converted + 1))
+              ocr_converted=$((ocr_converted + 1))
+              copied=$((copied + 1))
+            else
+              printf '\n' >&2
+              warn "OCR failed for $(basename "$src_file"), skipping"
+              skipped=$((skipped + 1))
+              ocr_skipped=$((ocr_skipped + 1))
+            fi
+          fi
+          processed=$((processed + 1))
+          ocr_processed=$((ocr_processed + 1))
+          render_copy_progress "$processed" "$total_files" "$copied" "$skipped" "$rel_path"
+        done
+        printf '\n'
+        ok "${M}OCR${RESET} Completed: ${ocr_converted} converted, ${ocr_skipped} skipped"
+      fi
     fi
   fi
 
-  # Binary copyable pass (non-PDF, or when converter unavailable)
+  # Binary copyable pass (non-OCR files)
   while IFS= read -r -d '' src_file; do
     should_skip_source_file "$src_file" && continue
-    # PDFs are only imported through the text-import pass above.
-    is_pdf_convertible_file "$src_file" && continue
     is_binary_copyable_file "$src_file" || continue
     import_extension_selected "$(file_ext "$src_file")" || continue
     rel_path="${src_file#"$source_path"/}"
@@ -1650,8 +1599,8 @@ copy_source() {
 
   COPY_COPIED_COUNT="$copied"
   COPY_SKIPPED_COUNT="$skipped"
-  COPY_PDF_CONVERTED_COUNT="$converted"
-  COPY_PDF_SKIPPED_COUNT="$pdf_skipped"
+  COPY_OCR_CONVERTED_COUNT="${ocr_converted:-0}"
+  COPY_OCR_SKIPPED_COUNT="${ocr_skipped:-0}"
 
   printf '\n'
   ok "Workspace source copy prepared in ${BOLD}$(dirname "$dest_dir")${RESET}"
@@ -1873,16 +1822,16 @@ APPEARANCE_EOF
 write_onboarding_summary() {
   local root="$1" project_title="$2" source_path="$3" preferred_cli="$4" handoff_action="$5" handoff_result="$6"
   local summary_path="$root/.pilosa/onboarding-summary.md"
-  local pdf_mode="not_applicable"
-  if multi_values_contains "pdf" "${SELECTED_IMPORT_EXTENSIONS[@]-}"; then
-    if [[ "${COPY_PDF_CONVERTED_COUNT:-0}" -gt 0 ]]; then
-      pdf_mode="plain_text_markdown"
-    elif [[ "${COPY_PDF_SKIPPED_COUNT:-0}" -gt 0 ]]; then
-      pdf_mode="text_import_skipped"
-    elif pdf_text_extractor_available; then
-      pdf_mode="plain_text_markdown"
+  local ocr_mode="not_applicable"
+  if [[ "${SCAN_OCR_CONVERTIBLE_COUNT:-0}" -gt 0 ]]; then
+    if [[ "${COPY_OCR_CONVERTED_COUNT:-0}" -gt 0 ]]; then
+      ocr_mode="rapidocr_structured"
+    elif [[ "${COPY_OCR_SKIPPED_COUNT:-0}" -gt 0 ]]; then
+      ocr_mode="ocr_skipped"
+    elif rapidocr_ocr_available; then
+      ocr_mode="rapidocr_available"
     else
-      pdf_mode="skipped_without_pdftotext"
+      ocr_mode="rapidocr_not_bundled"
     fi
   fi
 
@@ -1903,9 +1852,7 @@ updated: $TODAY
 ## Scan Summary
 - Text-based files to rename to Markdown: ${SCAN_MARKDOWN_COUNT} ($(format_bytes "$SCAN_MARKDOWN_BYTES"))
 - Native-readable files to copy unchanged: ${SCAN_NATIVE_COUNT} ($(format_bytes "$SCAN_NATIVE_BYTES"))
-- PDFs to import as plain-text Markdown: ${SCAN_PDF_CONVERTIBLE_COUNT} ($(format_bytes "$SCAN_PDF_CONVERTIBLE_BYTES"))
-- PDFs skipped until pdftotext is installed: ${SCAN_PDF_UNAVAILABLE_COUNT:-0} ($(format_bytes "${SCAN_PDF_UNAVAILABLE_BYTES:-0}"))
-- Images skipped: ${SCAN_IMAGE_COUNT} ($(format_bytes "$SCAN_IMAGE_BYTES"))
+- PDFs and images available for OCR: ${SCAN_OCR_CONVERTIBLE_COUNT:-0} ($(format_bytes "${SCAN_OCR_CONVERTIBLE_BYTES:-0}"))
 - Videos skipped: ${SCAN_VIDEO_COUNT} ($(format_bytes "$SCAN_VIDEO_BYTES"))
 - Audio skipped: ${SCAN_AUDIO_COUNT} ($(format_bytes "$SCAN_AUDIO_BYTES"))
 - Unsupported or unknown files: ${SCAN_UNKNOWN_COUNT} ($(format_bytes "$SCAN_UNKNOWN_BYTES"))
@@ -1916,9 +1863,9 @@ updated: $TODAY
 - Selected extension batches: $(selected_import_extensions_label)
 - Files imported into workspace: ${COPY_COPIED_COUNT:-0}
 - Files skipped during import: ${COPY_SKIPPED_COUNT:-0}
-- PDFs imported as text: ${COPY_PDF_CONVERTED_COUNT:-0}
-- PDFs skipped during text import: ${COPY_PDF_SKIPPED_COUNT:-0}
-- PDF handling mode: ${pdf_mode}
+- OCR (RapidOCR) converted: ${COPY_OCR_CONVERTED_COUNT:-0}
+- OCR (RapidOCR) skipped: ${COPY_OCR_SKIPPED_COUNT:-0}
+- OCR mode: ${ocr_mode}
 
 ## Handoff
 - Preferred CLI: ${preferred_cli}
@@ -1959,6 +1906,92 @@ Then execute system/startup.md. Specifically:
 
 Do not re-ask questions the CLI draft already answered. Do not stop after one index. Do not edit the source location or \`raw/\`.
 PROMPT_EOF
+}
+
+# ── OCR User Prompt ────────────────────────────────────────────────────────────
+
+# ── RapidOCR Functions ────────────────────────────────────────────────────────
+
+RAPIDOCR_VENDOR_DIR="${PILOSA_HOME:-$HOME/.pilosa}/vendor/rapidocr"
+RAPIDOCR_PLATFORM="${OS:-$(uname -s | tr '[:upper:]' '[:lower:]')}-$(uname -m | sed 's/aarch64/arm64/')"
+
+rapidocr_ocr_available() {
+  local bin="${RAPIDOCR_VENDOR_DIR}/${RAPIDOCR_PLATFORM}/rapidocr-cli"
+  [[ -x "$bin" ]] && return 0
+  # Also check framework .bin/lib/vendor/ directory
+  local framework_bin="${FRAMEWORK_ROOT:-.}/.bin/lib/vendor/rapidocr-${RAPIDOCR_PLATFORM}/rapidocr-cli"
+  [[ -x "$framework_bin" ]] && return 0
+  return 1
+}
+
+rapidocr_ocr_bin() {
+  local bin="${RAPIDOCR_VENDOR_DIR}/${RAPIDOCR_PLATFORM}/rapidocr-cli"
+  if [[ -x "$bin" ]]; then
+    echo "$bin"
+    return
+  fi
+  local framework_bin="${FRAMEWORK_ROOT:-.}/.bin/lib/vendor/rapidocr-${RAPIDOCR_PLATFORM}/rapidocr-cli"
+  if [[ -x "$framework_bin" ]]; then
+    echo "$framework_bin"
+    return
+  fi
+  return 1
+}
+
+run_rapidocr_ocr() {
+  local input_file="$1" output_file="$2"
+  local ocr_bin
+  ocr_bin="$(rapidocr_ocr_bin)" || { echo "ERROR: RapidOCR not installed" >&2; return 1; }
+  "$ocr_bin" "$input_file" "$output_file"
+}
+
+is_rapidocr_image() {
+  local ext
+  ext="$(file_ext "$1")"
+  [[ -n "$ext" ]] && ext_in_list "$ext" "$IMAGE_EXTENSIONS"
+}
+
+is_rapidocr_pdf() {
+  local ext
+  ext="$(file_ext "$1")"
+  [[ -n "$ext" ]] && ext_in_list "$ext" "pdf"
+}
+
+# ── Image File Detection ──────────────────────────────────────────────────────
+
+IMAGE_EXTENSIONS="jpg|jpeg|png|gif|webp|heic|heif|tif|tiff|bmp|svg"
+
+prompt_ocr_choice() {
+  # Skip OCR prompt in non-interactive mode (piped input, CI, tests)
+  if [[ ! -t 0 ]]; then
+    SCAN_OCR_CHOICE="no"
+    return 0
+  fi
+
+  local total_ocr="${SCAN_OCR_CONVERTIBLE_COUNT:-0}"
+  
+  # Skip if no PDFs or images
+  [[ "$total_ocr" -gt 0 ]] || { SCAN_OCR_CHOICE="no"; return 0; }
+  
+  if rapidocr_ocr_available; then
+    echo ""
+    note "OCR Available: RapidOCR (bundled)"
+    note "  • Converts PDFs → structured Markdown with OCR"
+    note "  • Converts images → text via OCR (90+ languages)"
+    note "  • Runs 100% locally, no cloud needed"
+    echo ""
+    
+    if confirm "Would you like to OCR ${total_ocr} PDFs and images?"; then
+      SCAN_OCR_CHOICE="yes"
+    else
+      SCAN_OCR_CHOICE="no"
+      echo ""
+      warn "Skipping OCR: ${total_ocr} files will not be processed"
+    fi
+  else
+    warn "RapidOCR OCR not available for this platform"
+    SCAN_OCR_CHOICE="no"
+  fi
 }
 
 run_integrated_onboarding() {
@@ -2005,11 +2038,13 @@ run_integrated_onboarding() {
     scan_source "$source_path"
     print_scan_summary
 
-    if pdf_text_extractor_available; then
-      [[ "$SCAN_PDF_CONVERTIBLE_COUNT" -gt 0 ]] && ok "${M}PDF → text${RESET} pdftotext found — $(plural_count "$SCAN_PDF_CONVERTIBLE_COUNT" "PDF") will be imported as plain-text Markdown"
-    else
-      [[ "${SCAN_PDF_UNAVAILABLE_COUNT:-0}" -gt 0 ]] && note "PDFs will be skipped during onboarding until pdftotext is installed."
+    if [[ "${SCAN_OCR_CONVERTIBLE_COUNT:-0}" -gt 0 ]]; then
+      if rapidocr_ocr_available; then
+        ok "${M}OCR${RESET} RapidOCR available — $(plural_count "$SCAN_OCR_CONVERTIBLE_COUNT" "PDF and image") will be processed"
+      fi
     fi
+
+    prompt_ocr_choice
 
     choose_import_batches || return 1
     copyable_count="$(selected_import_count)"
@@ -3487,10 +3522,10 @@ cmd_health() {
     note "Gum not available — plain prompts will be used"
   fi
 
-  if pdf_text_extractor_available; then
-    ok "pdftotext available for onboarding PDF imports"
+  if rapidocr_ocr_available; then
+    ok "RapidOCR OCR available for PDFs and images"
   else
-    note "pdftotext not available — onboarding will skip PDF text import"
+    note "RapidOCR OCR not bundled — PDFs and images will be skipped"
   fi
 
   local ws_count
@@ -3841,3 +3876,5 @@ case "${1:-}" in
     exit 1
     ;;
 esac
+
+
