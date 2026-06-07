@@ -1558,6 +1558,7 @@ copy_source() {
         printf '\n'
         info "${M}OCR${RESET} Processing ${#ocr_files[@]} files with RapidOCR..."
         local ocr_total=${#ocr_files[@]} ocr_idx=0
+        spinner_start "Loading OCR engine" >&2
         for src_file in "${ocr_files[@]}"; do
           rel_path="${src_file#"$source_path"/}"
           md_name="$(basename "$rel_path")"
@@ -1574,6 +1575,7 @@ copy_source() {
               ocr_converted=$((ocr_converted + 1))
               copied=$((copied + 1))
             else
+              spinner_stop >&2
               printf '\n' >&2
               warn "OCR failed for $(basename "$src_file"), skipping"
               skipped=$((skipped + 1))
@@ -1581,6 +1583,9 @@ copy_source() {
             fi
           fi
           ocr_idx=$((ocr_idx + 1))
+          if [[ "$ocr_idx" -eq 1 ]]; then
+            spinner_stop >&2
+          fi
           render_ocr_progress "$ocr_idx" "$ocr_total" "$ocr_converted" "$ocr_skipped" "$rel_path"
         done
         printf '\n'
@@ -1639,7 +1644,13 @@ choose_import_batches() {
   for i in "${!IMPORT_BATCH_EXTENSIONS[@]}"; do
     ext="${IMPORT_BATCH_EXTENSIONS[$i]}"
     count="${IMPORT_BATCH_COUNTS[$i]}"
-    options+=("$(option_spec "$ext" ".${ext}" "$(plural_count "$count" "file")")")
+    local ocr_tag=""
+    if rapidocr_ocr_available 2>/dev/null; then
+      if [[ "$ext" == "pdf" ]] || ext_in_list "$ext" "$IMAGE_EXTENSIONS"; then
+        ocr_tag=" (OCR)"
+      fi
+    fi
+    options+=("$(option_spec "$ext" ".${ext}" "$(plural_count "$count" "file")${ocr_tag}")")
   done
 
   while true; do
@@ -2049,15 +2060,20 @@ run_integrated_onboarding() {
     scan_source "$source_path"
     print_scan_summary
 
-    if [[ "${SCAN_OCR_CONVERTIBLE_COUNT:-0}" -gt 0 ]]; then
-      if rapidocr_ocr_available; then
-        ok "${M}OCR${RESET} RapidOCR available — $(plural_count "$SCAN_OCR_CONVERTIBLE_COUNT" "PDF and image") will be processed"
-      fi
+    choose_import_batches || return 1
+
+    # Auto-detect OCR from selected extensions
+    SCAN_OCR_CHOICE="no"
+    if rapidocr_ocr_available; then
+      local _ext
+      for _ext in "${SELECTED_IMPORT_EXTENSIONS[@]}"; do
+        if [[ "$_ext" == "pdf" ]] || ext_in_list "$_ext" "$IMAGE_EXTENSIONS"; then
+          SCAN_OCR_CHOICE="yes"
+          break
+        fi
+      done
     fi
 
-    prompt_ocr_choice
-
-    choose_import_batches || return 1
     copyable_count="$(selected_import_count)"
     estimated_bytes="$(scan_copyable_bytes)"
     free_bytes="$(available_disk_bytes "$root")"
