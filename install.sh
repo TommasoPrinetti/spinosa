@@ -569,25 +569,46 @@ main() {
     fi
 
     # ── install RapidOCR vendor ───────────────────────────────────────────
+    local rapidocr_dest="${PILOSA_HOME}/vendor/rapidocr/${suffix}"
+    local rapidocr_installed=false
+
+    # 1) Check inside framework tarball (bundled)
     local rapidocr_src="${vendor_src}/rapidocr-${suffix}"
     if [[ -d "$rapidocr_src" ]]; then
-      local rapidocr_dest="${PILOSA_HOME}/vendor/rapidocr/${suffix}"
       mkdir -p "$rapidocr_dest"
       cp -r "${rapidocr_src}/"* "$rapidocr_dest/"
       chmod +x "${rapidocr_dest}/rapidocr-cli" 2>/dev/null || true
-      ok "Installed RapidOCR"
+      rapidocr_installed=true
     else
-      # Check for tarball
       local rapidocr_tarball="${vendor_src}/rapidocr-${suffix}.tar.gz"
       if [[ -f "$rapidocr_tarball" ]]; then
-        local rapidocr_dest="${PILOSA_HOME}/vendor/rapidocr/${suffix}"
         mkdir -p "$rapidocr_dest"
         tar -xzf "$rapidocr_tarball" -C "$rapidocr_dest"
         chmod +x "${rapidocr_dest}/rapidocr-cli" 2>/dev/null || true
-        ok "Installed RapidOCR"
-      else
-        warn "No RapidOCR for ${suffix} (PDF/image OCR will not be available)"
+        rapidocr_installed=true
       fi
+    fi
+
+    # 2) Download from release assets if not bundled
+    if [[ "$rapidocr_installed" == "false" ]]; then
+      local rapidocr_url="${base_url}/rapidocr-${suffix}.tar.gz"
+      local rapidocr_tmp="${tmpdir}/rapidocr-${suffix}.tar.gz"
+      spinner_start "Downloading RapidOCR for ${suffix}"
+      if download "$rapidocr_url" "$rapidocr_tmp" 2>/dev/null; then
+        spinner_stop
+        mkdir -p "$rapidocr_dest"
+        tar -xzf "$rapidocr_tmp" -C "$rapidocr_dest"
+        chmod +x "${rapidocr_dest}/rapidocr-cli" 2>/dev/null || true
+        rapidocr_installed=true
+      else
+        spinner_stop
+      fi
+    fi
+
+    if [[ "$rapidocr_installed" == "true" ]]; then
+      ok "Installed RapidOCR"
+    else
+      warn "No RapidOCR for ${suffix} (PDF/image OCR will not be available)"
     fi
 
     # Verify vendor binary checksums against the release manifest
