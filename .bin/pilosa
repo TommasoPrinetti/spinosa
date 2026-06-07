@@ -846,9 +846,9 @@ sha256_file() {
 download_file() {
   local url="$1" dest="$2"
   if command -v curl >/dev/null 2>&1; then
-    curl -fsSL "$url" -o "$dest"
+    curl -fSL --progress-bar "$url" -o "$dest" 2>&2
   elif command -v wget >/dev/null 2>&1; then
-    wget -q "$url" -O "$dest"
+    wget -q --show-progress "$url" -O "$dest"
   else
     die "Neither curl nor wget found. Please install one."
   fi
@@ -936,10 +936,10 @@ prepare_release_framework() {
     cp "${release_dir}/checksums.txt" "$checksums_path"
   else
     local base_url="${PILOSA_RELEASE_BASE_URL:-https://github.com/${PILOSA_REPO}/releases/download/v${version}}"
-    spinner_start "Downloading framework v${version}" >&2
+    printf '\n' >&2
+    info "Downloading framework v${version}..."
     download_file "${base_url}/${archive_name}" "$archive_path"
     download_file "${base_url}/checksums.txt" "$checksums_path"
-    spinner_stop >&2
   fi
 
   expected="$(awk -v f="$archive_name" '$2 == f { print $1; exit }' "$checksums_path")"
