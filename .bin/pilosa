@@ -1480,14 +1480,16 @@ render_pdf_progress() {
 }
 
 render_ocr_progress() {
-  local processed="$1" total="$2" converted="$3" skipped="$4" current_file="${5:-}"
+  local processed="$1" total="$2" converted="$3" skipped="$4" current_file="${5:-}" page_info="${6:-}"
   local width=28 filled=0 bar="" i
   [[ "$total" -gt 0 ]] && filled=$((processed * width / total))
   for ((i = 0; i < width; i++)); do
     if (( i < filled )); then bar+="█"; else bar+="░"; fi
   done
   current_file="$(truncate_display_path "$current_file" 44)"
-  printf '\r\033[2K  %s%s%s %s[%s]%s %d/%d %s (%d converted, %d skipped)' "${M}" "$(spinner_frame "$processed")" "${RESET}" "${M}" "$bar" "${RESET}" "$processed" "$total" "$current_file" "$converted" "$skipped" >&2
+  local page_label=""
+  [[ -n "$page_info" ]] && page_label=" (page ${page_info})"
+  printf '\r\033[2K  %s%s%s %s[%s]%s %d/%d %s%s (%d converted, %d skipped)' "${M}" "$(spinner_frame "$processed")" "${RESET}" "${M}" "$bar" "${RESET}" "$processed" "$total" "$current_file" "$page_label" "$converted" "$skipped" >&2
 }
 
 copy_source() {
@@ -1558,6 +1560,8 @@ copy_source() {
         printf '\n'
         info "${M}OCR${RESET} Processing ${#ocr_files[@]} files with RapidOCR..."
         local ocr_total=${#ocr_files[@]} ocr_idx=0
+        local _ocr_bin
+        _ocr_bin="$(rapidocr_ocr_bin)" || _ocr_bin=""
         spinner_start "Loading OCR engine" >&2
         for src_file in "${ocr_files[@]}"; do
           rel_path="${src_file#"$source_path"/}"
@@ -1570,7 +1574,25 @@ copy_source() {
             skipped=$((skipped + 1))
             ocr_skipped=$((ocr_skipped + 1))
           else
-            if run_rapidocr_ocr "$src_file" "$md_dest" 2>/dev/null; then
+            local _ocr_page="" _ocr_ok=1
+            local _ocr_fifo
+            _ocr_fifo="$(mktemp -u)"
+            if [[ -n "$_ocr_bin" ]] && mkfifo "$_ocr_fifo" 2>/dev/null; then
+              "$_ocr_bin" "$src_file" "$md_dest" 2>"$_ocr_fifo" &
+              local _ocr_pid=$!
+              while IFS= read -r _line < "$_ocr_fifo"; do
+                [[ "$_line" == PROGRESS\ * ]] && _ocr_page="${_line#PROGRESS }"
+              done
+              wait "$_ocr_pid" 2>/dev/null
+              _ocr_ok=$?
+              rm -f "$_ocr_fifo"
+            elif [[ -n "$_ocr_bin" ]]; then
+              "$_ocr_bin" "$src_file" "$md_dest" 2>/dev/null
+              _ocr_ok=$?
+            else
+              _ocr_ok=1
+            fi
+            if [[ "$_ocr_ok" -eq 0 ]]; then
               converted=$((converted + 1))
               ocr_converted=$((ocr_converted + 1))
               copied=$((copied + 1))
@@ -1586,7 +1608,8 @@ copy_source() {
           if [[ "$ocr_idx" -eq 1 ]]; then
             spinner_stop >&2
           fi
-          render_ocr_progress "$ocr_idx" "$ocr_total" "$ocr_converted" "$ocr_skipped" "$rel_path"
+          render_ocr_progress "$ocr_idx" "$ocr_total" "$ocr_converted" "$ocr_skipped" "$rel_path" "$_ocr_page"
+          _ocr_page=""
         done
         printf '\n'
         ok "${M}OCR${RESET} Completed: ${ocr_converted} converted, ${ocr_skipped} skipped"

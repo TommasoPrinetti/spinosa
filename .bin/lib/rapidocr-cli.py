@@ -120,7 +120,9 @@ def ocr_pdf_file(engine, pdf_path: str) -> str:
         return ""
 
     all_text = []
+    total_pages = len(images)
     for page_num, image in images:
+        print(f"PROGRESS {page_num}/{total_pages}", file=sys.stderr, flush=True)
         text = ocr_pil_image(engine, image)
         if text.strip():
             all_text.append(f"## Page {page_num}\n\n{text}")
