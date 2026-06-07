@@ -74,6 +74,10 @@ __pycache__/
 # Release build output
 dist/
 
+# Build artifacts
+.bin/.build/
+.build/
+
 # Bundled vendor binaries (populated by package-release.sh at build time)
 .bin/lib/vendor/
 
