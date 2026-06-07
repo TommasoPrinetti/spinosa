@@ -55,6 +55,15 @@ for asset in "$ARCHIVE" "$INSTALLER" "$CHECKSUMS"; do
   fi
 done
 
+# Collect RapidOCR vendor tarballs as separate release assets
+RAPIDOCR_ASSETS=()
+for tarball in "${REPO_ROOT}/.bin/lib/vendor"/rapidocr-*.tar.gz; do
+  if [[ -f "$tarball" ]]; then
+    cp "$tarball" "${DIST}/$(basename "$tarball")"
+    RAPIDOCR_ASSETS+=("${DIST}/$(basename "$tarball")")
+  fi
+done
+
 BODY="$(mktemp)"
 cat > "$BODY" << EOF
 Pilosa Framework ${TAG}
@@ -87,11 +96,14 @@ pilosa update --version ${VERSION}
 - Locally modified framework files receive .pilosa-new sidecars unless the manifest marks them always_replace.
 EOF
 
+UPLOAD_ASSETS=("$ARCHIVE" "$INSTALLER" "$CHECKSUMS")
+[[ ${#RAPIDOCR_ASSETS[@]} -gt 0 ]] && UPLOAD_ASSETS+=("${RAPIDOCR_ASSETS[@]}")
+
 if gh release view "$TAG" >/dev/null 2>&1; then
   echo "Release ${TAG} already exists; uploading assets with --clobber"
-  gh release upload "$TAG" "$ARCHIVE" "$INSTALLER" "$CHECKSUMS" --clobber
+  gh release upload "$TAG" "${UPLOAD_ASSETS[@]}" --clobber
 else
-  gh release create "$TAG" "$ARCHIVE" "$INSTALLER" "$CHECKSUMS" \
+  gh release create "$TAG" "${UPLOAD_ASSETS[@]}" \
     --target "$CURRENT_SHA" \
     --title "Pilosa Framework ${TAG}" \
     --notes-file "$BODY"

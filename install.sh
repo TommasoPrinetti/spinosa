@@ -583,7 +583,7 @@ main() {
       local rapidocr_tarball="${vendor_src}/rapidocr-${suffix}.tar.gz"
       if [[ -f "$rapidocr_tarball" ]]; then
         mkdir -p "$rapidocr_dest"
-        tar -xzf "$rapidocr_tarball" -C "$rapidocr_dest"
+        tar -xzf "$rapidocr_tarball" -C "$rapidocr_dest" --strip-components=1
         chmod +x "${rapidocr_dest}/rapidocr-cli" 2>/dev/null || true
         rapidocr_installed=true
       fi
@@ -597,7 +597,7 @@ main() {
       if download "$rapidocr_url" "$rapidocr_tmp" 2>/dev/null; then
         spinner_stop
         mkdir -p "$rapidocr_dest"
-        tar -xzf "$rapidocr_tmp" -C "$rapidocr_dest"
+        tar -xzf "$rapidocr_tmp" -C "$rapidocr_dest" --strip-components=1
         chmod +x "${rapidocr_dest}/rapidocr-cli" 2>/dev/null || true
         rapidocr_installed=true
       else
