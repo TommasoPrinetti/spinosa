@@ -846,7 +846,7 @@ sha256_file() {
 download_file() {
   local url="$1" dest="$2"
   if command -v curl >/dev/null 2>&1; then
-    curl -fSL --progress-bar "$url" -o "$dest" 2>&2
+    curl -fSL --progress-bar "$url" -o "$dest"
   elif command -v wget >/dev/null 2>&1; then
     wget -q --show-progress "$url" -O "$dest"
   else

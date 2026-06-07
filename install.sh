@@ -20,7 +20,7 @@ set -eu
 
 # ── defaults ────────────────────────────────────────────────────────────────
 # Pinned stable version. Update this when cutting a new release.
-PINNED_VERSION="0.3.9"
+PINNED_VERSION="0.4.0"
 VERSION="${VERSION:-$PINNED_VERSION}"
 DRY_RUN=0
 VERIFY_ONLY=0
@@ -148,9 +148,9 @@ download() {
   dest="$2"
 
   if command -v curl >/dev/null 2>&1; then
-    curl -fsSL "$url" -o "$dest"
+    curl -fSL --progress-bar "$url" -o "$dest"
   elif command -v wget >/dev/null 2>&1; then
-    wget -q "$url" -O "$dest"
+    wget -q --show-progress "$url" -O "$dest"
   else
     die "Neither curl nor wget found. Please install one."
   fi
@@ -501,12 +501,12 @@ main() {
   # ── download framework ──────────────────────────────────────────────────
   local tmpdir
   tmpdir="$(mktemp -d)"
-  spinner_start "Downloading framework v${VERSION}"
+  printf '\n' >&2
+  info "Downloading framework v${VERSION}..."
   download "${base_url}/${archive_name}" "${tmpdir}/${archive_name}"
 
   # ── verify checksum ─────────────────────────────────────────────────────
   download "${base_url}/checksums.txt" "${tmpdir}/checksums.txt" 2>/dev/null
-  spinner_stop
   if [ -f "${tmpdir}/checksums.txt" ]; then
     local expected_hash
     expected_hash="$(grep "${archive_name}" "${tmpdir}/checksums.txt" 2>/dev/null | awk '{print $1}')"

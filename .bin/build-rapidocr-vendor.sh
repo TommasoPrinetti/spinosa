@@ -162,11 +162,49 @@ build_platform() {
         log "Installing rapidocr + onnxruntime + pypdfium2..."
         "${python_bin}" -m pip install rapidocr onnxruntime pypdfium2 --quiet
 
+        # Remove Chinese models (only English needed)
+        log "Removing Chinese models..."
+        "${python_bin}" -c "
+import rapidocr
+import os
+models_dir = os.path.join(os.path.dirname(rapidocr.__file__), 'models')
+for f in os.listdir(models_dir):
+    if f.startswith('ch_'):
+        path = os.path.join(models_dir, f)
+        os.remove(path)
+        print(f'Removed: {f}')
+" 2>/dev/null || warn "Could not remove Chinese models"
+
+        # Remove unnecessary text files
+        log "Removing unnecessary files..."
+        "${python_bin}" -c "
+import rapidocr
+import os
+models_dir = os.path.join(os.path.dirname(rapidocr.__file__), 'models')
+for f in ['ppocr_keys_v1.txt', 'ppocrv5_dict.txt']:
+    path = os.path.join(models_dir, f)
+    if os.path.exists(path):
+        os.remove(path)
+        print(f'Removed: {f}')
+" 2>/dev/null || true
+
         log "Pre-downloading OCR models..."
         "${python_bin}" -c "
-from rapidocr import RapidOCR
-engine = RapidOCR()
-print('Models downloaded successfully')
+from rapidocr import RapidOCR, EngineType, LangDet, LangRec, ModelType, OCRVersion
+# English engine only
+engine = RapidOCR(
+    params={
+        'Det.engine_type': EngineType.ONNXRUNTIME,
+        'Det.lang_type': LangDet.EN,
+        'Det.model_type': ModelType.MOBILE,
+        'Det.ocr_version': OCRVersion.PPOCRV4,
+        'Rec.engine_type': EngineType.ONNXRUNTIME,
+        'Rec.lang_type': LangRec.EN,
+        'Rec.model_type': ModelType.MOBILE,
+        'Rec.ocr_version': OCRVersion.PPOCRV4,
+    }
+)
+print('English models downloaded')
 " 2>/dev/null || warn "Model download will happen on first run"
     else
         warn "Cross-platform build — packages and models will install on first run"

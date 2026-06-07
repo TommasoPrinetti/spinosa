@@ -6,7 +6,7 @@ Converts PDFs and images to Markdown using PaddleOCR via ONNX Runtime.
 Runs 100% locally with no cloud dependencies.
 
 Usage:
-    rapidocr-cli <input_file> <output.md> [--lang en|ch]
+    rapidocr-cli <input_file> <output.md>
 
 Input: PDF or image file (jpg, png, gif, webp, heic, tiff, bmp)
 Output: Markdown file with OCR-extracted text
@@ -70,26 +70,21 @@ def pdf_to_images(pdf_path: str) -> list:
         return []
 
 def create_engine(lang: str = "en"):
-    """Create and configure RapidOCR engine."""
+    """Create and configure RapidOCR engine with English models."""
     from rapidocr import EngineType, LangDet, LangRec, ModelType, OCRVersion, RapidOCR
 
-    if lang == "en":
-        engine = RapidOCR(
-            params={
-                "Det.engine_type": EngineType.ONNXRUNTIME,
-                "Det.lang_type": LangDet.EN,
-                "Det.model_type": ModelType.MOBILE,
-                "Det.ocr_version": OCRVersion.PPOCRV4,
-                "Rec.engine_type": EngineType.ONNXRUNTIME,
-                "Rec.lang_type": LangRec.EN,
-                "Rec.model_type": ModelType.MOBILE,
-                "Rec.ocr_version": OCRVersion.PPOCRV4,
-            }
-        )
-    else:
-        # Chinese/multilingual (default)
-        engine = RapidOCR()
-
+    engine = RapidOCR(
+        params={
+            "Det.engine_type": EngineType.ONNXRUNTIME,
+            "Det.lang_type": LangDet.EN,
+            "Det.model_type": ModelType.MOBILE,
+            "Det.ocr_version": OCRVersion.PPOCRV4,
+            "Rec.engine_type": EngineType.ONNXRUNTIME,
+            "Rec.lang_type": LangRec.EN,
+            "Rec.model_type": ModelType.MOBILE,
+            "Rec.ocr_version": OCRVersion.PPOCRV4,
+        }
+    )
     return engine
 
 def ocr_pil_image(engine, image) -> str:
@@ -143,10 +138,6 @@ def main():
     )
     parser.add_argument("input", help="Input PDF or image file")
     parser.add_argument("output", help="Output Markdown file")
-    parser.add_argument(
-        "--lang", choices=["en", "ch"], default="en",
-        help="Language model: 'en' for English/Latin, 'ch' for Chinese/multilingual (default: en)"
-    )
 
     args = parser.parse_args()
 
@@ -167,7 +158,7 @@ def main():
         sys.exit(1)
 
     try:
-        engine = create_engine(args.lang)
+        engine = create_engine()
 
         # Process file
         if is_pdf(input_path):
