@@ -3635,32 +3635,28 @@ display_release_notes() {
   published_at="$(echo "$release_data" | cut -d'|' -f2)"
   body="$(echo "$release_data" | cut -d'|' -f3-)"
   
-  local w=77
-  local border
-  border="$(printf '%.0s─' $(seq 1 $w))"
-  
-  printf '\n'
-  printf '  %s┌%s┐%s\n' "${DIM}" "$border" "${RESET}"
-  printf '  %s│%s %sRelease Notes: %s%s%s\n' "${DIM}" "${RESET}" "${BOLD}" "$tag_name" "${RESET}" "${DIM}"
-  
-  if [[ -n "$published_at" ]]; then
-    printf '  %s│%s %sPublished:%s %s\n' "${DIM}" "${RESET}" "${DIM}" "${RESET}" "$published_at"
-  fi
-  
-  printf '  %s├%s┤%s\n' "${DIM}" "$border" "${RESET}"
-  
+  # Truncate body to first 3 non-empty lines
+  local short_body=""
+  local line_count=0
   if [[ -n "$body" ]]; then
-    echo "$body" | while IFS= read -r line; do
-      printf '  %s│%s %s\n' "${DIM}" "${RESET}" "$line"
-    done
-  else
-    printf '  %s│%s %sNo release notes available.%s\n' "${DIM}" "${RESET}" "${DIM}" "${RESET}"
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      line_count=$((line_count + 1))
+      [[ "$line_count" -le 3 ]] && short_body+="${line}"$'\n'
+      [[ "$line_count" -ge 3 ]] && break
+    done <<< "$body"
   fi
-  
-  printf '  %s└%s┘%s\n' "${DIM}" "$border" "${RESET}"
+
   printf '\n'
-  divider
-  printf '\n'
+  if [[ -n "$short_body" ]]; then
+    note "${BOLD}${tag_name}${RESET} — $(echo "$short_body" | head -1)"
+    local extra
+    extra="$(echo "$short_body" | tail -n +2 | sed '/^$/d')"
+    [[ -n "$extra" ]] && echo "$extra" | while IFS= read -r l; do note "  $l"; done
+  else
+    note "${BOLD}${tag_name}${RESET}"
+  fi
+  echo ""
 }
 
 # ═══════════════════════════════════════════════════════════════════════════
