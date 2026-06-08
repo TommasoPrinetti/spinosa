@@ -1,6 +1,6 @@
 
 <p align="center">
-  <img src="assets/logo.jpg" alt="Pilosa" width="400">
+  <img src="assets/logo.jpg" alt="Pilosa">
 </p>
 
 # Pilosa
