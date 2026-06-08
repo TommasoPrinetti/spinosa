@@ -1,77 +1,71 @@
-
-<p align="center">
-  <img width="1920" height="1198" alt="Banner-dithered" src="https://github.com/user-attachments/assets/ae3bd645-c0bf-4b02-961e-a1a1dc675a48" />
-</p>
-
 # Pilosa
 
-Pilosa turns a folder of source material into a searchable, header-indexed, multi-agent-readable knowledge map. After onboarding, the source location remains the immutable original and `raw/` becomes the active working corpus. A thin orchestrator (`AGENTS.md`) routes every prompt through specialist sub-agents or executes the startup workflow directly.
+A CLI tool that takes a folder of source files and turns it into a searchable knowledge map for multi-agent research workflows.
+
+## What it does
+
+1. Copies your source files into a workspace (`raw/`)
+2. Generates YAML headers for each file
+3. Creates navigation maps with wikilinks between files
+4. Provides an orchestrator (`AGENTS.md`) that routes questions to specialist sub-agents
+
+The original source folder is never modified. The workspace is self-contained.
 
 ## Install
 
-One command. Zero dependencies.
-
 ```bash
-curl -fsSL https://github.com/TommasoPrinetti/pilosa/releases/download/v0.3.0/install.sh | bash
+curl -fsSL https://github.com/TommasoPrinetti/pilosa/releases/download/v0.4.1/install.sh | bash
 ```
 
-This installs the **pinned stable version** (`0.3.0`). No npm, no Python, no Go — fully autonomous.
+This installs the pinned stable version (`0.4.1`) to `~/.pilosa/`. No npm, Python, or Go required.
 
-For options (specific version, security flags, etc.), download first:
+For more options:
 
 ```bash
-curl -fsSL https://github.com/TommasoPrinetti/pilosa/releases/download/v0.3.0/install.sh -o install-pilosa.sh
-bash install-pilosa.sh --version 0.3.0
+curl -fsSL https://github.com/TommasoPrinetti/pilosa/releases/download/v0.4.1/install.sh -o install-pilosa.sh
+bash install-pilosa.sh --version 0.4.1
 bash install-pilosa.sh --min-days 7
 bash install-pilosa.sh --verify-only
 ```
 
-## Quick Start
+## Quick start
 
 ### 1. Create a workspace
 
 ```bash
-pilosa new /path/to/my-research
+pilosa new /path/to/source/folder
 ```
 
-This runs the full onboarding flow:
-- **Corpus selection** — point to your source folder (PDFs, notes, markdown, etc.)
-- **Workspace creation** — a sibling folder `<name>-pilosa/` is created next to your corpus
-- **Corpus scan** — counts files by type, shows byte totals
-- **Batch import** — multi-select picker lets you choose which file types to import
-- **PDF handling** — imported as plain-text Markdown when `pdftotext` is available
-- **CLI handoff** — copies a startup prompt to your clipboard for your LLM CLI
+This runs the onboarding flow:
+- Scans the source folder for file types
+- Creates a sibling folder `<name>-pilosa/` as the workspace
+- Lets you pick which file types to import
+- Converts PDFs to Markdown (if `pdftotext` is installed)
+- Copies a startup prompt to your clipboard
 
-### 2. Paste the prompt into your LLM CLI
+### 2. Run the startup workflow
 
-Open Claude Code, Codex, OpenCode, or whichever CLI you picked, point it at the workspace folder, and paste the prompt. The LLM will:
+Point your LLM CLI (Claude Code, Codex, OpenCode, etc.) at the workspace folder and paste the prompt. The LLM will:
 
-1. Read project context and build the master dictionary from `raw/`
+1. Read project context and build a dictionary from `raw/`
 2. Generate YAML headers for every raw file
-3. Create detailed Obsidian-wikilink maps in `maps/`
-4. Validate headers, map links, and run retrieval tests
+3. Create navigation maps in `maps/` with wikilinks
+4. Validate headers and map links
 5. Write a startup report to `agent_reports/`
 
-After that, ask research questions normally. The orchestrator routes them through the right sub-agents.
+### 3. Ask questions
 
-### 3. Explore your workspace
-
-Open the workspace folder in Obsidian to browse the knowledge graph. Maps contain wikilinks (`[[raw/filename]]`) that connect everything into a navigable graph.
+After startup, ask research questions normally. The orchestrator routes them through sub-agents.
 
 ## Dashboard
 
 Run `pilosa` without arguments to open the interactive dashboard:
 
-```
- pilosa
+```bash
+pilosa
 ```
 
-The dashboard detects your environment and shows:
-- **Workspace status** — project name, setup status, framework version
-- **Discovered workspaces** — all registered workspaces on your system
-- **Detected LLM CLIs** — Claude Code, Codex, OpenCode, etc.
-
-Select an option with arrow keys and Enter:
+Available options:
 
 | Option | Description |
 |--------|-------------|
@@ -85,70 +79,54 @@ Select an option with arrow keys and Enter:
 | Uninstall | Remove Pilosa from this system |
 | Help | Show help information |
 
-## Commands Reference
+## Commands
 
 ### `pilosa new [directory]`
 
-Create a new workspace and run the full onboarding flow.
+Create a new workspace and run onboarding. If no directory is given, you are prompted for the path.
 
 ```bash
-pilosa new /path/to/my-research
+pilosa new /path/to/source
 ```
 
-If no directory is given, you are prompted for the corpus path. The workspace is created as a sibling folder.
-
-**Flags:**
-- `--gum` — use interactive Gum prompts (if installed)
-- `--no-gum` — use plain shell prompts (default)
-- `--no-color` — disable colored output
-- `--help` — show usage
+Flags: `--gum`, `--no-gum`, `--no-color`, `--help`
 
 ### `pilosa onboard [workspace]`
 
-Re-run onboarding on an existing workspace. Skips workspace creation and goes straight to source selection, corpus scan, and startup handoff.
+Re-run onboarding on an existing workspace.
 
 ```bash
 pilosa onboard /path/to/workspace
 ```
 
-**Flags:** same as `pilosa new`
-
 ### `pilosa update [workspace]`
 
-Update workspace framework files. Shows an update plan and asks for confirmation before writing.
+Update workspace framework files. Shows a plan and asks for confirmation.
 
 ```bash
 pilosa update /path/to/workspace
 pilosa update  # if inside a workspace
 ```
 
-The update separates clean replacements, forced replacements, locally modified files, new files, and retired-file cleanup.
-
-**Flags:**
-- `--version X.Y.Z` — target framework version (default: latest)
-- `--dry-run` — show what would change without writing
-- `--yes` — apply without confirmation
-- `--help` — show usage
+Flags: `--version X.Y.Z`, `--dry-run`, `--yes`, `--help`
 
 ### `pilosa upgrade`
 
-Upgrade the Pilosa CLI to the latest release. Shows release notes and asks for confirmation.
+Upgrade the Pilosa CLI to the latest release.
 
 ```bash
 pilosa upgrade
-pilosa upgrade --yes  # skip confirmation
+pilosa upgrade --yes
 ```
 
 ### `pilosa check [workspace]`
 
-Validate workspace integrity. Checks required files, detects leftover placeholders, validates source location, and checks map coverage.
+Validate workspace integrity. Checks required files, source location, and map coverage.
 
 ```bash
 pilosa check /path/to/workspace
 pilosa check  # if inside a workspace
 ```
-
-Fails with a detailed report if any required file is missing, a placeholder remains, setup status is incomplete, or the source location is invalid.
 
 ### `pilosa sync`
 
@@ -158,8 +136,6 @@ Regenerate vendor-specific agent mirrors and sync skills from canonical sources.
 pilosa sync
 ```
 
-Rebuilds `.opencode/agents/`, `.claude/agents/`, all skill mirrors, and updates `CLAUDE.md` with provenance fields.
-
 ### `pilosa health`
 
 Check system health and environment.
@@ -168,119 +144,63 @@ Check system health and environment.
 pilosa health
 ```
 
-Reports framework installation status, available LLM CLIs, pdftotext availability, and discovered workspaces.
-
 ### `pilosa uninstall`
 
-Remove Pilosa from your system. Does not affect any research workspaces.
+Remove Pilosa from your system. Does not affect research workspaces.
 
 ```bash
 pilosa uninstall
-pilosa uninstall --yes  # skip confirmation
+pilosa uninstall --yes
 ```
 
-Removes `~/.pilosa/` (framework + binary) and the `~/.local/bin/pilosa` shim.
+## Security
 
-## Security Model
+- The installer uses a **pinned stable version**, not `latest`
+- SHA-256 checksums are verified for the framework tarball and vendor binaries
+- Minimum release age can be enforced with `--min-days`
+- Verify-only mode audits an existing install without reinstalling
 
-Pilosa is designed with supply-chain paranoia in mind. Zero npm, Python, Java, Go, or Homebrew dependencies in the core install.
-
-### Version pinning
-
-The installer uses a **pinned stable version** (not `latest`). This prevents a compromised fresh release from auto-installing on every `curl | sh` run.
-
-### Checksum verification
-
-Every release includes two layers of checksums:
-
-1. **Framework tarball**: SHA-256 of `pilosa-framework-<version>.tar.gz` is verified against `checksums.txt` before unpacking.
-2. **Vendor binaries**: Each platform-specific Gum and pdf2md binary has an embedded SHA-256 manifest in `metadata/vendor-checksums.txt`. The installer verifies the copied binary against this manifest after installation.
-
-A mismatch aborts the install with an error.
-
-### Minimum release age
-
-Reject releases that are too fresh. This gives the community time to detect a compromised upload.
-
-```bash
-bash install-pilosa.sh --min-days 7
-```
-
-### Verify-only mode
-
-Audit an existing installation without reinstalling:
-
-```bash
-bash install-pilosa.sh --verify-only
-```
-
-### What we download
-
-| Asset | Source | Verified |
-|-------|--------|----------|
-| Framework tarball | GitHub releases | SHA-256 against `checksums.txt` |
-| Gum binary | charmbracelet/gum releases | SHA-256 against embedded manifest |
-| pdf2md binary | fjacquet/pdf2md releases | SHA-256 against embedded manifest |
-
-## Workspace Structure
+## Workspace structure
 
 ```
 workspace/
-├── AGENTS.md                    Project context for standard coding agents
+├── AGENTS.md                    Orchestrator routing contract
 ├── .bin/
 │   ├── pilosa                    CLI entry point
 │   └── lib/
-│       └── metrics.sh            Unicode metric helpers
+│       └── metrics.sh            Metric helpers
 ├── .agents/                     Canonical agent and skill source
-│   ├── agents/                  Canonical native agent definitions (.md)
-│   └── skills/                  Canonical portable workflow skills
-├── .opencode/
-│   ├── agents/                  Generated mirror of canonical agents
-│   └── skills/                  Generated mirror of canonical skills
-├── .claude/
-│   ├── agents/                  Generated mirror of canonical agents
-│   └── skills/                  Generated mirror of canonical skills
-├── .codex/
-│   ├── agents/                  Tracked TOML expansion of canonical agents
-│   └── skills/                  Generated mirror of canonical skills
-├── CLAUDE.md                    Generated mirror of AGENTS.md (with provenance)
-├── system/                      Architecture, context, configuration, templates
-│   ├── context.md               Project context (scope, names, particularities)
-│   ├── configuration.md         Operating profile
-│   ├── startup.md               Setup translation + indexing protocol
-│   ├── dictionary.md            Shared vocabulary (built at startup)
-│   ├── yaml_header_template.md  YAML frontmatter schema
-│   └── workspace_index.md       Master workspace index (built at startup)
-├── raw/                         Active working corpus: unchanged source copies
-├── maps/                        Navigation maps with Obsidian wikilinks
-├── logs/                        Request, intake, and external-access summaries
-├── agent_reports/               Writer / Verifier reports
+│   ├── agents/
+│   └── skills/
+├── .opencode/                   Generated mirror for OpenCode
+├── .claude/                     Generated mirror for Claude
+├── .codex/                      Generated mirror for Codex
+├── CLAUDE.md                    Generated mirror of AGENTS.md
+├── system/                      Architecture and configuration
+│   ├── context.md
+│   ├── configuration.md
+│   ├── startup.md
+│   ├── dictionary.md
+│   ├── yaml_header_template.md
+│   └── workspace_index.md
+├── raw/                         Working corpus (copies of source files)
+├── maps/                        Navigation maps with wikilinks
+├── logs/                        Request and intake logs
+├── agent_reports/               Sub-agent output
 └── .trash/                      Retired files
 ```
 
-## The Orchestrator
+## Rules
 
-Read `AGENTS.md` for the full routing contract. Briefly:
-
-- **Classifies** every prompt into one of several classes (`fast_path`, `clarify_search`, `find_material`, `evidence_answer`, `synthesis_report`, `verification`, `index_maintenance`, `cleanup`).
-- **Chooses a sub-agent sequence** for non-fast-path prompts — never answers them directly.
-- **Owns the question tool** — sub-agents execute; they never ask.
-- **Pre-processes** the user prompt (trim, summarize, normalize) before dispatch.
-- **Logs every request** in `logs/user_requests.md`.
-
-## Hard Rules
-
-- Do not edit `raw/`, maps, dictionary, logs, or system files.
-- `connects_to` lists in YAML frontmatter stay at 3–5 load-bearing entries.
-- File retirement goes to `.trash/`, not `rm`.
+- Do not edit `raw/`, maps, dictionary, logs, or system files directly
+- `connects_to` lists in YAML frontmatter stay at 3-5 entries
+- File retirement goes to `.trash/`, not `rm`
 
 ---
 
-## Dev Setup
+## Development
 
-For contributors who want to work on the Pilosa framework itself.
-
-### Clone the repo
+### Clone and build
 
 ```bash
 git clone https://github.com/TommasoPrinetti/pilosa.git
@@ -289,32 +209,22 @@ cd pilosa
 
 ### Branch strategy
 
-- **`main`** — stable framework, tagged releases only
-- **`dev`** — active development branch
-- **`<project-name>`** — your research workspace branch (branched from `dev`)
+- **`main`** - stable framework, tagged releases only
+- **`dev`** - active development
+- **`<name>`** - project workspace branch (from `dev`)
 
 ```bash
-git checkout -b my-project-name dev
-git push -u origin my-project-name
+git checkout -b my-project dev
+git push -u origin my-project
 ```
-
-Onboarding rewrites `system/configuration.md` and `system/context.md` and prepares a working copy of your source files inside the workspace. Keeping that on a project branch lets you re-onboard, re-index, or wipe the project without touching the framework.
 
 ### Sync agents
-
-After pulling changes, sync the agent mirrors:
-
-```bash
-bash .bin/pilosa sync
-```
-
-Or use the installed CLI:
 
 ```bash
 pilosa sync
 ```
 
-### Run tests
+### Tests
 
 ```bash
 bash tests/test_cli.sh
@@ -323,48 +233,18 @@ bash tests/test_cli.sh
 ### Packaging a release
 
 ```bash
-bash .bin/package-release.sh 0.3.0
+bash .bin/package-release.sh 0.4.1
 ```
-
-Creates `dist/v0.3.0/` with the framework tarball, installer, and checksums.
 
 ### Publishing a release
 
 ```bash
-bash .bin/publish-release.sh 0.3.0
+bash .bin/publish-release.sh 0.4.1
 ```
 
-Requires `gh` CLI and a clean working tree. Creates a GitHub release with the archive, installer, and checksums.
+Requires `gh` CLI and a clean working tree.
 
 ### Contributing
 
-- Framework changes go to `dev` (or a feature branch off `dev`), not to your project branch.
-- Keep `.bin/` scripts pure bash, zero deps.
-- All output must be reports — no inline chat responses apart from saying what you've done.
-
-## Development Checklist
-
-### Knowledge / Context System
-- [ ] Improve token and context management strategy (no quota or budget system yet)
-
-### Sub-Agent System
-- [ ] Verify whether sub-agents were already called (no call log yet)
-- [ ] Allow agents to call many sub-agents dynamically (current dispatcher is fixed-shape)
-
-### Reporting & Output
-- [ ] Enable direct extraction from raw copies into reports (no pipe from raw copies to Writer)
-
-### UX / Interaction Design
-- [ ] Create different "attitudes" / interaction modes for orchestration (single mode today)
-
-### Infrastructure
-- [ ] Explore scalable indexing architecture (current indexing is O(files) per startup)
-- [ ] Continuous source sync (today: one-shot copy at onboarding, re-run to refresh)
-
-### Open Questions
-- [ ] How should token/context budgeting work long term?
-- [ ] What is the optimal orchestration strategy for sub-agents?
-- [ ] How much process visibility should remain in final reports?
-- [ ] How should the system balance exploration vs execution?
-- [ ] How should agent "attitudes" be modeled technically?
-- [ ] How should the log/report rotation policy be tuned once real data accumulates?
+- Framework changes go to `dev` or a feature branch off `dev`
+- Keep `.bin/` scripts pure bash, zero deps
