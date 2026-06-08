@@ -1263,7 +1263,7 @@ available_disk_bytes() {
 
 spinner_frame() {
   local index="$1"
-  local frames=("◐" "◓" "◑" "◒")
+  local frames=("▁" "▃" "▅" "▇" "█" "▇" "▅" "▃")
   printf '%s' "${frames[$((index % ${#frames[@]}))]}"
 }
 

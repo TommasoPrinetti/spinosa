@@ -5,11 +5,12 @@ A CLI tool that takes a folder of source files and turns it into a searchable kn
 ## What it does
 
 1. Copies your source files into a workspace (`raw/`)
-2. Generates YAML headers for each file
-3. Creates navigation maps with wikilinks between files
-4. Provides an orchestrator (`AGENTS.md`) that routes questions to specialist sub-agents
+2. Converts PDFs and images to searchable Markdown via built-in RapidOCR
+3. Generates YAML headers for each file
+4. Creates navigation maps with wikilinks between files
+5. Provides an orchestrator (`AGENTS.md`) that routes questions to specialist sub-agents
 
-The original source folder is never modified. The workspace is self-contained.
+The original source folder is never modified. The workspace is self-contained. OCR runs 100% locally via ONNX Runtime — no cloud, no API keys.
 
 ## Install
 
@@ -30,20 +31,30 @@ bash install-pilosa.sh --verify-only
 
 ## Quick start
 
-### 1. Create a workspace
+### 1. Install
+
+```bash
+curl -fsSL https://github.com/TommasoPrinetti/pilosa/releases/download/v0.4.1/install.sh | sh
+```
+
+Requires bash. The installer auto-launches the dashboard when done.
+
+### 2. Create a workspace
+
+From the dashboard, select **New workspace** and provide your source folder. Or run:
 
 ```bash
 pilosa new /path/to/source/folder
 ```
 
 This runs the onboarding flow:
-- Scans the source folder for file types
-- Creates a sibling folder `<name>-pilosa/` as the workspace
+- Scans the source folder for file types (PDFs, images, Markdown, etc.)
 - Lets you pick which file types to import
-- Converts PDFs to Markdown (if `pdftotext` is installed)
+- OCRs PDFs and images to Markdown via bundled RapidOCR (ONNX, fully local)
 - Copies a startup prompt to your clipboard
+- Offers to open your LLM CLI in a new terminal tab
 
-### 2. Run the startup workflow
+### 3. Run the startup workflow
 
 Point your LLM CLI (Claude Code, Codex, OpenCode, etc.) at the workspace folder and paste the prompt. The LLM will:
 
@@ -53,7 +64,7 @@ Point your LLM CLI (Claude Code, Codex, OpenCode, etc.) at the workspace folder 
 4. Validate headers and map links
 5. Write a startup report to `agent_reports/`
 
-### 3. Ask questions
+### 4. Ask questions
 
 After startup, ask research questions normally. The orchestrator routes them through sub-agents.
 
