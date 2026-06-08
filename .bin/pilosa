@@ -1066,7 +1066,19 @@ run_cli_with_prompt() {
   case "$cli" in
     codex)
       command -v codex >/dev/null 2>&1 || { warn "codex was not found on PATH."; return 1; }
-      exec codex -C "$root" "$prompt"
+      if [[ "$(uname)" == "Darwin" ]]; then
+        local _ptmp_codex _ltmp_codex
+        _ptmp_codex="$(mktemp /tmp/pilosa-prompt.XXXXXX)"
+        printf '%s' "$prompt" > "$_ptmp_codex"
+        _ltmp_codex="$(mktemp /tmp/pilosa-launch.XXXXXX.command)"
+        printf '#!/bin/bash\ncd %s && exec codex -C %s "$(cat %s)"\n' \
+          "$(printf '%q' "$root")" "$(printf '%q' "$root")" "$(printf '%q' "$_ptmp_codex")" > "$_ltmp_codex"
+        chmod +x "$_ltmp_codex"
+        open "$_ltmp_codex"
+        ok "Opened Codex in a new terminal tab."
+      else
+        exec codex -C "$root" "$prompt"
+      fi
       ;;
     codex_app)
       command -v codex >/dev/null 2>&1 || { warn "codex was not found on PATH."; return 1; }
@@ -1076,7 +1088,19 @@ run_cli_with_prompt() {
       ;;
     opencode)
       command -v opencode >/dev/null 2>&1 || { warn "opencode was not found on PATH."; return 1; }
-      exec opencode --prompt "$prompt" "$root"
+      if [[ "$(uname)" == "Darwin" ]]; then
+        local _ptmp_oc _ltmp_oc
+        _ptmp_oc="$(mktemp /tmp/pilosa-prompt.XXXXXX)"
+        printf '%s' "$prompt" > "$_ptmp_oc"
+        _ltmp_oc="$(mktemp /tmp/pilosa-launch.XXXXXX.command)"
+        printf '#!/bin/bash\ncd %s && exec opencode --prompt "$(cat %s)" %s\n' \
+          "$(printf '%q' "$root")" "$(printf '%q' "$_ptmp_oc")" "$(printf '%q' "$root")" > "$_ltmp_oc"
+        chmod +x "$_ltmp_oc"
+        open "$_ltmp_oc"
+        ok "Opened OpenCode in a new terminal tab."
+      else
+        exec opencode --prompt "$prompt" "$root"
+      fi
       ;;
     opencode_desktop)
       command -v opencode >/dev/null 2>&1 || { warn "opencode was not found on PATH."; return 1; }
@@ -1086,8 +1110,20 @@ run_cli_with_prompt() {
       ;;
     claude_code)
       command -v claude >/dev/null 2>&1 || { warn "claude was not found on PATH."; return 1; }
-      cd "$root"
-      exec claude "$prompt"
+      if [[ "$(uname)" == "Darwin" ]]; then
+        local _ptmp_cc _ltmp_cc
+        _ptmp_cc="$(mktemp /tmp/pilosa-prompt.XXXXXX)"
+        printf '%s' "$prompt" > "$_ptmp_cc"
+        _ltmp_cc="$(mktemp /tmp/pilosa-launch.XXXXXX.command)"
+        printf '#!/bin/bash\ncd %s && exec claude "$(cat %s)"\n' \
+          "$(printf '%q' "$root")" "$(printf '%q' "$_ptmp_cc")" > "$_ltmp_cc"
+        chmod +x "$_ltmp_cc"
+        open "$_ltmp_cc"
+        ok "Opened Claude Code in a new terminal tab."
+      else
+        cd "$root"
+        exec claude "$prompt"
+      fi
       ;;
     claude_code_desktop)
       local encoded_prompt
@@ -1102,8 +1138,20 @@ run_cli_with_prompt() {
       ;;
     kilo)
       command -v kilo >/dev/null 2>&1 || { warn "kilo was not found on PATH."; return 1; }
-      cd "$root"
-      exec kilo "$prompt"
+      if [[ "$(uname)" == "Darwin" ]]; then
+        local _ptmp_kl _ltmp_kl
+        _ptmp_kl="$(mktemp /tmp/pilosa-prompt.XXXXXX)"
+        printf '%s' "$prompt" > "$_ptmp_kl"
+        _ltmp_kl="$(mktemp /tmp/pilosa-launch.XXXXXX.command)"
+        printf '#!/bin/bash\ncd %s && exec kilo "$(cat %s)"\n' \
+          "$(printf '%q' "$root")" "$(printf '%q' "$_ptmp_kl")" > "$_ltmp_kl"
+        chmod +x "$_ltmp_kl"
+        open "$_ltmp_kl"
+        ok "Opened Kilo in a new terminal tab."
+      else
+        cd "$root"
+        exec kilo "$prompt"
+      fi
       ;;
     *)
       warn "Run-now is only available for known CLI choices."
