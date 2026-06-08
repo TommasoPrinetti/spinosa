@@ -1,22 +1,33 @@
-#!/usr/bin/env bash
-set -eu
+#!/bin/sh
+# ── install.sh — Pilosa Framework Installer (auto-re-execs with bash) ──────
 
-# ── install.sh — Pilosa Framework Installer ─────────────────────────────────
-# Curl-installable installer for the Pilosa research framework.
-#
-# Usage:
-#   curl -fsSL https://github.com/.../install.sh -o install-pilosa.sh
-#   sh install-pilosa.sh
-#
-# Or with options:
-#   sh install-pilosa.sh --version 0.2.2
-#   sh install-pilosa.sh --dry-run
-#   sh install-pilosa.sh --no-gum
-#   sh install-pilosa.sh --prefix /custom/path
-#   sh install-pilosa.sh --bin-dir /custom/bin
-#
-# Requirements: sh, curl or wget, tar, basic Unix utils.
-# Zero npm, zero Python, zero Go, zero Homebrew, zero Git.
+if [ -z "${BASH_VERSION-}" ]; then
+  if command -v bash >/dev/null 2>&1; then
+    if [ -n "${0-}" ] && [ -f "${0-}" ]; then
+      exec bash "$0" "$@"
+    fi
+    # Piped mode — bash is available but we're in sh
+    TMP_SCRIPT="$(mktemp /tmp/pilosa-install.XXXXXX)"
+    trap 'rm -f "$TMP_SCRIPT"' EXIT
+    cat > "$TMP_SCRIPT"
+    exec bash "$TMP_SCRIPT" "$@"
+  fi
+  echo "" >&2
+  echo "  Pilosa requires bash. Install it first:" >&2
+  if command -v apk >/dev/null 2>&1; then
+    echo "    apk add bash" >&2
+  elif command -v apt-get >/dev/null 2>&1; then
+    echo "    sudo apt-get install bash" >&2
+  elif command -v brew >/dev/null 2>&1; then
+    echo "    brew install bash" >&2
+  else
+    echo "    Install bash through your system package manager." >&2
+  fi
+  echo "" >&2
+  exit 1
+fi
+
+set -euo pipefail
 
 # ── defaults ────────────────────────────────────────────────────────────────
 # Pinned stable version. Update this when cutting a new release.
@@ -92,6 +103,7 @@ while [ $# -gt 0 ]; do
     --upgrade)    UPGRADE=1; shift ;;
     --reinstall)  REINSTALL=1; shift ;;
     --no-gum)     NO_GUM=1; shift ;;
+    --no-modify-path) NO_MODIFY_PATH=true; shift ;;
     --min-days)   MIN_DAYS="$2"; shift 2 ;;
     --prefix)     PILOSA_HOME="$2"; shift 2 ;;
     --bin-dir)    PILOSA_BIN_DIR="$2"; shift 2 ;;
@@ -113,6 +125,7 @@ while [ $# -gt 0 ]; do
       echo ""
       echo "Paths:"
       echo "  --no-gum          Skip bundled binary installation (Gum)"
+      echo "  --no-modify-path  Don't modify shell config files (~/.zshrc, etc.)"
       echo "  --prefix PATH     Install root (default: ~/.pilosa)"
       echo "  --bin-dir PATH    Shim directory (default: ~/.local/bin)"
       exit 0
@@ -156,6 +169,27 @@ download() {
   fi
 }
 
+# ── safe untar ──────────────────────────────────────────────────────────────
+# Extracts a tarball after scanning for path traversal and symlink attacks.
+# Usage: safe_untar <archive> <destination> [extra tar args...]
+safe_untar() {
+  local archive="$1" dest="$2"
+  shift 2
+
+  local listing
+  listing="$(tar -tzf "$archive" 2>/dev/null)" || die "Cannot read archive: $archive"
+
+  if printf '%s\n' "$listing" | grep -qE '(^|[^a-zA-Z0-9./_-])(\.\./)'; then
+    die "Archive contains path traversal entries — aborting for safety"
+  fi
+
+  if printf '%s\n' "$listing" | grep -qE ' -> /'; then
+    die "Archive contains absolute symlinks — aborting for safety"
+  fi
+
+  tar -xzf "$archive" -C "$dest" --no-same-owner "$@"
+}
+
 # ── checksum helper ─────────────────────────────────────────────────────────
 sha256_file() {
   if command -v sha256sum >/dev/null 2>&1; then
@@ -163,18 +197,13 @@ sha256_file() {
   elif command -v shasum >/dev/null 2>&1; then
     shasum -a 256 "$1" | awk '{print $1}'
   else
-    echo "no_checksum_tool"
+    die "No SHA-256 tool (sha256sum or shasum) found. Cannot verify checksums."
   fi
 }
 
 verify_checksum() {
   file="$1"
   expected="$2"
-
-  if [ "$expected" = "no_checksum_tool" ]; then
-    warn "No checksum tool available — skipping verification for $(basename "$file")"
-    return 0
-  fi
 
   actual="$(sha256_file "$file")"
   if [ "$actual" = "$expected" ]; then
@@ -501,6 +530,7 @@ main() {
   # ── download framework ──────────────────────────────────────────────────
   local tmpdir
   tmpdir="$(mktemp -d)"
+  trap 'rm -rf "$tmpdir"' EXIT
   printf '\n' >&2
   info "Downloading framework v${VERSION}..."
   download "${base_url}/${archive_name}" "${tmpdir}/${archive_name}"
@@ -517,15 +547,15 @@ main() {
         die "Framework checksum mismatch — aborting for safety"
       fi
     else
-      warn "Archive not found in checksums file — skipping verification"
+      die "Archive not found in checksums file — aborting for safety"
     fi
   else
-    warn "No checksums.txt available — skipping verification"
+    die "No checksums.txt available — aborting for safety"
   fi
 
   # ── unpack framework ────────────────────────────────────────────────────
   info "Unpacking framework..."
-  tar -xzf "${tmpdir}/${archive_name}" -C "${PILOSA_HOME}/versions/${VERSION}"
+  safe_untar "${tmpdir}/${archive_name}" "${PILOSA_HOME}/versions/${VERSION}"
 
   # ── install pilosa CLI ──────────────────────────────────────────────────
   local pilosa_bin="${PILOSA_HOME}/versions/${VERSION}/pilosa-framework-${VERSION}/.bin/pilosa"
@@ -583,7 +613,7 @@ main() {
       local rapidocr_tarball="${vendor_src}/rapidocr-${suffix}.tar.gz"
       if [[ -f "$rapidocr_tarball" ]]; then
         mkdir -p "$rapidocr_dest"
-        tar -xzf "$rapidocr_tarball" -C "$rapidocr_dest" --strip-components=1
+        safe_untar "$rapidocr_tarball" "$rapidocr_dest" --strip-components=1
         chmod +x "${rapidocr_dest}/rapidocr-cli" 2>/dev/null || true
         rapidocr_installed=true
       fi
@@ -597,7 +627,7 @@ main() {
       if download "$rapidocr_url" "$rapidocr_tmp" 2>/dev/null; then
         spinner_stop
         mkdir -p "$rapidocr_dest"
-        tar -xzf "$rapidocr_tmp" -C "$rapidocr_dest" --strip-components=1
+        safe_untar "$rapidocr_tmp" "$rapidocr_dest" --strip-components=1
         chmod +x "${rapidocr_dest}/rapidocr-cli" 2>/dev/null || true
         rapidocr_installed=true
       else
@@ -625,24 +655,9 @@ SHIM_EOF
   chmod +x "$shim"
   ok "Created shim: ${shim}"
 
-  # ── cleanup ─────────────────────────────────────────────────────────────
+  # ── clean up, check PATH, launch dashboard ──────────────────────────────
+  trap - EXIT
   rm -rf "$tmpdir"
-
-  # ── PATH check ──────────────────────────────────────────────────────────
-  echo ""
-  case ":${PATH}:" in
-    *":${PILOSA_BIN_DIR}:"*)
-      ok "Pilosa is on your PATH"
-      ;;
-    *)
-      warn "${PILOSA_BIN_DIR} is not on your PATH"
-      echo ""
-      info "Add this to your shell profile (~/.zshrc, ~/.bashrc, etc.):"
-      echo ""
-      echo "    export PATH=\"${PILOSA_BIN_DIR}:\$PATH\""
-      echo ""
-      ;;
-  esac
 
   # ── smoke test ──────────────────────────────────────────────────────────
   echo ""
@@ -653,32 +668,61 @@ SHIM_EOF
     warn "Smoke test failed — pilosa may need PATH update"
   fi
 
+  #
+  # ── PATH setup — opencode pattern: shell detection + deduplication ──────
+  #
+  if [[ "${NO_MODIFY_PATH:-false}" != "true" ]]; then
+    local current_shell
+    current_shell="$(basename "${SHELL:-/bin/sh}")"
+    local candidates=()
+
+    case "$current_shell" in
+      fish) candidates=("$HOME/.config/fish/config.fish") ;;
+      zsh)  candidates=("${ZDOTDIR:-$HOME}/.zshrc" "${ZDOTDIR:-$HOME}/.zshenv") ;;
+      bash) candidates=("$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.profile") ;;
+      *)    candidates=("$HOME/.profile") ;;
+    esac
+
+    local config_file=""
+    for cf in "${candidates[@]}"; do
+      if [[ -f "$cf" ]]; then config_file="$cf"; break; fi
+    done
+
+    local path_line=""
+    case "$current_shell" in
+      fish) path_line="fish_add_path $PILOSA_BIN_DIR" ;;
+      *)    path_line="export PATH=\"$PILOSA_BIN_DIR:\$PATH\"" ;;
+    esac
+
+    if [[ -n "$config_file" ]]; then
+      if [[ -w "$config_file" ]]; then
+        if ! grep -Fxq "$path_line" "$config_file" 2>/dev/null; then
+          printf '\n# Pilosa\n%s\n' "$path_line" >> "$config_file"
+          ok "Added ${PILOSA_BIN_DIR} to ${config_file}"
+        fi
+      else
+        info "Cannot write to ${config_file} — add it manually:"
+        info "  ${path_line}"
+      fi
+    else
+      info "No shell config found for ${current_shell}."
+      info "Add this to your shell config:"
+      info "  ${path_line}"
+    fi
+  fi
+
   echo ""
   divider
   printf '\n  %s%sPilosa installed successfully!%s\n\n' "${BOLD}" "${G}" "${RESET}"
 
-  # ── prominent next-step banner ────────────────────────────────────────────
-  printf '  %s%s%s\n' "${BOLD}" "The pilosa command is now available." "${RESET}"
-  echo ""
+  # Source the right profile so PATH is live for the dashboard launch
+  if [[ "${NO_MODIFY_PATH:-false}" != "true" ]] && [[ -n "${config_file:-}" ]] && [[ -f "${config_file:-}" ]]; then
+    source "${config_file}" 2>/dev/null || true
+  fi
 
-  case ":${PATH}:" in
-    *":${PILOSA_BIN_DIR}:")
-      printf '  %sTry it now:%s\n' "${BOLD}" "${RESET}"
-      printf '    %s%s%s\n\n' "${C}" "$ pilosa" "${RESET}"
-      ;;
-    *)
-      printf '  %s%sPILOSA_BIN_DIR is not on your PATH%s\n' "${Y}" "${BOLD}" "${RESET}"
-      echo ""
-      printf '  %sAdd this to your shell profile, then reload:%s\n' "${BOLD}" "${RESET}"
-      printf '    %sexport PATH="%s:\$PATH"%s\n\n' "${C}" "${PILOSA_BIN_DIR}" "${RESET}"
-      printf '  %sThen run:%s\n' "${BOLD}" "${RESET}"
-      printf '    %s%s%s\n\n' "${C}" "$ pilosa" "${RESET}"
-      ;;
-  esac
-
-  info "Run ${BOLD}pilosa new${RESET} to create a research workspace"
-  info "Run ${BOLD}pilosa help${RESET} to see available commands"
-  echo ""
+  info "Launching Pilosa dashboard..."
+  sleep 1
+  exec "${PILOSA_BIN_DIR}/pilosa" </dev/tty
 }
 
 # ── helpers ─────────────────────────────────────────────────────────────────

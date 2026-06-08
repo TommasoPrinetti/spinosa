@@ -26,7 +26,7 @@ PILOSA_HOME="${PILOSA_HOME:-$HOME/.pilosa}"
 PILOSA_REPO="${PILOSA_REPO:-TommasoPrinetti/pilosa}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TODAY="$(date +%Y-%m-%d)"
-USE_GUM="${USE_GUM:-0}"
+USE_GUM="${USE_GUM:-1}"
 
 # ── global cleanup trap ────────────────────────────────────────────────────
 cleanup_on_exit() {
@@ -129,7 +129,7 @@ spinner_stop() {
 }
 
 gum_available() {
-  [[ "$USE_GUM" == "1" && -t 0 ]] || return 1
+  [[ -t 0 ]] || return 1
   local bin
   if [[ -x "${PILOSA_HOME}/bin/gum" ]]; then
     bin="${PILOSA_HOME}/bin/gum"
@@ -1502,7 +1502,7 @@ render_ocr_progress() {
   current_file="$(truncate_display_path "$current_file" 44)"
   local page_label=""
   [[ -n "$page_info" ]] && page_label=" (page ${page_info})"
-  printf '\r\033[2K  %s%s%s %s[%s]%s %d/%d %s%s (%d converted, %d skipped)' "${M}" "$(spinner_frame "$processed")" "${RESET}" "${M}" "$bar" "${RESET}" "$processed" "$total" "$current_file" "$page_label" "$converted" "$skipped" >&2
+  printf '\r\033[2K  %s%s%s %s[%s]%s %d/%d %s%s (%d converted, %d skipped)' "${M}" "$(spinner_frame "${7:-$processed}")" "${RESET}" "${M}" "$bar" "${RESET}" "$processed" "$total" "$current_file" "$page_label" "$converted" "$skipped" >&2
 }
 
 copy_source() {
@@ -1572,10 +1572,25 @@ copy_source() {
       if [[ ${#ocr_files[@]} -gt 0 ]]; then
         printf '\n'
         info "${M}OCR${RESET} Processing ${#ocr_files[@]} files with RapidOCR..."
+        local _ocr_log
+        _ocr_log="$dest_dir/../logs/ocr-processed.ndjson"
+        mkdir -p "$(dirname "$_ocr_log")"
+        local _ocr_debug
+        _ocr_debug="${_ocr_log%.ndjson}.debug"
+        pilosa_debug() { printf '[%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >> "$_ocr_debug"; }
+        pilosa_debug "OCR pass starting — _ocr_bin lookup"
+        local _ocr_error_trap
+        _ocr_error_trap="$(trap -p ERR 2>/dev/null || true)"
+        trap 'pilosa_debug "ERROR trap fired at line $LINENO exit=$?"; trap - ERR' ERR
         local ocr_total=${#ocr_files[@]} ocr_idx=0
         local _ocr_bin
         _ocr_bin="$(rapidocr_ocr_bin)" || _ocr_bin=""
-        spinner_start "Loading OCR engine" >&2
+        pilosa_debug "ocr_total=$ocr_total _ocr_bin=${_ocr_bin:-<empty>} dest_dir=$dest_dir source_path=$source_path"
+
+        # Separate files already OCR'd (skip) from files needing processing
+        local _ocr_process_src=()
+        local _ocr_process_rel=()
+        pilosa_debug "Separating skip vs process: ${#ocr_files[@]} total files"
         for src_file in "${ocr_files[@]}"; do
           rel_path="${src_file#"$source_path"/}"
           md_name="$(basename "$rel_path")"
@@ -1583,49 +1598,145 @@ copy_source() {
           md_dest="$dest_dir/$(dirname "$rel_path")/${md_name}.md"
           dest_parent="$(dirname "$md_dest")"
           mkdir -p "$dest_parent"
+
           if [[ -f "$md_dest" ]]; then
             skipped=$((skipped + 1))
             ocr_skipped=$((ocr_skipped + 1))
+            ocr_idx=$((ocr_idx + 1))
+            printf '{"ts":"%s","status":"skip","source":"%s","output":"%s","pages":"","duration_s":0}\n' \
+              "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+              "$rel_path" \
+              "$(dirname "$rel_path")/${md_name}.md" >> "$_ocr_log"
+            render_ocr_progress "$ocr_idx" "$ocr_total" "$ocr_converted" "$ocr_skipped" "$rel_path" "" ""
           else
-            local _ocr_page="" _ocr_ok=1
-            local _ocr_fifo
-            _ocr_fifo="$(mktemp -u)"
-            if [[ -n "$_ocr_bin" ]] && mkfifo "$_ocr_fifo" 2>/dev/null; then
-              "$_ocr_bin" "$src_file" "$md_dest" 2>"$_ocr_fifo" &
-              local _ocr_pid=$!
-              while IFS= read -r _line < "$_ocr_fifo"; do
-                [[ "$_line" == PROGRESS\ * ]] && _ocr_page="${_line#PROGRESS }"
+            _ocr_process_src+=("$src_file")
+            _ocr_process_rel+=("$rel_path")
+          fi
+        done
+        pilosa_debug "Separation done — skipped=$ocr_skipped process=${#_ocr_process_src[@]}"
+
+        if [[ ${#_ocr_process_src[@]} -gt 0 ]]; then
+          local _ocr_page="" _ocr_page_counter=0
+          local _spinner_stopped=""
+          local _current_rel=""
+          local _ocr_fifo
+          _ocr_fifo="$(mktemp -u)"
+          pilosa_debug "Batch starting — ${#_ocr_process_src[@]} files, fifo=$_ocr_fifo"
+
+          _ocr_cleanup() {
+            spinner_stop >&2 2>/dev/null || true
+            [[ -z "${_ocr_pid:-}" ]] || kill "$_ocr_pid" 2>/dev/null || true
+            [[ -z "${_ocr_fifo:-}" ]] || rm -f "$_ocr_fifo" 2>/dev/null || true
+            printf '\n' >&2
+            exit 1
+          }
+          trap _ocr_cleanup INT TERM
+
+          if [[ -n "$_ocr_bin" ]] && mkfifo "$_ocr_fifo" 2>/dev/null; then
+            pilosa_debug "FIFO created — starting spinner and batch process"
+            spinner_start "Loading OCR engine (one-time model init)" >&2
+            (
+              printf '%s\t%s\n' SOURCE "$source_path"
+              local _i
+              for _i in "${!_ocr_process_src[@]}"; do
+                local _s="${_ocr_process_src[$_i]}"
+                local _r="${_ocr_process_rel[$_i]}"
+                local _m
+                _m="$(basename "$_r")"
+                _m="${_m%.*}"
+                printf '%s\t%s\t%s\n' FILE "$_s" "$dest_dir/$(dirname "$_r")/${_m}.md"
               done
-              wait "$_ocr_pid" 2>/dev/null
-              _ocr_ok=$?
-              rm -f "$_ocr_fifo"
-            elif [[ -n "$_ocr_bin" ]]; then
-              "$_ocr_bin" "$src_file" "$md_dest" 2>/dev/null
-              _ocr_ok=$?
-            else
-              _ocr_ok=1
-            fi
-            if [[ "$_ocr_ok" -eq 0 ]]; then
-              converted=$((converted + 1))
-              ocr_converted=$((ocr_converted + 1))
-              copied=$((copied + 1))
-            else
-              spinner_stop >&2
-              printf '\n' >&2
-              warn "OCR failed for $(basename "$src_file"), skipping"
+            ) | "$_ocr_bin" --batch 2>"$_ocr_fifo" &
+            local _ocr_pid=$!
+            pilosa_debug "Batch process spawned — pid=$_ocr_pid, reading fifo..."
+
+            while IFS= read -r _line; do
+              [[ -n "${_line//$'\t'/}" ]] || { pilosa_debug "EMPTY fifo line, skipping"; continue; }
+              local _type="${_line%%$'\t'*}"
+              case "$_type" in
+                BEGIN)
+                  _current_rel="${_line#BEGIN$'\t'}"
+                  _ocr_page=""
+                  _ocr_page_counter=0
+                  if [[ -z "${_spinner_stopped:-}" ]]; then
+                    spinner_stop >&2
+                    _spinner_stopped=1
+                  fi
+                  pilosa_debug "BEGIN $_current_rel"
+                  ;;
+                PROGRESS)
+                  _ocr_page="${_line#PROGRESS$'\t'}"
+                  _ocr_page_counter=$((_ocr_page_counter + 1))
+                  render_ocr_progress "$ocr_idx" "$ocr_total" "$ocr_converted" "$ocr_skipped" "$_current_rel" "$_ocr_page" "$_ocr_page_counter"
+                  ;;
+                END)
+                  ocr_idx=$((ocr_idx + 1))
+                  local _rest="${_line#END$'\t'}"
+                  local _end_status="${_rest%%$'\t'*}"
+                  _rest="${_rest#$_end_status$'\t'}"
+                  _current_rel="${_rest%%$'\t'*}"
+                  local _end_dur="${_rest#$_current_rel$'\t'}"
+                  local _md_out="$(dirname "$_current_rel")/$(basename "${_current_rel%.*}").md"
+                  pilosa_debug "END $_end_status $_current_rel dur=${_end_dur}s pages=${_ocr_page:-none}"
+
+                  if [[ "$_end_status" == "ok" ]]; then
+                    converted=$((converted + 1))
+                    ocr_converted=$((ocr_converted + 1))
+                    copied=$((copied + 1))
+                    printf '{"ts":"%s","status":"ok","source":"%s","output":"%s","pages":"%s","duration_s":%s}\n' \
+                      "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+                      "$_current_rel" \
+                      "$_md_out" \
+                      "${_ocr_page:-1/1}" \
+                      "$_end_dur" >> "$_ocr_log"
+                  else
+                    spinner_stop >&2
+                    printf '\n' >&2
+                    warn "OCR failed for $(basename "$_current_rel"), skipping"
+                    skipped=$((skipped + 1))
+                    ocr_skipped=$((ocr_skipped + 1))
+                    printf '{"ts":"%s","status":"fail","source":"%s","output":"%s","pages":"%s","duration_s":%s}\n' \
+                      "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+                      "$_current_rel" \
+                      "$_md_out" \
+                      "${_ocr_page:-}" \
+                      "$_end_dur" >> "$_ocr_log"
+                  fi
+                  render_ocr_progress "$ocr_idx" "$ocr_total" "$ocr_converted" "$ocr_skipped" "$_current_rel" "$_ocr_page" "$_ocr_page_counter"
+                  _ocr_page=""
+                  ;;
+                *)
+                  pilosa_debug "UNEXPECTED fifo line: $_line"
+                  ;;
+              esac
+            done < "$_ocr_fifo"
+            pilosa_debug "FIFO read complete — waiting for batch process (pid=$_ocr_pid)..."
+            wait "$_ocr_pid" 2>/dev/null
+            pilosa_debug "Batch process finished — exit=$?"
+            rm -f "$_ocr_fifo"
+          elif [[ -n "$_ocr_bin" ]]; then
+            warn "Could not create FIFO — OCR skipped"
+            for _r in "${_ocr_process_rel[@]}"; do
+              ocr_idx=$((ocr_idx + 1))
               skipped=$((skipped + 1))
               ocr_skipped=$((ocr_skipped + 1))
-            fi
+              render_ocr_progress "$ocr_idx" "$ocr_total" "$ocr_converted" "$ocr_skipped" "$_r" "" ""
+            done
+          else
+            for _r in "${_ocr_process_rel[@]}"; do
+              ocr_idx=$((ocr_idx + 1))
+              skipped=$((skipped + 1))
+              ocr_skipped=$((ocr_skipped + 1))
+              render_ocr_progress "$ocr_idx" "$ocr_total" "$ocr_converted" "$ocr_skipped" "$_r" "" ""
+            done
           fi
-          ocr_idx=$((ocr_idx + 1))
-          if [[ "$ocr_idx" -eq 1 ]]; then
-            spinner_stop >&2
-          fi
-          render_ocr_progress "$ocr_idx" "$ocr_total" "$ocr_converted" "$ocr_skipped" "$rel_path" "$_ocr_page"
-          _ocr_page=""
-        done
+          trap - INT TERM
+        fi
+
         printf '\n'
         ok "${M}OCR${RESET} Completed: ${ocr_converted} converted, ${ocr_skipped} skipped"
+        pilosa_debug "OCR pass complete — converted=$ocr_converted skipped=$ocr_skipped"
+        trap - ERR 2>/dev/null || true
       fi
     fi
   fi
@@ -2059,7 +2170,6 @@ run_integrated_onboarding() {
 
   # ── Step 1: Source folder ─────────────────────────────────────────────
   if [[ -n "$preselected_source" ]]; then
-    # Corpus was already selected during workspace creation — skip prompt
     source_path="$preselected_source"
     info "Source: ${BOLD}${source_path}${RESET}"
   fi
@@ -2077,7 +2187,7 @@ run_integrated_onboarding() {
       source_prompt_shown=1
 
       while true; do
-        source_path="$(prompt_directory "Source folder (absolute path)" "" "e.g. /home/user/Documents/my-sources")"
+        source_path="$(prompt_directory "Source folder (absolute path)" "${preselected_source:-}" "e.g. /home/user/Documents/my-sources")"
         source_path="$(normalize_path_input "$source_path")"
         source_path="$(expand_home "$source_path")"
         if [[ -z "$source_path" ]]; then
@@ -2337,24 +2447,25 @@ cmd_onboard() {
   if [[ -z "$project_name" ]]; then
     local default_name
     default_name="$(basename "$workspace_path")"
-    project_name="$(prompt_input "Project name" "$default_name")"
+    while [[ -z "$project_name" ]] || [[ ! "$project_name" =~ ^[a-zA-Z0-9_-]+$ ]]; do
+      project_name="$(prompt_input "Project name" "$default_name")"
+      if [[ ! "$project_name" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+        warn "Project name can only contain letters, numbers, hyphens, and underscores."
+        project_name=""
+      fi
+    done
     sed -i.bak "s/project_name:.*/project_name: ${project_name}/" "$workspace_path/.pilosa/workspace" 2>/dev/null || \
     sed -i '' "s/project_name:.*/project_name: ${project_name}/" "$workspace_path/.pilosa/workspace" 2>/dev/null || true
     rm -f "$workspace_path/.pilosa/workspace.bak"
   fi
 
-  # If no --source-dir, read source_location from workspace metadata
+  # Read stored source from workspace metadata as default
   if [[ -z "$source_dir" ]]; then
     source_dir="$(grep 'source_location:' "$workspace_path/.pilosa/workspace" 2>/dev/null | sed 's/source_location: *//' | head -1 || echo "")"
-    if [[ -n "$source_dir" && -d "$source_dir" ]]; then
-      info "Previous source location found: ${source_dir}"
-    elif [[ -n "$source_dir" && ! -d "$source_dir" ]]; then
-      warn "Previous source location no longer exists: ${source_dir}"
-      source_dir=""
-    fi
+    [[ -n "$source_dir" ]] && info "Stored source folder: ${source_dir}"
   fi
-
   run_integrated_onboarding "$workspace_path" "$project_name" "$source_dir"
+  exit 0
 }
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -2435,9 +2546,14 @@ cmd_new() {
   local default_name
   default_name="$corpus_name"
 
-  while [[ -z "$project_name" ]]; do
+  while [[ -z "$project_name" ]] || [[ ! "$project_name" =~ ^[a-zA-Z0-9_-]+$ ]]; do
     project_name="$(prompt_input "Project name" "$default_name")"
-    [[ -z "$project_name" ]] && printf '  %s\n' "${R}Project name is required.${RESET}" >&2
+    if [[ -z "$project_name" ]]; then
+      :
+    elif [[ ! "$project_name" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+      warn "Project name can only contain letters, numbers, hyphens, and underscores."
+      project_name=""
+    fi
   done
   project_name="${project_name:-$default_name}"
   ok "Project:   ${BOLD}${project_name}${RESET}"
@@ -2519,6 +2635,7 @@ EOF
 
   ok "Workspace ready: ${BOLD}${workspace_path}${RESET}"
   printf '\n'
+  exit 0
 }
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -2749,7 +2866,7 @@ cmd_update() {
       fi
     fi
 
-    if ! confirm_action "Apply this Pilosa framework update now?" "n"; then
+    if ! confirm_action "Apply this Pilosa framework update now?" "y"; then
       printf '\n  %sUpdate cancelled.%s\n\n' "${DIM}" "${RESET}"
       rm -rf "$tmpdir"
       return 0
@@ -3514,12 +3631,6 @@ require_workspace() {
     fi
   fi
   
-  # Check if current directory is a workspace
-  if validate_workspace "$(pwd)"; then
-    echo "$(pwd)"
-    return 0
-  fi
-  
   # Not in a workspace - discover and prompt
   printf '\n%s\n' "${Y}Not in a Pilosa workspace.${RESET}" >&2
   local discovered=()
@@ -3671,9 +3782,9 @@ fetch_release_notes() {
   local api_url
   
   if [[ "$version" == "latest" ]]; then
-    api_url="https://api.github.com/repos/${PILOSA_REPO}/releases/latest"
+    api_url="https://api.github.com/repos/TommasoPrinetti/pilosa/releases/latest"
   else
-    api_url="https://api.github.com/repos/${PILOSA_REPO}/releases/tags/v${version}"
+    api_url="https://api.github.com/repos/TommasoPrinetti/pilosa/releases/tags/v${version}"
   fi
   
   # Use Python for reliable JSON parsing
@@ -3784,23 +3895,26 @@ cmd_upgrade() {
   local installer="${tmpdir}/install-pilosa.sh"
 
   # Resolve latest version from GitHub
+  # PILOSA_REPO env var is intentionally NOT used here — self-upgrade
+  # must always point to the canonical upstream to prevent supply-chain attacks
+  # via compromised environment variables.
   spinner_start "Resolving latest version"
   local latest_version
-  latest_version="$(curl -fsSL -o /dev/null -w '%{url_effective}' "https://github.com/${PILOSA_REPO}/releases/latest" 2>/dev/null | sed 's|.*/tag/v||' || echo "")"
+  latest_version="$(curl -fsSL -o /dev/null -w '%{url_effective}' "https://github.com/TommasoPrinetti/pilosa/releases/latest" 2>/dev/null | sed 's|.*/tag/v||' || echo "")"
   spinner_stop
   
   if [[ -n "$latest_version" ]]; then
     spinner_start "Downloading installer v${latest_version}"
-    if ! curl -fsSL "https://github.com/${PILOSA_REPO}/releases/download/v${latest_version}/install.sh" -o "$installer" 2>/dev/null; then
+    if ! curl -fsSL "https://github.com/TommasoPrinetti/pilosa/releases/download/v${latest_version}/install.sh" -o "$installer" 2>/dev/null; then
       spinner_stop
       warn "Could not download release installer. Falling back to raw main branch..."
       spinner_start "Downloading from main branch"
-      curl -fsSL "https://raw.githubusercontent.com/${PILOSA_REPO}/main/install.sh" -o "$installer" || die "Could not download installer"
+      curl -fsSL "https://raw.githubusercontent.com/TommasoPrinetti/pilosa/main/install.sh" -o "$installer" || die "Could not download installer"
     fi
     spinner_stop
   else
     spinner_start "Downloading from main branch"
-    curl -fsSL "https://raw.githubusercontent.com/${PILOSA_REPO}/main/install.sh" -o "$installer" || die "Could not download installer"
+    curl -fsSL "https://raw.githubusercontent.com/TommasoPrinetti/pilosa/main/install.sh" -o "$installer" || die "Could not download installer"
     spinner_stop
   fi
 

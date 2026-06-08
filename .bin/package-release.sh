@@ -184,6 +184,38 @@ bundle_platform_binary() {
   local tmpdir="$(mktemp -d)"
   echo "  Downloading ${name} ${suffix}..."
   if curl -fsSL "$url" -o "${tmpdir}/archive.tar.gz" 2>/dev/null; then
+    local upstream_checksums_url="https://github.com/charmbracelet/${name}/releases/download/v${version}/checksums.txt"
+    local upstream_checksums="${tmpdir}/upstream-checksums.txt"
+    if ! curl -fsSL "$upstream_checksums_url" -o "$upstream_checksums" 2>/dev/null; then
+      echo "    ERROR: Could not download upstream checksums for ${name} v${version}"
+      rm -rf "$tmpdir"
+      return 1
+    fi
+
+    local actual_hash
+    actual_hash="$(sha256sum "${tmpdir}/archive.tar.gz" 2>/dev/null | awk '{print $1}' || shasum -a 256 "${tmpdir}/archive.tar.gz" 2>/dev/null | awk '{print $1}')"
+    local archive_basename
+    archive_basename="$(basename "$url")"
+    local expected_entry
+    expected_entry="$(grep "${archive_basename}" "$upstream_checksums" 2>/dev/null | head -1 || true)"
+
+    if [[ -z "$expected_entry" ]]; then
+      echo "    ERROR: ${archive_basename} not found in upstream checksums"
+      rm -rf "$tmpdir"
+      return 1
+    fi
+
+    local expected_hash
+    expected_hash="$(printf '%s' "$expected_entry" | awk '{print $1}')"
+    if [[ "$actual_hash" != "$expected_hash" ]]; then
+      echo "    ERROR: Checksum mismatch for ${name} ${suffix}"
+      echo "      Expected: ${expected_hash}"
+      echo "      Got:      ${actual_hash}"
+      rm -rf "$tmpdir"
+      return 1
+    fi
+    echo "    Upstream checksum verified for ${name} ${suffix}"
+
     tar -xzf "${tmpdir}/archive.tar.gz" -C "$tmpdir" 2>/dev/null
     # Find the binary inside the extracted contents
     local bin_path
@@ -263,6 +295,14 @@ done
 TODAY="$(date +%Y-%m-%d)"
 echo "$TODAY" > "${FRAMEWORK_DIR}/metadata/release-date"
 echo "  Release date: ${TODAY}"
+
+# ── Vendor versions ──────────────────────────────────────────────────────────
+VERSIONS_FILE="${FRAMEWORK_DIR}/metadata/vendor-versions.txt"
+printf 'gum %s\n' "$GUM_VERSION" > "$VERSIONS_FILE"
+printf 'rapidocr 3.8.1\n' >> "$VERSIONS_FILE"
+printf 'onnxruntime 1.26.0\n' >> "$VERSIONS_FILE"
+printf 'pypdfium2 5.9.0\n' >> "$VERSIONS_FILE"
+echo "  Vendor versions recorded"
 
 echo "  Vendor binaries bundled"
 echo ""
