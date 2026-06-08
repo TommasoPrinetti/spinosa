@@ -255,7 +255,12 @@ WRAPPER_EOF
 
 # Main
 main() {
-    local platform="${1:-$(detect_platform)}"
+    local platform
+    if [[ -n "${1:-}" ]]; then
+        platform="$1"
+    else
+        platform="$(detect_platform)" || return $?
+    fi
 
     log "RapidOCR Vendor Builder"
     log "======================="

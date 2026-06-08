@@ -181,7 +181,8 @@ mkdir -p "$VENDOR_DIR"
 
 bundle_platform_binary() {
   local name="$1" version="$2" url="$3" suffix="$4"
-  local tmpdir="$(mktemp -d)"
+  local tmpdir
+  tmpdir="$(mktemp -d)" || return 1
   echo "  Downloading ${name} ${suffix}..."
   if curl -fsSL "$url" -o "${tmpdir}/archive.tar.gz" 2>/dev/null; then
     local upstream_checksums_url="https://github.com/charmbracelet/${name}/releases/download/v${version}/checksums.txt"

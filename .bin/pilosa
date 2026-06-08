@@ -62,13 +62,13 @@ resolve_framework_root() {
   # Installed mode: find latest version
   if [[ -d "${PILOSA_HOME}/versions" ]]; then
       local latest_version
-      local portable_sort
+      local portable_sort_args
       if sort -V /dev/null 2>/dev/null; then
-        portable_sort="sort -V"
+        portable_sort_args=(sort -V)
       else
-        portable_sort="sort -t. -k1,1n -k2,2n -k3,3n"
+        portable_sort_args=(sort -t. -k1,1n -k2,2n -k3,3n)
       fi
-      latest_version="$(ls -1 "${PILOSA_HOME}/versions" 2>/dev/null | $portable_sort | tail -1)"
+      latest_version="$(ls -1 "${PILOSA_HOME}/versions" 2>/dev/null | "${portable_sort_args[@]}" | tail -1)"
     if [[ -n "$latest_version" ]]; then
       local fw_dir="${PILOSA_HOME}/versions/${latest_version}"
       # The archive unpacks to pilosa-framework-<version>/
@@ -1724,8 +1724,9 @@ copy_source() {
                   local _end_status="${_rest%%$'\t'*}"
                   _rest="${_rest#$_end_status$'\t'}"
                   _current_rel="${_rest%%$'\t'*}"
-                  local _end_dur="${_rest#$_current_rel$'\t'}"
-                  local _md_out="$(dirname "$_current_rel")/$(basename "${_current_rel%.*}").md"
+                  local _end_dur _md_out
+                  _end_dur="${_rest#$_current_rel$'\t'}"
+                  _md_out="$(dirname "$_current_rel")/$(basename "${_current_rel%.*}").md"
                   pilosa_debug "END $_end_status $_current_rel dur=${_end_dur}s pages=${_ocr_page:-none}"
 
                   if [[ "$_end_status" == "ok" ]]; then
@@ -2363,6 +2364,7 @@ detect_llm_clis() {
 # COMMAND: uninstall
 # ═══════════════════════════════════════════════════════════════════════════
 cmd_uninstall() {
+  local FORCE_YES=""
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --no-color) R="" G="" B="" Y="" C="" M="" DIM="" BOLD="" RESET=""; shift ;;

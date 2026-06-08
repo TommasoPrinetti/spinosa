@@ -194,7 +194,6 @@ done
 echo ""
 echo "--- Syncing CLAUDE.md ---"
 cp "$REPO_ROOT/AGENTS.md" "$REPO_ROOT/CLAUDE.md"
-today=""
 today="$(date +%Y-%m-%d)"
 # Update updated date and add provenance fields in the frontmatter block
 sed -i.bak \

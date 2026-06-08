@@ -8,7 +8,7 @@ else
   R=$'\033[31m' G=$'\033[32m' Y=$'\033[33m' BOLD=$'\033[1m' RESET=$'\033[0m'
 fi
 
-ROOT="$(pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 failures=()
 warnings=()
 

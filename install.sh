@@ -157,8 +157,7 @@ detect_platform() {
 
 # ── download helper ─────────────────────────────────────────────────────────
 download() {
-  url="$1"
-  dest="$2"
+  local url="$1" dest="$2"
 
   if command -v curl >/dev/null 2>&1; then
     curl -fSL --progress-bar "$url" -o "$dest"
