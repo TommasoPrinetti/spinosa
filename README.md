@@ -1,6 +1,6 @@
 
 <p align="center">
-  <img src="assets/logo.jpg" alt="Pilosa">
+  <img width="1920" height="1198" alt="Banner-dithered" src="https://github.com/user-attachments/assets/ae3bd645-c0bf-4b02-961e-a1a1dc675a48" />
 </p>
 
 # Pilosa
