@@ -27,7 +27,7 @@ PILOSA_HOME="${PILOSA_HOME:-$HOME/.pilosa}"
 PILOSA_REPO="${PILOSA_REPO:-TommasoPrinetti/pilosa}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TODAY="$(date +%Y-%m-%d)"
-USE_GUM="${USE_GUM:-1}"
+USE_GUM="${USE_GUM:-0}"
 
 # ── global cleanup trap ────────────────────────────────────────────────────
 cleanup_on_exit() {
@@ -130,7 +130,7 @@ spinner_stop() {
 }
 
 gum_available() {
-  [[ -t 0 ]] || return 1
+  [[ "$USE_GUM" == "1" && -t 0 ]] || return 1
   local bin
   if [[ -x "${PILOSA_HOME}/bin/gum" ]]; then
     bin="${PILOSA_HOME}/bin/gum"
