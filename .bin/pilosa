@@ -2318,6 +2318,11 @@ cmd_onboard() {
     esac
   done
 
+  # Use first positional arg as workspace path if provided
+  if [[ ${#onboard_args[@]} -gt 0 ]]; then
+    workspace_path="${onboard_args[0]}"
+  fi
+
   # Resolve workspace path
   if [[ -n "$workspace_path" ]]; then
     workspace_path="$(require_workspace "$workspace_path")" || return $?
@@ -3009,7 +3014,7 @@ cmd_check() {
       done
     fi
     printf '\n'
-    exit 1
+    return 1
   fi
 
   divider
@@ -3027,8 +3032,27 @@ cmd_check() {
 # COMMAND: sync
 # ═══════════════════════════════════════════════════════════════════════════
 cmd_sync() {
-  local repo_root
-  repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+  local dry_run=0 auto_yes=0
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --dry-run) dry_run=1; shift ;;
+      --yes|-y)  auto_yes=1; shift ;;
+      --help|-h)
+        echo "Usage: pilosa sync [options]" >&2
+        echo "  --dry-run   Show what would change without writing" >&2
+        echo "  --yes       Skip confirmation prompt" >&2
+        return 0
+        ;;
+      -*) die "Unknown option: $1" ;;
+      *) shift ;;
+    esac
+  done
+
+  # Use FRAMEWORK_ROOT (resolves dev + installed mode correctly)
+  local repo_root="$FRAMEWORK_ROOT"
+  if [[ -z "$repo_root" || ! -d "$repo_root/.agents/agents" ]]; then
+    die "Framework root not found. Cannot sync without framework."
+  fi
 
   header "Pilosa — Sync Agents & Skills"
 
@@ -3037,6 +3061,33 @@ cmd_sync() {
 
   if [[ ! -d "$agents_src" ]]; then
     die "Canonical agents directory not found: $agents_src"
+  fi
+
+  # Count what will change
+  local agent_count=0
+  for canonical in "$agents_src"/*.md; do
+    [[ -f "$canonical" ]] && agent_count=$((agent_count + 1))
+  done
+  local skill_count=0
+  for skill_dir in "$skills_src"/*/; do
+    [[ -d "$skill_dir" ]] && skill_count=$((skill_count + 1))
+  done
+
+  info "Will sync ${agent_count} agents and ${skill_count} skills"
+  info "Targets: .opencode/agents/, .claude/agents/, .codex/agents/"
+  info "Skills:  .opencode/skills/, .claude/skills/, .codex/skills/"
+
+  if [[ "$dry_run" -eq 1 ]]; then
+    warn "Dry run — no changes made"
+    return 0
+  fi
+
+  if [[ "$auto_yes" -ne 1 ]]; then
+    printf '\n'
+    if ! confirm "Apply sync? (deletes and regenerates vendor agent files)" "y"; then
+      info "Sync cancelled."
+      return 0
+    fi
   fi
 
   # ── clean stale mirrors ────────────────────────────────────────────
@@ -3647,25 +3698,32 @@ display_release_notes() {
   tag_name="$(echo "$release_data" | cut -d'|' -f1)"
   published_at="$(echo "$release_data" | cut -d'|' -f2)"
   body="$(echo "$release_data" | cut -d'|' -f3-)"
-  
-  # Truncate body to first 3 non-empty lines
-  local short_body=""
-  local line_count=0
-  if [[ -n "$body" ]]; then
-    while IFS= read -r line; do
-      [[ -z "$line" ]] && continue
-      line_count=$((line_count + 1))
-      [[ "$line_count" -le 3 ]] && short_body+="${line}"$'\n'
-      [[ "$line_count" -ge 3 ]] && break
-    done <<< "$body"
-  fi
+
+  # Extract key lines: strip markdown, code fences, commands, keep only descriptions
+  local lines
+  lines="$(echo "$body" | sed -E '
+    /^```/d
+    /^curl /d
+    /^bash /d
+    /^pilosa /d
+    /^For options/d
+    /^Pilosa Framework/d
+    /^##+ (Install|Update)/d
+    s/^This installs.*/↳ Zero dependencies, bundled OCR/
+    s/^- Framework-owned.*/↳ Framework files updated from release/
+    s/^- User workspace.*/↳ Your workspace is preserved/
+    s/^- Locally modified.*/↳ Modified files get .pilosa-new sidecars/
+  ' | sed '/^$/d')"
 
   printf '\n'
-  if [[ -n "$short_body" ]]; then
-    note "${BOLD}${tag_name}${RESET} — $(echo "$short_body" | head -1)"
-    local extra
-    extra="$(echo "$short_body" | tail -n +2 | sed '/^$/d')"
-    [[ -n "$extra" ]] && echo "$extra" | while IFS= read -r l; do note "  $l"; done
+  if [[ -n "$lines" ]]; then
+    printf '  %s┌%s┐\n' "${DIM}" "$(printf '%.0s─' 1 {1..60})"
+    printf '  %s│%s %s%s%s\n' "${DIM}" "${RESET}" "${BOLD}${tag_name}${RESET}" "${DIM}" "${RESET}"
+    printf '  %s├%s┤\n' "${DIM}" "$(printf '%.0s─' 1 {1..60})"
+    echo "$lines" | while IFS= read -r line; do
+      printf '  %s│%s %s\n' "${DIM}" "${RESET}" "$line"
+    done
+    printf '  %s└%s┘\n' "${DIM}" "$(printf '%.0s─' 1 {1..60})"
   else
     note "${BOLD}${tag_name}${RESET}"
   fi
@@ -3882,6 +3940,7 @@ cmd_dashboard() {
     options+=("$(option_spec "health" "System health" "Check system health and environment")")
     options+=("$(option_spec "uninstall" "Uninstall" "Remove Pilosa from this system")")
     options+=("$(option_spec "help" "Help" "Show help information")")
+    options+=("$(option_spec "quit" "Quit" "Exit Pilosa")")
 
     local choice
     choice="$(prompt_choose "What would you like to do?" "${options[@]}")" || return 0
@@ -3889,15 +3948,16 @@ cmd_dashboard() {
     printf '\n'
 
     case "$choice" in
-      new)       cmd_new "$@" || true ;;
-      onboard)   cmd_onboard "$@" || true ;;
-      update)    cmd_update "$@" || true ;;
-      check)     cmd_check "$@" || true ;;
-      sync)      cmd_sync || true ;;
-      upgrade)   cmd_upgrade || true ;;
-      health)    cmd_health || true ;;
-      uninstall) cmd_uninstall "$@" || true ;;
-      help)      cmd_help || true ;;
+      new)       cmd_new "$@" ;;
+      onboard)   cmd_onboard "$@" ;;
+      update)    cmd_update "$@" ;;
+      check)     cmd_check "$@" ;;
+      sync)      cmd_sync "$@" ;;
+      upgrade)   cmd_upgrade "$@" ;;
+      health)    cmd_health "$@" ;;
+      uninstall) cmd_uninstall "$@" ;;
+      help)      cmd_help ;;
+      quit)      return 0 ;;
       *)         return 0 ;;
     esac
 
@@ -3909,14 +3969,14 @@ cmd_dashboard() {
 # MAIN
 # ═══════════════════════════════════════════════════════════════════════════
 case "${1:-}" in
-  new)       shift; cmd_new "$@" || true ;;
-  onboard)   shift; cmd_onboard "$@" || true ;;
-  update)    shift; cmd_update "$@" || true ;;
-  upgrade)   shift; cmd_upgrade "$@" || true ;;
-  check)     shift; cmd_check "$@" || true ;;
-  sync)      shift; cmd_sync || true ;;
-  health)    shift; cmd_health || true ;;
-  uninstall) shift; cmd_uninstall "$@" || true ;;
+  new)       shift; cmd_new "$@" ;;
+  onboard)   shift; cmd_onboard "$@" ;;
+  update)    shift; cmd_update "$@" ;;
+  upgrade)   shift; cmd_upgrade "$@" ;;
+  check)     shift; cmd_check "$@" ;;
+  sync)      shift; cmd_sync "$@" ;;
+  health)    shift; cmd_health "$@" ;;
+  uninstall) shift; cmd_uninstall "$@" ;;
   help|-h|--help) cmd_help ;;
   "") cmd_dashboard ;;
   *)

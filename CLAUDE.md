@@ -9,9 +9,9 @@ connects_to:
   - system/configuration.md
   - system/context.md
 created: 2026-05-26
-updated: 2026-06-07
+updated: 2026-06-08
 generated_by: sync-agents
-generated_at: 2026-06-07
+generated_at: 2026-06-08
 processing_status: auto_generated
 ---
 # Pilosa Framework
