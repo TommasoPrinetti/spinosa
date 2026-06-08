@@ -3683,7 +3683,6 @@ require_workspace() {
   fi
   
   # Not in a workspace - discover and prompt
-  printf '\n%s\n' "${Y}Not in a Pilosa workspace.${RESET}" >&2
   local discovered=()
   local workspace_data
   
@@ -3692,7 +3691,7 @@ require_workspace() {
   spinner_stop
   
   if [[ -z "$workspace_data" ]]; then
-    # Discovery failed or denied - prompt for path
+    printf '\n%s\n' "${Y}Not in a Pilosa workspace.${RESET}" >&2
     prompt_workspace_or_cancel || return 1
     return 0
   fi
