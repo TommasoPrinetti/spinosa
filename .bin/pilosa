@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+ORIGINAL_ARGS=("$@")
 
 # ── pilosa — CLI entry point ────────────────────────────────────────────────
 # Usage: pilosa [new|onboard|update|check|sync|uninstall|help]
@@ -3749,7 +3750,7 @@ require_workspace() {
     fi
     
     # Re-prompt with updated list
-    exec "$0" "${BASH_ARGV[@]}"
+    exec "$0" "${ORIGINAL_ARGS[@]}"
   elif [[ "$choice" == "__enter__" ]]; then
     local manual_path
     manual_path="$(prompt_input "Workspace path")"
@@ -3836,7 +3837,9 @@ fetch_release_notes() {
   fi
   
   # Use Python for reliable JSON parsing
-  curl -fsSL "$api_url" 2>/dev/null | python3 -c "
+  local _py=python3
+  command -v python3 >/dev/null 2>&1 || _py=python
+  curl -fsSL "$api_url" 2>/dev/null | "$_py" -c "
 import sys, json
 try:
     data = json.load(sys.stdin)

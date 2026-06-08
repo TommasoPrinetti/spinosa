@@ -186,7 +186,7 @@ for platform in .opencode .claude .codex; do
             cp "$skill_dir/references/"*.md "$dest/$skill_name/references/" 2>/dev/null || true
         fi
     done
-    count=$(find "$dest" -name "SKILL.md" | wc -l)
+    count=$(find "$dest" -name "SKILL.md" | wc -l | tr -d ' ')
     echo "  $platform/skills/ → $count skills"
 done
 
