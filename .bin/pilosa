@@ -189,7 +189,7 @@ gum_confirm() {
 prompt_input() {
   local prompt="$1" default="${2:-}" hint="${3:-}" value=""
   if gum_available; then
-    value="$(gum_input "$prompt" "$default" 2>/dev/null)" || value=""
+    value="$(gum_input "$prompt" "$default")" || value=""
     reset_terminal
   fi
   if [[ -z "$value" ]]; then
@@ -201,7 +201,7 @@ prompt_input() {
 prompt_directory() {
   local prompt="$1" default="${2:-}" hint="${3:-}" value=""
   if gum_available; then
-    value="$(gum_file "$prompt" 2>/dev/null)" || value=""
+    value="$(gum_file "$prompt")" || value=""
     reset_terminal
   fi
   if [[ -z "$value" ]]; then
@@ -293,7 +293,7 @@ prompt_choose() {
     for i in "${!options[@]}"; do
       displays+=("$(option_gum_display "${options[$i]}")")
     done
-    if choice="$(gum_choose "$prompt" "${displays[@]}" 2>/dev/null)"; then
+    if choice="$(gum_choose "$prompt" "${displays[@]}")"; then
       reset_terminal
       for i in "${!displays[@]}"; do
         if [[ "${displays[$i]}" == "$choice" ]]; then
@@ -346,7 +346,7 @@ prompt_multi_choose() {
       selected_csv="$(join_by "," "${preselected[@]}")"
     fi
     local gum_output=""
-    if gum_output="$(gum_multi_choose "$prompt" "$selected_csv" "${displays[@]}" 2>/dev/null)"; then
+    if gum_output="$(gum_multi_choose "$prompt" "$selected_csv" "${displays[@]}")"; then
       reset_terminal
       MULTI_CHOOSE_SELECTED=()
       local line i
@@ -378,7 +378,7 @@ prompt_confirm() {
   local prompt="$1" default="${2:-y}"
   if gum_available; then
     local status=0
-    if gum_confirm "$prompt" 2>/dev/null; then
+    if gum_confirm "$prompt"; then
       status=0
     else
       status=$?
