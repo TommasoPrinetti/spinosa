@@ -151,8 +151,8 @@ build_platform() {
         log "Installing RapidOCR ${RAPIDOCR_VERSION} + pypdfium2 ${PDFIUM_VERSION}..."
         "${python_bin}" -m pip install "rapidocr==${RAPIDOCR_VERSION}" "pypdfium2==${PDFIUM_VERSION}" --quiet
 
-        log "Installing MarkItDown ${MARKITDOWN_VERSION} [docx,pptx,xlsx,xls,outlook]..."
-        "${python_bin}" -m pip install "markitdown[docx,pptx,xlsx,xls,outlook]==${MARKITDOWN_VERSION}" --quiet
+        log "Installing MarkItDown ${MARKITDOWN_VERSION} [docx,pptx,xlsx,xls,outlook,pdf]..."
+        "${python_bin}" -m pip install "markitdown[docx,pptx,xlsx,xls,outlook,pdf]==${MARKITDOWN_VERSION}" --quiet
 
         # Remove Chinese models (only English needed)
         log "Removing Chinese OCR models..."

@@ -43,11 +43,11 @@ cleanup_on_exit() {
 trap cleanup_on_exit EXIT INT TERM
 
 # Source file classes used by integrated onboarding.
-MARKDOWN_EXTENSIONS="txt|rtf|textile|wiki|mediawiki|dokuwiki|pmwiki|outliner|workflowy|dynalist"
-NATIVE_EXTENSIONS="md|csv|json|yaml|yml|toml|xml|html|css|js|ts|py|rb|sh|log|ini|cfg|conf|tex|bib|org|adoc|rst|tiddlywiki|logseq|roam|obsidian"
+MARKDOWN_EXTENSIONS="txt|rtf|textile|wiki|mediawiki|dokuwiki|pmwiki|outliner|workflowy|dynalist|yaml|yml|toml|css|js|ts|py|rb|sh|log|ini|cfg|conf|tex|bib|org|adoc|rst|tiddlywiki|logseq|roam|obsidian"
+NATIVE_EXTENSIONS="md"
 BINARY_COPYABLE_EXTENSIONS=""
 # Engine: markitdown — convert Office docs, EPUB, HTML, ZIP, and text-based PDFs to .md
-MARKITDOWN_EXTENSIONS="docx|pptx|xlsx|xls|epub|html|htm|msg|zip"
+MARKITDOWN_EXTENSIONS="docx|pptx|xlsx|xls|epub|html|htm|msg|zip|json|csv|xml"
 OPTION_SEP=$'\t'
 
 # Resolve framework root:
@@ -1895,9 +1895,12 @@ copy_source() {
       local ocr_files=()
       while IFS= read -r -d '' src_file; do
         should_skip_source_file "$src_file" && continue
-        # Skip text-based PDFs — already handled by MarkItDown pass
-        if is_rapidocr_pdf "$src_file" && is_text_based_pdf "$src_file"; then
-          continue
+        # Skip PDFs already handled by MarkItDown (check output .md exists)
+        if is_rapidocr_pdf "$src_file"; then
+          local _ocr_md_rel="${src_file#"$source_path"/}"
+          if [[ -f "$dest_dir/$(markdown_raw_rel_path "$_ocr_md_rel")" ]]; then
+            continue
+          fi
         fi
         if is_rapidocr_pdf "$src_file" || is_rapidocr_image "$src_file"; then
           import_extension_selected "$(file_ext "$src_file")" || continue

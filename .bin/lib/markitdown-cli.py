@@ -40,7 +40,7 @@ from pathlib import Path
 EXTENSIONS = {
     ".docx", ".pptx", ".xlsx", ".xls",
     ".epub", ".html", ".htm", ".msg", ".zip",
-    ".pdf",
+    ".pdf", ".json", ".csv", ".xml",
 }
 
 
