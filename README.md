@@ -22,7 +22,7 @@ The original source folder is never modified. The workspace is self-contained. A
 ## Install
 
 ```bash
-curl -fsSL https://github.com/TommasoPrinetti/pilosa/releases/download/v0.4.12/install.sh | bash -s -- --yes
+curl -fsSL https://github.com/TommasoPrinetti/pilosa/releases/download/v0.4.12/install.sh | bash
 ```
 
 This installs the pinned stable version (`0.4.7`) to `~/.pilosa/`. A bundled Python handles pip packages at install time. No system Python, npm, or Go required. Requires bash and internet access for first install.
@@ -46,7 +46,7 @@ bash install-pilosa.sh --help
 ### 1. Install
 
 ```bash
-curl -fsSL https://github.com/TommasoPrinetti/pilosa/releases/download/v0.4.12/install.sh | bash -s -- --yes
+curl -fsSL https://github.com/TommasoPrinetti/pilosa/releases/download/v0.4.12/install.sh | bash
 ```
 
 ### 2. Create a workspace
