@@ -93,10 +93,33 @@ build_platform() {
 
     local python_url python_tar
     python_url="$(get_python_url "$platform")"
-    python_tar="/tmp/python-standalone-${platform}.tar.gz"
+    python_tar="$(mktemp /tmp/python-standalone-${platform}-XXXXXX.tar.gz)"
 
     log "Downloading standalone Python..."
     curl -L -o "${python_tar}" "${python_url}" || err "Failed to download Python"
+
+    # Verify Python standalone checksum
+    local python_checksums_url
+    python_checksums_url="https://github.com/astral-sh/python-build-standalone/releases/download/${PYTHON_BUILD_VERSION}/SHA256SUMS"
+    local python_checksums
+    python_checksums="$(mktemp /tmp/python-checksums-${platform}-XXXXXX.txt)"
+    if curl -fsSL "$python_checksums_url" -o "$python_checksums" 2>/dev/null; then
+      local _expected_hash
+      _expected_hash="$(grep "$(basename "$python_url" | sed 's/%2B/+/')" "$python_checksums" 2>/dev/null | awk '{print $1}')"
+      if [[ -n "$_expected_hash" ]]; then
+        local _actual_hash
+        _actual_hash="$(shasum -a 256 "$python_tar" 2>/dev/null | awk '{print $1}' || sha256sum "$python_tar" 2>/dev/null | awk '{print $1}')"
+        if [[ "$_actual_hash" != "$_expected_hash" ]]; then
+          err "Python standalone checksum mismatch — aborting for safety"
+        fi
+        log "Python standalone checksum verified"
+      else
+        warn "Python standalone not found in checksums — skipping verification"
+      fi
+      rm -f "$python_checksums"
+    else
+      warn "Could not download Python checksums — skipping verification"
+    fi
 
     log "Extracting Python..."
     mkdir -p "${python_dir}"

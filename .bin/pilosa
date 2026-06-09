@@ -837,14 +837,6 @@ expand_home() {
 }
 
 # ── Gum integration (optional, private install) ─────────────────────────────
-pilosa_gum() {
-  if [ -x "${PILOSA_HOME}/bin/gum" ]; then
-    "${PILOSA_HOME}/bin/gum" "$@"
-  else
-    return 127
-  fi
-}
-
 # ── checksum helper ─────────────────────────────────────────────────────────
 sha256_file() {
   if command -v sha256sum >/dev/null 2>&1; then
@@ -988,16 +980,6 @@ shell_quote() {
   printf "'%s'" "$value"
 }
 
-prompt_preview() {
-  local line count=0
-  while IFS= read -r line; do
-    printf '%s\n' "$line"
-    count=$((count + 1))
-    [[ "$count" -ge 4 ]] && break
-  done
-  printf '...\n'
-}
-
 print_box() {
   local iw=$((COLS > 6 ? COLS - 4 : 10)) ow=$((COLS > 4 ? COLS - 2 : 10))
   printf '\n  %s┌%s┐%s\n' "${DIM}" "$(printf '%.0s─' $(seq 1 "$iw"))" "${RESET}"
@@ -1102,7 +1084,7 @@ run_cli_with_prompt() {
       _ptmp_codex="$(mktemp /tmp/pilosa-prompt.XXXXXX)"
       printf '%s' "$prompt" > "$_ptmp_codex"
       _ltmp_codex="$(mktemp /tmp/pilosa-launch.XXXXXX.sh)"
-      printf '#!/bin/bash\ncd %s && exec codex -C %s "$(cat %s)"\nrm -f %s\n' \
+      printf '#!/bin/bash\ncd %s && codex -C %s "$(cat %s)"\nrm -f %s\n' \
         "$(printf '%q' "$root")" "$(printf '%q' "$root")" "$(printf '%q' "$_ptmp_codex")" "$(printf '%q' "$_ptmp_codex")" > "$_ltmp_codex"
       chmod +x "$_ltmp_codex"
       _launch_in_terminal "$_ltmp_codex"
@@ -1120,7 +1102,7 @@ run_cli_with_prompt() {
       _ptmp_oc="$(mktemp /tmp/pilosa-prompt.XXXXXX)"
       printf '%s' "$prompt" > "$_ptmp_oc"
       _ltmp_oc="$(mktemp /tmp/pilosa-launch.XXXXXX.sh)"
-      printf '#!/bin/bash\ncd %s && exec opencode --prompt "$(cat %s)" %s\nrm -f %s\n' \
+      printf '#!/bin/bash\ncd %s && opencode --prompt "$(cat %s)" %s\nrm -f %s\n' \
         "$(printf '%q' "$root")" "$(printf '%q' "$_ptmp_oc")" "$(printf '%q' "$root")" "$(printf '%q' "$_ptmp_oc")" > "$_ltmp_oc"
       chmod +x "$_ltmp_oc"
       _launch_in_terminal "$_ltmp_oc"
@@ -1138,7 +1120,7 @@ run_cli_with_prompt() {
       _ptmp_cc="$(mktemp /tmp/pilosa-prompt.XXXXXX)"
       printf '%s' "$prompt" > "$_ptmp_cc"
       _ltmp_cc="$(mktemp /tmp/pilosa-launch.XXXXXX.sh)"
-      printf '#!/bin/bash\ncd %s && exec claude "$(cat %s)"\nrm -f %s\n' \
+      printf '#!/bin/bash\ncd %s && claude "$(cat %s)"\nrm -f %s\n' \
         "$(printf '%q' "$root")" "$(printf '%q' "$_ptmp_cc")" "$(printf '%q' "$_ptmp_cc")" > "$_ltmp_cc"
       chmod +x "$_ltmp_cc"
       _launch_in_terminal "$_ltmp_cc"
@@ -1161,7 +1143,7 @@ run_cli_with_prompt() {
       _ptmp_kl="$(mktemp /tmp/pilosa-prompt.XXXXXX)"
       printf '%s' "$prompt" > "$_ptmp_kl"
       _ltmp_kl="$(mktemp /tmp/pilosa-launch.XXXXXX.sh)"
-      printf '#!/bin/bash\ncd %s && exec kilo "$(cat %s)"\nrm -f %s\n' \
+      printf '#!/bin/bash\ncd %s && kilo "$(cat %s)"\nrm -f %s\n' \
         "$(printf '%q' "$root")" "$(printf '%q' "$_ptmp_kl")" "$(printf '%q' "$_ptmp_kl")" > "$_ltmp_kl"
       chmod +x "$_ltmp_kl"
       _launch_in_terminal "$_ltmp_kl"
@@ -1238,17 +1220,6 @@ is_text_based_pdf() {
 }
 
 # ── Centralized engine routing ──────────────────────────────────────────────
-
-engine_for_extension() {
-  local ext="$1"
-  ext_in_list "$ext" "$MARKDOWN_EXTENSIONS"       && { echo "renamer"; return; }
-  ext_in_list "$ext" "$MARKITDOWN_EXTENSIONS"     && { echo "markitdown"; return; }
-  ext_in_list "$ext" "$IMAGE_EXTENSIONS"          && { echo "rapidocr"; return; }
-  [[ "$ext" == "pdf" ]]                           && { echo "pdf_classify"; return; }
-  echo "none"
-}
-
-
 
 markdown_raw_rel_path() {
   local rel_path="$1" name dir stem ext
@@ -1614,17 +1585,6 @@ render_copy_progress() {
   printf '\r\033[2K  %s%s%s %s[%s]%s %d/%d %s (%d copied, %d skipped)' "${C}" "$(spinner_frame "$processed")" "${RESET}" "${C}" "$bar" "${RESET}" "$processed" "$total" "$current_file" "$copied" "$skipped" >&2
 }
 
-render_pdf_progress() {
-  local processed="$1" total="$2" converted="$3" skipped="$4" current_file="${5:-}"
-  local width=$((COLS > 60 ? 28 : (COLS-36 > 10 ? COLS-36 : 10))) filled=0 bar="" i
-  [[ "$total" -gt 0 ]] && filled=$((processed * width / total))
-  for ((i = 0; i < width; i++)); do
-    if (( i < filled )); then bar+="◆"; else bar+="◇"; fi
-  done
-  current_file="$(truncate_display_path "$current_file" 44)"
-  printf '\r\033[2K  %s%s PDF → text%s %s[%s]%s %d/%d %s (%d imported, %d skipped)' "${M}" "$(spinner_frame "$processed")" "${RESET}" "${M}" "$bar" "${RESET}" "$processed" "$total" "$current_file" "$converted" "$skipped" >&2
-}
-
 render_ocr_progress() {
   local processed="$1" total="$2" converted="$3" skipped="$4" current_file="${5:-}" page_info="${6:-}"
   local width=$((COLS > 60 ? 28 : (COLS-36 > 10 ? COLS-36 : 10))) filled=0 bar="" i
@@ -1797,7 +1757,8 @@ copy_source() {
             local _md_pid=$!
             pilosa_debug_md "MarkItDown batch spawned — pid=$_md_pid, reading fifo..."
 
-            while IFS= read -r _line; do
+            local _md_read_exit=0
+            while IFS= read -r -t 60 _line; do
               [[ -n "${_line//$'\t'/}" ]] || { pilosa_debug_md "EMPTY fifo line, skipping"; continue; }
               local _type="${_line%%$'\t'*}"
               case "$_type" in
@@ -1860,7 +1821,11 @@ copy_source() {
                   pilosa_debug_md "UNEXPECTED fifo line: $_line"
                   ;;
               esac
-            done < "$_md_fifo"
+            done < "$_md_fifo" || _md_read_exit=$?
+            if [[ $_md_read_exit -eq 142 ]]; then
+              warn "MarkItDown batch timed out — partial results may be available"
+              kill "$_md_pid" 2>/dev/null || true
+            fi
             pilosa_debug_md "FIFO read complete — waiting for batch process (pid=$_md_pid)..."
             wait "$_md_pid" 2>/dev/null
             pilosa_debug_md "Batch process finished — exit=$?"
@@ -1996,7 +1961,8 @@ copy_source() {
             local _ocr_pid=$!
             pilosa_debug "Batch process spawned — pid=$_ocr_pid, reading fifo..."
 
-            while IFS= read -r _line; do
+            local _ocr_read_exit=0
+            while IFS= read -r -t 120 _line; do
               [[ -n "${_line//$'\t'/}" ]] || { pilosa_debug "EMPTY fifo line, skipping"; continue; }
               local _type="${_line%%$'\t'*}"
               case "$_type" in
@@ -2052,7 +2018,11 @@ copy_source() {
                   pilosa_debug "UNEXPECTED fifo line: $_line"
                   ;;
               esac
-            done < "$_ocr_fifo"
+            done < "$_ocr_fifo" || _ocr_read_exit=$?
+            if [[ $_ocr_read_exit -eq 142 ]]; then
+              warn "OCR batch timed out — partial results may be available"
+              kill "$_ocr_pid" 2>/dev/null || true
+            fi
             pilosa_debug "FIFO read complete — waiting for batch process (pid=$_ocr_pid)..."
             wait "$_ocr_pid" 2>/dev/null
             pilosa_debug "Batch process finished — exit=$?"
@@ -2168,19 +2138,6 @@ choose_import_batches() {
     fi
     warn "Select at least one file type to enable import."
   done
-}
-
-choose_scan_action() {
-  local copyable_count="$1"
-  local options=()
-  if [[ "$copyable_count" -gt 0 ]]; then
-    options+=("$(option_spec "import" "Import these files into the workspace" "prepare a working copy for analysis")")
-  fi
-  options+=(
-    "$(option_spec "rescan" "Choose another source folder" "rescan a different folder before importing anything")"
-    "$(option_spec "cancel" "Cancel onboarding" "stop here without preparing a workspace copy")"
-  )
-  prompt_choose "Next step" "${options[@]}"
 }
 
 choose_handoff_action() {
@@ -2455,7 +2412,7 @@ PROMPT_EOF
 
 PILOSA_VENDOR_DIR="${PILOSA_HOME:-$HOME/.pilosa}/vendor/pilosa"
 RAPIDOCR_VENDOR_DIR="${PILOSA_HOME:-$HOME/.pilosa}/vendor/rapidocr"
-PLATFORM="${OS:-$(uname -s | tr '[:upper:]' '[:lower:]')}-$(uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/')"
+PLATFORM="${OS:-$(uname -s | tr '[:upper:]' '[:lower:]')}-$(uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/' | sed 's/i[3-9]86/i386/')"
 RAPIDOCR_PLATFORM="$PLATFORM"
 
 rapidocr_ocr_available() {
@@ -2503,12 +2460,7 @@ markitdown_bin() {
   return 1
 }
 
-run_rapidocr_ocr() {
-  local input_file="$1" output_file="$2"
-  local ocr_bin
-  ocr_bin="$(rapidocr_ocr_bin)" || { echo "ERROR: RapidOCR not installed" >&2; return 1; }
-  "$ocr_bin" "$input_file" "$output_file"
-}
+
 
 is_rapidocr_image() {
   local ext
@@ -2526,44 +2478,14 @@ is_rapidocr_pdf() {
 
 IMAGE_EXTENSIONS="jpg|jpeg|png|gif|webp|heic|heif|tif|tiff|bmp|svg"
 
-prompt_ocr_choice() {
-  # Skip OCR prompt in non-interactive mode (piped input, CI, tests)
-  if [[ ! -t 0 ]]; then
-    SCAN_OCR_CHOICE="no"
-    return 0
-  fi
 
-  local total_ocr="${SCAN_OCR_CONVERTIBLE_COUNT:-0}"
-  
-  # Skip if no scanned PDFs or images
-  [[ "$total_ocr" -gt 0 ]] || { SCAN_OCR_CHOICE="no"; return 0; }
-  
-  if rapidocr_ocr_available; then
-    echo ""
-    note "OCR Available: RapidOCR (bundled)"
-    note "  • Converts scanned PDFs → structured Markdown via off-line OCR"
-    note "  • Converts images → text via OCR (90+ languages)"
-    note "  • Runs 100% locally, no cloud needed"
-    note "  • Text-based PDFs are handled by MarkItDown (faster text extraction)"
-    echo ""
-    
-    if confirm "Would you like to OCR ${total_ocr} scanned PDFs and images?"; then
-      SCAN_OCR_CHOICE="yes"
-    else
-      SCAN_OCR_CHOICE="no"
-      echo ""
-      warn "Skipping OCR: ${total_ocr} files will not be processed"
-    fi
-  else
-    warn "RapidOCR OCR not available for this platform"
-    SCAN_OCR_CHOICE="no"
-  fi
-}
+
+IMAGE_EXTENSIONS="jpg|jpeg|png|gif|webp|heic|heif|tif|tiff|bmp|svg"
 
 run_integrated_onboarding() {
   local root="$1" project_title="$2" preselected_source="${3:-}"
   local source_path="" preferred_cli preferred_cli_label startup_prompt launch_command handoff_action handoff_action_text handoff_result
-  local copyable_count estimated_bytes free_bytes scan_action source_prompt_shown=0
+  local copyable_count estimated_bytes free_bytes source_prompt_shown=0
 
   # ── Step 1: Source folder ─────────────────────────────────────────────
   if [[ -n "$preselected_source" ]]; then
@@ -2695,20 +2617,6 @@ run_integrated_onboarding() {
 }
 
 # ── framework manifest reader ──────────────────────────────────────────────
-# Reads framework-files.tsv and returns paths matching the given role filter.
-# Usage: read_manifest [framework|user_state|mixed_framework_user]
-read_manifest() {
-  local filter="${1:-}"
-  local tsv="${FRAMEWORK_ROOT}/.pilosa/framework-files.tsv"
-  [[ -f "$tsv" ]] || die "Framework manifest not found: $tsv"
-
-  while IFS=$'\t' read -r path role policy; do
-    [[ "$path" == "path" ]] && continue  # skip header
-    if [[ -z "$filter" || "$role" == "$filter" ]]; then
-      echo "$path"
-    fi
-  done < "$tsv"
-}
 
 # ── detect installed LLM CLIs ──────────────────────────────────────────────
 detect_llm_clis() {
@@ -3813,7 +3721,6 @@ processing_status: auto_generated' \
 PILOSA_CONFIG="${PILOSA_HOME}/config.yaml"
 PILOSA_CACHE="${PILOSA_HOME}/workspace_cache.txt"
 DEFAULT_SCAN_ROOTS=("$HOME/Projects" "$HOME/Work" "$HOME/Documents")
-CACHE_TTL=3600  # 1 hour
 
 # Load config from ~/.pilosa/config.yaml
 load_config() {
@@ -3878,19 +3785,6 @@ ask_scan_permission() {
   fi
 }
 
-# Check if cache is fresh (< TTL)
-cache_is_fresh() {
-  [[ -f "$PILOSA_CACHE" ]] || return 1
-  
-  local cache_time
-  cache_time="$(stat -f %m "$PILOSA_CACHE" 2>/dev/null || stat -c %Y "$PILOSA_CACHE" 2>/dev/null || echo 0)"
-  local current_time
-  current_time="$(date +%s)"
-  local age=$((current_time - cache_time))
-  
-  [[ $age -lt $CACHE_TTL ]]
-}
-
 # Scan workspaces and return paths
 scan_workspaces() {
   local roots=("$@")
@@ -3930,18 +3824,6 @@ update_cache() {
   } > "$PILOSA_CACHE"
 }
 
-# Load workspaces from cache
-load_cached_workspaces() {
-  [[ -f "$PILOSA_CACHE" ]] || return 1
-  
-  while IFS='|' read -r path project; do
-    [[ -d "$path/.pilosa" ]] || continue  # Validate still exists
-    printf '%s|%s\n' "$path" "$project"
-  done < "$PILOSA_CACHE"
-}
-
-# Main discovery function with permission and caching
-# Note: This function does NOT ask for permission - caller must handle that
 discover_workspaces_with_permission() {
   load_config
   
@@ -4027,12 +3909,7 @@ update_registry() {
   done
 }
 
-# Legacy function for backward compatibility
-discover_workspaces() {
-  discover_workspaces_with_permission | cut -d'|' -f1
-}
 
-# Validate workspace path
 validate_workspace() {
   local path="$1"
   [[ -d "$path" ]] || return 1

@@ -31,7 +31,7 @@ set -euo pipefail
 
 # ── defaults ────────────────────────────────────────────────────────────────
 # Pinned stable version. Update this when cutting a new release.
-PINNED_VERSION="0.4.10"
+PINNED_VERSION="0.4.11"
 VERSION="${VERSION:-$PINNED_VERSION}"
 DRY_RUN=0
 VERIFY_ONLY=0
@@ -130,7 +130,12 @@ progress_stop() {
 # ── parse flags ─────────────────────────────────────────────────────────────
 while [ $# -gt 0 ]; do
   case "$1" in
-    --version)    VERSION="$2"; shift 2 ;;
+    --version)
+      VERSION="$2"; shift 2
+      if [[ "$VERSION" != "latest" && ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        die "Invalid version: $VERSION (use X.Y.Z or 'latest')"
+      fi
+      ;;
     --latest)     VERSION="latest"; shift ;;
     --dry-run)    DRY_RUN=1; shift ;;
     --verify-only) VERIFY_ONLY=1; shift ;;
@@ -140,7 +145,12 @@ while [ $# -gt 0 ]; do
     --no-modify-path) NO_MODIFY_PATH=true; shift ;;
     --min-days)   MIN_DAYS="$2"; shift 2 ;;
     --prefix)     PILOSA_HOME="$2"; shift 2 ;;
-    --bin-dir)    PILOSA_BIN_DIR="$2"; shift 2 ;;
+    --bin-dir)
+      PILOSA_BIN_DIR="$2"; shift 2
+      if [[ ! "$PILOSA_BIN_DIR" =~ ^[a-zA-Z0-9_/.-]+$ ]]; then
+        die "Invalid bin directory path: $PILOSA_BIN_DIR"
+      fi
+      ;;
     --yes|-y)     YES=1; shift ;;
     --help|-h)
       echo "Usage: bash install-pilosa.sh [options]"
@@ -182,6 +192,7 @@ detect_platform() {
   case "$arch" in
     arm64|aarch64) ARCH="arm64" ;;
     x86_64|amd64)  ARCH="amd64" ;;
+    i386|i686)     ARCH="i386" ;;
     *)             die "Unsupported architecture: $arch" ;;
   esac
 
@@ -205,6 +216,17 @@ download() {
 # ── safe untar ──────────────────────────────────────────────────────────────
 # Extracts a tarball after scanning for path traversal and symlink attacks.
 # Usage: safe_untar <archive> <destination> [extra tar args...]
+_realpath() {
+  local path="$1"
+  if [[ -d "$path" ]]; then
+    (cd "$path" 2>/dev/null && pwd -P) 2>/dev/null || echo "$path"
+  else
+    local dir; dir="$(dirname "$path")"
+    local base; base="$(basename "$path")"
+    (cd "$dir" 2>/dev/null && echo "$(pwd -P)/$base") 2>/dev/null || echo "$path"
+  fi
+}
+
 safe_untar() {
   local archive="$1" dest="$2"
   shift 2
@@ -212,15 +234,27 @@ safe_untar() {
   local listing
   listing="$(tar -tzf "$archive" 2>/dev/null)" || die "Cannot read archive: $archive"
 
-  if printf '%s\n' "$listing" | grep -qE '(^|[^a-zA-Z0-9./_-])(\.\./)'; then
+  # Reject any entry with .. component
+  if printf '%s\n' "$listing" | grep -qE '(^|/)\.\.(/|$)'; then
     die "Archive contains path traversal entries — aborting for safety"
   fi
 
-  if printf '%s\n' "$listing" | grep -qE ' -> /'; then
-    die "Archive contains absolute symlinks — aborting for safety"
+  # Reject absolute or escaping symlinks
+  if printf '%s\n' "$listing" | grep -qE ' -> '; then
+    while IFS= read -r _entry; do
+      _target="${_entry#* -> }"
+      _target="${_target% }"
+      if [[ "$_target" == /* ]]; then
+        die "Archive contains absolute symlinks — aborting for safety"
+      fi
+      _resolved="$(_realpath "${dest}/${_target}" 2>/dev/null || echo "")"
+      if [[ -n "$_resolved" && "$_resolved" != "${dest}"* ]]; then
+        die "Archive contains symlinks escaping destination — aborting for safety"
+      fi
+    done < <(printf '%s\n' "$listing" | grep ' -> ')
   fi
 
-  tar -xzf "$archive" -C "$dest" --no-same-owner "$@" 2>/dev/null
+  tar -xzf "$archive" -C "$dest" --no-same-owner "$@"
 }
 
 # ── checksum helper ─────────────────────────────────────────────────────────
@@ -563,15 +597,18 @@ main() {
   # ── download framework ──────────────────────────────────────────────────
   local tmpdir
   tmpdir="$(mktemp -d)"
-  trap 'rm -rf "$tmpdir"' EXIT
+  trap 'spinner_stop; progress_stop; rm -rf "$tmpdir"' EXIT INT TERM
   printf '\n' >&2
   spinner_start "Downloading framework v${VERSION}"
-  download "${base_url}/${archive_name}" "${tmpdir}/${archive_name}" 2>/dev/null
+  if ! download "${base_url}/${archive_name}" "${tmpdir}/${archive_name}"; then
+    spinner_stop
+    die "Failed to download framework from ${base_url}/${archive_name}"
+  fi
   spinner_stop
 
   # ── verify checksum ─────────────────────────────────────────────────────
-  download "${base_url}/checksums.txt" "${tmpdir}/checksums.txt" 2>/dev/null
-  if [ -f "${tmpdir}/checksums.txt" ]; then
+  if download "${base_url}/checksums.txt" "${tmpdir}/checksums.txt"; then
+    if [ -f "${tmpdir}/checksums.txt" ]; then
     local expected_hash
     expected_hash="$(grep "${archive_name}" "${tmpdir}/checksums.txt" 2>/dev/null | awk '{print $1}')"
     if [ -n "$expected_hash" ]; then
@@ -678,7 +715,7 @@ main() {
           "rapidocr==3.8.1" \
           "onnxruntime==1.26.0" \
           "pypdfium2==5.9.0" \
-          --quiet 2>/dev/null; then
+          --quiet 2>&1; then
           pip_ok=1
         fi
         progress_stop "Install complete"
@@ -732,6 +769,7 @@ print('English models ready')
           fi
         else
           warn "pip install failed — PDF/image OCR and Office doc conversion will not be available"
+          rm -f "${pilosa_vendor_dest}/rapidocr-cli" "${pilosa_vendor_dest}/markitdown-cli" 2>/dev/null || true
         fi
       else
         warn "Bundled Python not found — PDF/image OCR and Office doc conversion will not be available"
