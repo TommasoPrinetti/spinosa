@@ -31,7 +31,7 @@ set -euo pipefail
 
 # ── defaults ────────────────────────────────────────────────────────────────
 # Pinned stable version. Update this when cutting a new release.
-PINNED_VERSION="0.4.13"
+PINNED_VERSION="0.5.0"
 VERSION="${VERSION:-$PINNED_VERSION}"
 DRY_RUN=0
 VERIFY_ONLY=0
@@ -100,19 +100,12 @@ progress_start() {
   PROGRESS_PID=""
   [ -t 1 ] || return 0
   (
-    local width=30
+    local frames=("▁" "▃" "▄" "▅" "▆" "▇" "█" "▇" "▆" "▅" "▄" "▃")
     local i=0
-    local dir=1
     while true; do
-      local filled=$((i * width / 100))
-      local empty=$((width - filled))
-      local bar
-      bar="$(printf '%*s' "$filled" '' | tr ' ' '█')$(printf '%*s' "$empty" '' | tr ' ' '░')"
-      printf '\r\033[2K  %s%s%s %s %s' "${C}" "$bar" "${RESET}" "$msg" "$i%" >&2
-      i=$((i + dir * 2))
-      if [ "$i" -ge 100 ]; then i=98; dir=-1; fi
-      if [ "$i" -le 0 ]; then i=2; dir=1; fi
-      sleep 0.15
+      printf '\r\033[2K  %s%s%s %s' "${C}" "${frames[$((i % 12))]}" "${RESET}" "$msg" >&2
+      i=$((i + 1))
+      sleep 0.1
     done
   ) &
   PROGRESS_PID=$!
@@ -123,8 +116,10 @@ progress_stop() {
   kill "$PROGRESS_PID" 2>/dev/null || true
   wait "$PROGRESS_PID" 2>/dev/null || true
   PROGRESS_PID=""
-  # Fill the bar to 100%
-  printf '\r\033[2K  %s%s%s %s %s\n' "${C}" "$(printf '%*s' 30 '' | tr ' ' '█')" "${RESET}" "$1" "100%" >&2
+  printf '\r\033[2K' >&2
+  if [[ -n "${1:-}" ]]; then
+    printf '  %s %s\n' "${G}✦${RESET}" "$1"
+  fi
 }
 
 # ── parse flags ─────────────────────────────────────────────────────────────
@@ -741,6 +736,9 @@ for f in ['ppocr_keys_v1.txt', 'ppocrv5_dict.txt']:
             # Pre-download English OCR models
             progress_start "Downloading OCR models"
             if "$pilosa_python" -c "
+import logging
+logging.getLogger('RapidOCR').setLevel(logging.WARNING)
+logging.getLogger('onnxruntime').setLevel(logging.WARNING)
 from rapidocr import RapidOCR, EngineType, LangDet, LangRec, ModelType, OCRVersion
 RapidOCR(params={
     'Det.engine_type': EngineType.ONNXRUNTIME,

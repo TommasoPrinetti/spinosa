@@ -109,6 +109,8 @@ print_step(){ printf '\n  %s%s[%s/%s] %s%s\n' "${BOLD}" "${C}" "$1" "$2" "$3" "$
 read_from_tty() {
   if [[ -t 0 ]]; then
     IFS= read -r "$@"
+  elif [[ "${NUMBERED:-0}" = "1" ]]; then
+    return 1
   else
     # Try to read from /dev/tty if available, suppress all errors
     { [[ -r /dev/tty ]] && IFS= read -r "$@" < /dev/tty; } 2>/dev/null || return 1
@@ -2088,12 +2090,12 @@ copy_source() {
 
 choose_preferred_cli() {
   local options=(
+    "$(option_spec "opencode" "OpenCode" "run the OpenCode CLI with the startup prompt")"
+    "$(option_spec "opencode_desktop" "OpenCode Desktop" "open OpenCode and paste the copied prompt")"
     "$(option_spec "claude_code" "Claude Code" "run the terminal CLI in this workspace")"
     "$(option_spec "claude_code_desktop" "Claude Code Desktop" "open the desktop app with the prompt ready")"
     "$(option_spec "codex" "Codex" "run the Codex terminal CLI in this workspace")"
     "$(option_spec "codex_app" "Codex App" "open the Codex app and paste the copied prompt")"
-    "$(option_spec "opencode" "OpenCode" "run the OpenCode CLI with the startup prompt")"
-    "$(option_spec "opencode_desktop" "OpenCode Desktop" "open OpenCode and paste the copied prompt")"
     "$(option_spec "kilo" "Kilo" "run the Kilo terminal CLI in this workspace")"
     "$(option_spec "other" "Other" "copy a generic launch command for another tool")"
   )
@@ -4213,65 +4215,72 @@ cmd_upgrade() {
 
   header "Pilosa — Upgrade"
 
-  # Fetch and display release notes before confirmation
+  # ── resolve target version early ───────────────────────────────────────
+  # PILOSA_REPO env var is intentionally NOT used — self-upgrade
+  # must always point to the canonical upstream to prevent supply-chain attacks
+  # via compromised environment variables.
+  local resolved_version
+  if [[ "$target_version" != "latest" ]]; then
+    resolved_version="$target_version"
+  else
+    spinner_start "Resolving latest version"
+    resolved_version="$(curl -fsSL -o /dev/null -w '%{url_effective}' \
+      "https://github.com/TommasoPrinetti/pilosa/releases/latest" 2>/dev/null \
+      | sed 's|.*/tag/v||' || echo "")"
+    spinner_stop
+  fi
+
+  # ── check if already on this version ──────────────────────────────────
+  local installed_version
+  installed_version="$(framework_version "$FRAMEWORK_ROOT")"
+  [[ "$installed_version" == "dev" || -z "$installed_version" ]] && installed_version=""
+
+  if [[ -n "$installed_version" && "$resolved_version" == "$installed_version" ]]; then
+    info "Already on the latest version (v${installed_version}). Nothing to upgrade."
+    return 0
+  fi
+
+  # ── release notes ──────────────────────────────────────────────────────
   if [[ "$auto_yes" -ne 1 ]]; then
     spinner_start "Fetching release notes"
     local release_data
-    release_data="$(fetch_release_notes "$target_version")"
+    release_data="$(fetch_release_notes "$resolved_version")"
     spinner_stop
-    
+
     if [[ -n "$release_data" ]]; then
       display_release_notes "$release_data"
     else
       warn "Could not fetch release notes"
       printf '\n'
     fi
-  fi
 
-  # Confirm before downloading and running installer
-  if [[ "$auto_yes" -ne 1 ]]; then
     if ! confirm "Download and run the Pilosa installer to upgrade?" "y"; then
       info "Upgrade cancelled."
       return 0
     fi
   fi
 
-  info "Downloading latest installer..."
+  # ── download installer ──────────────────────────────────────────────────
+  info "Downloading installer..."
 
   local tmpdir
   tmpdir="$(mktemp -d)"
   local installer="${tmpdir}/install-pilosa.sh"
 
-  # Resolve latest version from GitHub
-  # PILOSA_REPO env var is intentionally NOT used here — self-upgrade
-  # must always point to the canonical upstream to prevent supply-chain attacks
-  # via compromised environment variables.
-  spinner_start "Resolving latest version"
-  local latest_version
-  latest_version="$(curl -fsSL -o /dev/null -w '%{url_effective}' "https://github.com/TommasoPrinetti/pilosa/releases/latest" 2>/dev/null | sed 's|.*/tag/v||' || echo "")"
-  spinner_stop
-  
-  if [[ -n "$latest_version" ]]; then
-    spinner_start "Downloading installer v${latest_version}"
-    if ! curl -fsSL "https://github.com/TommasoPrinetti/pilosa/releases/download/v${latest_version}/install.sh" -o "$installer" 2>/dev/null; then
-      spinner_stop
-      warn "Could not download release installer. Falling back to raw main branch..."
-      spinner_start "Downloading from main branch"
-      curl -fsSL "https://raw.githubusercontent.com/TommasoPrinetti/pilosa/main/install.sh" -o "$installer" || die "Could not download installer"
-    fi
+  spinner_start "Downloading installer v${resolved_version}"
+  if curl -fsSL "https://github.com/TommasoPrinetti/pilosa/releases/download/v${resolved_version}/install.sh" -o "$installer" 2>/dev/null; then
     spinner_stop
+    ok "Installer downloaded"
   else
+    spinner_stop
+    warn "Could not download release installer. Falling back to raw main branch..."
     spinner_start "Downloading from main branch"
     curl -fsSL "https://raw.githubusercontent.com/TommasoPrinetti/pilosa/main/install.sh" -o "$installer" || die "Could not download installer"
     spinner_stop
+    ok "Installer downloaded"
   fi
 
-  ok "Installer downloaded"
-
-  local upgrade_args=("--upgrade")
-  if [[ "$target_version" != "latest" ]]; then
-    upgrade_args+=("--version" "$target_version")
-  fi
+  local upgrade_args=("--upgrade" "--version" "$resolved_version")
   if [[ "$auto_yes" -eq 1 ]]; then
     upgrade_args+=("--yes")
   fi
