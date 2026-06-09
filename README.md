@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/Banner-dithered.jpg">
+    <img src="assets/Banner-dithered.jpg" alt="Pilosa Framework" width="100%">
+  </picture>
+</p>
+
 # Pilosa
 
 A CLI tool that takes a folder of source files and turns it into a searchable knowledge map for multi-agent research workflows.
