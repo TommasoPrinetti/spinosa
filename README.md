@@ -5,26 +5,26 @@ A CLI tool that takes a folder of source files and turns it into a searchable kn
 ## What it does
 
 1. Copies your source files into a workspace (`raw/`)
-2. Converts PDFs and images to searchable Markdown via built-in RapidOCR
+2. Converts Office docs, PDFs, images, and more to searchable Markdown via built-in MarkItDown + RapidOCR
 3. Generates YAML headers for each file
 4. Creates navigation maps with wikilinks between files
 5. Provides an orchestrator (`AGENTS.md`) that routes questions to specialist sub-agents
 
-The original source folder is never modified. The workspace is self-contained. OCR runs 100% locally via ONNX Runtime — no cloud, no API keys.
+The original source folder is never modified. The workspace is self-contained. All conversion runs 100% locally — no cloud, no API keys.
 
 ## Install
 
 ```bash
-curl -fsSL https://github.com/TommasoPrinetti/pilosa/releases/download/v0.4.1/install.sh | bash
+curl -fsSL https://github.com/TommasoPrinetti/pilosa/releases/download/v0.4.2/install.sh | bash
 ```
 
-This installs the pinned stable version (`0.4.1`) to `~/.pilosa/`. No npm, Python, or Go required.
+This installs the pinned stable version (`0.4.2`) to `~/.pilosa/`. No npm, Python, or Go required.
 
 For more options:
 
 ```bash
 curl -fsSL https://github.com/TommasoPrinetti/pilosa/releases/download/v0.4.1/install.sh -o install-pilosa.sh
-bash install-pilosa.sh --version 0.4.1
+bash install-pilosa.sh --version 0.4.2
 bash install-pilosa.sh --min-days 7
 bash install-pilosa.sh --verify-only
 ```
