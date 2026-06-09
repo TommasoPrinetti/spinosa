@@ -255,27 +255,6 @@ bundle_platform_binary "gum" "$GUM_VERSION" \
   "https://github.com/charmbracelet/gum/releases/download/v${GUM_VERSION}/gum_${GUM_VERSION}_Linux_i386.tar.gz" \
   "linux-i386"
 
-# ── Bundle Pilosa vendor bundles (RapidOCR + MarkItDown) ─────────────────
-echo "Bundling Pilosa vendor bundles..."
-
-VENDOR_SRC="${REPO_ROOT}/.bin/lib/vendor"
-# Unified vendor bundles (post-merger: single archive with both engines)
-for tarball in "$VENDOR_SRC"/pilosa-vendor-*.tar.gz; do
-  if [[ -f "$tarball" ]]; then
-    tarball_name="$(basename "$tarball")"
-    cp "$tarball" "${VENDOR_DIR}/${tarball_name}"
-    echo "  Bundled ${tarball_name}"
-  fi
-done
-# Legacy RapidOCR-only bundles (backward compat during transition)
-for tarball in "$VENDOR_SRC"/rapidocr-*.tar.gz; do
-  if [[ -f "$tarball" ]]; then
-    tarball_name="$(basename "$tarball")"
-    cp "$tarball" "${VENDOR_DIR}/${tarball_name}"
-    echo "  Bundled ${tarball_name} (legacy)"
-  fi
-done
-
 # ── Vendor binary checksums ─────────────────────────────────────────────────
 echo "Computing vendor binary checksums..."
 
