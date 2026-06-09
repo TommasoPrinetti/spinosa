@@ -31,7 +31,7 @@ set -euo pipefail
 
 # ── defaults ────────────────────────────────────────────────────────────────
 # Pinned stable version. Update this when cutting a new release.
-PINNED_VERSION="0.4.8"
+PINNED_VERSION="0.4.9"
 VERSION="${VERSION:-$PINNED_VERSION}"
 DRY_RUN=0
 VERIFY_ONLY=0
@@ -46,16 +46,17 @@ REPO="TommasoPrinetti/pilosa"
 
 # ── colors (only if terminal) ──────────────────────────────────────────────
 if [ -t 2 ] && [ "${NO_COLOR:-}" != "1" ]; then
-  R='' G='' B='' Y='' C='' DIM='' BOLD='' RESET=''
+  R='' G='' B='' Y='' C='' DIM='' BOLD='' U='' RESET=''
   R=$'\033[31m' G=$'\033[32m' Y=$'\033[33m'
-  C=$'\033[36m' DIM=$'\033[2m' BOLD=$'\033[1m' RESET=$'\033[0m'
+  C=$'\033[36m' DIM=$'\033[2m' BOLD=$'\033[1m' U=$'\033[4m' RESET=$'\033[0m'
 else
-  R='' G='' B='' Y='' C='' DIM='' BOLD='' RESET=''
+  R='' G='' B='' Y='' C='' DIM='' BOLD='' U='' RESET=''
 fi
 
 info()  { printf '  %s %s\n' "${DIM}→${RESET}" "$1"; }
 ok()    { printf '  %s %s\n' "${G}✦${RESET}" "$1"; }
 warn()  { printf '  %s %s\n' "${Y}⚠${RESET}" "$1"; }
+fail()  { printf '  %s%s%s✗%s %s%s\n' "${R}${BOLD}" "${U}" "$1" "$(printf '\033[24m')" "${RESET}" >&2; }
 die()   { printf '\n  %s %s\n\n' "${R}✗${RESET}" "$1" >&2; exit 1; }
 
 # ── read from TTY (works with piped input) ──────────────────────────────────
@@ -698,7 +699,7 @@ for f in ['ppocr_keys_v1.txt', 'ppocrv5_dict.txt']:
 
           # Pre-download English OCR models (avoids delay on first use)
           progress_start "Downloading OCR models"
-          "$pilosa_python" -c "
+          if "$pilosa_python" -c "
 from rapidocr import RapidOCR, EngineType, LangDet, LangRec, ModelType, OCRVersion
 RapidOCR(params={
     'Det.engine_type': EngineType.ONNXRUNTIME,
@@ -711,9 +712,22 @@ RapidOCR(params={
     'Rec.ocr_version': OCRVersion.PPOCRV4,
 })
 print('English models ready')
-" 2>/dev/null || warn "Model download will happen on first use"
-          progress_stop "Models ready"
+" 2>&1; then
+            progress_stop "Models ready"
+          else
+            progress_stop "Models not downloaded"
+            fail "OCR models could not be downloaded — will download on first use"
+            note "This is normal on first install, but verify internet access if it persists"
+          fi
           ok "Python packages installed"
+
+          # Linux: check for libGL (required by OpenCV/RapidOCR)
+          if [[ "$(uname -s)" == "Linux" ]] && ! ldconfig -p 2>/dev/null | grep -q "libGL.so"; then
+            fail "libGL.so.1 not found — RapidOCR/OpenCV needs this on Linux"
+            note "Install: sudo apt-get install libgl1  (Debian/Ubuntu)"
+            note "        sudo dnf install mesa-libGL  (Fedora)"
+            note "        sudo pacman -S mesa           (Arch)"
+          fi
         else
           warn "pip install failed — PDF/image OCR and Office doc conversion will not be available"
         fi
