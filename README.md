@@ -11,7 +11,7 @@ A CLI tool that takes a folder of source files and turns it into a searchable kn
 
 ## What it does
 
-1. Copies your source files into a workspace (`raw/`)
+1. Copies and converts your source files into a workspace — every file becomes `.md`
 2. Converts Office docs, PDFs, images, and more to searchable Markdown via built-in MarkItDown + RapidOCR
 3. Generates YAML headers for each file
 4. Creates navigation maps with wikilinks between files
@@ -22,18 +22,16 @@ The original source folder is never modified. The workspace is self-contained. A
 ## Install
 
 ```bash
-curl -fsSL https://github.com/TommasoPrinetti/pilosa/releases/download/v0.4.4/install.sh | bash
+curl -fsSL https://github.com/TommasoPrinetti/pilosa/releases/download/v0.4.5/install.sh | bash
 ```
 
-This installs the pinned stable version (`0.4.2`) to `~/.pilosa/`. No npm, Python, or Go required.
+This installs the pinned stable version (`0.4.5`) to `~/.pilosa/`. No npm, Python, or Go required. Requires bash.
 
-For more options:
+For custom versions or offline installs, download the script first:
 
 ```bash
-curl -fsSL https://github.com/TommasoPrinetti/pilosa/releases/download/v0.4.1/install.sh -o install-pilosa.sh
-bash install-pilosa.sh --version 0.4.2
-bash install-pilosa.sh --min-days 7
-bash install-pilosa.sh --verify-only
+curl -fsSL https://github.com/TommasoPrinetti/pilosa/releases/download/v0.4.5/install.sh -o install-pilosa.sh
+bash install-pilosa.sh --help
 ```
 
 ## Quick start
@@ -41,10 +39,8 @@ bash install-pilosa.sh --verify-only
 ### 1. Install
 
 ```bash
-curl -fsSL https://github.com/TommasoPrinetti/pilosa/releases/download/v0.4.1/install.sh | sh
+curl -fsSL https://github.com/TommasoPrinetti/pilosa/releases/download/v0.4.5/install.sh | bash
 ```
-
-Requires bash. The installer auto-launches the dashboard when done.
 
 ### 2. Create a workspace
 
@@ -55,9 +51,9 @@ pilosa new /path/to/source/folder
 ```
 
 This runs the onboarding flow:
-- Scans the source folder for file types (PDFs, images, Markdown, etc.)
-- Lets you pick which file types to import
-- OCRs PDFs and images to Markdown via bundled RapidOCR (ONNX, fully local)
+- Scans the source folder for file types (PDFs, images, Office docs, Markdown, etc.)
+- Converts Office docs, HTML, CSV, JSON, and text-based PDFs to Markdown via bundled MarkItDown (fully local)
+- OCRs scanned PDFs and images to Markdown via bundled RapidOCR (ONNX, fully local)
 - Copies a startup prompt to your clipboard
 - Offers to open your LLM CLI in a new terminal tab
 
@@ -251,13 +247,13 @@ bash tests/test_cli.sh
 ### Packaging a release
 
 ```bash
-bash .bin/package-release.sh 0.4.1
+bash .bin/package-release.sh 0.4.5
 ```
 
 ### Publishing a release
 
 ```bash
-bash .bin/publish-release.sh 0.4.1
+bash .bin/publish-release.sh 0.4.5
 ```
 
 Requires `gh` CLI and a clean working tree.
