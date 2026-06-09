@@ -297,7 +297,7 @@ echo ""
 # ── Create tarball ──────────────────────────────────────────────────────────
 echo "Creating archive..."
 
-tar -czf "${DIST}/${FRAMEWORK_ARCHIVE}" -C "$STAGE" "pilosa-framework-${VERSION}" --no-xattrs 2>/dev/null
+COPYFILE_DISABLE=1 tar -czf "${DIST}/${FRAMEWORK_ARCHIVE}" -C "$STAGE" "pilosa-framework-${VERSION}" 2>/dev/null
 
 # ── Stage install.sh ────────────────────────────────────────────────────────
 echo "Staging install.sh..."
