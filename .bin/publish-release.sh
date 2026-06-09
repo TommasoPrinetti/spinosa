@@ -75,6 +75,7 @@ curl -fsSL https://github.com/TommasoPrinetti/pilosa/releases/download/${TAG}/in
 \`\`\`
 
 This installs the pinned stable version (${VERSION}). Zero dependencies.
+Python packages (MarkItDown, RapidOCR) and OCR models are installed via pip on first run.
 
 For options, download first:
 

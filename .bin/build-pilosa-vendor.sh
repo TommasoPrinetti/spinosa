@@ -1,21 +1,19 @@
 #!/usr/bin/env bash
-# build-pilosa-vendor.sh — Build unified Pilosa vendor bundle
+# build-pilosa-vendor.sh — Build Pilosa vendor bundle (Python + wrappers only)
 #
 # Creates a self-contained vendor directory with:
-#   - Standalone Python 3.11 (no system Python needed)
+#   - Standalone Python 3.11 (no system Python needed, includes pip + SSL)
 #   - rapidocr-cli.py wrapper (batch protocol)
 #   - markitdown-cli.py wrapper (batch protocol)
 #
-# Pip packages (RapidOCR, MarkItDown, onnxruntime, pypdfium2)
-# are installed at install time by install.sh.
-#
-# Cross-platform builds work from any host — only Python binary
-# + wrappers are packaged. No pip install at build time.
+# Packages (markitdown, rapidocr, onnxruntime, pypdfium2) and OCR models
+# are NOT bundled — they install via pip at install time. This keeps the
+# vendor tarball small (~26 MB) and cross-platform compatible.
 #
 # Usage:
 #   ./build-pilosa-vendor.sh [platform]
 #
-# Platforms: darwin-arm64, linux-amd64, linux-arm64, darwin-amd64
+# Platforms: darwin-arm64, darwin-amd64, linux-amd64, linux-arm64
 # If omitted, builds for current platform.
 #
 # Output:
@@ -62,25 +60,11 @@ get_python_url() {
     local platform="$1"
     local os arch
     case "$platform" in
-        darwin-arm64)
-            os="apple-darwin"
-            arch="aarch64"
-            ;;
-        darwin-amd64)
-            os="apple-darwin"
-            arch="x86_64"
-            ;;
-        linux-amd64)
-            os="unknown-linux-gnu"
-            arch="x86_64"
-            ;;
-        linux-arm64)
-            os="unknown-linux-gnu"
-            arch="aarch64"
-            ;;
-        *)
-            err "Unsupported platform: $platform"
-            ;;
+        darwin-arm64) os="apple-darwin"; arch="aarch64" ;;
+        darwin-amd64) os="apple-darwin"; arch="x86_64" ;;
+        linux-amd64)  os="unknown-linux-gnu"; arch="x86_64" ;;
+        linux-arm64)  os="unknown-linux-gnu"; arch="aarch64" ;;
+        *) err "Unsupported platform: $platform" ;;
     esac
     echo "https://github.com/astral-sh/python-build-standalone/releases/download/${PYTHON_BUILD_VERSION}/cpython-${PYTHON_VERSION}%2B${PYTHON_BUILD_VERSION}-${arch}-${os}-install_only.tar.gz"
 }
@@ -101,7 +85,7 @@ build_platform() {
     local vendor_dir="${VENDOR_BASE}/pilosa-vendor-${platform}"
     local python_dir="${vendor_dir}/python"
 
-    log "Building Pilosa unified vendor for: ${platform}"
+    log "Building Pilosa vendor bundle for: ${platform}"
     log "Python version: ${PYTHON_VERSION}"
 
     rm -rf "${vendor_dir}"
@@ -175,7 +159,7 @@ MDWRAP_EOF
     vendor_size=$(du -sh "pilosa-vendor-${platform}" | cut -f1)
     log "Archive created: pilosa-vendor-${platform}.tar.gz (${archive_size} compressed, ${vendor_size} uncompressed)"
 
-    rm -rf "pilosa-vendor-${platform}/"
+    rm -rf "pilosa-vendor-${platform}"
     log "Build complete for ${platform}"
 }
 
@@ -187,8 +171,8 @@ main() {
         platform="$(detect_platform)" || return $?
     fi
 
-    log "Pilosa Unified Vendor Builder"
-    log "============================="
+    log "Pilosa Vendor Builder"
+    log "====================="
     log "Platform: ${platform}"
     log "Python: ${PYTHON_VERSION}"
     log "Output: ${VENDOR_BASE}/pilosa-vendor-${platform}.tar.gz"

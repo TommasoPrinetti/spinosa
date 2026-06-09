@@ -218,7 +218,7 @@ safe_untar() {
     die "Archive contains absolute symlinks — aborting for safety"
   fi
 
-  tar -xzf "$archive" -C "$dest" --no-same-owner "$@"
+  tar -xzf "$archive" -C "$dest" --no-same-owner "$@" 2>/dev/null
 }
 
 # ── checksum helper ─────────────────────────────────────────────────────────
