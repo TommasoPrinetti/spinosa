@@ -31,7 +31,7 @@ set -euo pipefail
 
 # ── defaults ────────────────────────────────────────────────────────────────
 # Pinned stable version. Update this when cutting a new release.
-PINNED_VERSION="0.4.7"
+PINNED_VERSION="0.4.8"
 VERSION="${VERSION:-$PINNED_VERSION}"
 DRY_RUN=0
 VERIFY_ONLY=0
@@ -637,10 +637,24 @@ main() {
     local vendor_url="${base_url}/pilosa-vendor-${suffix}.tar.gz"
     local vendor_tmp="${tmpdir}/pilosa-vendor-${suffix}.tar.gz"
 
-    spinner_start "Downloading Pilosa vendor for ${suffix}"
-    if download "$vendor_url" "$vendor_tmp" 2>/dev/null; then
+    # Retry download up to 3 times with 3-second backoff
+    local retries=0 max_retries=3 download_ok=false
+    while [[ $retries -lt $max_retries ]]; do
+      spinner_start "Downloading Pilosa vendor for ${suffix} (attempt $((retries + 1))/${max_retries})"
+      if download "$vendor_url" "$vendor_tmp"; then
+        spinner_stop
+        download_ok=true
+        break
+      fi
       spinner_stop
+      retries=$((retries + 1))
+      if [[ $retries -lt $max_retries ]]; then
+        warn "Download failed — retrying (${retries}/${max_retries})"
+        sleep 3
+      fi
+    done
 
+    if $download_ok; then
       spinner_start "Installing Pilosa vendor (Python + wrappers)"
       mkdir -p "$pilosa_vendor_dest"
       safe_untar "$vendor_tmp" "$pilosa_vendor_dest" --strip-components=1
@@ -706,9 +720,12 @@ print('English models ready')
       else
         warn "Bundled Python not found — PDF/image OCR and Office doc conversion will not be available"
       fi
-    else
-      spinner_stop
-      warn "No Pilosa vendor for ${suffix} (PDF/image OCR and Office doc conversion will not be available)"
+    fi
+    if ! $download_ok; then
+      warn "Could not download vendor bundle for ${suffix}"
+      note "URL: ${vendor_url}"
+      note "Check your internet connection or download manually and extract to: ${pilosa_vendor_dest}"
+      note "PDF/image OCR and Office doc conversion will not be available"
     fi
 
     # Verify vendor binary checksums against the release manifest

@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+# ── rlwrap re-exec for readline + tab completion ───────────────────────────
+if [[ -z "${RLWRAP_EXEC:-}" && -t 0 && -t 1 ]] && command -v rlwrap >/dev/null 2>&1; then
+  export RLWRAP_EXEC=1
+  exec rlwrap -c "$0" "$@"
+fi
 set -euo pipefail
 ORIGINAL_ARGS=("$@")
 
@@ -21,6 +26,9 @@ else
   R=$'\033[31m' G=$'\033[32m' B=$'\033[34m' Y=$'\033[33m'
   C=$'\033[36m' M=$'\033[35m' DIM=$'\033[2m' BOLD=$'\033[1m' RESET=$'\033[0m'
 fi
+
+# ── terminal width ─────────────────────────────────────────────────────────
+COLS="${COLUMNS:-$(tput cols 2>/dev/null || echo 80)}"
 
 # ── paths ───────────────────────────────────────────────────────────────────
 PILOSA_HOME="${PILOSA_HOME:-$HOME/.pilosa}"
@@ -89,7 +97,7 @@ resolve_framework_root() {
 FRAMEWORK_ROOT="$(resolve_framework_root)"
 
 # ── helpers ─────────────────────────────────────────────────────────────────
-divider()   { printf '%s\n' "${DIM}$(printf '%.0s─' 1 {1..78})${RESET}"; }
+divider()   { local w=$((COLS > 4 ? COLS - 2 : 10)); printf '%s\n' "${DIM}$(printf '%.0s─' $(seq 1 "$w"))${RESET}"; }
 header()    { printf '\n%s\n\n' "${BOLD}${C}$1${RESET}"; }
 info()      { printf '  %s %s\n' "${DIM}→${RESET}" "$1"; }
 ok()        { printf '  %s %s\n' "${G}✦${RESET}" "$1"; }
@@ -448,6 +456,7 @@ confirm() {
 
 reset_terminal() {
   stty sane 2>/dev/null || true
+  printf '\033[?25h' >&2
 }
 
 select_menu() {
@@ -740,6 +749,7 @@ multi_arrow_select() {
     multi_select_menu "$prompt" "${options[@]}"
     return
   fi
+  printf '\033[?25l' >&2
 
   local old_int_trap old_term_trap old_exit_trap
   old_int_trap="$(trap -p INT || true)"
@@ -989,13 +999,14 @@ prompt_preview() {
 }
 
 print_box() {
-  printf '\n  %s┌%s┐%s\n' "${DIM}" "$(printf '%.0s─' 1 {1..76})" "${RESET}"
+  local iw=$((COLS > 6 ? COLS - 4 : 10)) ow=$((COLS > 4 ? COLS - 2 : 10))
+  printf '\n  %s┌%s┐%s\n' "${DIM}" "$(printf '%.0s─' $(seq 1 "$iw"))" "${RESET}"
   printf '  %s│%s %s%s%s\n' "${DIM}" "${RESET}" "${BOLD}$1${RESET}" "${DIM}" "${RESET}"
-  printf '  %s├%s┤%s\n' "${DIM}" "$(printf '%.0s─' 1 {1..76})" "${RESET}"
+  printf '  %s├%s┤%s\n' "${DIM}" "$(printf '%.0s─' $(seq 1 "$iw"))" "${RESET}"
   while IFS= read -r line; do
     printf '  %s│%s %s\n' "${DIM}" "${RESET}" "$line"
   done
-  printf '  %s└%s┘%s\n' "${DIM}" "$(printf '%.0s─' 1 {1..76})" "${RESET}"
+  printf '  %s└%s┘%s\n' "${DIM}" "$(printf '%.0s─' $(seq 1 "$iw"))" "${RESET}"
 }
 
 preferred_cli_name() {
@@ -1594,7 +1605,7 @@ print_onboarding_preflight() {
 
 render_copy_progress() {
   local processed="$1" total="$2" copied="$3" skipped="$4" current_file="${5:-}"
-  local width=28 filled=0 bar="" i
+  local width=$((COLS > 60 ? 28 : (COLS-36 > 10 ? COLS-36 : 10))) filled=0 bar="" i
   [[ "$total" -gt 0 ]] && filled=$((processed * width / total))
   for ((i = 0; i < width; i++)); do
     if (( i < filled )); then bar+="█"; else bar+="░"; fi
@@ -1605,7 +1616,7 @@ render_copy_progress() {
 
 render_pdf_progress() {
   local processed="$1" total="$2" converted="$3" skipped="$4" current_file="${5:-}"
-  local width=28 filled=0 bar="" i
+  local width=$((COLS > 60 ? 28 : (COLS-36 > 10 ? COLS-36 : 10))) filled=0 bar="" i
   [[ "$total" -gt 0 ]] && filled=$((processed * width / total))
   for ((i = 0; i < width; i++)); do
     if (( i < filled )); then bar+="◆"; else bar+="◇"; fi
@@ -1616,7 +1627,7 @@ render_pdf_progress() {
 
 render_ocr_progress() {
   local processed="$1" total="$2" converted="$3" skipped="$4" current_file="${5:-}" page_info="${6:-}"
-  local width=28 filled=0 bar="" i
+  local width=$((COLS > 60 ? 28 : (COLS-36 > 10 ? COLS-36 : 10))) filled=0 bar="" i
   [[ "$total" -gt 0 ]] && filled=$((processed * width / total))
   for ((i = 0; i < width; i++)); do
     if (( i < filled )); then bar+="█"; else bar+="░"; fi
@@ -1750,7 +1761,7 @@ copy_source() {
         pilosa_debug_md "Separation done — skipped=$md_skipped process=${#_md_process_src[@]}"
 
         if [[ ${#_md_process_src[@]} -gt 0 ]]; then
-          local _md_page="" _md_spinner_stopped="" _md_current_rel=""
+          local _md_page="" _md_current_rel=""
           local _md_fifo
           _md_fifo="$(mktemp -u)"
           pilosa_debug_md "MarkItDown batch starting — ${#_md_process_src[@]} files, fifo=$_md_fifo"
@@ -1765,8 +1776,8 @@ copy_source() {
           trap _markitdown_cleanup INT TERM
 
           if [[ -n "$_md_bin" ]] && mkfifo "$_md_fifo" 2>/dev/null; then
-            pilosa_debug_md "FIFO created — starting spinner and batch process"
-            spinner_start "Loading MarkItDown engine" >&2
+            pilosa_debug_md "FIFO created — starting batch process"
+            info "Loading MarkItDown engine" >&2
             (
               printf '%s\t%s\n' SOURCE "$source_path"
               local _k
@@ -1793,10 +1804,6 @@ copy_source() {
                 BEGIN)
                   _md_current_rel="${_line#BEGIN$'\t'}"
                   _md_page=""
-                  if [[ -z "${_md_spinner_stopped:-}" ]]; then
-                    spinner_stop >&2
-                    _md_spinner_stopped=1
-                  fi
                   pilosa_debug_md "BEGIN $_md_current_rel"
                   ;;
                 PROGRESS)
@@ -1957,7 +1964,6 @@ copy_source() {
 
         if [[ ${#_ocr_process_src[@]} -gt 0 ]]; then
           local _ocr_page="" _ocr_page_counter=0
-          local _spinner_stopped=""
           local _current_rel=""
           local _ocr_fifo
           _ocr_fifo="$(mktemp -u)"
@@ -1973,8 +1979,8 @@ copy_source() {
           trap _ocr_cleanup INT TERM
 
           if [[ -n "$_ocr_bin" ]] && mkfifo "$_ocr_fifo" 2>/dev/null; then
-            pilosa_debug "FIFO created — starting spinner and batch process"
-            spinner_start "Loading OCR engine (one-time model init)" >&2
+            pilosa_debug "FIFO created — starting batch process"
+            info "Loading OCR engine (one-time model init)" >&2
             (
               printf '%s\t%s\n' SOURCE "$source_path"
               local _i
@@ -1998,10 +2004,6 @@ copy_source() {
                   _current_rel="${_line#BEGIN$'\t'}"
                   _ocr_page=""
                   _ocr_page_counter=0
-                  if [[ -z "${_spinner_stopped:-}" ]]; then
-                    spinner_stop >&2
-                    _spinner_stopped=1
-                  fi
                   pilosa_debug "BEGIN $_current_rel"
                   ;;
                 PROGRESS)
@@ -3006,9 +3008,12 @@ cmd_new() {
       mkdir -p "$(dirname "$dst")"
       cp -a "$src" "$dst"
     fi
-  done < "${FRAMEWORK_ROOT}/.pilosa/framework-files.tsv"
+done < "${FRAMEWORK_ROOT}/.pilosa/framework-files.tsv"
 
-  # Create empty user-state directories with .gitkeep
+# Clean .DS_Store files copied from framework directories
+find "$workspace_path" -name ".DS_Store" -delete 2>/dev/null || true
+
+# Create empty user-state directories with .gitkeep
   for dir in raw maps logs agent_reports .trash; do
     mkdir -p "$workspace_path/$dir"
     touch "$workspace_path/$dir/.gitkeep"
@@ -4057,7 +4062,13 @@ prompt_workspace_or_cancel() {
 # Main helper - returns workspace path or prompts for selection
 require_workspace() {
   local provided_path="${1:-}"
-  
+
+  # Check if CWD is already a workspace
+  if [[ -f ".pilosa/workspace" ]]; then
+    pwd
+    return 0
+  fi
+
   # If path provided, validate it
   if [[ -n "$provided_path" ]]; then
     provided_path="$(expand_home "$provided_path")"
