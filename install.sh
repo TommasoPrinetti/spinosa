@@ -714,11 +714,12 @@ main() {
           --quiet 2>&1; then
           pip_ok=1
         fi
-        progress_stop "Install complete"
+        progress_stop "MarkItDown + RapidOCR installed"
 
         if [[ $pip_ok -eq 1 ]]; then
           # Verify rapidocr imports before model operations
-          if "$pilosa_python" -c "from rapidocr import RapidOCR; print('import ok')" 2>/dev/null; then
+          if "$pilosa_python" -c "from rapidocr import RapidOCR" 2>/dev/null; then
+            ok "RapidOCR import verified"
             # Remove Chinese OCR models (English only, saves ~100 MB)
             progress_start "Cleaning up unused models"
             "$pilosa_python" -c "
@@ -735,6 +736,8 @@ for f in ['ppocr_keys_v1.txt', 'ppocrv5_dict.txt']:
 
             # Pre-download English OCR models
             progress_start "Downloading OCR models"
+            local ocr_log="${PILOSA_HOME}/logs/ocr-model-download.log"
+            mkdir -p "$(dirname "$ocr_log")"
             if "$pilosa_python" -c "
 import logging
 logging.getLogger('RapidOCR').setLevel(logging.WARNING)
@@ -750,8 +753,7 @@ RapidOCR(params={
     'Rec.model_type': ModelType.MOBILE,
     'Rec.ocr_version': OCRVersion.PPOCRV4,
 })
-print('English models ready')
-" 2>&1; then
+" >"$ocr_log" 2>&1; then
               progress_stop "Models ready"
             else
               progress_stop "Models not downloaded"
