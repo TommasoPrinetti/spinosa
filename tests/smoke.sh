@@ -46,7 +46,7 @@ done
 echo ""
 echo "Test 2: pilosa help"
 HELP_OUTPUT="$($REPO_ROOT/.bin/pilosa help 2>/dev/null || true)"
-for cmd in new onboard update upgrade check sync uninstall; do
+for cmd in new prepare update upgrade check sync uninstall; do
   if echo "$HELP_OUTPUT" | grep -q "pilosa $cmd"; then
     pass "help mentions 'pilosa $cmd'"
   else

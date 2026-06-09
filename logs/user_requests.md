@@ -16,7 +16,8 @@ updated: 2026-05-26
 
 Short routing log for user prompts. Log the request before deciding whether to answer directly or route through sub-agents.
 
-| Date       | Request summary                     | Route     | Status | Output                                 |
+| Date | Request summary | Route | Status | Output |
+| 2026-06-09 | User Advocate position paper for CLI string audit | evidence_answer | done | report returned at agent_reports/04_user_advocate_position.md |
 | ---------- | ----------------------------------- | --------- | ------ | -------------------------------------- |
 
 | 2026-06-05 | Thoroughly audit the Pilosa framework structure (YAML frontmatter, links, content, missing AGENTS.md, framework-files.tsv) | verification | done | audit report at agent_reports/01_framework_audit_report.md — 14 issues found across 27 files |
@@ -28,3 +29,4 @@ Short routing log for user prompts. Log the request before deciding whether to a
 
 | 2026-06-09 | Compare all 7 agent definitions vs their skill fallbacks for structural gaps | synthesis_report | done | report at agent_reports/03_agent_skill_comparison.md — 22 HIGH, 19 MEDIUM, 19 LOW gaps identified across 7 pairs |
 | 2026-06-09 | Trace macOS metadata file journey through pipeline | synthesis_report | done | report at agent_reports/04_macos_metadata_trace.md |
+| 2026-06-09 | Extract all user-facing text strings from .bin/pilosa, install.sh, README.md | evidence_answer | done | report written with 310+ strings across 16 categories |

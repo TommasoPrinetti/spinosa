@@ -15,7 +15,7 @@ A CLI tool that takes a folder of source files and turns it into a searchable kn
 2. Converts Office docs, PDFs, images, and more to searchable Markdown via built-in MarkItDown + RapidOCR
 3. Generates YAML headers for each file
 4. Creates navigation maps with wikilinks between files
-5. Provides an orchestrator (`AGENTS.md`) that routes questions to specialist sub-agents
+5. Provides a router (`AGENTS.md`) that routes questions to specialist helpers
 
 The original source folder is never modified. The workspace is self-contained. All conversion runs 100% locally — no cloud, no API keys.
 
@@ -76,7 +76,7 @@ Point your LLM CLI (Claude Code, Codex, OpenCode, etc.) at the workspace folder 
 
 ### 4. Ask questions
 
-After startup, ask research questions normally. The orchestrator routes them through sub-agents.
+After startup, ask research questions normally. The router directs them to specialist helpers.
 
 ## Dashboard
 
@@ -90,8 +90,8 @@ Available options:
 
 | Option | Description |
 |--------|-------------|
-| New workspace | Create a new workspace and run onboarding |
-| Onboard workspace | Run onboarding on an existing workspace |
+| New workspace | Create a new workspace and run setup |
+| Prepare workspace | Set up an existing workspace |
 | Update workspace | Update workspace framework files |
 | Check workspace | Validate workspace integrity |
 | Sync agents | Sync agent and skill mirrors |
@@ -104,7 +104,7 @@ Available options:
 
 ### `pilosa new [directory]`
 
-Create a new workspace and run onboarding. If no directory is given, you are prompted for the path.
+Create a new workspace and run setup. If no directory is given, you are prompted for the path.
 
 ```bash
 pilosa new /path/to/source
@@ -112,13 +112,13 @@ pilosa new /path/to/source
 
 Flags: `--gum`, `--no-gum`, `--no-color`, `--help`
 
-### `pilosa onboard [workspace]`
+### `pilosa prepare [workspace]`
 
-Re-run onboarding on an existing workspace.
+Set up an existing workspace.
 
-```bash
-pilosa onboard /path/to/workspace
-```
+\`\`\`bash
+pilosa prepare /path/to/workspace
+\`\`\`
 
 ### `pilosa update [workspace]`
 
@@ -151,7 +151,7 @@ pilosa check  # if inside a workspace
 
 ### `pilosa sync`
 
-Regenerate vendor-specific agent mirrors and sync skills from canonical sources.
+Sync helpers from original sources.
 
 ```bash
 pilosa sync

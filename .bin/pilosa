@@ -8,14 +8,14 @@ set -euo pipefail
 ORIGINAL_ARGS=("$@")
 
 # ── pilosa — CLI entry point ────────────────────────────────────────────────
-# Usage: pilosa [new|onboard|update|check|sync|uninstall|help]
+# Usage: pilosa [new|prepare|update|check|sync|uninstall|help]
 #
 # Commands:
-#   new       Create a new Pilosa workspace and run onboarding
-#   onboard   Run onboarding on an existing workspace
-#   update    Update workspace framework files from a release
-#   check     Validate workspace integrity and configuration
-#   sync      Sync agent and skill mirrors from canonical sources
+#   new       Create a new Pilosa workspace and run setup
+#   prepare   Set up an existing workspace
+#   update    Update workspace files from a release
+#   check     Check workspace structure and settings
+#   sync      Sync helpers from original sources
 #   uninstall Remove Pilosa from this system
 #   help      Show this help
 
@@ -1572,7 +1572,7 @@ print_onboarding_preflight() {
     [[ -n "$line" ]] && cli_labels+=("$line")
   done <<< "$cli_output"
   if [[ ${#cli_labels[@]} -gt 0 ]]; then
-    note "Detected handoff targets: $(join_by ", " "${cli_labels[@]}")"
+    note "Available tools: $(join_by ", " "${cli_labels[@]}")"
   fi
 }
 
@@ -2142,12 +2142,12 @@ choose_import_batches() {
   done
 }
 
-choose_handoff_action() {
+choose_launch_method() {
   local options=(
     "$(option_spec "copy_command" "Copy launch command" "keep the command in your clipboard and run it yourself")"
     "$(option_spec "run_now" "Run launch command now" "open the selected CLI immediately when supported")"
   )
-  prompt_choose "Handoff action" "${options[@]}"
+  prompt_choose "How to launch" "${options[@]}"
 }
 
 confirm_action() {
@@ -2380,7 +2380,7 @@ startup_prompt_text() {
   cat << PROMPT_EOF
 Workspace: ${root}
 
-This is the Pilosa startup handoff. The user has completed pilosa new setup.
+This is the Pilosa startup prompt. The user has completed pilosa new setup.
 
 Read these files first, in this order:
 1. AGENTS.md
@@ -2583,7 +2583,7 @@ run_integrated_onboarding() {
 
   copy_source "$source_path" "$root/raw"
 
-  print_step 3 3 "Startup handoff"
+  print_step 3 3 "Startup prompt"
   reset_terminal
   preferred_cli="$(choose_preferred_cli)" || return 1
   preferred_cli_label="$(preferred_cli_name "$preferred_cli")"
@@ -2601,7 +2601,7 @@ run_integrated_onboarding() {
   header "Copy this prompt and paste it in your tool"
   printf '\n%s%s%s\n\n' "${G}" "$startup_prompt" "${RESET}"
 
-  handoff_action="$(choose_handoff_action)" || return 1
+  handoff_action="$(choose_launch_method)" || return 1
   handoff_action_text="$(handoff_action_label "$handoff_action")"
   handoff_result="launch_command_copied"
   if [[ "$handoff_action" == "run_now" ]]; then
@@ -2677,7 +2677,7 @@ cmd_uninstall() {
   [[ -f "$bin_dir/pilosa" ]] && rm -f "$bin_dir/pilosa" && ok "Removed ${bin_dir}/pilosa"
 
   divider
-  ok "Pilosa uninstalled."
+  ok "Pilosa uninstalled"
   echo ""
   info "Any research workspaces you created are still intact."
   info "To remove a workspace, delete its directory."
@@ -2691,13 +2691,13 @@ cmd_help() {
   header "Pilosa — Research Framework CLI"
 
   printf '  %s\n' "${BOLD}Usage:${RESET}"
-  printf '    %s\n' "pilosa new [directory]    Create a new workspace and run onboarding"
-  printf '    %s\n' "pilosa onboard [dir]     Run onboarding on an existing workspace"
-  printf '    %s\n' "pilosa update [dir]      Update workspace framework files"
+  printf '    %s\n' "pilosa new [directory]    Create a new workspace and run setup"
+  printf '    %s\n' "pilosa prepare [dir]     Set up an existing workspace"
+  printf '    %s\n' "pilosa update [dir]      Update workspace files"
   printf '    %s\n' "pilosa upgrade           Upgrade Pilosa CLI to latest release"
-  printf '    %s\n' "pilosa check [directory] Validate workspace integrity"
-  printf '    %s\n' "pilosa health            Show system health status"
-  printf '    %s\n' "pilosa sync              Sync agent and skill mirrors from canonical"
+  printf '    %s\n' "pilosa check [directory] Check workspace structure"
+  printf '    %s\n' "pilosa health            Show system status"
+  printf '    %s\n' "pilosa sync              Sync helpers from original sources"
   printf '    %s\n' "pilosa uninstall         Remove Pilosa from this system"
   printf '    %s\n' "pilosa dashboard         Open interactive dashboard"
   printf '    %s\n' "pilosa help              Show this help"
@@ -3321,13 +3321,13 @@ cmd_update() {
   rm -rf "$tmpdir"
 
   divider
-  ok "Update complete."
+  ok "Update complete"
   info "Files replaced: $replaced"
   info "Files added: $added"
   info "Directories updated: $directory_updates"
-  info "Retired files removed: $retired_removed"
-  [[ $sidecars -gt 0 ]] && warn "Sidecars written: $sidecars"
-  [[ $retired_kept -gt 0 ]] && warn "Retired files left in place because they were modified: $retired_kept"
+  info "Old files removed: $retired_removed"
+  [[ $sidecars -gt 0 ]] && warn "Backup copies written: $sidecars"
+  [[ $retired_kept -gt 0 ]] && warn "Old files left in place because they were modified: $retired_kept"
   printf '\n'
 }
 
@@ -3489,7 +3489,7 @@ cmd_check() {
   fi
 
   divider
-  ok "Check passed."
+  ok "Check passed"
   if [[ ${#warnings[@]} -gt 0 ]]; then
     printf '\n%s\n' "${BOLD}${Y}Warnings:${RESET}"
     for w in "${warnings[@]}"; do
@@ -4403,7 +4403,7 @@ cmd_dashboard() {
   while true; do
     local options=()
     options+=("$(option_spec "new" "New workspace" "Create a new workspace and run onboarding")")
-    options+=("$(option_spec "onboard" "Onboard workspace" "Run onboarding on an existing workspace")")
+    options+=("$(option_spec "prepare" "Prepare workspace" "Set up an existing workspace")")
     options+=("$(option_spec "update" "Update workspace" "Update workspace framework files")")
     options+=("$(option_spec "check" "Check workspace" "Validate workspace integrity")")
     options+=("$(option_spec "sync" "Sync agents" "Sync agent and skill mirrors")")
@@ -4420,7 +4420,7 @@ cmd_dashboard() {
 
     case "$choice" in
       new)       cmd_new "$@" ;;
-      onboard)   cmd_onboard "$@" ;;
+      onboard|prepare)   cmd_onboard "$@" ;;
       update)    cmd_update "$@" ;;
       check)     cmd_check "$@" ;;
       sync)      cmd_sync "$@" ;;
@@ -4441,7 +4441,7 @@ cmd_dashboard() {
 # ═══════════════════════════════════════════════════════════════════════════
 case "${1:-}" in
   new)       shift; cmd_new "$@" ;;
-  onboard)   shift; cmd_onboard "$@" ;;
+  onboard|prepare)   shift; cmd_onboard "$@" ;;
   update)    shift; cmd_update "$@" ;;
   upgrade)   shift; cmd_upgrade "$@" ;;
   check)     shift; cmd_check "$@" ;;

@@ -55,7 +55,7 @@ fi
 
 info()  { printf '  %s %s\n' "${DIM}→${RESET}" "$1"; }
 ok()    { printf '  %s %s\n' "${G}✦${RESET}" "$1"; }
-warn()  { printf '  %s %s\n' "${Y}⚠${RESET}" "$1"; }
+warn()  { printf '  %s %s\n' "${Y}⚠${RESET}" "$1" >&2; }
 note()  { printf '  %s↳%s %s\n' "${DIM}" "${RESET}" "$1"; }
 fail()  { printf '  %s%s✗%s %s%s\n' "${R}${BOLD}" "${U}" "$(printf '\033[24m')" "$1" "${RESET}" >&2; }
 die()   { printf '\n  %s %s\n\n' "${R}✗${RESET}" "$1" >&2; exit 1; }
@@ -795,19 +795,19 @@ RapidOCR(params={
 exec "${PILOSA_HOME}/bin/pilosa" "\$@"
 SHIM_EOF
   chmod +x "$shim"
-  ok "Created shim: ${shim}"
+  ok "Created wrapper script: ${shim}"
 
   # ── clean up, check PATH, launch dashboard ──────────────────────────────
   trap - EXIT
   rm -rf "$tmpdir"
 
-  # ── smoke test ──────────────────────────────────────────────────────────
+  # ── basic test ──────────────────────────────────────────────────────────
   echo ""
-  info "Running smoke test..."
+  info "Running basic test..."
   if "${PILOSA_BIN_DIR}/pilosa" help >/dev/null 2>&1; then
-    ok "Smoke test passed"
+    ok "Basic test passed"
   else
-    warn "Smoke test failed — pilosa may need PATH update"
+    warn "Basic test failed. pilosa may need a PATH update."
   fi
 
   #
