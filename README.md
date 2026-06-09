@@ -15,7 +15,7 @@ The original source folder is never modified. The workspace is self-contained. A
 ## Install
 
 ```bash
-curl -fsSL https://github.com/TommasoPrinetti/pilosa/releases/download/v0.4.2/install.sh | bash
+curl -fsSL https://github.com/TommasoPrinetti/pilosa/releases/download/v0.4.3/install.sh | bash
 ```
 
 This installs the pinned stable version (`0.4.2`) to `~/.pilosa/`. No npm, Python, or Go required.
