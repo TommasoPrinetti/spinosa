@@ -115,7 +115,30 @@ Check that:
 - `checksums.txt` exists
 - Platform-relevant vendor tarballs exist (unified for native, legacy for others)
 
-### 7. Restore workspace
+### 7. Align README
+
+After publishing, check that the README reflects the new version:
+
+```bash
+rg 'v\d+\.\d+\.\d+' README.md
+```
+
+Update if stale:
+- Curl URL in install command must point to new version
+- Pinned version text
+- Feature descriptions (routing, engine naming) must match current behaviour
+- Both the **Install** section and **Quick start** section must agree
+- If the release changed file-type routing (e.g. new MarkItDown filetypes), update the What it does and onboarding descriptions
+
+Commit README changes:
+
+```bash
+git add README.md
+git commit -m "docs: bump README to v<version>, align descriptions"
+git push
+```
+
+### 8. Restore workspace
 
 ```bash
 mv .trash/temp/* agent_reports/ && rmdir .trash/temp
