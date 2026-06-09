@@ -93,6 +93,38 @@ spinner_stop() {
   printf '\r\033[2K' >&2
 }
 
+progress_start() {
+  local msg="$1"
+  PROGRESS_PID=""
+  [ -t 1 ] || return 0
+  (
+    local width=30
+    local i=0
+    local dir=1
+    while true; do
+      local filled=$((i * width / 100))
+      local empty=$((width - filled))
+      local bar
+      bar="$(printf '%*s' "$filled" '' | tr ' ' '█')$(printf '%*s' "$empty" '' | tr ' ' '░')"
+      printf '\r\033[2K  %s%s%s %s %s' "${C}" "$bar" "${RESET}" "$msg" "$i%" >&2
+      i=$((i + dir * 2))
+      if [ "$i" -ge 100 ]; then i=98; dir=-1; fi
+      if [ "$i" -le 0 ]; then i=2; dir=1; fi
+      sleep 0.15
+    done
+  ) &
+  PROGRESS_PID=$!
+}
+
+progress_stop() {
+  [ -n "${PROGRESS_PID:-}" ] || return 0
+  kill "$PROGRESS_PID" 2>/dev/null || true
+  wait "$PROGRESS_PID" 2>/dev/null || true
+  PROGRESS_PID=""
+  # Fill the bar to 100%
+  printf '\r\033[2K  %s%s%s %s %s\n' "${C}" "$(printf '%*s' 30 '' | tr ' ' '█')" "${RESET}" "$1" "100%" >&2
+}
+
 # ── parse flags ─────────────────────────────────────────────────────────────
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -622,7 +654,7 @@ main() {
         pilosa_python="${pilosa_vendor_dest}/Python.framework/Versions/Current/bin/python3"
       fi
       if [[ -x "$pilosa_python" ]]; then
-        spinner_start "Installing Python packages (MarkItDown + RapidOCR)"
+        progress_start "Installing Python packages (MarkItDown + RapidOCR)"
         local pip_ok=0
         "$pilosa_python" -m pip install --upgrade pip --quiet 2>/dev/null || true
         if "$pilosa_python" -m pip install \
@@ -633,11 +665,11 @@ main() {
           --quiet 2>/dev/null; then
           pip_ok=1
         fi
-        spinner_stop
+        progress_stop "Install complete"
 
         if [[ $pip_ok -eq 1 ]]; then
           # Remove Chinese OCR models (English only, saves ~100 MB)
-          spinner_start "Cleaning up unused models"
+          progress_start "Cleaning up unused models"
           "$pilosa_python" -c "
 import rapidocr, os
 models_dir = os.path.join(os.path.dirname(rapidocr.__file__), 'models')
@@ -648,10 +680,10 @@ for f in ['ppocr_keys_v1.txt', 'ppocrv5_dict.txt']:
     path = os.path.join(models_dir, f)
     if os.path.exists(path): os.remove(path)
 " 2>/dev/null || true
-          spinner_stop
+          progress_stop "Models cleaned"
 
           # Pre-download English OCR models (avoids delay on first use)
-          spinner_start "Downloading OCR models"
+          progress_start "Downloading OCR models"
           "$pilosa_python" -c "
 from rapidocr import RapidOCR, EngineType, LangDet, LangRec, ModelType, OCRVersion
 RapidOCR(params={
@@ -666,7 +698,7 @@ RapidOCR(params={
 })
 print('English models ready')
 " 2>/dev/null || warn "Model download will happen on first use"
-          spinner_stop
+          progress_stop "Models ready"
           ok "Python packages installed"
         else
           warn "pip install failed — PDF/image OCR and Office doc conversion will not be available"
