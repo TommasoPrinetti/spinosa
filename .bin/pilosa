@@ -1064,24 +1064,38 @@ build_launch_command() {
   esac
 }
 
+_launch_in_terminal() {
+  local script="$1"
+  if [[ "$(uname)" == "Darwin" ]]; then
+    local mac_script="${script%.sh}.command"
+    mv "$script" "$mac_script"
+    chmod +x "$mac_script"
+    open "$mac_script"
+  elif command -v x-terminal-emulator >/dev/null 2>&1; then
+    x-terminal-emulator -e bash "$script" &
+  elif command -v gnome-terminal >/dev/null 2>&1; then
+    gnome-terminal -- bash "$script" &
+  elif command -v xterm >/dev/null 2>&1; then
+    xterm -hold -e bash "$script" &
+  else
+    exec bash "$script"
+  fi
+}
+
 run_cli_with_prompt() {
   local root="$1" cli="$2" prompt="$3"
   case "$cli" in
     codex)
       command -v codex >/dev/null 2>&1 || { warn "codex was not found on PATH."; return 1; }
-      if [[ "$(uname)" == "Darwin" ]]; then
-        local _ptmp_codex _ltmp_codex
-        _ptmp_codex="$(mktemp /tmp/pilosa-prompt.XXXXXX)"
-        printf '%s' "$prompt" > "$_ptmp_codex"
-        _ltmp_codex="$(mktemp /tmp/pilosa-launch.XXXXXX.command)"
-        printf '#!/bin/bash\ncd %s && exec codex -C %s "$(cat %s)"\n' \
-          "$(printf '%q' "$root")" "$(printf '%q' "$root")" "$(printf '%q' "$_ptmp_codex")" > "$_ltmp_codex"
-        chmod +x "$_ltmp_codex"
-        open "$_ltmp_codex"
-        ok "Opened Codex in a new terminal tab."
-      else
-        exec codex -C "$root" "$prompt"
-      fi
+      local _ptmp_codex _ltmp_codex
+      _ptmp_codex="$(mktemp /tmp/pilosa-prompt.XXXXXX)"
+      printf '%s' "$prompt" > "$_ptmp_codex"
+      _ltmp_codex="$(mktemp /tmp/pilosa-launch.XXXXXX.sh)"
+      printf '#!/bin/bash\ncd %s && exec codex -C %s "$(cat %s)"\nrm -f %s\n' \
+        "$(printf '%q' "$root")" "$(printf '%q' "$root")" "$(printf '%q' "$_ptmp_codex")" "$(printf '%q' "$_ptmp_codex")" > "$_ltmp_codex"
+      chmod +x "$_ltmp_codex"
+      _launch_in_terminal "$_ltmp_codex"
+      ok "Opened Codex in a new terminal."
       ;;
     codex_app)
       command -v codex >/dev/null 2>&1 || { warn "codex was not found on PATH."; return 1; }
@@ -1091,19 +1105,15 @@ run_cli_with_prompt() {
       ;;
     opencode)
       command -v opencode >/dev/null 2>&1 || { warn "opencode was not found on PATH."; return 1; }
-      if [[ "$(uname)" == "Darwin" ]]; then
-        local _ptmp_oc _ltmp_oc
-        _ptmp_oc="$(mktemp /tmp/pilosa-prompt.XXXXXX)"
-        printf '%s' "$prompt" > "$_ptmp_oc"
-        _ltmp_oc="$(mktemp /tmp/pilosa-launch.XXXXXX.command)"
-        printf '#!/bin/bash\ncd %s && exec opencode --prompt "$(cat %s)" %s\n' \
-          "$(printf '%q' "$root")" "$(printf '%q' "$_ptmp_oc")" "$(printf '%q' "$root")" > "$_ltmp_oc"
-        chmod +x "$_ltmp_oc"
-        open "$_ltmp_oc"
-        ok "Opened OpenCode in a new terminal tab."
-      else
-        exec opencode --prompt "$prompt" "$root"
-      fi
+      local _ptmp_oc _ltmp_oc
+      _ptmp_oc="$(mktemp /tmp/pilosa-prompt.XXXXXX)"
+      printf '%s' "$prompt" > "$_ptmp_oc"
+      _ltmp_oc="$(mktemp /tmp/pilosa-launch.XXXXXX.sh)"
+      printf '#!/bin/bash\ncd %s && exec opencode --prompt "$(cat %s)" %s\nrm -f %s\n' \
+        "$(printf '%q' "$root")" "$(printf '%q' "$_ptmp_oc")" "$(printf '%q' "$root")" "$(printf '%q' "$_ptmp_oc")" > "$_ltmp_oc"
+      chmod +x "$_ltmp_oc"
+      _launch_in_terminal "$_ltmp_oc"
+      ok "Opened OpenCode in a new terminal."
       ;;
     opencode_desktop)
       command -v opencode >/dev/null 2>&1 || { warn "opencode was not found on PATH."; return 1; }
@@ -1113,20 +1123,15 @@ run_cli_with_prompt() {
       ;;
     claude_code)
       command -v claude >/dev/null 2>&1 || { warn "claude was not found on PATH."; return 1; }
-      if [[ "$(uname)" == "Darwin" ]]; then
-        local _ptmp_cc _ltmp_cc
-        _ptmp_cc="$(mktemp /tmp/pilosa-prompt.XXXXXX)"
-        printf '%s' "$prompt" > "$_ptmp_cc"
-        _ltmp_cc="$(mktemp /tmp/pilosa-launch.XXXXXX.command)"
-        printf '#!/bin/bash\ncd %s && exec claude "$(cat %s)"\n' \
-          "$(printf '%q' "$root")" "$(printf '%q' "$_ptmp_cc")" > "$_ltmp_cc"
-        chmod +x "$_ltmp_cc"
-        open "$_ltmp_cc"
-        ok "Opened Claude Code in a new terminal tab."
-      else
-        cd "$root"
-        exec claude "$prompt"
-      fi
+      local _ptmp_cc _ltmp_cc
+      _ptmp_cc="$(mktemp /tmp/pilosa-prompt.XXXXXX)"
+      printf '%s' "$prompt" > "$_ptmp_cc"
+      _ltmp_cc="$(mktemp /tmp/pilosa-launch.XXXXXX.sh)"
+      printf '#!/bin/bash\ncd %s && exec claude "$(cat %s)"\nrm -f %s\n' \
+        "$(printf '%q' "$root")" "$(printf '%q' "$_ptmp_cc")" "$(printf '%q' "$_ptmp_cc")" > "$_ltmp_cc"
+      chmod +x "$_ltmp_cc"
+      _launch_in_terminal "$_ltmp_cc"
+      ok "Opened Claude Code in a new terminal."
       ;;
     claude_code_desktop)
       local encoded_prompt
@@ -1141,20 +1146,15 @@ run_cli_with_prompt() {
       ;;
     kilo)
       command -v kilo >/dev/null 2>&1 || { warn "kilo was not found on PATH."; return 1; }
-      if [[ "$(uname)" == "Darwin" ]]; then
-        local _ptmp_kl _ltmp_kl
-        _ptmp_kl="$(mktemp /tmp/pilosa-prompt.XXXXXX)"
-        printf '%s' "$prompt" > "$_ptmp_kl"
-        _ltmp_kl="$(mktemp /tmp/pilosa-launch.XXXXXX.command)"
-        printf '#!/bin/bash\ncd %s && exec kilo "$(cat %s)"\n' \
-          "$(printf '%q' "$root")" "$(printf '%q' "$_ptmp_kl")" > "$_ltmp_kl"
-        chmod +x "$_ltmp_kl"
-        open "$_ltmp_kl"
-        ok "Opened Kilo in a new terminal tab."
-      else
-        cd "$root"
-        exec kilo "$prompt"
-      fi
+      local _ptmp_kl _ltmp_kl
+      _ptmp_kl="$(mktemp /tmp/pilosa-prompt.XXXXXX)"
+      printf '%s' "$prompt" > "$_ptmp_kl"
+      _ltmp_kl="$(mktemp /tmp/pilosa-launch.XXXXXX.sh)"
+      printf '#!/bin/bash\ncd %s && exec kilo "$(cat %s)"\nrm -f %s\n' \
+        "$(printf '%q' "$root")" "$(printf '%q' "$_ptmp_kl")" "$(printf '%q' "$_ptmp_kl")" > "$_ltmp_kl"
+      chmod +x "$_ltmp_kl"
+      _launch_in_terminal "$_ltmp_kl"
+      ok "Opened Kilo in a new terminal."
       ;;
     *)
       warn "Run-now is only available for known CLI choices."
@@ -2338,11 +2338,6 @@ CONFIG_EOF
 }
 APPEARANCE_EOF
 
-  ok "Setup files written"
-  note "$context"
-  note "$config"
-  [[ "$claude_created" == "yes" ]] && note "$claude"
-  note "$root/.obsidian/appearance.json"
 }
 
 write_onboarding_summary() {
@@ -2420,8 +2415,10 @@ SUMMARY_EOF
 }
 
 startup_prompt_text() {
-  local project_title="$1" source_path="$2" preferred_cli="$3"
+  local project_title="$1" root="$2" source_path="$3" preferred_cli="$4"
   cat << PROMPT_EOF
+Workspace: ${root}
+
 This is the Pilosa startup handoff. The user has completed pilosa new setup.
 
 Read these files first, in this order:
@@ -2671,11 +2668,12 @@ run_integrated_onboarding() {
   sed -i '' 's/setup_status: not_started/setup_status: cli_started/' "$root/.pilosa/workspace" 2>/dev/null || true
   rm -f "$root/.pilosa/workspace.bak"
 
-  startup_prompt="$(startup_prompt_text "$project_title" "$source_path" "$preferred_cli_label")"
+  startup_prompt="$(startup_prompt_text "$project_title" "$root" "$source_path" "$preferred_cli_label")"
   launch_command="$(build_launch_command "$root" "$preferred_cli" "$startup_prompt")"
 
-  print_box "Pilosa Startup Prompt Preview" <<< "$(prompt_preview <<< "$startup_prompt")"
-  print_box "Terminal Launch Command Preview" <<< "$(prompt_preview <<< "$launch_command")"
+  echo ""
+  header "Copy this prompt and paste it in your tool"
+  printf '\n%s%s%s\n\n' "${G}" "$startup_prompt" "${RESET}"
 
   handoff_action="$(choose_handoff_action)" || return 1
   handoff_action_text="$(handoff_action_label "$handoff_action")"
