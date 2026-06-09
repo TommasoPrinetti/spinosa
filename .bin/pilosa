@@ -1207,9 +1207,7 @@ is_text_based_pdf() {
   fi
 
   # Tier 2: Quick scan of first 256 KB for /Font or /CIDFont dictionaries
-  local head_scan
-  head_scan="$(head -c 262144 "$pdf" 2>/dev/null)"
-  if echo "$head_scan" | grep -q -a -E '/(Font|CIDFont)\b' 2>/dev/null; then
+  if head -c 262144 "$pdf" 2>/dev/null | grep -q -a -E '/(Font|CIDFont)\b' 2>/dev/null; then
     return 0   # → MarkItDown
   fi
 
