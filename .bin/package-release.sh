@@ -93,8 +93,9 @@ if [[ "$missing_count" -gt 0 ]]; then
 fi
 
 # ── Clean macOS junk from staged files ──────────────────────────────────────
-echo "Cleaning .DS_Store files..."
+echo "Cleaning .DS_Store and AppleDouble files..."
 find "$FRAMEWORK_DIR" -name ".DS_Store" -delete 2>/dev/null || true
+find "$FRAMEWORK_DIR" -name "._*" -delete 2>/dev/null || true
 
 # ── Add metadata ────────────────────────────────────────────────────────────
 echo "Writing metadata..."

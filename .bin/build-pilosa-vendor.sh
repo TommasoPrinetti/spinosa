@@ -126,6 +126,10 @@ build_platform() {
     tar -xzf "${python_tar}" -C "${python_dir}" --strip-components=1
     rm "${python_tar}"
 
+    # Clean macOS metadata files from extraction
+    find "$vendor_dir" -name ".DS_Store" -delete 2>/dev/null || true
+    find "$vendor_dir" -name "._*" -delete 2>/dev/null || true
+
     local python_bin
     if ! python_bin="$(find_python_bin "${python_dir}")"; then
         err "Python binary not found after extraction"
@@ -175,7 +179,7 @@ MDWRAP_EOF
     # Package
     log "Creating archive..."
     cd "${VENDOR_BASE}"
-    tar -czf "pilosa-vendor-${platform}.tar.gz" "pilosa-vendor-${platform}/"
+    COPYFILE_DISABLE=1 tar -czf "pilosa-vendor-${platform}.tar.gz" "pilosa-vendor-${platform}/"
 
     local archive_size vendor_size
     archive_size=$(du -h "pilosa-vendor-${platform}.tar.gz" | cut -f1)

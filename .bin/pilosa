@@ -1162,7 +1162,7 @@ should_skip_source_file() {
   lower_name="$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]')"
   [[ "$lower_name" == "agents.md" ]] && return 0
   case "$1" in
-    */.DS_Store|*/.gitkeep|*/node_modules/*|*/.git/*) return 0 ;;
+    */.DS_Store|*/._*|*/.localized|*/__MACOSX/*|*/.gitkeep|*/node_modules/*|*/.git/*) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -2918,8 +2918,9 @@ cmd_new() {
     fi
 done < "${FRAMEWORK_ROOT}/.pilosa/framework-files.tsv"
 
-# Clean .DS_Store files copied from framework directories
+# Clean macOS metadata files from framework copy
 find "$workspace_path" -name ".DS_Store" -delete 2>/dev/null || true
+find "$workspace_path" -name "._*" -delete 2>/dev/null || true
 
 # Create empty user-state directories with .gitkeep
   for dir in raw maps logs agent_reports .trash; do

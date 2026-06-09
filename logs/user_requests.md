@@ -27,3 +27,4 @@ Short routing log for user prompts. Log the request before deciding whether to a
 | 2026-06-09 | Build cross-platform comparison table for Pilosa framework (macOS vs Linux) | synthesis_report | in-progress | searching codebase |
 
 | 2026-06-09 | Compare all 7 agent definitions vs their skill fallbacks for structural gaps | synthesis_report | done | report at agent_reports/03_agent_skill_comparison.md — 22 HIGH, 19 MEDIUM, 19 LOW gaps identified across 7 pairs |
+| 2026-06-09 | Trace macOS metadata file journey through pipeline | synthesis_report | done | report at agent_reports/04_macos_metadata_trace.md |
