@@ -3721,7 +3721,7 @@ processing_status: auto_generated' \
 
 PILOSA_CONFIG="${PILOSA_HOME}/config.yaml"
 PILOSA_CACHE="${PILOSA_HOME}/workspace_cache.txt"
-DEFAULT_SCAN_ROOTS=("$HOME/Projects" "$HOME/Work" "$HOME/Documents")
+DEFAULT_SCAN_ROOTS=("$HOME")
 
 # Load config from ~/.pilosa/config.yaml
 load_config() {
@@ -3772,16 +3772,17 @@ save_config() {
 
 # Ask permission on first run
 ask_scan_permission() {
-  printf '\n%s\n' "${BOLD}Pilosa needs to discover your workspaces.${RESET}"
-  printf '\n%s\n' "Scan common directories (~/Projects, ~/Work, ~/Documents) for Pilosa workspaces?"
-  printf '%s\n' "This runs \`find\` with maxdepth 3 and caches results for 1 hour."
+  printf '\n%s\n' "${BOLD}Pilosa can auto-discover your workspaces.${RESET}"
+  printf '\n%s\n' "Search your home directory for existing Pilosa workspaces?"
+  printf '%s\n' "Scans for \`.pilosa/workspace\` marker files (5 folders deep at most)."
+  printf '%s\n' "${DIM}Nothing leaves your computer — no data is uploaded, stored, or shared.${RESET}"
   printf '\n'
   
   if confirm "Allow workspace discovery?" "y"; then
-    save_config "granted" "${DEFAULT_SCAN_ROOTS[@]}"
+    save_config "granted" "${HOME}"
     return 0
   else
-    save_config "denied" "${DEFAULT_SCAN_ROOTS[@]}"
+    save_config "denied" "${HOME}"
     return 1
   fi
 }
@@ -3806,7 +3807,7 @@ scan_workspaces() {
       [[ "$already_seen" == "0" ]] || continue
       seen+=("$ws_dir")
       printf '%s\n' "$ws_dir"
-    done < <(find "$root" -maxdepth 3 -name "workspace" -path "*/.pilosa/workspace" -print0 2>/dev/null)
+    done < <(find "$root" -maxdepth 5 -name "workspace" -path "*/.pilosa/workspace" -print0 2>/dev/null)
   done
 }
 
