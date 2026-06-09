@@ -1,5 +1,5 @@
 ---
-name: orchestrator-dispatch
+name: pilosa-orchestrator-dispatch
 type: skill
 scope: prompt_routing
 description: Classify a user prompt and route it through the sub-agent pipeline
@@ -61,13 +61,13 @@ Use the default sequence unless the user's request clearly requires a different 
 | Class | Default Sequence | Skill to inject |
 |---|---|---|
 | `fast_path` | (none — answer directly) | — |
-| `clarify_search` | skip (or Searcher if term disambiguation needed) | `evidence-search` (if needed) |
-| `find_material` | Searcher → Verifier | `evidence-search` → `claim-verification` |
-| `evidence_answer` | Searcher + Analyst → Serendippo → Writer → Verifier | `evidence-search` + `context-analysis` → serendipity → `report-writing` → `claim-verification` |
-| `synthesis_report` | Searcher ×N + Analyst → Serendippo → Writer → Verifier | `evidence-search` ×N + `context-analysis` → serendipity → `report-writing` → `claim-verification` |
-| `verification` | Verifier | `claim-verification` |
-| `index_maintenance` | Searcher, Mapper, or Source Intake → Verifier | `evidence-search` or `source-intake` → `claim-verification` |
-| `cleanup` | Janitor | `workspace-cleanup` |
+| `clarify_search` | skip (or Searcher if term disambiguation needed) | `pilosa-evidence-search` (if needed) |
+| `find_material` | Searcher → Verifier | `pilosa-evidence-search` → `pilosa-claim-verification` |
+| `evidence_answer` | Searcher + Analyst → Serendippo → Writer → Verifier | `pilosa-evidence-search` + `pilosa-context-analysis` → serendipity → `pilosa-report-writing` → `pilosa-claim-verification` |
+| `synthesis_report` | Searcher ×N + Analyst → Serendippo → Writer → Verifier | `pilosa-evidence-search` ×N + `pilosa-context-analysis` → serendipity → `pilosa-report-writing` → `pilosa-claim-verification` |
+| `verification` | Verifier | `pilosa-claim-verification` |
+| `index_maintenance` | Searcher, Mapper, or Source Intake → Verifier | `pilosa-evidence-search` or `pilosa-source-intake` → `pilosa-claim-verification` |
+| `cleanup` | Janitor | `pilosa-workspace-cleanup` |
 
 Always handle workspace startup by reading `system/startup.md` directly. Do not route startup through a skill injection.
 
@@ -144,22 +144,22 @@ See `references/skills.md` for the full role → skill mapping.
 
 | Role | Native Agent | Skill | What it does |
 |---|---|---|---|
-| Searcher | `pilosa-searcher` | `evidence-search` | Searches existing raw copies and maps for evidence |
-| Analyst | `pilosa-analyst` | `context-analysis` | Provides broader contextual analysis from project context |
-| Writer | `pilosa-writer` | `report-writing` | Synthesizes findings into reports |
-| Verifier | `pilosa-verifier` | `claim-verification` | Verifies claims, quotes, and paths |
-| Janitor | `pilosa-janitor` | `workspace-cleanup` | Audits hygiene and archives stale files |
-| Mapper | `pilosa-mapper` | `mapper-fallback` | Reads raw files in batches; extracts content-grounded fragments, key passages, and concept signals; writes maps |
-| Serendippo | `pilosa-serendippo` | `serendippo-fallback` | Finds hidden cross-corpus connections and proposes map enrichment |
+| Searcher | `pilosa-searcher` | `pilosa-evidence-search` | Searches existing raw copies and maps for evidence |
+| Analyst | `pilosa-analyst` | `pilosa-context-analysis` | Provides broader contextual analysis from project context |
+| Writer | `pilosa-writer` | `pilosa-report-writing` | Synthesizes findings into reports |
+| Verifier | `pilosa-verifier` | `pilosa-claim-verification` | Verifies claims, quotes, and paths |
+| Janitor | `pilosa-janitor` | `pilosa-workspace-cleanup` | Audits hygiene and archives stale files |
+| Mapper | `pilosa-mapper` | `pilosa-mapper-fallback` | Reads raw files in batches; extracts content-grounded fragments, key passages, and concept signals; writes maps |
+| Serendippo | `pilosa-serendippo` | `pilosa-serendippo-fallback` | Finds hidden cross-corpus connections and proposes map enrichment |
 
 ## See also
 
-- `evidence-search` — file-based evidence retrieval fallback for Searcher
-- `source-intake` — source file registration; not a Searcher fallback
-- `context-analysis` — broader contextual analysis
-- `report-writing` — report synthesis
-- `claim-verification` — claim verification
-- `workspace-cleanup` — hygiene audit and archival
+- `pilosa-evidence-search` — file-based evidence retrieval fallback for Searcher
+- `pilosa-source-intake` — source file registration; not a Searcher fallback
+- `pilosa-context-analysis` — broader contextual analysis
+- `pilosa-report-writing` — report synthesis
+- `pilosa-claim-verification` — claim verification
+- `pilosa-workspace-cleanup` — hygiene audit and archival
 - `pilosa-mapper` — startup and deep index-maintenance extraction agent
 - `pilosa-serendippo` — hidden-connection discovery agent
 - `system/startup.md` — workspace initialization protocol (orchestrator reads directly)

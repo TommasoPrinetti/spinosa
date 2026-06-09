@@ -1,5 +1,5 @@
 ---
-name: source-intake
+name: pilosa-source-intake
 type: skill
 scope: source_registration
 description: Add new source files to the workspace and log them
@@ -53,5 +53,5 @@ Register new source files in the workspace. Supported formats are routed to the 
 
 ## See also
 
-- `report-writing` — for using intake evidence in reports
+- `pilosa-report-writing` — for using intake evidence in reports
 - `system/startup.md` — workspace initialization protocol

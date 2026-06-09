@@ -1,5 +1,5 @@
 ---
-name: release-engineering
+name: pilosa-release-engineering
 type: skill
 scope: release_operations
 description: Build vendor bundles, package, and publish Pilosa Framework releases
@@ -153,4 +153,4 @@ mv .trash/temp/* agent_reports/ && rmdir .trash/temp
 
 - `install.sh` (repo root) — installer that consumes these assets
 - `.bin/lib/build-pilosa-vendor.sh` — the build script internals
-- `orchestrator-dispatch` — general prompt routing; release ops don't go through Pilosa sub-agents
+- `pilosa-orchestrator-dispatch` — general prompt routing; release ops don't go through Pilosa sub-agents

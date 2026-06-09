@@ -1543,7 +1543,7 @@ print_scan_summary() {
     if markitdown_available; then
       printf '  %s├─%s %s available for MarkItDown conversion (%s)\n' "${DIM}" "${RESET}" "$(file_type_label markitdown "$(plural_count "$SCAN_MARKITDOWN_COUNT" "Office/EPUB/HTML file")")" "$(format_bytes "$SCAN_MARKITDOWN_BYTES")"
     else
-      printf '  %s├─%s %s skipped — MarkItDown not bundled (%s)\n' "${DIM}" "${RESET}" "$(file_type_label markitdown "$(plural_count "$SCAN_MARKITDOWN_COUNT" "Office/EPUB/HTML file")")" "$(format_bytes "$SCAN_MARKITDOWN_BYTES")"
+      printf '  %s├─%s %s skipped — MarkItDown not available (%s)\n' "${DIM}" "${RESET}" "$(file_type_label markitdown "$(plural_count "$SCAN_MARKITDOWN_COUNT" "Office/EPUB/HTML file")")" "$(format_bytes "$SCAN_MARKITDOWN_BYTES")"
     fi
   fi
   [[ "$SCAN_NATIVE_COUNT" -gt 0 ]] && printf '  %s├─%s %s to copy unchanged (%s)\n' "${DIM}" "${RESET}" "$(file_type_label native "$(plural_count "$SCAN_NATIVE_COUNT" "native-readable file")")" "$(format_bytes "$SCAN_NATIVE_BYTES")"
@@ -1551,7 +1551,7 @@ print_scan_summary() {
     if rapidocr_ocr_available; then
       printf '  %s├─%s %s available for OCR (scanned PDFs and images) (%s)\n' "${DIM}" "${RESET}" "$(file_type_label image "$(plural_count "$SCAN_OCR_CONVERTIBLE_COUNT" "scanned PDF and image")")" "$(format_bytes "$SCAN_OCR_CONVERTIBLE_BYTES")"
     else
-      printf '  %s├─%s %s skipped — RapidOCR OCR not bundled (%s)\n' "${DIM}" "${RESET}" "$(file_type_label image "$(plural_count "$SCAN_OCR_CONVERTIBLE_COUNT" "scanned PDF and image")")" "$(format_bytes "$SCAN_OCR_CONVERTIBLE_BYTES")"
+      printf '  %s├─%s %s skipped — RapidOCR not available (%s)\n' "${DIM}" "${RESET}" "$(file_type_label image "$(plural_count "$SCAN_OCR_CONVERTIBLE_COUNT" "scanned PDF and image")")" "$(format_bytes "$SCAN_OCR_CONVERTIBLE_BYTES")"
     fi
   fi
   [[ "$SCAN_BINARY_COPYABLE_COUNT" -gt 0 ]] && printf '  %s├─%s %s to copy as-is (%s)\n' "${DIM}" "${RESET}" "$(file_type_label pdf "$(plural_count "$SCAN_BINARY_COPYABLE_COUNT" "PDF")")" "$(format_bytes "$SCAN_BINARY_COPYABLE_BYTES")"
@@ -1581,12 +1581,12 @@ print_onboarding_preflight() {
   if rapidocr_ocr_available; then
     ok "${M}OCR${RESET} RapidOCR available for scanned PDFs and images"
   else
-    note "RapidOCR OCR not bundled — scanned PDFs and images will be skipped."
+    note "RapidOCR not available — scanned PDFs and images will be skipped."
   fi
   if markitdown_available; then
     ok "${G}MarkItDown${RESET} available for Office docs, EPUB, HTML, and text-based PDFs"
   else
-    note "MarkItDown not bundled — Office docs, EPUB, HTML, and text-based PDFs will be skipped."
+    note "MarkItDown not available — Office docs, EPUB, HTML, and text-based PDFs will be skipped."
   fi
 
   free_bytes="$(available_disk_bytes "$root")"

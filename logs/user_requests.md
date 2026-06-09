@@ -24,3 +24,6 @@ Short routing log for user prompts. Log the request before deciding whether to a
 | 2026-06-08 | Cross-platform audit of all shell scripts for macOS/Linux/Windows compatibility | evidence_answer | done | report returned with verifier pass |
 | 2026-06-09 | Review /Font grep heuristic for PDF text vs scanned classification | verification | done | report at agent_reports/03_pdf_heuristic_review.md — ADEQUATE WITH MITIGATIONS, tiered pipeline recommended |
 | 2026-06-09 | Critical review of MarkItDown integration plan for .bin/pilosa (signal handlers, counters, race conditions, scope) | fast_path | done | report at agent_reports/markitdown-integration-review.md — 5 issues found, 2 HIGH severity |
+| 2026-06-09 | Build cross-platform comparison table for Pilosa framework (macOS vs Linux) | synthesis_report | in-progress | searching codebase |
+
+| 2026-06-09 | Compare all 7 agent definitions vs their skill fallbacks for structural gaps | synthesis_report | done | report at agent_reports/03_agent_skill_comparison.md — 22 HIGH, 19 MEDIUM, 19 LOW gaps identified across 7 pairs |

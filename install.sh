@@ -56,7 +56,8 @@ fi
 info()  { printf '  %s %s\n' "${DIM}→${RESET}" "$1"; }
 ok()    { printf '  %s %s\n' "${G}✦${RESET}" "$1"; }
 warn()  { printf '  %s %s\n' "${Y}⚠${RESET}" "$1"; }
-fail()  { printf '  %s%s%s✗%s %s%s\n' "${R}${BOLD}" "${U}" "$1" "$(printf '\033[24m')" "${RESET}" >&2; }
+note()  { printf '  %s↳%s %s\n' "${DIM}" "${RESET}" "$1"; }
+fail()  { printf '  %s%s✗%s %s%s\n' "${R}${BOLD}" "${U}" "$(printf '\033[24m')" "$1" "${RESET}" >&2; }
 die()   { printf '\n  %s %s\n\n' "${R}✗${RESET}" "$1" >&2; exit 1; }
 
 # ── read from TTY (works with piped input) ──────────────────────────────────
@@ -683,9 +684,11 @@ main() {
         progress_stop "Install complete"
 
         if [[ $pip_ok -eq 1 ]]; then
-          # Remove Chinese OCR models (English only, saves ~100 MB)
-          progress_start "Cleaning up unused models"
-          "$pilosa_python" -c "
+          # Verify rapidocr imports before model operations
+          if "$pilosa_python" -c "from rapidocr import RapidOCR; print('import ok')" 2>/dev/null; then
+            # Remove Chinese OCR models (English only, saves ~100 MB)
+            progress_start "Cleaning up unused models"
+            "$pilosa_python" -c "
 import rapidocr, os
 models_dir = os.path.join(os.path.dirname(rapidocr.__file__), 'models')
 for f in os.listdir(models_dir):
@@ -695,11 +698,11 @@ for f in ['ppocr_keys_v1.txt', 'ppocrv5_dict.txt']:
     path = os.path.join(models_dir, f)
     if os.path.exists(path): os.remove(path)
 " 2>/dev/null || true
-          progress_stop "Models cleaned"
+            progress_stop "Models cleaned"
 
-          # Pre-download English OCR models (avoids delay on first use)
-          progress_start "Downloading OCR models"
-          if "$pilosa_python" -c "
+            # Pre-download English OCR models
+            progress_start "Downloading OCR models"
+            if "$pilosa_python" -c "
 from rapidocr import RapidOCR, EngineType, LangDet, LangRec, ModelType, OCRVersion
 RapidOCR(params={
     'Det.engine_type': EngineType.ONNXRUNTIME,
@@ -713,20 +716,19 @@ RapidOCR(params={
 })
 print('English models ready')
 " 2>&1; then
-            progress_stop "Models ready"
+              progress_stop "Models ready"
+            else
+              progress_stop "Models not downloaded"
+              fail "OCR models could not be pre-downloaded — will download on first use"
+              note "Check internet access if this persists"
+            fi
+            ok "Python packages installed"
           else
-            progress_stop "Models not downloaded"
-            fail "OCR models could not be downloaded — will download on first use"
-            note "This is normal on first install, but verify internet access if it persists"
-          fi
-          ok "Python packages installed"
-
-          # Linux: check for libGL (required by OpenCV/RapidOCR)
-          if [[ "$(uname -s)" == "Linux" ]] && ! ldconfig -p 2>/dev/null | grep -q "libGL.so"; then
-            fail "libGL.so.1 not found — RapidOCR/OpenCV needs this on Linux"
-            note "Install: sudo apt-get install libgl1  (Debian/Ubuntu)"
-            note "        sudo dnf install mesa-libGL  (Fedora)"
-            note "        sudo pacman -S mesa           (Arch)"
+            fail "RapidOCR installed but cannot import — system library missing"
+            if [[ "$(uname -s)" == "Linux" ]]; then
+              note "On Linux, install: sudo apt-get install libgl1"
+            fi
+            warn "PDF/image OCR and Office doc conversion will not be available"
           fi
         else
           warn "pip install failed — PDF/image OCR and Office doc conversion will not be available"

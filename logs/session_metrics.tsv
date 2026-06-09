@@ -1,1 +1,3 @@
 date	session_id	agent	route	operation	query_label	dirs_seen	maps_read	raw_matches	raw_files_read	reports_written	output_path
+2026-06-09	20260609-144500-synthesis	pilosa-searcher	synthesis_report	synthesis	agent-skill-comparison	3	0	0	19	1	agent_reports/03_agent_skill_comparison.md
+20260609-162000-dispatch	pilosa-searcher	synthesis_report	search	cross-platform	.bin/;install.sh;.bin/package-release.sh;.bin/build-pilosa-vendor.sh;.bin/build-rapidocr-vendor.sh;.bin/sync-agents.sh;.bin/check-startup.sh;tests/	5	55	7	1	agent_reports/cross_platform_comparison.md

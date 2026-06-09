@@ -1,22 +1,31 @@
 ---
-name: workspace-cleanup
+name: pilosa-workspace-cleanup
 type: skill
 scope: workspace_hygiene
-description: Evaluate staleness and propose archival of old workspace files
+description: |
+  Audits repo hygiene, evaluates staleness, and proposes archival moves to .trash/.
+  Requires explicit user confirmation before any move.
 created: 2026-05-26
-updated: 2026-06-04
+updated: 2026-06-09
+permissions:
+  read: allow
+  grep: allow
+  glob: allow
+  write:
+    - agent_reports/
+    - logs/session_metrics.tsv
+  move:
+    - .trash/ # only after explicit user confirmation
 ---
 
-## Purpose
-
-Audit the workspace for stale, broken, or orphaned files. Propose moves to `.trash/`. Never execute moves without user confirmation.
+You are Pilosa's cleanup agent. You audit the workspace for hygiene issues, evaluate staleness, and propose archival moves. You never delete files — you move them to `.trash/`.
 
 ## Prerequisites
 
-- workspace is initialized (`setup_status: workspace_started`)
-- `system/configuration.md` has `stale_after_days` threshold (default: 30 days; reports may use a longer threshold if configured)
+- Workspace is initialized (`setup_status: workspace_started`).
+- `system/configuration.md` has `stale_after_days` threshold (default: 30 days; reports may use a longer threshold if configured).
 
-## Steps
+## Workflow
 
 1. Read `system/configuration.md` for staleness thresholds.
 2. Check raw copy validity:
@@ -37,24 +46,81 @@ Audit the workspace for stale, broken, or orphaned files. Propose moves to `.tra
 7. Evaluate staleness by age:
    - Compare `updated:` date in YAML frontmatter against current date.
    - Mark files older than `stale_after_days`.
-8. Write Janitor Report in `agent_reports/` with:
-   - Files checked, issues found, proposed moves with reasons.
-9. Return a proposed log summary to the orchestrator when traceability is needed.
-10. Append one compact metrics row to `logs/session_metrics.tsv`.
-11. **Wait for user confirmation** before any actual moves.
+8. Check `agent_reports/` for outdated reports.
+9. Check `logs/` for log entries referencing moved or deleted files.
+10. Generate a cleanup report listing proposed moves with reasons.
+11. Present the report to the user for confirmation before executing any moves.
+12. Append one compact metrics row to `logs/session_metrics.tsv`.
+
+## Hygiene Score Gauge
+
+Generate a Unicode gauge in the cleanup report header to show overall workspace health.
+
+### Score Calculation
+
+```
+total_files = count of files in raw/ + maps/ + agent_reports/ + system/
+issues_found = count of stale_source + corrupt_copy + broken_link + stale_entry + orphaned_file
+health_pct = ((total_files - issues_found) / total_files) * 100
+```
+
+### Gauge Rendering
+
+```
+bar_width = 16 characters
+filled = round((health_pct / 100) * bar_width)
+empty = bar_width - filled
+
+Use circle half characters for visual weight:
+  0%   = ░░░░░░░░░░░░░░░░
+  25%  = ◐░░░░░░░░░░░░░░░
+  50%  = ◐◐◐◐◐◐◐◐◑░░░░░░░
+  75%  = ◐◐◐◐◐◐◐◐◐◐◐◐◑░░░
+  100% = ◐◐◐◐◐◐◐◐◐◐◐◐◐◐◐◐
+```
+
+### Dashboard Format
+
+```
+┌─ Hygiene Score ─────────────────────────────────────────────────┐
+│ Overall  ◐◐◐◐◐◐◐◐◑░░░░░░░  75%                                 │
+│ Files    ▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░  940 checked                         │
+│ Issues   ▓▓▓░░░░░░░░░░░░░  12 found                            │
+│ Propose  ▓▓▓░░░░░░░░░░░░░  8 moves                             │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Score Thresholds
+
+| Score | Status | Action |
+|---|---|---|
+| 90-100% | ✓ healthy | No action needed |
+| 70-89% | ⚠ minor issues | Review proposed moves |
+| 50-69% | ⚠ attention | Consider cleanup |
+| 0-49% | ✗ critical | Immediate cleanup recommended |
+
+## Staleness Thresholds
+
+Read `system/configuration.md` for `stale_after_days` thresholds:
+- Reports: default 90 days
+- Temporary files: default 30 days
+- Maps: re-validate when raw/ changes
 
 ## Rules
 
+- **All output must be reports.** Every answer is a report written to `agent_reports/`. No inline chat responses. No exceptions.
+- Never delete files. Move to `.trash/` only.
 - User confirmation is mandatory before any file move — this is a hard gate.
-- Never delete files — only move to `.trash/`.
+- Document every proposed move with a reason.
+- Do not move files that are still referenced by active maps or reports.
 - Never modify file content — only move or flag.
 - Never reorganize or rename files outside of archival moves.
 - `.gitkeep` must always remain in `.trash/`.
 - Evaluate by file age only — no structured research needs or tendency detection.
-- Do not edit `logs/user_requests.md`; the orchestrator writes logs.
+- Return a log summary to the orchestrator when traceability is needed; the orchestrator writes `logs/user_requests.md`.
 - Append one metrics row with operation `cleanup_audit`, directories seen, maps read if applicable, files checked, files read, reports written, and output path. Use `.bin/lib/metrics.sh` when available; never log raw command output, long grep terms, source excerpts, secrets, or credentials.
 
 ## See also
 
-- `source-intake` — for adding new files to the workspace
-- `orchestrator-dispatch` — Janitor dispatch requires user-confirmation gate
+- `pilosa-source-intake` — for adding new files to the workspace
+- `pilosa-orchestrator-dispatch` — Janitor dispatch requires user-confirmation gate

@@ -7,13 +7,13 @@ Always handle workspace startup by reading `system/startup.md` directly. Do not 
 | Class | Default Sequence | Skill to inject |
 |---|---|---|
 | `fast_path` | (none — answer directly) | — |
-| `clarify_search` | skip (or Searcher if term disambiguation needed) | `evidence-search` (if needed) |
-| `find_material` | Searcher → Verifier | `evidence-search` → `claim-verification` |
-| `evidence_answer` | Searcher + Analyst → Serendippo → Writer → Verifier | `evidence-search` + `context-analysis` → serendipity → `report-writing` → `claim-verification` |
-| `synthesis_report` | Searcher ×N + Analyst → Serendippo → Writer → Verifier | `evidence-search` ×N + `context-analysis` → serendipity → `report-writing` → `claim-verification` |
-| `verification` | Verifier | `claim-verification` |
-| `index_maintenance` | Searcher, Mapper, or Source Intake → Verifier | `evidence-search` or `source-intake` → `claim-verification` |
-| `cleanup` | Janitor | `workspace-cleanup` |
+| `clarify_search` | skip (or Searcher if term disambiguation needed) | `pilosa-evidence-search` (if needed) |
+| `find_material` | Searcher → Verifier | `pilosa-evidence-search` → `pilosa-claim-verification` |
+| `evidence_answer` | Searcher + Analyst → Serendippo → Writer → Verifier | `pilosa-evidence-search` + `pilosa-context-analysis` → serendipity → `pilosa-report-writing` → `pilosa-claim-verification` |
+| `synthesis_report` | Searcher ×N + Analyst → Serendippo → Writer → Verifier | `pilosa-evidence-search` ×N + `pilosa-context-analysis` → serendipity → `pilosa-report-writing` → `pilosa-claim-verification` |
+| `verification` | Verifier | `pilosa-claim-verification` |
+| `index_maintenance` | Searcher, Mapper, or Source Intake → Verifier | `pilosa-evidence-search` or `pilosa-source-intake` → `pilosa-claim-verification` |
+| `cleanup` | Janitor | `pilosa-workspace-cleanup` |
 
 Startup and deep index-maintenance routes may additionally use Mapper and Serendippo when the task requires corpus-wide extraction or hidden-connection discovery.
 

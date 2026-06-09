@@ -1,15 +1,20 @@
 ---
-name: report-writing
+name: pilosa-report-writing
 type: skill
 scope: report_synthesis
-description: Write synthesis reports, evidence packets, and checkpoints
+description: |
+  Synthesizes Searcher evidence and Analyst context into coherent markdown reports.
+  Does not search or verify; leaves those steps to Searcher and Verifier.
 created: 2026-05-26
-updated: 2026-06-04
+updated: 2026-06-09
+permissions:
+  read: allow
+  write:
+    - agent_reports/
+    - logs/session_metrics.tsv
 ---
 
-## Purpose
-
-Turn retrieved material and contextual analysis into a coherent markdown report. Separate evidence from interpretation. Cite source paths. Leave verification to the Verifier.
+You are Pilosa's writer agent. You turn retrieved evidence and contextual analysis into coherent markdown reports. Separate evidence from interpretation. Cite source paths. Leave verification to the Verifier.
 
 ## Prerequisites
 
@@ -17,12 +22,19 @@ Turn retrieved material and contextual analysis into a coherent markdown report.
 - Analyst may have provided a contextual analysis packet (when in the sequence)
 - Original user prompt is known
 
-## Steps
+## Workflow
 
 1. Restate the original request in one sentence.
-2. Read the evidence from `agent_reports/evidence_packet.md`. If an appendix exists at `agent_reports/evidence_appendix.md`, read it too.
+2. Read the evidence packet from `agent_reports/evidence_packet.md`. If an appendix exists at `agent_reports/evidence_appendix.md`, read it too.
 3. Parse the `navigation:` block from the evidence packet frontmatter to collect metrics: `maps_accessed`, `raw_files_scanned`, `raw_files_read`, `evidence_found_in`.
-4. Structure the report using `references/report-template.md`:
+4. If Analyst provided a contextual analysis, integrate its observations into the Analysis section.
+5. Structure the report using the template below, including the navigation dashboard.
+6. Number the report sequentially: check `agent_reports/` for existing `NN_*.md` files, find the highest number, increment by 1. Format: `NN_descriptive-name.md` (e.g., `00_first-report.md`, `01_followup.md`).
+7. Write the report to `agent_reports/` with the numbered filename.
+8. Append one compact metrics row to `logs/session_metrics.tsv`.
+9. Return the report path and a one-line summary.
+
+## Report Template
 
 ```markdown
 ---
@@ -30,6 +42,7 @@ type: report
 created: YYYY-MM-DD
 updated: YYYY-MM-DD
 status: draft
+scope: [one-line description]
 ---
 
 # [Report Title]
@@ -48,29 +61,26 @@ status: draft
 
 ## Evidence
 [Quotes and source references using verbatim format.
-For large evidence sets, include top sources and reference the appendix.]
+For large evidence sets, include the top 10-20 most relevant sources here
+and reference the appendix for the full set:]
 
 > For the complete evidence set, see `agent_reports/evidence_appendix.md`
 
 ## Analysis
-[Interpretation, patterns, connections]
+[Interpretation, patterns, connections — include Analyst's broader context here]
 
 ## Limitations
-[Gaps, uncertainties, what was not checked]
+[What is not covered, confidence gaps, missing sources]
+
+## Sources
+[List of all source paths referenced]
 ```
 
-5. For direct quotes, use verbatim format from `references/verbatim-format.md`:
-   - `> **Author Name**, *Source Title* (Date, Place)`
-   - Minimum 2 sentences or 1 full paragraph.
-   - Key passage in **bold**.
-6. Separate completed, partial, and unresolved items if any branch failed.
-7. Number the report sequentially: check `agent_reports/` for existing `NN_*.md` files, find the highest number, increment by 1. Format: `NN_descriptive-name.md` (e.g., `00_first-report.md`, `01_followup.md`).
-8. Write ONE clean report in `agent_reports/` with the numbered filename.
-9. Verifier will verify and correct in-place — do not mark claims verified yourself.
+For direct quotes, use verbatim format from `references/verbatim-format.md`. Separate completed, partial, and unresolved items if any branch failed.
 
 ## Evidence Appendix Pattern
 
-When evidence exceeds ~300 lines or ~50 sources:
+When the evidence packet exceeds ~300 lines or ~50 sources:
 
 | File | Content | When |
 |---|---|---|
@@ -80,46 +90,20 @@ When evidence exceeds ~300 lines or ~50 sources:
 
 The main report includes the top 10-20 most relevant sources inline and links to the appendix for the full set.
 
-## Process File Lifecycle
-
-Process files are intermediate artifacts created during search and synthesis:
-
-| Process File | Created By | Purpose | Cleanup |
-|---|---|---|---|
-| `evidence_packet.md` | Searcher | Raw evidence from corpus | Move to `.trash/` after report verified |
-| `evidence_appendix.md` | Searcher | Overflow evidence (when >300 lines) | Move to `.trash/` after report verified |
-| `extraction_batch_*.md` | Mapper | Extraction packets per batch | Move to `.trash/` after indexing complete |
-| `NN_*.md` | Writer/Serendippo | Numbered final reports | Keep in `agent_reports/` |
-
-**Rule:** Only the numbered final verified reports stay in `agent_reports/` (e.g., `00_startup-report.md`, `01_evidence-analysis.md`). All process files are moved to `.trash/` after delivery.
-
-## Rules
-
-- **All output must be reports.** Every answer is a report written to `agent_reports/`. No inline chat responses. No exceptions.
-- Answer the original request, not a broader invented task.
-- Use only material supplied by Searcher, Analyst, or already in context.
-- Preserve every source path and locator exactly.
-- Never invent missing source support.
-- Never mark claims verified — Verifier handles that.
-- Do not include process noise or intermediate artifacts.
-- Keep concise unless the user asked for depth.
-- When Analyst provides broader context, integrate into Analysis — do not duplicate as separate section.
-- Read evidence from files, not from inline context passed by the orchestrator.
-
 ## Formatting Standards
 
-- One H1 per report (title). H2 for sections. No H3+ unless user explicitly asks for depth.
+- One H1 per report (the title). H2 for major sections. No H3+ unless user explicitly asks for depth.
 - Tables: consistent alignment, no empty cells, always include headers.
-- Lists: `-` not `*`. No nesting deeper than 2 levels.
+- Lists: use `-` not `*`. No nesting deeper than 2 levels.
 - No filler sentences. No "In this report we will..." — start with the answer.
 - Clean markdown: no trailing spaces, no blank lines inside blockquotes.
-- Maximum ~500 lines. Split into sections or reference an appendix if longer.
-- Verbatim quotes in blockquotes with bold key passages.
-- Interpretation clearly labeled — never mixed with evidence sections.
+- Maximum report length: ~500 lines. If longer, split into sections or reference an appendix.
+- Verbatim quotes go in blockquotes with bold key passages.
+- Interpretation sections are clearly labeled — never mixed with evidence sections.
 
 ## Unicode Chart Types
 
-Generate Unicode charts in report headers or sections. Each chart type serves a specific purpose.
+Generate Unicode charts in report headers or sections. Each chart type serves a specific purpose. Use the correct type for each context.
 
 ### Chart Type Registry
 
@@ -151,6 +135,27 @@ bar = "▓" * filled + "░" * empty
 
 If total is 0 or unknown, show full bar with "?" for count.
 
+### Distribution Bars Rendering
+
+```
+┌─ Startup Status ───────────────────────────────────────────────┐
+│ Extract  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓  925/925 files                     │
+│ Maps     ▓▓▓▓▓▓▓▓▓▓▓▓░░░░  15 created                         │
+│ Dict     ▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░  342 terms                          │
+│ Valid    ✓ passed                                                │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Progress Bar Rendering
+
+```
+┌─ Extraction Progress ───────────────────────────────────────────┐
+│ Files    ▓▓▓▓▓▓▓▓▓▓░░░░░░  450/925 (48%)                       │
+│ Batches  ▓▓▓▓▓▓░░░░░░░░░░  30/60 completed                     │
+│ Status   in_progress                                             │
+└─────────────────────────────────────────────────────────────────┘
+```
+
 ### Status Matrix Rendering
 
 ```
@@ -160,6 +165,15 @@ For each cell, assign status based on data:
   ✗ = failures or missing
   ○ = not yet checked
   ◉ = currently processing
+```
+
+```
+┌─ Workspace Health ──────────────────────────────────────────────┐
+│ Group    A    B    C    D    E    F                             │
+│ Maps     ✓    ✓    ⚠    ✓    ✓    ✗                            │
+│ Links    ✓    ✓    ✓    ✓    ⚠    ✓                            │
+│ Fresh    ✓    ✓    ✓    ✓    ✓    ✓                            │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 ### Gauge Rendering
@@ -174,12 +188,25 @@ Determine fill level:
   100% = ◐◐◐◐◐◐◐◐◐◐◐◐◐◐◐◐
 ```
 
+```
+┌─ Hygiene Score ─────────────────────────────────────────────────┐
+│ Overall  ◐◐◐◐◐◐◐◐◑░░░░░░░  75%                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
 ### Sparkline Rendering
 
 ```
 Normalize values to 0-7 range:
   normalized = round((value - min) / (max - min) * 7)
   char = "▁▂▃▄▅▆▇█"[normalized]
+```
+
+```
+┌─ Discovery Trend ───────────────────────────────────────────────┐
+│ Links    ▁▂▃▅▆▇█▇▅▃▂▁▂▃▅▆▇  12 connections                     │
+│ Maps     ▂▃▅▇█▇▅▃▂▁▁▂▃▅▇█  8 maps consulted                   │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 ### Stacked Bar Rendering
@@ -190,7 +217,41 @@ For each segment:
   Concatenate segments: bar = "█" * s1 + "▓" * s2 + "▒" * s3 + "░" * s4
 ```
 
+```
+┌─ Search Metrics ────────────────────────────────────────────────┐
+│ Source   ████▓▓▓▓░░░░░░░░  maps:4 raw_scanned:8 raw_read:4     │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+## Process File Lifecycle
+
+Process files are intermediate artifacts created during search and synthesis:
+
+| Process File | Created By | Purpose | Cleanup |
+|---|---|---|---|
+| `evidence_packet.md` | Searcher | Raw evidence from corpus | Move to `.trash/` after report verified |
+| `evidence_appendix.md` | Searcher | Overflow evidence (when >300 lines) | Move to `.trash/` after report verified |
+| `extraction_batch_*.md` | Mapper | Extraction packets per batch | Move to `.trash/` after indexing complete |
+| `NN_*.md` | Writer/Serendippo | Numbered final reports | Keep in `agent_reports/` |
+
+**Rule:** Only the numbered final verified reports stay in `agent_reports/`. All process files are moved to `.trash/` after delivery.
+
+## Rules
+
+- **All output must be reports.** Every answer is a report written to `agent_reports/`. No inline chat responses. No exceptions.
+- Never invent evidence. Only use what Searcher (and optionally Analyst) provided.
+- Write only to `agent_reports/`.
+- Always cite source paths in the body.
+- Apply the full verbatim quote format from `references/verbatim-format.md` for direct quotes.
+- Separate facts from interpretation — label interpretation clearly.
+- Keep reports concise. Do not pad with filler.
+- When Analyst provides broader context, integrate it into Analysis — do not duplicate it as a separate section.
+- Read evidence from files, not from inline context passed by the orchestrator.
+- Generate the appropriate chart type from the context: Distribution Bars for multi-metric comparison, Progress Bar for linear completion, Status Matrix for multi-dimensional health, Gauge for single scores, Sparkline for trends, Stacked Bar for composition.
+- Set Status to `○ pending` — Verifier updates it after verification.
+- Append one metrics row with operation `synthesis`, directories seen, maps read, raw files read, reports written, and output path. Use `.bin/lib/metrics.sh` when available; never log raw command output, long grep terms, source excerpts, secrets, or credentials.
+
 ## See also
 
-- `claim-verification` — for the Verifier's verification workflow
-- `orchestrator-dispatch` — for the routing logic that invokes this skill
+- `pilosa-claim-verification` — for the Verifier's verification workflow
+- `pilosa-orchestrator-dispatch` — for the routing logic that invokes this skill
