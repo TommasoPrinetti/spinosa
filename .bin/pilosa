@@ -2797,7 +2797,7 @@ cmd_help() {
   if [[ -f ".pilosa/workspace" ]]; then
     local fw_version project_name setup_status
     fw_version="$(grep 'framework_version:' .pilosa/workspace | awk '{print $2}')"
-    project_name="$(grep 'project_name:' .pilosa/workspace | awk '{print $2}')"
+    project_name="$(grep 'project_name:' .pilosa/workspace | sed 's/project_name: *//')"
     setup_status="$(grep 'setup_status:' .pilosa/workspace | awk '{print $2}')"
     divider
     printf '\n  %s %s\n' "${BOLD}Current workspace:${RESET}" "${project_name:-unknown}"
@@ -2867,10 +2867,10 @@ cmd_onboard() {
   if [[ -z "$project_name" ]]; then
     local default_name
     default_name="$(basename "$workspace_path")"
-    while [[ -z "$project_name" ]] || [[ ! "$project_name" =~ ^[a-zA-Z0-9_-]+$ ]]; do
+    while [[ -z "$project_name" ]] || [[ ! "$project_name" =~ ^[a-zA-Z0-9_ -]+$ ]]; do
       project_name="$(prompt_input "Project name" "$default_name")"
-      if [[ ! "$project_name" =~ ^[a-zA-Z0-9_-]+$ ]]; then
-        warn "Project name can only contain letters, numbers, hyphens, and underscores."
+      if [[ ! "$project_name" =~ ^[a-zA-Z0-9_ -]+$ ]]; then
+        warn "Project name can only contain letters, numbers, spaces, hyphens, and underscores."
         project_name=""
       fi
     done
@@ -2966,12 +2966,12 @@ cmd_new() {
   local default_name
   default_name="$corpus_name"
 
-  while [[ -z "$project_name" ]] || [[ ! "$project_name" =~ ^[a-zA-Z0-9_-]+$ ]]; do
+  while [[ -z "$project_name" ]] || [[ ! "$project_name" =~ ^[a-zA-Z0-9_ -]+$ ]]; do
     project_name="$(prompt_input "Project name" "$default_name")"
     if [[ -z "$project_name" ]]; then
       :
-    elif [[ ! "$project_name" =~ ^[a-zA-Z0-9_-]+$ ]]; then
-      warn "Project name can only contain letters, numbers, hyphens, and underscores."
+    elif [[ ! "$project_name" =~ ^[a-zA-Z0-9_ -]+$ ]]; then
+      warn "Project name can only contain letters, numbers, spaces, hyphens, and underscores."
       project_name=""
     fi
   done
@@ -3115,7 +3115,7 @@ cmd_update() {
 
   local fw_version project_name
   fw_version="$(grep 'framework_version:' "$workspace_path/.pilosa/workspace" | awk '{print $2}')"
-  project_name="$(grep 'project_name:' "$workspace_path/.pilosa/workspace" | awk '{print $2}')"
+  project_name="$(grep 'project_name:' "$workspace_path/.pilosa/workspace" | sed 's/project_name: *//')"
 
   ok "Workspace: ${BOLD}${project_name:-unknown}${RESET}"
   info "Current framework version: ${fw_version:-unknown}"
