@@ -36,6 +36,13 @@ bash install-pilosa.sh --help
 
 ## Quick start
 
+> **Note:** The CLI setup works fine on its own, but actually using the workspace requires one of these LLM CLIs:
+> - **[Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview)** — Anthropic's CLI agent
+> - **[Codex](https://github.com/openai/codex)** — OpenAI's CLI agent
+> - **[OpenCode](https://opencode.ai)** — open-source CLI agent
+>
+> Install one before you proceed.
+
 ### 1. Install
 
 ```bash
