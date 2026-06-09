@@ -163,3 +163,11 @@ See `references/skills.md` for the full role → skill mapping.
 - `pilosa-mapper` — startup and deep index-maintenance extraction agent
 - `pilosa-serendippo` — hidden-connection discovery agent
 - `system/startup.md` — workspace initialization protocol (orchestrator reads directly)
+
+## References
+
+| File | Content |
+|---|---|
+| `references/classification.md` | Full prompt classification definitions |
+| `references/sequences.md` | Default sub-agent sequences per route class |
+| `references/skills.md` | Complete role → skill mapping table

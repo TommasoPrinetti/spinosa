@@ -2455,7 +2455,7 @@ PROMPT_EOF
 
 PILOSA_VENDOR_DIR="${PILOSA_HOME:-$HOME/.pilosa}/vendor/pilosa"
 RAPIDOCR_VENDOR_DIR="${PILOSA_HOME:-$HOME/.pilosa}/vendor/rapidocr"
-PLATFORM="${OS:-$(uname -s | tr '[:upper:]' '[:lower:]')}-$(uname -m | sed 's/aarch64/arm64/')"
+PLATFORM="${OS:-$(uname -s | tr '[:upper:]' '[:lower:]')}-$(uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/')"
 RAPIDOCR_PLATFORM="$PLATFORM"
 
 rapidocr_ocr_available() {

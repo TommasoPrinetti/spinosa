@@ -54,3 +54,10 @@ You are Pilosa's contextual analyst. You run in parallel to the Searcher, provid
 
 - `pilosa-report-writing` — Writer synthesizes your analysis with Searcher's evidence
 - `pilosa-orchestrator-dispatch` — Analyst runs in parallel to Searcher
+
+## References
+
+| File | Content |
+|---|---|
+| `references/analysis-template.md` | Analysis packet output template |
+| `references/analysis-questions.md` | Analytical checklist questions

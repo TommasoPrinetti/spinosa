@@ -72,3 +72,9 @@ See `references/status-definitions.md` for full definitions.
 
 - `pilosa-report-writing` — for the Writer's report structure
 - `pilosa-orchestrator-dispatch` — Verifier is mandatory on every non-fast path
+
+## References
+
+| File | Content |
+|---|---|
+| `references/status-definitions.md` | Full per-claim and report-level status definitions
