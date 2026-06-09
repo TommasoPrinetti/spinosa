@@ -22,15 +22,15 @@ The original source folder is never modified. The workspace is self-contained. A
 ## Install
 
 ```bash
-curl -fsSL https://github.com/TommasoPrinetti/pilosa/releases/download/v0.4.6/install.sh | bash
+curl -fsSL https://github.com/TommasoPrinetti/pilosa/releases/download/v0.4.7/install.sh | bash -s -- --yes
 ```
 
-This installs the pinned stable version (`0.4.6`) to `~/.pilosa/`. No npm, Python, or Go required. Requires bash.
+This installs the pinned stable version (`0.4.7`) to `~/.pilosa/`. A bundled Python handles pip packages at install time. No system Python, npm, or Go required. Requires bash and internet access for first install.
 
-For custom versions or offline installs, download the script first:
+For custom versions or options, download the script first:
 
 ```bash
-curl -fsSL https://github.com/TommasoPrinetti/pilosa/releases/download/v0.4.6/install.sh -o install-pilosa.sh
+curl -fsSL https://github.com/TommasoPrinetti/pilosa/releases/download/v0.4.7/install.sh -o install-pilosa.sh
 bash install-pilosa.sh --help
 ```
 
@@ -46,7 +46,7 @@ bash install-pilosa.sh --help
 ### 1. Install
 
 ```bash
-curl -fsSL https://github.com/TommasoPrinetti/pilosa/releases/download/v0.4.6/install.sh | bash
+curl -fsSL https://github.com/TommasoPrinetti/pilosa/releases/download/v0.4.7/install.sh | bash -s -- --yes
 ```
 
 ### 2. Create a workspace
@@ -254,13 +254,13 @@ bash tests/test_cli.sh
 ### Packaging a release
 
 ```bash
-bash .bin/package-release.sh 0.4.6
+bash .bin/package-release.sh 0.4.7
 ```
 
 ### Publishing a release
 
 ```bash
-bash .bin/publish-release.sh 0.4.6
+bash .bin/publish-release.sh 0.4.7
 ```
 
 Requires `gh` CLI and a clean working tree.
