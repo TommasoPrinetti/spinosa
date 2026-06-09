@@ -55,12 +55,20 @@ for asset in "$ARCHIVE" "$INSTALLER" "$CHECKSUMS"; do
   fi
 done
 
-# Collect RapidOCR vendor tarballs as separate release assets
-RAPIDOCR_ASSETS=()
+# Collect vendor tarballs as separate release assets
+VENDOR_ASSETS=()
+# Unified vendor (post-merger: single bundle with RapidOCR + MarkItDown)
+for tarball in "${REPO_ROOT}/.bin/lib/vendor"/pilosa-vendor-*.tar.gz; do
+  if [[ -f "$tarball" ]]; then
+    cp "$tarball" "${DIST}/$(basename "$tarball")"
+    VENDOR_ASSETS+=("${DIST}/$(basename "$tarball")")
+  fi
+done
+# Legacy RapidOCR-only vendor (backward compat during transition)
 for tarball in "${REPO_ROOT}/.bin/lib/vendor"/rapidocr-*.tar.gz; do
   if [[ -f "$tarball" ]]; then
     cp "$tarball" "${DIST}/$(basename "$tarball")"
-    RAPIDOCR_ASSETS+=("${DIST}/$(basename "$tarball")")
+    VENDOR_ASSETS+=("${DIST}/$(basename "$tarball")")
   fi
 done
 
@@ -97,7 +105,7 @@ pilosa update --version ${VERSION}
 EOF
 
 UPLOAD_ASSETS=("$ARCHIVE" "$INSTALLER" "$CHECKSUMS")
-[[ ${#RAPIDOCR_ASSETS[@]} -gt 0 ]] && UPLOAD_ASSETS+=("${RAPIDOCR_ASSETS[@]}")
+[[ ${#VENDOR_ASSETS[@]} -gt 0 ]] && UPLOAD_ASSETS+=("${VENDOR_ASSETS[@]}")
 
 if gh release view "$TAG" >/dev/null 2>&1; then
   echo "Release ${TAG} already exists; uploading assets with --clobber"

@@ -49,7 +49,8 @@ Required for every file in [[raw/]]. The dictionary is the source of truth for c
 type: raw_copy
 source: "raw/[relative-path]/[filename]"
 source_type: interview | fieldnote | article | report | dataset | correspondence | researcher_note
-text_type: md | txt | rtf | csv | json | yaml | ...
+original_format: pdf | docx | pptx | xlsx | xls | epub | html | txt | rtf | csv | json | yaml | md | jpg | png | ...
+converter_engine: markitdown | rapidocr | renamer | native
 language: en | fr | pt | es | ...
 date: "YYYY-MM-DD or YYYY-MM-DD"
 people: ["canonical name from dictionary"]
@@ -67,7 +68,7 @@ metadata_uncertainty: ["date_missing", "identity_ambiguous"]
 related_sources: ["other_file.md"]
 generated_by: startup_agent
 generated_at: YYYY-MM-DD
-processing_status: copied_text_headered
+processing_status: copied_text_headered | markitdown_converted | ocr_processed
 created: YYYY-MM-DD
 updated: YYYY-MM-DD
 ---
@@ -75,6 +76,8 @@ updated: YYYY-MM-DD
 
 Rules:
 - `source` uses a relative path from the repo root (e.g., `raw/folder/file.md`). The source location is stored in [[context]] for reference during onboarding only.
+- `original_format` records the source file extension before conversion (e.g., `pdf`, `docx`, `txt`). Replaces the former `text_type` field. Used for provenance tracking and re-onboarding idempotency checks.
+- `converter_engine` records which engine produced this `.md` file: `renamer` (extension rename only), `native` (copied unchanged), `markitdown` (MarkItDown conversion), or `rapidocr` (OCR via RapidOCR). Enables engine-specific re-classification warnings on re-onboarding.
 - `language` is the ISO 639-1 code of the source file's primary language (en, fr, pt, es, etc.).
 - `people`, `places`, `organizations` MUST use canonical forms from [[dictionary]].
 - `keywords` include both canonical terms and aliases in the source's language (so grep finds any variant).
@@ -85,6 +88,7 @@ Rules:
 - `uncertain_terms`, `machine_artifacts`, and `metadata_uncertainty` quarantine noisy or incomplete metadata.
 - `related_sources` lists other raw copies with shared topics or concepts.
 - `generated_by`, `generated_at`, and `processing_status` preserve provenance for generated headers.
+- `processing_status` values are engine-specific: `copied_text_headered` (renamer/native), `markitdown_converted` (MarkItDown), `ocr_processed` (RapidOCR).
 - Omit fields that have no value — do not write `people: []`.
 
 **Frontmatter exception:** `connects_to:` and other YAML keys use **bare paths** (not wikilinks). This keeps the metadata machine-readable, grep-friendly, and stable for sub-agents to parse.

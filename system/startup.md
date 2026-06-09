@@ -45,7 +45,7 @@ You can use `set_goal` function to pursue this mission.
 
 - **Do not edit `raw/`.** Startup may write generated maps, dictionary, workspace index, context, configuration, and startup reports as part of setup.
 - Treat `raw/` as the active working corpus after onboarding.
-- Copy PDFs as Markdown when onboarding accepted them (via pdftotext or Surya OCR). Images are processed via OCR if enabled. Account for skipped media (audio, video) as uncovered source media.
+- Copy PDFs as Markdown when onboarding accepted them (via MarkItDown for text-based PDFs or RapidOCR for scanned/image-based PDFs). Images are processed via RapidOCR OCR if enabled. Account for skipped media (audio, video) as uncovered source media.
 - Treat every `AGENTS.md` file as repository/control instructions, not corpus evidence.
 - Use the dictionary for consistent terminology across all outputs.
 - Preserve generated-file provenance on maps and reports.
@@ -95,7 +95,7 @@ Survey [[raw/]] as the active working corpus. For each raw directory:
 1. List all files and subdirectories (skip `.DS_Store`, `AGENTS.md`, system files, empty dirs)
 2. Note file types (`.md`, `.txt`, `.csv`, `.json`, etc.), count per type, approximate date range
 3. Read a sample of raw copies to characterize the folder's content accurately
-4. Record: source types, modality, names, dates, topics, keywords, gaps
+4. Record: source types, modality, names, dates, topics, keywords, gaps, `converter_engine` (which engine produced each file), `original_format` (source file extension before conversion).
 
 Count **all** files in raw/ (not just `.md`):
 

@@ -31,7 +31,7 @@ set -euo pipefail
 
 # ── defaults ────────────────────────────────────────────────────────────────
 # Pinned stable version. Update this when cutting a new release.
-PINNED_VERSION="0.4.1"
+PINNED_VERSION="0.4.2"
 VERSION="${VERSION:-$PINNED_VERSION}"
 DRY_RUN=0
 VERIFY_ONLY=0
@@ -597,47 +597,85 @@ main() {
       done
     fi
 
-    # ── install RapidOCR vendor ───────────────────────────────────────────
-    local rapidocr_dest="${PILOSA_HOME}/vendor/rapidocr/${suffix}"
-    local rapidocr_installed=false
+    # ── install Pilosa vendor (RapidOCR + MarkItDown) ────────────────────
+    local pilosa_vendor_dest="${PILOSA_HOME}/vendor/pilosa-${suffix}"
+    local vendor_installed=false
 
-    # 1) Check inside framework tarball (bundled)
-    local rapidocr_src="${vendor_src}/rapidocr-${suffix}"
-    if [[ -d "$rapidocr_src" ]]; then
-      mkdir -p "$rapidocr_dest"
-      cp -r "${rapidocr_src}/"* "$rapidocr_dest/"
-      chmod +x "${rapidocr_dest}/rapidocr-cli" 2>/dev/null || true
-      rapidocr_installed=true
+    # 1) Check inside framework tarball for unified vendor (bundled)
+    local pilosa_vendor_src="${vendor_src}/pilosa-vendor-${suffix}"
+    if [[ -d "$pilosa_vendor_src" ]]; then
+      mkdir -p "$pilosa_vendor_dest"
+      cp -r "${pilosa_vendor_src}/"* "$pilosa_vendor_dest/"
+      chmod +x "${pilosa_vendor_dest}/rapidocr-cli" 2>/dev/null || true
+      chmod +x "${pilosa_vendor_dest}/markitdown-cli" 2>/dev/null || true
+      vendor_installed=true
     else
-      local rapidocr_tarball="${vendor_src}/rapidocr-${suffix}.tar.gz"
-      if [[ -f "$rapidocr_tarball" ]]; then
-        mkdir -p "$rapidocr_dest"
-        safe_untar "$rapidocr_tarball" "$rapidocr_dest" --strip-components=1
-        chmod +x "${rapidocr_dest}/rapidocr-cli" 2>/dev/null || true
-        rapidocr_installed=true
+      local pilosa_vendor_tarball="${vendor_src}/pilosa-vendor-${suffix}.tar.gz"
+      if [[ -f "$pilosa_vendor_tarball" ]]; then
+        mkdir -p "$pilosa_vendor_dest"
+        safe_untar "$pilosa_vendor_tarball" "$pilosa_vendor_dest" --strip-components=1
+        chmod +x "${pilosa_vendor_dest}/rapidocr-cli" 2>/dev/null || true
+        chmod +x "${pilosa_vendor_dest}/markitdown-cli" 2>/dev/null || true
+        vendor_installed=true
       fi
     fi
 
-    # 2) Download from release assets if not bundled
-    if [[ "$rapidocr_installed" == "false" ]]; then
-      local rapidocr_url="${base_url}/rapidocr-${suffix}.tar.gz"
-      local rapidocr_tmp="${tmpdir}/rapidocr-${suffix}.tar.gz"
-      spinner_start "Downloading RapidOCR for ${suffix}"
-      if download "$rapidocr_url" "$rapidocr_tmp" 2>/dev/null; then
+    # 2) Legacy RapidOCR-only bundle (backward compat — no MarkItDown)
+    if [[ "$vendor_installed" == "false" ]]; then
+      local legacy_dest="${PILOSA_HOME}/vendor/rapidocr/${suffix}"
+      local legacy_src="${vendor_src}/rapidocr-${suffix}"
+      if [[ -d "$legacy_src" ]]; then
+        mkdir -p "$legacy_dest"
+        cp -r "${legacy_src}/"* "$legacy_dest/"
+        chmod +x "${legacy_dest}/rapidocr-cli" 2>/dev/null || true
+        vendor_installed=true
+      else
+        local legacy_tarball="${vendor_src}/rapidocr-${suffix}.tar.gz"
+        if [[ -f "$legacy_tarball" ]]; then
+          mkdir -p "$legacy_dest"
+          safe_untar "$legacy_tarball" "$legacy_dest" --strip-components=1
+          chmod +x "${legacy_dest}/rapidocr-cli" 2>/dev/null || true
+          vendor_installed=true
+        fi
+      fi
+    fi
+
+    # 3) Download from release assets if not bundled
+    if [[ "$vendor_installed" == "false" ]]; then
+      # Try unified vendor first
+      local vendor_url="${base_url}/pilosa-vendor-${suffix}.tar.gz"
+      local vendor_tmp="${tmpdir}/pilosa-vendor-${suffix}.tar.gz"
+      spinner_start "Downloading Pilosa vendor for ${suffix}"
+      if download "$vendor_url" "$vendor_tmp" 2>/dev/null; then
         spinner_stop
-        mkdir -p "$rapidocr_dest"
-        safe_untar "$rapidocr_tmp" "$rapidocr_dest" --strip-components=1
-        chmod +x "${rapidocr_dest}/rapidocr-cli" 2>/dev/null || true
-        rapidocr_installed=true
+        mkdir -p "$pilosa_vendor_dest"
+        safe_untar "$vendor_tmp" "$pilosa_vendor_dest" --strip-components=1
+        chmod +x "${pilosa_vendor_dest}/rapidocr-cli" 2>/dev/null || true
+        chmod +x "${pilosa_vendor_dest}/markitdown-cli" 2>/dev/null || true
+        vendor_installed=true
       else
         spinner_stop
+        # Fall back to legacy RapidOCR-only download
+        local legacy_url="${base_url}/rapidocr-${suffix}.tar.gz"
+        local legacy_tmp="${tmpdir}/rapidocr-${suffix}.tar.gz"
+        spinner_start "Downloading RapidOCR for ${suffix} (legacy)"
+        if download "$legacy_url" "$legacy_tmp" 2>/dev/null; then
+          spinner_stop
+          local legacy_dest="${PILOSA_HOME}/vendor/rapidocr/${suffix}"
+          mkdir -p "$legacy_dest"
+          safe_untar "$legacy_tmp" "$legacy_dest" --strip-components=1
+          chmod +x "${legacy_dest}/rapidocr-cli" 2>/dev/null || true
+          vendor_installed=true
+        else
+          spinner_stop
+        fi
       fi
     fi
 
-    if [[ "$rapidocr_installed" == "true" ]]; then
-      ok "Installed RapidOCR"
+    if [[ "$vendor_installed" == "true" ]]; then
+      ok "Installed Pilosa vendor (RapidOCR + MarkItDown)"
     else
-      warn "No RapidOCR for ${suffix} (PDF/image OCR will not be available)"
+      warn "No Pilosa vendor for ${suffix} (PDF/image OCR and Office doc conversion will not be available)"
     fi
 
     # Verify vendor binary checksums against the release manifest

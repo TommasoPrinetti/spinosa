@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Shell syntax check
+        run: |
+          bash -n .bin/pilosa
+          bash -n .bin/package-release.sh
+          bash -n .bin/publish-release.sh
+          bash -n .bin/build-pilosa-vendor.sh
+          bash -n install.sh
+
+      - name: CLI unit tests
+        run: bash tests/test_cli.sh
+
+      - name: Smoke tests
+        run: bash tests/smoke.sh

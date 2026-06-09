@@ -1,0 +1,57 @@
+name: CD
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.extract-version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: extract-version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Shell syntax check
+        run: |
+          bash -n .bin/pilosa
+          bash -n .bin/package-release.sh
+          bash -n .bin/publish-release.sh
+
+      - name: CLI unit tests
+        run: bash tests/test_cli.sh
+
+      - name: Smoke tests
+        run: bash tests/smoke.sh
+
+      - name: Package release
+        run: bash .bin/package-release.sh "${{ steps.extract-version.outputs.version }}"
+
+      - name: Upload framework archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: pilosa-framework-${{ steps.extract-version.outputs.version }}
+          path: dist/v${{ steps.extract-version.outputs.version }}/
+
+  publish:
+    needs: package
+    runs-on: ubuntu-latest
+    if: success()
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download framework archive
+        uses: actions/download-artifact@v4
+        with:
+          name: pilosa-framework-${{ needs.package.outputs.version }}
+          path: dist/v${{ needs.package.outputs.version }}/
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .bin/publish-release.sh "${{ needs.package.outputs.version }}"

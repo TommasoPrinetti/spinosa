@@ -255,15 +255,24 @@ bundle_platform_binary "gum" "$GUM_VERSION" \
   "https://github.com/charmbracelet/gum/releases/download/v${GUM_VERSION}/gum_${GUM_VERSION}_Linux_i386.tar.gz" \
   "linux-i386"
 
-# ── Bundle RapidOCR vendor bundles ──────────────────────────────────────────
-echo "Bundling RapidOCR vendor bundles..."
+# ── Bundle Pilosa vendor bundles (RapidOCR + MarkItDown) ─────────────────
+echo "Bundling Pilosa vendor bundles..."
 
-RAPIDOCR_SRC="${REPO_ROOT}/.bin/lib/vendor"
-for tarball in "$RAPIDOCR_SRC"/rapidocr-*.tar.gz; do
+VENDOR_SRC="${REPO_ROOT}/.bin/lib/vendor"
+# Unified vendor bundles (post-merger: single archive with both engines)
+for tarball in "$VENDOR_SRC"/pilosa-vendor-*.tar.gz; do
   if [[ -f "$tarball" ]]; then
     tarball_name="$(basename "$tarball")"
     cp "$tarball" "${VENDOR_DIR}/${tarball_name}"
     echo "  Bundled ${tarball_name}"
+  fi
+done
+# Legacy RapidOCR-only bundles (backward compat during transition)
+for tarball in "$VENDOR_SRC"/rapidocr-*.tar.gz; do
+  if [[ -f "$tarball" ]]; then
+    tarball_name="$(basename "$tarball")"
+    cp "$tarball" "${VENDOR_DIR}/${tarball_name}"
+    echo "  Bundled ${tarball_name} (legacy)"
   fi
 done
 
@@ -278,7 +287,7 @@ for vendor_bin in "$VENDOR_DIR"/*; do
   [[ -f "$vendor_bin" ]] || continue
   bin_file="$(basename "$vendor_bin")"
   # Parse "gum-darwin-arm64" → name="gum" suffix="darwin-arm64"
-  # Parse "rapidocr-darwin-arm64.tar.gz" → name="rapidocr" suffix="darwin-arm64"
+  # Parse "pilosa-vendor-darwin-arm64.tar.gz" → name="pilosa" suffix="vendor-darwin-arm64"
   if [[ "$bin_file" == *.tar.gz ]]; then
     bin_name="${bin_file%%-*}"
     bin_suffix="${bin_file#*-}"
@@ -302,6 +311,7 @@ VERSIONS_FILE="${FRAMEWORK_DIR}/metadata/vendor-versions.txt"
 printf 'gum %s\n' "$GUM_VERSION" > "$VERSIONS_FILE"
 printf 'rapidocr 3.8.1\n' >> "$VERSIONS_FILE"
 printf 'onnxruntime 1.26.0\n' >> "$VERSIONS_FILE"
+printf 'markitdown 0.1.6\n' >> "$VERSIONS_FILE"
 printf 'pypdfium2 5.9.0\n' >> "$VERSIONS_FILE"
 echo "  Vendor versions recorded"
 

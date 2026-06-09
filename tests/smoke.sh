@@ -323,10 +323,11 @@ fi
 echo ""
 echo "Test 11: install.sh version pinning"
 HELP_OUTPUT="$(bash "$REPO_ROOT/install.sh" --help 2>/dev/null || true)"
-if echo "$HELP_OUTPUT" | grep -q "default: 0.3.0"; then
-  pass "install.sh defaults to pinned version 0.2.2"
+PINNED="$(grep 'PINNED_VERSION=' "$REPO_ROOT/install.sh" | head -1 | sed 's/.*PINNED_VERSION="\([^"]*\)".*/\1/')"
+if [[ -n "$PINNED" ]] && echo "$HELP_OUTPUT" | grep -q "default: ${PINNED}"; then
+  pass "install.sh defaults to pinned version ${PINNED}"
 else
-  fail "install.sh does not default to pinned version"
+  fail "install.sh does not default to pinned version (expected: ${PINNED})"
 fi
 
 # ── Test 12: install.sh --upgrade and --reinstall flags ──────────────────────

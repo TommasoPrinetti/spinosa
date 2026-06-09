@@ -46,6 +46,8 @@ trap cleanup_on_exit EXIT INT TERM
 MARKDOWN_EXTENSIONS="txt|rtf|textile|wiki|mediawiki|dokuwiki|pmwiki|outliner|workflowy|dynalist"
 NATIVE_EXTENSIONS="md|csv|json|yaml|yml|toml|xml|html|css|js|ts|py|rb|sh|log|ini|cfg|conf|tex|bib|org|adoc|rst|tiddlywiki|logseq|roam|obsidian"
 BINARY_COPYABLE_EXTENSIONS=""
+# Engine: markitdown — convert Office docs, EPUB, HTML, ZIP, and text-based PDFs to .md
+MARKITDOWN_EXTENSIONS="docx|pptx|xlsx|xls|epub|html|htm|msg|zip"
 OPTION_SEP=$'\t'
 
 # Resolve framework root:
@@ -91,7 +93,7 @@ divider()   { printf '%s\n' "${DIM}$(printf '%.0s─' 1 {1..78})${RESET}"; }
 header()    { printf '\n%s\n\n' "${BOLD}${C}$1${RESET}"; }
 info()      { printf '  %s %s\n' "${DIM}→${RESET}" "$1"; }
 ok()        { printf '  %s %s\n' "${G}✦${RESET}" "$1"; }
-warn()      { printf '  %s %s\n' "${Y}⚠${RESET}" "$1"; }
+warn()      { printf '  %s %s\n' "${Y}⚠${RESET}" "$1" >&2; }
 note()      { printf '  %s↳%s %s\n' "${DIM}" "${RESET}" "$1"; }
 die()       { printf '\n  %s %s\n\n' "${R}✗${RESET}" "$1" >&2; exit 1; }
 print_step(){ printf '\n  %s%s[%s/%s] %s%s\n' "${BOLD}" "${C}" "$1" "$2" "$3" "${RESET}"; }
@@ -1191,6 +1193,51 @@ ext_in_list() {
 is_markdown_convertible_file() { local ext; ext="$(file_ext "$1")"; [[ -n "$ext" ]] && ext_in_list "$ext" "$MARKDOWN_EXTENSIONS"; }
 is_native_readable_file() { local ext; ext="$(file_ext "$1")"; [[ -n "$ext" ]] && ext_in_list "$ext" "$NATIVE_EXTENSIONS"; }
 is_binary_copyable_file() { local ext; ext="$(file_ext "$1")"; [[ -n "$ext" ]] && ext_in_list "$ext" "$BINARY_COPYABLE_EXTENSIONS"; }
+is_markitdown_convertible_file() { local ext; ext="$(file_ext "$1")"; [[ -n "$ext" ]] && ext_in_list "$ext" "$MARKITDOWN_EXTENSIONS"; }
+
+# ── PDF classification (text-based vs scanned) ──────────────────────────────
+
+is_text_based_pdf() {
+  local pdf="$1"
+  [[ "$(file_ext "$pdf")" == "pdf" ]] || return 1
+
+  # Tier 1: Reject encrypted PDFs — /Font keys visible but content unreadable
+  if grep -q -a -m1 -F '/Encrypt' "$pdf" 2>/dev/null; then
+    return 1   # → OCR
+  fi
+
+  # Tier 2: Quick scan of first 256 KB for /Font or /CIDFont dictionaries
+  local head_scan
+  head_scan="$(head -c 262144 "$pdf" 2>/dev/null)"
+  if echo "$head_scan" | grep -q -a -E '/(Font|CIDFont)\b' 2>/dev/null; then
+    return 0   # → MarkItDown
+  fi
+
+  # Tier 3: Full scan for late-appearing font dictionaries
+  if grep -q -a -m1 -E '/(Font|CIDFont)\b' "$pdf" 2>/dev/null; then
+    return 0   # → MarkItDown
+  fi
+
+  # Tier 4: pdftotext first-page fallback (handles ObjStm-compressed dicts)
+  if command -v pdftotext >/dev/null 2>&1; then
+    local text_sample
+    text_sample="$(pdftotext -l 1 -q "$pdf" - 2>/dev/null | tr -d '[:space:]' | head -c 1)"
+    [[ -n "$text_sample" ]] && return 0
+  fi
+
+  return 1  # → OCR (scanned / image-based)
+}
+
+# ── Centralized engine routing ──────────────────────────────────────────────
+
+engine_for_extension() {
+  local ext="$1"
+  ext_in_list "$ext" "$MARKDOWN_EXTENSIONS"       && { echo "renamer"; return; }
+  ext_in_list "$ext" "$MARKITDOWN_EXTENSIONS"     && { echo "markitdown"; return; }
+  ext_in_list "$ext" "$IMAGE_EXTENSIONS"          && { echo "rapidocr"; return; }
+  [[ "$ext" == "pdf" ]]                           && { echo "pdf_classify"; return; }
+  echo "none"
+}
 
 
 
@@ -1271,6 +1318,7 @@ file_type_color() {
   local kind="$1"
   case "$kind" in
     markdown) printf '%s' "${G}" ;;
+    markitdown) printf '%s' "${BOLD}${G}" ;;
     native) printf '%s' "${C}" ;;
     pdf) printf '%s' "${M}" ;;
     image) printf '%s' "${Y}" ;;
@@ -1358,7 +1406,7 @@ selected_copy_count() {
   for i in "${!IMPORT_BATCH_EXTENSIONS[@]}"; do
     ext="${IMPORT_BATCH_EXTENSIONS[$i]}"
     if import_extension_selected "$ext"; then
-      if [[ "$ext" != "pdf" ]] && ! ext_in_list "$ext" "$IMAGE_EXTENSIONS"; then
+      if [[ "$ext" != "pdf" ]] && ! ext_in_list "$ext" "$IMAGE_EXTENSIONS" && ! ext_in_list "$ext" "$MARKITDOWN_EXTENSIONS"; then
         total=$((total + IMPORT_BATCH_COUNTS[$i]))
       fi
     fi
@@ -1388,9 +1436,15 @@ classify_source_file() {
   local path="$1" ext
   should_skip_source_file "$path" && { echo "ignored"; return; }
   is_markdown_convertible_file "$path" && { echo "markdown"; return; }
+  is_markitdown_convertible_file "$path" && { echo "markitdown"; return; }
   is_native_readable_file "$path" && { echo "native"; return; }
+  # PDF: text-based → MarkItDown, scanned/image-based → RapidOCR
   if is_rapidocr_pdf "$path"; then
-    echo "ocr_convertible"
+    if is_text_based_pdf "$path"; then
+      echo "markitdown"
+    else
+      echo "ocr_convertible"
+    fi
     return
   fi
   ext="$(file_ext "$path")"
@@ -1407,6 +1461,7 @@ scan_source() {
   reset_import_batches
   SCAN_TOTAL_COUNT=0
   SCAN_MARKDOWN_COUNT=0
+  SCAN_MARKITDOWN_COUNT=0
   SCAN_NATIVE_COUNT=0
   SCAN_BINARY_COPYABLE_COUNT=0
   SCAN_OCR_CONVERTIBLE_COUNT=0
@@ -1415,6 +1470,7 @@ scan_source() {
   SCAN_UNKNOWN_COUNT=0
   SCAN_IGNORED_COUNT=0
   SCAN_MARKDOWN_BYTES=0
+  SCAN_MARKITDOWN_BYTES=0
   SCAN_NATIVE_BYTES=0
   SCAN_BINARY_COPYABLE_BYTES=0
   SCAN_OCR_CONVERTIBLE_BYTES=0
@@ -1438,6 +1494,12 @@ scan_source() {
       markdown)
         SCAN_MARKDOWN_COUNT=$((SCAN_MARKDOWN_COUNT + 1))
         SCAN_MARKDOWN_BYTES=$((SCAN_MARKDOWN_BYTES + size))
+        ext="$(file_ext "$f")"
+        [[ -n "$ext" ]] && record_import_batch "$ext" "$size"
+        ;;
+      markitdown)
+        SCAN_MARKITDOWN_COUNT=$((SCAN_MARKITDOWN_COUNT + 1))
+        SCAN_MARKITDOWN_BYTES=$((SCAN_MARKITDOWN_BYTES + size))
         ext="$(file_ext "$f")"
         [[ -n "$ext" ]] && record_import_batch "$ext" "$size"
         ;;
@@ -1468,12 +1530,19 @@ scan_source() {
 print_scan_summary() {
   printf '  %s✓%s Source scan complete\n' "${G}" "${RESET}"
   [[ "$SCAN_MARKDOWN_COUNT" -gt 0 ]] && printf '  %s├─%s %s to rename to .md (%s)\n' "${DIM}" "${RESET}" "$(file_type_label markdown "$(plural_count "$SCAN_MARKDOWN_COUNT" "text-based file")")" "$(format_bytes "$SCAN_MARKDOWN_BYTES")"
+  if [[ "$SCAN_MARKITDOWN_COUNT" -gt 0 ]]; then
+    if markitdown_available; then
+      printf '  %s├─%s %s available for MarkItDown conversion (%s)\n' "${DIM}" "${RESET}" "$(file_type_label markitdown "$(plural_count "$SCAN_MARKITDOWN_COUNT" "Office/EPUB/HTML file")")" "$(format_bytes "$SCAN_MARKITDOWN_BYTES")"
+    else
+      printf '  %s├─%s %s skipped — MarkItDown not bundled (%s)\n' "${DIM}" "${RESET}" "$(file_type_label markitdown "$(plural_count "$SCAN_MARKITDOWN_COUNT" "Office/EPUB/HTML file")")" "$(format_bytes "$SCAN_MARKITDOWN_BYTES")"
+    fi
+  fi
   [[ "$SCAN_NATIVE_COUNT" -gt 0 ]] && printf '  %s├─%s %s to copy unchanged (%s)\n' "${DIM}" "${RESET}" "$(file_type_label native "$(plural_count "$SCAN_NATIVE_COUNT" "native-readable file")")" "$(format_bytes "$SCAN_NATIVE_BYTES")"
   if [[ "$SCAN_OCR_CONVERTIBLE_COUNT" -gt 0 ]]; then
     if rapidocr_ocr_available; then
-      printf '  %s├─%s %s available for OCR (%s)\n' "${DIM}" "${RESET}" "$(file_type_label ocr "$(plural_count "$SCAN_OCR_CONVERTIBLE_COUNT" "PDF and image")")" "$(format_bytes "$SCAN_OCR_CONVERTIBLE_BYTES")"
+      printf '  %s├─%s %s available for OCR (scanned PDFs and images) (%s)\n' "${DIM}" "${RESET}" "$(file_type_label image "$(plural_count "$SCAN_OCR_CONVERTIBLE_COUNT" "scanned PDF and image")")" "$(format_bytes "$SCAN_OCR_CONVERTIBLE_BYTES")"
     else
-      printf '  %s├─%s %s skipped — RapidOCR OCR not bundled (%s)\n' "${DIM}" "${RESET}" "$(file_type_label ocr "$(plural_count "$SCAN_OCR_CONVERTIBLE_COUNT" "PDF and image")")" "$(format_bytes "$SCAN_OCR_CONVERTIBLE_BYTES")"
+      printf '  %s├─%s %s skipped — RapidOCR OCR not bundled (%s)\n' "${DIM}" "${RESET}" "$(file_type_label image "$(plural_count "$SCAN_OCR_CONVERTIBLE_COUNT" "scanned PDF and image")")" "$(format_bytes "$SCAN_OCR_CONVERTIBLE_BYTES")"
     fi
   fi
   [[ "$SCAN_BINARY_COPYABLE_COUNT" -gt 0 ]] && printf '  %s├─%s %s to copy as-is (%s)\n' "${DIM}" "${RESET}" "$(file_type_label pdf "$(plural_count "$SCAN_BINARY_COPYABLE_COUNT" "PDF")")" "$(format_bytes "$SCAN_BINARY_COPYABLE_BYTES")"
@@ -1481,7 +1550,8 @@ print_scan_summary() {
   [[ "$SCAN_AUDIO_COUNT" -gt 0 ]] && printf '  %s├─%s %s skipped (%s)\n' "${DIM}" "${RESET}" "$(file_type_label audio "$(plural_count "$SCAN_AUDIO_COUNT" "audio file")")" "$(format_bytes "$SCAN_AUDIO_BYTES")"
   [[ "$SCAN_UNKNOWN_COUNT" -gt 0 ]] && printf '  %s├─%s %s unsupported or unknown (%s)\n' "${DIM}" "${RESET}" "$(file_type_label unknown "$(plural_count "$SCAN_UNKNOWN_COUNT" "file")")" "$(format_bytes "$SCAN_UNKNOWN_BYTES")"
   printf '  %s└─%s %s ignored\n' "${DIM}" "${RESET}" "$(file_type_label ignored "$(plural_count "$SCAN_IGNORED_COUNT" "file")")"
-  note "RapidOCR OCR handles PDFs and images. Other files are skipped."
+  note "MarkItDown handles Office docs, EPUB, HTML, and text-based PDFs."
+  note "RapidOCR handles scanned PDFs and images via off-line OCR."
 }
 
 scan_copyable_bytes() {
@@ -1500,9 +1570,14 @@ print_onboarding_preflight() {
   info "Environment preflight"
   ok "Workspace writable: ${BOLD}${root}${RESET}"
   if rapidocr_ocr_available; then
-    ok "${M}OCR${RESET} RapidOCR available for PDFs and images"
+    ok "${M}OCR${RESET} RapidOCR available for scanned PDFs and images"
   else
-    note "RapidOCR OCR not bundled — PDFs and images will be skipped."
+    note "RapidOCR OCR not bundled — scanned PDFs and images will be skipped."
+  fi
+  if markitdown_available; then
+    ok "${G}MarkItDown${RESET} available for Office docs, EPUB, HTML, and text-based PDFs"
+  else
+    note "MarkItDown not bundled — Office docs, EPUB, HTML, and text-based PDFs will be skipped."
   fi
 
   free_bytes="$(available_disk_bytes "$root")"
@@ -1560,7 +1635,7 @@ copy_source() {
   total_files="$(selected_copy_count)"
   [[ "$total_files" -gt 0 ]] || { warn "No copyable files found in source location."; return 1; }
 
-  local copied=0 skipped=0 processed=0 converted=0 ocr_converted=0 ocr_skipped=0 src_file rel_path raw_rel_path dest_file dest_parent
+  local copied=0 skipped=0 processed=0 converted=0 ocr_converted=0 ocr_skipped=0 md_converted=0 md_skipped=0 src_file rel_path raw_rel_path dest_file dest_parent
   local md_name md_dest
   COPY_TOTAL_COUNT="$total_files"
   COPY_COPIED_COUNT=0
@@ -1604,7 +1679,217 @@ copy_source() {
     render_copy_progress "$processed" "$total_files" "$copied" "$skipped" "$rel_path"
   done < <(find "$source_path" -type f -print0 2>/dev/null)
 
-  # RapidOCR OCR pass — PDFs and images → structured Markdown
+  # ── MarkItDown conversion pass — Office docs, EPUB, HTML, text-based PDFs → .md ──
+  if [[ "${SCAN_MARKITDOWN_CHOICE:-no}" == "yes" ]]; then
+    if ! markitdown_available; then
+      warn "MarkItDown not available — skipping MarkItDown pass"
+    else
+      local md_files=()
+      while IFS= read -r -d '' src_file; do
+        should_skip_source_file "$src_file" && continue
+        local md_pass=0
+        is_markitdown_convertible_file "$src_file" && md_pass=1
+        if [[ "$md_pass" -eq 0 ]] && is_rapidocr_pdf "$src_file" && is_text_based_pdf "$src_file"; then
+          md_pass=1
+        fi
+        [[ "$md_pass" -eq 1 ]] || continue
+        import_extension_selected "$(file_ext "$src_file")" || continue
+        md_files+=("$src_file")
+      done < <(find "$source_path" -type f -print0 2>/dev/null)
+
+      if [[ ${#md_files[@]} -gt 0 ]]; then
+        printf '\n'
+        info "${G}MarkItDown${RESET} Processing ${#md_files[@]} files with MarkItDown..."
+        local _md_log
+        _md_log="$dest_dir/../logs/markitdown-processed.ndjson"
+        mkdir -p "$(dirname "$_md_log")"
+        local _md_debug
+        _md_debug="${_md_log%.ndjson}.debug"
+        pilosa_debug_md() { printf '[%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >> "$_md_debug"; }
+        pilosa_debug_md "MarkItDown pass starting — _md_bin lookup"
+        local _md_prev_int _md_prev_term
+        _md_prev_int="$(trap -p INT 2>/dev/null || true)"
+        _md_prev_term="$(trap -p TERM 2>/dev/null || true)"
+        trap 'pilosa_debug_md "ERROR trap fired at line $LINENO exit=$?"; trap - ERR' ERR
+        local md_total=${#md_files[@]} md_idx=0
+        local _md_bin
+        _md_bin="$(markitdown_bin)" || _md_bin=""
+        pilosa_debug_md "md_total=$md_total _md_bin=${_md_bin:-<empty>} dest_dir=$dest_dir source_path=$source_path"
+
+        local _md_process_src=()
+        local _md_process_rel=()
+        pilosa_debug_md "Separating skip vs process: ${#md_files[@]} total files"
+        for src_file in "${md_files[@]}"; do
+          rel_path="${src_file#"$source_path"/}"
+          md_name="$(basename "$rel_path")"
+          md_name="${md_name%.*}"
+          local _md_out_ext
+          _md_out_ext="$(file_ext "$rel_path")"
+          [[ "$_md_out_ext" == "md" ]] && _md_out_ext=""
+          if [[ -n "$_md_out_ext" && "$_md_out_ext" != "md" ]]; then
+            _md_out="${md_name}__${_md_out_ext}.md"
+          else
+            _md_out="${md_name}.md"
+          fi
+          md_dest="$dest_dir/$(dirname "$rel_path")/${_md_out}"
+          dest_parent="$(dirname "$md_dest")"
+          mkdir -p "$dest_parent"
+
+          if [[ -f "$md_dest" ]]; then
+            skipped=$((skipped + 1))
+            md_skipped=$((md_skipped + 1))
+            md_idx=$((md_idx + 1))
+            printf '{"ts":"%s","status":"skip","source":"%s","output":"%s","engine":"markitdown","pages":"","duration_s":0}\n' \
+              "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+              "$rel_path" \
+              "$(dirname "$rel_path")/${_md_out}" >> "$_md_log"
+            render_ocr_progress "$md_idx" "$md_total" "$md_converted" "$md_skipped" "$rel_path" "" ""
+          else
+            _md_process_src+=("$src_file")
+            _md_process_rel+=("$rel_path")
+          fi
+        done
+        pilosa_debug_md "Separation done — skipped=$md_skipped process=${#_md_process_src[@]}"
+
+        if [[ ${#_md_process_src[@]} -gt 0 ]]; then
+          local _md_page="" _md_spinner_stopped="" _md_current_rel=""
+          local _md_fifo
+          _md_fifo="$(mktemp -u)"
+          pilosa_debug_md "MarkItDown batch starting — ${#_md_process_src[@]} files, fifo=$_md_fifo"
+
+          _markitdown_cleanup() {
+            spinner_stop >&2 2>/dev/null || true
+            [[ -z "${_md_pid:-}" ]] || kill "$_md_pid" 2>/dev/null || true
+            [[ -z "${_md_fifo:-}" ]] || rm -f "$_md_fifo" 2>/dev/null || true
+            printf '\n' >&2
+            exit 1
+          }
+          trap _markitdown_cleanup INT TERM
+
+          if [[ -n "$_md_bin" ]] && mkfifo "$_md_fifo" 2>/dev/null; then
+            pilosa_debug_md "FIFO created — starting spinner and batch process"
+            spinner_start "Loading MarkItDown engine" >&2
+            (
+              printf '%s\t%s\n' SOURCE "$source_path"
+              local _k
+              for _k in "${!_md_process_src[@]}"; do
+                local _s="${_md_process_src[$_k]}"
+                local _r="${_md_process_rel[$_k]}"
+                local _m _mout
+                _m="$(basename "$_r")"
+                _m="${_m%.*}"
+                _mout="${_m}.md"
+                local _mext
+                _mext="$(file_ext "$_r")"
+                [[ -n "$_mext" && "$_mext" != "md" ]] && _mout="${_m}__${_mext}.md"
+                printf '%s\t%s\t%s\n' FILE "$_s" "$dest_dir/$(dirname "$_r")/${_mout}"
+              done
+            ) | "$_md_bin" --batch 2>"$_md_fifo" &
+            local _md_pid=$!
+            pilosa_debug_md "MarkItDown batch spawned — pid=$_md_pid, reading fifo..."
+
+            while IFS= read -r _line; do
+              [[ -n "${_line//$'\t'/}" ]] || { pilosa_debug_md "EMPTY fifo line, skipping"; continue; }
+              local _type="${_line%%$'\t'*}"
+              case "$_type" in
+                BEGIN)
+                  _md_current_rel="${_line#BEGIN$'\t'}"
+                  _md_page=""
+                  if [[ -z "${_md_spinner_stopped:-}" ]]; then
+                    spinner_stop >&2
+                    _md_spinner_stopped=1
+                  fi
+                  pilosa_debug_md "BEGIN $_md_current_rel"
+                  ;;
+                PROGRESS)
+                  _md_page="${_line#PROGRESS$'\t'}"
+                  render_ocr_progress "$md_idx" "$md_total" "$md_converted" "$md_skipped" "$_md_current_rel" "$_md_page" "$md_idx"
+                  ;;
+                END)
+                  md_idx=$((md_idx + 1))
+                  local _md_rest="${_line#END$'\t'}"
+                  local _md_end_status="${_md_rest%%$'\t'*}"
+                  _md_rest="${_md_rest#$_md_end_status$'\t'}"
+                  _md_current_rel="${_md_rest%%$'\t'*}"
+                  local _md_end_dur _md_out_log
+                  _md_end_dur="${_md_rest#$_md_current_rel$'\t'}"
+                  local _md_out_log_dir
+                  _md_out_log_dir="$(dirname "$_md_current_rel")"
+                  local _md_out_log_name
+                  _md_out_log_name="$(basename "${_md_current_rel%.*}")"
+                  local _md_out_log_ext
+                  _md_out_log_ext="$(file_ext "$_md_current_rel")"
+                  if [[ -n "$_md_out_log_ext" && "$_md_out_log_ext" != "md" ]]; then
+                    _md_out_log="${_md_out_log_dir}/${_md_out_log_name}__${_md_out_log_ext}.md"
+                  else
+                    _md_out_log="${_md_out_log_dir}/${_md_out_log_name}.md"
+                  fi
+                  pilosa_debug_md "END $_md_end_status $_md_current_rel dur=${_md_end_dur}s"
+
+                  if [[ "$_md_end_status" == "ok" ]]; then
+                    copied=$((copied + 1))
+                    md_converted=$((md_converted + 1))
+                    printf '{"ts":"%s","status":"ok","source":"%s","output":"%s","engine":"markitdown","pages":"%s","duration_s":%s}\n' \
+                      "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+                      "$_md_current_rel" \
+                      "$_md_out_log" \
+                      "${_md_page:-}" \
+                      "$_md_end_dur" >> "$_md_log"
+                  else
+                    spinner_stop >&2
+                    printf '\n' >&2
+                    warn "MarkItDown failed for $(basename "$_md_current_rel"), skipping"
+                    skipped=$((skipped + 1))
+                    md_skipped=$((md_skipped + 1))
+                    printf '{"ts":"%s","status":"fail","source":"%s","output":"%s","engine":"markitdown","pages":"%s","duration_s":%s}\n' \
+                      "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+                      "$_md_current_rel" \
+                      "$_md_out_log" \
+                      "${_md_page:-}" \
+                      "$_md_end_dur" >> "$_md_log"
+                  fi
+                  render_ocr_progress "$md_idx" "$md_total" "$md_converted" "$md_skipped" "$_md_current_rel" "$_md_page" "$md_idx"
+                  _md_page=""
+                  ;;
+                *)
+                  pilosa_debug_md "UNEXPECTED fifo line: $_line"
+                  ;;
+              esac
+            done < "$_md_fifo"
+            pilosa_debug_md "FIFO read complete — waiting for batch process (pid=$_md_pid)..."
+            wait "$_md_pid" 2>/dev/null
+            pilosa_debug_md "Batch process finished — exit=$?"
+            rm -f "$_md_fifo"
+          elif [[ -n "$_md_bin" ]]; then
+            warn "Could not create MarkItDown FIFO — skipped"
+            for _r in "${_md_process_rel[@]}"; do
+              md_idx=$((md_idx + 1))
+              skipped=$((skipped + 1))
+              md_skipped=$((md_skipped + 1))
+              render_ocr_progress "$md_idx" "$md_total" "$md_converted" "$md_skipped" "$_r" "" ""
+            done
+          else
+            for _r in "${_md_process_rel[@]}"; do
+              md_idx=$((md_idx + 1))
+              skipped=$((skipped + 1))
+              md_skipped=$((md_skipped + 1))
+              render_ocr_progress "$md_idx" "$md_total" "$md_converted" "$md_skipped" "$_r" "" ""
+            done
+          fi
+          # Restore outer INT/TERM traps
+          eval "$_md_prev_int" 2>/dev/null || trap - INT
+          eval "$_md_prev_term" 2>/dev/null || trap - TERM
+        fi
+
+        printf '\n'
+        ok "${G}MarkItDown${RESET} Completed: ${md_converted} converted, ${md_skipped} skipped"
+        pilosa_debug_md "MarkItDown pass complete — converted=$md_converted skipped=$md_skipped"
+        trap - ERR 2>/dev/null || true
+      fi
+    fi
+  fi
+
+  # RapidOCR OCR pass — scanned PDFs and images → structured Markdown
   if [[ "${SCAN_OCR_CHOICE:-no}" == "yes" ]]; then
     if ! rapidocr_ocr_available; then
       warn "RapidOCR OCR not available — skipping OCR pass"
@@ -1612,6 +1897,10 @@ copy_source() {
       local ocr_files=()
       while IFS= read -r -d '' src_file; do
         should_skip_source_file "$src_file" && continue
+        # Skip text-based PDFs — already handled by MarkItDown pass
+        if is_rapidocr_pdf "$src_file" && is_text_based_pdf "$src_file"; then
+          continue
+        fi
         if is_rapidocr_pdf "$src_file" || is_rapidocr_image "$src_file"; then
           import_extension_selected "$(file_ext "$src_file")" || continue
           ocr_files+=("$src_file")
@@ -1620,7 +1909,7 @@ copy_source() {
 
       if [[ ${#ocr_files[@]} -gt 0 ]]; then
         printf '\n'
-        info "${M}OCR${RESET} Processing ${#ocr_files[@]} files with RapidOCR..."
+        info "${M}OCR${RESET} Processing ${#ocr_files[@]} scanned images and PDFs with RapidOCR..."
         local _ocr_log
         _ocr_log="$dest_dir/../logs/ocr-processed.ndjson"
         mkdir -p "$(dirname "$_ocr_log")"
@@ -1628,8 +1917,9 @@ copy_source() {
         _ocr_debug="${_ocr_log%.ndjson}.debug"
         pilosa_debug() { printf '[%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >> "$_ocr_debug"; }
         pilosa_debug "OCR pass starting — _ocr_bin lookup"
-        local _ocr_error_trap
-        _ocr_error_trap="$(trap -p ERR 2>/dev/null || true)"
+        local _ocr_prev_int _ocr_prev_term
+        _ocr_prev_int="$(trap -p INT 2>/dev/null || true)"
+        _ocr_prev_term="$(trap -p TERM 2>/dev/null || true)"
         trap 'pilosa_debug "ERROR trap fired at line $LINENO exit=$?"; trap - ERR' ERR
         local ocr_total=${#ocr_files[@]} ocr_idx=0
         local _ocr_bin
@@ -1780,7 +2070,9 @@ copy_source() {
               render_ocr_progress "$ocr_idx" "$ocr_total" "$ocr_converted" "$ocr_skipped" "$_r" "" ""
             done
           fi
-          trap - INT TERM
+          # Restore outer INT/TERM traps instead of clearing
+          eval "$_ocr_prev_int" 2>/dev/null || trap - INT
+          eval "$_ocr_prev_term" 2>/dev/null || trap - TERM
         fi
 
         printf '\n'
@@ -1812,6 +2104,8 @@ copy_source() {
 
   COPY_COPIED_COUNT="$copied"
   COPY_SKIPPED_COUNT="$skipped"
+  COPY_MARKITDOWN_CONVERTED_COUNT="${md_converted:-0}"
+  COPY_MARKITDOWN_SKIPPED_COUNT="${md_skipped:-0}"
   COPY_OCR_CONVERTED_COUNT="${ocr_converted:-0}"
   COPY_OCR_SKIPPED_COUNT="${ocr_skipped:-0}"
 
@@ -1841,13 +2135,25 @@ choose_import_batches() {
   for i in "${!IMPORT_BATCH_EXTENSIONS[@]}"; do
     ext="${IMPORT_BATCH_EXTENSIONS[$i]}"
     count="${IMPORT_BATCH_COUNTS[$i]}"
-    local ocr_tag=""
-    if rapidocr_ocr_available 2>/dev/null; then
-      if [[ "$ext" == "pdf" ]] || ext_in_list "$ext" "$IMAGE_EXTENSIONS"; then
-        ocr_tag=" (OCR)"
+    local tag=""
+    if [[ "$ext" == "pdf" ]]; then
+      # PDF routing is content-based: text-based → MarkItDown, scanned → RapidOCR
+      local md_ok="" ocr_ok=""
+      markitdown_available 2>/dev/null && md_ok="MarkItDown"
+      rapidocr_ocr_available 2>/dev/null && ocr_ok="OCR"
+      if [[ -n "$md_ok" && -n "$ocr_ok" ]]; then
+        tag=" (MarkItDown / OCR)"
+      elif [[ -n "$md_ok" ]]; then
+        tag=" (MarkItDown)"
+      elif [[ -n "$ocr_ok" ]]; then
+        tag=" (OCR)"
       fi
+    elif markitdown_available 2>/dev/null && ext_in_list "$ext" "$MARKITDOWN_EXTENSIONS"; then
+      tag=" (MarkItDown)"
+    elif rapidocr_ocr_available 2>/dev/null && ext_in_list "$ext" "$IMAGE_EXTENSIONS"; then
+      tag=" (OCR)"
     fi
-    options+=("$(option_spec "$ext" ".${ext}" "$(plural_count "$count" "file")${ocr_tag}")")
+    options+=("$(option_spec "$ext" ".${ext}" "$(plural_count "$count" "file")${tag}")")
   done
 
   while true; do
@@ -2010,7 +2316,7 @@ preferred_llm_cli: "$preferred_cli"
 
 ## Notes
 - This file was initialized by \`pilosa new\`.
-- The CLI collected: project name, source location, and preferred LLM CLI. It scanned the source location and transposed accepted files (text, native, and plain-text PDF imports) into raw/. Images, video, audio, and AGENTS.md control files were skipped.
+- The CLI collected: project name, source location, and preferred LLM CLI. It scanned the source location and transposed accepted files (text, native, Office documents, EPUB/HTML, and PDFs) into raw/. Office documents and text-based PDFs were converted via MarkItDown. Scanned PDFs and images were processed via RapidOCR OCR. Videos, audio, and AGENTS.md control files were skipped.
 - After onboarding, the source location remains immutable original storage. Normal source-grounded work starts from raw/.
 - During startup, project description and helpful artifact URLs are optional. If absent, the LLM CLI agent records them as not provided, keeps external_sources_allowed at its default \`no\`, and infers working scope from the raw corpus.
 - When setup_status reaches workspace_started, the startup workflow has built the master dictionary, generated YAML headers, created multi-level navigation maps in maps/, and passed validation.
@@ -2053,6 +2359,18 @@ write_onboarding_summary() {
       ocr_mode="rapidocr_not_bundled"
     fi
   fi
+  local markitdown_mode="not_applicable"
+  if [[ "${SCAN_MARKITDOWN_COUNT:-0}" -gt 0 ]]; then
+    if [[ "${COPY_MARKITDOWN_CONVERTED_COUNT:-0}" -gt 0 ]]; then
+      markitdown_mode="markitdown_converted"
+    elif [[ "${COPY_MARKITDOWN_SKIPPED_COUNT:-0}" -gt 0 ]]; then
+      markitdown_mode="markitdown_skipped"
+    elif markitdown_available; then
+      markitdown_mode="markitdown_available"
+    else
+      markitdown_mode="markitdown_not_bundled"
+    fi
+  fi
 
   cat > "$summary_path" << SUMMARY_EOF
 ---
@@ -2070,8 +2388,9 @@ updated: $TODAY
 
 ## Scan Summary
 - Text-based files to rename to Markdown: ${SCAN_MARKDOWN_COUNT} ($(format_bytes "$SCAN_MARKDOWN_BYTES"))
+- Office docs/HTML/EPUB/text PDFs via MarkItDown: ${SCAN_MARKITDOWN_COUNT:-0} ($(format_bytes "${SCAN_MARKITDOWN_BYTES:-0}"))
 - Native-readable files to copy unchanged: ${SCAN_NATIVE_COUNT} ($(format_bytes "$SCAN_NATIVE_BYTES"))
-- PDFs and images available for OCR: ${SCAN_OCR_CONVERTIBLE_COUNT:-0} ($(format_bytes "${SCAN_OCR_CONVERTIBLE_BYTES:-0}"))
+- Scanned PDFs and images available for OCR: ${SCAN_OCR_CONVERTIBLE_COUNT:-0} ($(format_bytes "${SCAN_OCR_CONVERTIBLE_BYTES:-0}"))
 - Videos skipped: ${SCAN_VIDEO_COUNT} ($(format_bytes "$SCAN_VIDEO_BYTES"))
 - Audio skipped: ${SCAN_AUDIO_COUNT} ($(format_bytes "$SCAN_AUDIO_BYTES"))
 - Unsupported or unknown files: ${SCAN_UNKNOWN_COUNT} ($(format_bytes "$SCAN_UNKNOWN_BYTES"))
@@ -2082,6 +2401,9 @@ updated: $TODAY
 - Selected extension batches: $(selected_import_extensions_label)
 - Files imported into workspace: ${COPY_COPIED_COUNT:-0}
 - Files skipped during import: ${COPY_SKIPPED_COUNT:-0}
+- MarkItDown converted: ${COPY_MARKITDOWN_CONVERTED_COUNT:-0}
+- MarkItDown skipped: ${COPY_MARKITDOWN_SKIPPED_COUNT:-0}
+- MarkItDown mode: ${markitdown_mode}
 - OCR (RapidOCR) converted: ${COPY_OCR_CONVERTED_COUNT:-0}
 - OCR (RapidOCR) skipped: ${COPY_OCR_SKIPPED_COUNT:-0}
 - OCR mode: ${ocr_mode}
@@ -2109,7 +2431,7 @@ Read these files first, in this order:
 
 The setup draft already contains:
 - Project name: ${project_title}
-- Source location: ${source_path} (already validated, files transposed to raw/ — images, video, audio, and AGENTS.md skipped)
+- Source location: ${source_path} (already validated, files transposed to raw/ — Office docs converted via MarkItDown, scanned PDFs and images via RapidOCR OCR, videos/audio/AGENTS.md skipped)
 - Preferred LLM CLI: ${preferred_cli}
 
 Optional context not collected by fast setup:
@@ -2131,29 +2453,53 @@ PROMPT_EOF
 
 # ── RapidOCR Functions ────────────────────────────────────────────────────────
 
+PILOSA_VENDOR_DIR="${PILOSA_HOME:-$HOME/.pilosa}/vendor/pilosa"
 RAPIDOCR_VENDOR_DIR="${PILOSA_HOME:-$HOME/.pilosa}/vendor/rapidocr"
-RAPIDOCR_PLATFORM="${OS:-$(uname -s | tr '[:upper:]' '[:lower:]')}-$(uname -m | sed 's/aarch64/arm64/')"
+PLATFORM="${OS:-$(uname -s | tr '[:upper:]' '[:lower:]')}-$(uname -m | sed 's/aarch64/arm64/')"
+RAPIDOCR_PLATFORM="$PLATFORM"
 
 rapidocr_ocr_available() {
+  # Unified vendor path (post-merger)
+  local unified_bin="${PILOSA_VENDOR_DIR}-${PLATFORM}/rapidocr-cli"
+  [[ -x "$unified_bin" ]] && return 0
+  # Legacy vendor path (pre-merger)
   local bin="${RAPIDOCR_VENDOR_DIR}/${RAPIDOCR_PLATFORM}/rapidocr-cli"
   [[ -x "$bin" ]] && return 0
-  # Also check framework .bin/lib/vendor/ directory
+  # Framework .bin/lib/vendor/ directory
+  local framework_unified="${FRAMEWORK_ROOT:-.}/.bin/lib/vendor/pilosa-${PLATFORM}/rapidocr-cli"
+  [[ -x "$framework_unified" ]] && return 0
   local framework_bin="${FRAMEWORK_ROOT:-.}/.bin/lib/vendor/rapidocr-${RAPIDOCR_PLATFORM}/rapidocr-cli"
   [[ -x "$framework_bin" ]] && return 0
   return 1
 }
 
 rapidocr_ocr_bin() {
+  local unified_bin="${PILOSA_VENDOR_DIR}-${PLATFORM}/rapidocr-cli"
+  if [[ -x "$unified_bin" ]]; then echo "$unified_bin"; return; fi
   local bin="${RAPIDOCR_VENDOR_DIR}/${RAPIDOCR_PLATFORM}/rapidocr-cli"
-  if [[ -x "$bin" ]]; then
-    echo "$bin"
-    return
-  fi
+  if [[ -x "$bin" ]]; then echo "$bin"; return; fi
+  local framework_unified="${FRAMEWORK_ROOT:-.}/.bin/lib/vendor/pilosa-${PLATFORM}/rapidocr-cli"
+  if [[ -x "$framework_unified" ]]; then echo "$framework_unified"; return; fi
   local framework_bin="${FRAMEWORK_ROOT:-.}/.bin/lib/vendor/rapidocr-${RAPIDOCR_PLATFORM}/rapidocr-cli"
-  if [[ -x "$framework_bin" ]]; then
-    echo "$framework_bin"
-    return
-  fi
+  if [[ -x "$framework_bin" ]]; then echo "$framework_bin"; return; fi
+  return 1
+}
+
+# ── MarkItDown Functions ────────────────────────────────────────────────────
+
+markitdown_available() {
+  local unified_bin="${PILOSA_VENDOR_DIR}-${PLATFORM}/markitdown-cli"
+  [[ -x "$unified_bin" ]] && return 0
+  local framework_bin="${FRAMEWORK_ROOT:-.}/.bin/lib/vendor/pilosa-${PLATFORM}/markitdown-cli"
+  [[ -x "$framework_bin" ]] && return 0
+  return 1
+}
+
+markitdown_bin() {
+  local unified_bin="${PILOSA_VENDOR_DIR}-${PLATFORM}/markitdown-cli"
+  if [[ -x "$unified_bin" ]]; then echo "$unified_bin"; return; fi
+  local framework_bin="${FRAMEWORK_ROOT:-.}/.bin/lib/vendor/pilosa-${PLATFORM}/markitdown-cli"
+  if [[ -x "$framework_bin" ]]; then echo "$framework_bin"; return; fi
   return 1
 }
 
@@ -2189,18 +2535,19 @@ prompt_ocr_choice() {
 
   local total_ocr="${SCAN_OCR_CONVERTIBLE_COUNT:-0}"
   
-  # Skip if no PDFs or images
+  # Skip if no scanned PDFs or images
   [[ "$total_ocr" -gt 0 ]] || { SCAN_OCR_CHOICE="no"; return 0; }
   
   if rapidocr_ocr_available; then
     echo ""
     note "OCR Available: RapidOCR (bundled)"
-    note "  • Converts PDFs → structured Markdown with OCR"
+    note "  • Converts scanned PDFs → structured Markdown via off-line OCR"
     note "  • Converts images → text via OCR (90+ languages)"
     note "  • Runs 100% locally, no cloud needed"
+    note "  • Text-based PDFs are handled by MarkItDown (faster text extraction)"
     echo ""
     
-    if confirm "Would you like to OCR ${total_ocr} PDFs and images?"; then
+    if confirm "Would you like to OCR ${total_ocr} scanned PDFs and images?"; then
       SCAN_OCR_CHOICE="yes"
     else
       SCAN_OCR_CHOICE="no"
@@ -2258,12 +2605,28 @@ run_integrated_onboarding() {
 
     choose_import_batches || return 1
 
-    # Auto-detect OCR from selected extensions
+    # Auto-detect MarkItDown from selected extensions
+    SCAN_MARKITDOWN_CHOICE="no"
+    if markitdown_available; then
+      local _md_ext
+      for _md_ext in "${SELECTED_IMPORT_EXTENSIONS[@]}"; do
+        if [[ "$_md_ext" == "pdf" ]] || ext_in_list "$_md_ext" "$MARKITDOWN_EXTENSIONS"; then
+          SCAN_MARKITDOWN_CHOICE="yes"
+          break
+        fi
+      done
+    fi
+
+    # Auto-detect OCR from selected extensions (images, and PDFs only if MarkItDown unavailable)
     SCAN_OCR_CHOICE="no"
     if rapidocr_ocr_available; then
       local _ext
       for _ext in "${SELECTED_IMPORT_EXTENSIONS[@]}"; do
-        if [[ "$_ext" == "pdf" ]] || ext_in_list "$_ext" "$IMAGE_EXTENSIONS"; then
+        if ext_in_list "$_ext" "$IMAGE_EXTENSIONS"; then
+          SCAN_OCR_CHOICE="yes"
+          break
+        fi
+        if [[ "$_ext" == "pdf" ]] && ! markitdown_available; then
           SCAN_OCR_CHOICE="yes"
           break
         fi
@@ -2369,8 +2732,8 @@ cmd_uninstall() {
     case "$1" in
       --no-color) R="" G="" B="" Y="" C="" M="" DIM="" BOLD="" RESET=""; shift ;;
       --yes|-y) FORCE_YES="1"; shift ;;
-      --help|-h) echo "Usage: pilosa uninstall [--yes]" >&2; return 0 ;;
-      -*) die "Unknown option: $1" ;;
+      --help|-h) echo "Usage: pilosa uninstall [--yes] [--no-color]" >&2; return 0 ;;
+      -*) die "Unknown option: $1. Valid: --yes, --no-color, --help" ;; 
       *) shift ;;
     esac
   done
@@ -2422,8 +2785,10 @@ cmd_help() {
   printf '    %s\n' "pilosa update [dir]      Update workspace framework files"
   printf '    %s\n' "pilosa upgrade           Upgrade Pilosa CLI to latest release"
   printf '    %s\n' "pilosa check [directory] Validate workspace integrity"
+  printf '    %s\n' "pilosa health            Show system health status"
   printf '    %s\n' "pilosa sync              Sync agent and skill mirrors from canonical"
   printf '    %s\n' "pilosa uninstall         Remove Pilosa from this system"
+  printf '    %s\n' "pilosa dashboard         Open interactive dashboard"
   printf '    %s\n' "pilosa help              Show this help"
   printf '\n'
 
@@ -2470,11 +2835,14 @@ cmd_onboard() {
       --help|-h)
         echo "Usage: pilosa onboard [workspace-directory] [options]" >&2
         echo "  --source-dir PATH  Pre-select source folder (skip prompt)" >&2
+        echo "  --no-color         Disable colored output" >&2
         echo "  --gum              Use interactive Gum prompts" >&2
         echo "  --no-gum           Use plain shell prompts" >&2
+        echo "Example:" >&2
+        echo "  pilosa onboard --source-dir /Users/me/Documents/archive" >&2
         return 0
         ;;
-      -*) die "Unknown option: $1" ;;
+      -*) die "Unknown option: $1. Valid: --source-dir, --no-color, --gum, --no-gum, --help" ;; 
       *) onboard_args+=("$1"); shift ;;
     esac
   done
@@ -2723,7 +3091,7 @@ cmd_update() {
         return 0
         ;;
       --*)
-        die "Unknown update option: $1"
+        die "Unknown update option: $1. Valid: --version, --release-dir, --dry-run, --yes, --no-color, --gum, --no-gum, --help"
         ;;
       *)
         if [[ -z "$workspace_path" ]]; then
@@ -3050,7 +3418,25 @@ cmd_update() {
 # COMMAND: check
 # ═══════════════════════════════════════════════════════════════════════════
 cmd_check() {
-  local provided_path="${1:-}"
+  local provided_path=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --help|-h)
+        printf '  %s\n' "Usage: pilosa check [workspace-directory]"
+        printf '    %s\n' "  Validates workspace integrity: required files, placeholders,"
+        printf '    %s\n' "  setup status, source location, maps, and retrieval coverage."
+        return 0
+        ;;
+      -*) die "Unknown option: $1. Valid: --help" ;;
+      *)
+        if [[ -n "$provided_path" ]]; then
+          die "Unexpected extra argument: $1"
+        fi
+        provided_path="$1"
+        shift
+        ;;
+    esac
+  done
   
   # Resolve workspace path
   local workspace_path
@@ -3211,7 +3597,7 @@ cmd_sync() {
         echo "  --yes       Skip confirmation prompt" >&2
         return 0
         ;;
-      -*) die "Unknown option: $1" ;;
+      -*) die "Unknown sync option: $1. Valid: --dry-run, --yes, --help" ;;
       *) shift ;;
     esac
   done
@@ -3771,6 +4157,19 @@ require_workspace() {
 # ═══════════════════════════════════════════════════════════════════════════
 
 cmd_health() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --help|-h)
+        printf '  %s\n' "Usage: pilosa health"
+        printf '    %s\n' "  Reports framework installation status, vendor engine availability,"
+        printf '    %s\n' "  workspace discovery, and detected LLM CLIs."
+        return 0
+        ;;
+      -*) die "Unknown option: $1. Valid: --help" ;;
+      *) shift ;;
+    esac
+  done
+
   header "Pilosa — System Health"
   local issues=0
 
@@ -3788,9 +4187,15 @@ cmd_health() {
   fi
 
   if rapidocr_ocr_available; then
-    ok "RapidOCR OCR available for PDFs and images"
+    ok "RapidOCR OCR available for scanned PDFs and images"
   else
-    note "RapidOCR OCR not bundled — PDFs and images will be skipped"
+    note "RapidOCR OCR not bundled — scanned PDFs and images will be skipped"
+  fi
+
+  if markitdown_available; then
+    ok "MarkItDown available for Office docs, EPUB, HTML, and text-based PDFs"
+  else
+    note "MarkItDown not bundled — Office docs and text PDFs will be skipped"
   fi
 
   local ws_count
@@ -3872,7 +4277,7 @@ display_release_notes() {
     /^For options/d
     /^Pilosa Framework/d
     /^##+ (Install|Update)/d
-    s/^This installs.*/↳ Zero dependencies, bundled OCR/
+    s/^This installs.*/↳ Zero dependencies, bundled OCR + MarkItDown/
     s/^- Framework-owned.*/↳ Framework files updated from release/
     s/^- User workspace.*/↳ Your workspace is preserved/
     s/^- Locally modified.*/↳ Modified files get .pilosa-new sidecars/
@@ -3910,7 +4315,7 @@ cmd_upgrade() {
         printf '    %s\n' "  --help            Show this help"
         return 0
         ;;
-      -*) die "Unknown option: $1" ;;
+      -*) die "Unknown upgrade option: $1. Valid: --version, --yes, --help" ;;
       *) shift ;;
     esac
   done
@@ -4144,6 +4549,7 @@ case "${1:-}" in
   health)    shift; cmd_health "$@" ;;
   uninstall) shift; cmd_uninstall "$@" ;;
   help|-h|--help) cmd_help ;;
+  --version|-v) printf 'pilosa %s\n' "$(framework_version "$FRAMEWORK_ROOT")"; exit 0 ;;
   "") cmd_dashboard ;;
   *)
     printf '%s\n' "${R}Unknown command: $1${RESET}" >&2
