@@ -288,10 +288,7 @@ echo "  Release date: ${TODAY}"
 # ── Vendor versions ──────────────────────────────────────────────────────────
 VERSIONS_FILE="${FRAMEWORK_DIR}/metadata/vendor-versions.txt"
 printf 'gum %s\n' "$GUM_VERSION" > "$VERSIONS_FILE"
-printf 'rapidocr 3.8.1\n' >> "$VERSIONS_FILE"
-printf 'onnxruntime 1.26.0\n' >> "$VERSIONS_FILE"
-printf 'markitdown 0.1.6\n' >> "$VERSIONS_FILE"
-printf 'pypdfium2 5.9.0\n' >> "$VERSIONS_FILE"
+printf 'python 3.11.15\n' >> "$VERSIONS_FILE"
 echo "  Vendor versions recorded"
 
 echo "  Vendor binaries bundled"

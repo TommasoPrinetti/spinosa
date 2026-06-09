@@ -3,20 +3,20 @@
 #
 # Creates a self-contained vendor directory with:
 #   - Standalone Python 3.11 (no system Python needed)
-#   - RapidOCR + onnxruntime + pypdfium2 (offline OCR engine)
-#   - MarkItDown + python-docx + python-pptx + openpyxl + xlrd + olefile (Office doc converter)
-#   - PaddleOCR ONNX models (pre-downloaded, English only)
 #   - rapidocr-cli.py wrapper (batch protocol)
 #   - markitdown-cli.py wrapper (batch protocol)
+#
+# Pip packages (RapidOCR, MarkItDown, onnxruntime, pypdfium2)
+# are installed at install time by install.sh.
+#
+# Cross-platform builds work from any host — only Python binary
+# + wrappers are packaged. No pip install at build time.
 #
 # Usage:
 #   ./build-pilosa-vendor.sh [platform]
 #
 # Platforms: darwin-arm64, linux-amd64, linux-arm64, darwin-amd64
 # If omitted, builds for current platform.
-#
-# Cross-platform builds (e.g. linux-amd64 on macOS) skip pip install
-# and model download — those happen on first run on the target machine.
 #
 # Output:
 #   .bin/lib/vendor/pilosa-vendor-<platform>.tar.gz
@@ -31,12 +31,6 @@ MARKITDOWN_CLI="${FRAMEWORK_ROOT}/.bin/lib/markitdown-cli.py"
 
 PYTHON_VERSION="3.11.15"
 PYTHON_BUILD_VERSION="20260602"
-
-# Pinned dependency versions
-ONNXRUNTIME_VERSION="1.26.0"
-RAPIDOCR_VERSION="3.8.1"
-PDFIUM_VERSION="5.9.0"
-MARKITDOWN_VERSION="0.1.6"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -62,13 +56,6 @@ detect_platform() {
         *) err "Unsupported architecture: $arch" ;;
     esac
     echo "${os}-${arch}"
-}
-
-can_execute() {
-    local platform="$1"
-    local host_platform
-    host_platform="$(detect_platform)"
-    [[ "$platform" == "$host_platform" ]]
 }
 
 get_python_url() {
@@ -138,73 +125,6 @@ build_platform() {
     fi
     log "Python binary: ${python_bin}"
 
-    if can_execute "$platform"; then
-        log "Native build — installing packages and downloading models..."
-        "${python_bin}" --version || err "Python not working"
-
-        log "Upgrading pip..."
-        "${python_bin}" -m pip install --upgrade pip --quiet
-
-        log "Installing onnxruntime ${ONNXRUNTIME_VERSION} (anchor first)..."
-        "${python_bin}" -m pip install "onnxruntime==${ONNXRUNTIME_VERSION}" --quiet
-
-        log "Installing RapidOCR ${RAPIDOCR_VERSION} + pypdfium2 ${PDFIUM_VERSION}..."
-        "${python_bin}" -m pip install "rapidocr==${RAPIDOCR_VERSION}" "pypdfium2==${PDFIUM_VERSION}" --quiet
-
-        log "Installing MarkItDown ${MARKITDOWN_VERSION} [docx,pptx,xlsx,xls,outlook,pdf]..."
-        "${python_bin}" -m pip install "markitdown[docx,pptx,xlsx,xls,outlook,pdf]==${MARKITDOWN_VERSION}" --quiet
-
-        # Remove Chinese models (only English needed)
-        log "Removing Chinese OCR models..."
-        "${python_bin}" -c "
-import rapidocr
-import os
-models_dir = os.path.join(os.path.dirname(rapidocr.__file__), 'models')
-for f in os.listdir(models_dir):
-    if f.startswith('ch_'):
-        path = os.path.join(models_dir, f)
-        os.remove(path)
-        print(f'Removed: {f}')
-" 2>/dev/null || warn "Could not remove Chinese models"
-
-        # Remove unnecessary text files
-        log "Removing unnecessary model files..."
-        "${python_bin}" -c "
-import rapidocr
-import os
-models_dir = os.path.join(os.path.dirname(rapidocr.__file__), 'models')
-for f in ['ppocr_keys_v1.txt', 'ppocrv5_dict.txt']:
-    path = os.path.join(models_dir, f)
-    if os.path.exists(path):
-        os.remove(path)
-        print(f'Removed: {f}')
-" 2>/dev/null || true
-
-        log "Pre-downloading OCR models..."
-        "${python_bin}" -c "
-from rapidocr import RapidOCR, EngineType, LangDet, LangRec, ModelType, OCRVersion
-engine = RapidOCR(
-    params={
-        'Det.engine_type': EngineType.ONNXRUNTIME,
-        'Det.lang_type': LangDet.EN,
-        'Det.model_type': ModelType.MOBILE,
-        'Det.ocr_version': OCRVersion.PPOCRV4,
-        'Rec.engine_type': EngineType.ONNXRUNTIME,
-        'Rec.lang_type': LangRec.EN,
-        'Rec.model_type': ModelType.MOBILE,
-        'Rec.ocr_version': OCRVersion.PPOCRV4,
-    }
-)
-print('English models downloaded')
-" 2>/dev/null || warn "Model download will happen on first run"
-
-        log "Verifying both engines import..."
-        "${python_bin}" -c "from rapidocr import RapidOCR; print('RapidOCR OK')" || warn "RapidOCR import failed"
-        "${python_bin}" -c "from markitdown import MarkItDown; print('MarkItDown OK')" || warn "MarkItDown import failed"
-    else
-        warn "Cross-platform build — packages and models will install on first run"
-    fi
-
     # Copy both CLI wrappers
     log "Copying CLI wrappers..."
     cp "${RAPIDOCR_CLI}" "${vendor_dir}/rapidocr-cli.py"
@@ -271,8 +191,6 @@ main() {
     log "============================="
     log "Platform: ${platform}"
     log "Python: ${PYTHON_VERSION}"
-    log "RapidOCR: ${RAPIDOCR_VERSION} (onnxruntime ${ONNXRUNTIME_VERSION})"
-    log "MarkItDown: ${MARKITDOWN_VERSION}"
     log "Output: ${VENDOR_BASE}/pilosa-vendor-${platform}.tar.gz"
     echo ""
 

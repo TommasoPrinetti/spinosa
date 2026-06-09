@@ -2,6 +2,8 @@ path	role	update_policy
 AGENTS.md	framework	always_replace
 README.md	framework	replace_if_unmodified
 LICENSE	framework	replace_if_unmodified
+.gitignore	framework	replace_if_unmodified
+.editorconfig	framework	replace_if_unmodified
 .bin/check-startup.sh	framework	replace_if_unmodified
 .bin/sync-agents.sh	framework	replace_if_unmodified
 .bin/pilosa	framework	replace_if_unmodified
@@ -10,7 +12,7 @@ LICENSE	framework	replace_if_unmodified
 .bin/lib/rapidocr-cli.py	framework	replace_if_unmodified
 .bin/lib/markitdown-cli.py	framework	replace_if_unmodified
 .bin/lib/CONVERTER_PROTOCOL.md	framework	replace_if_unmodified
-.bin/build-rapidocr-vendor.sh	framework	replace_if_unmodified
+.bin/build-pilosa-vendor.sh	framework	replace_if_unmodified
 .pilosa/retired-framework-files.tsv	framework	replace_if_unmodified
 .agents/	framework	replace_if_unmodified
 .claude/	framework	replace_if_unmodified

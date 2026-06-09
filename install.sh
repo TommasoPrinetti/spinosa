@@ -570,21 +570,23 @@ main() {
   # ── install bundled binaries ───────────────────────────────────────────
   if [ "$NO_GUM" -eq 0 ]; then
     local vendor_src="${PILOSA_HOME}/versions/${VERSION}/pilosa-framework-${VERSION}/.bin/lib/vendor"
+
+    # Detect platform suffix (e.g. darwin-arm64, linux-amd64)
+    local os arch suffix
+    case "$(uname -s)" in
+      Darwin) os="darwin" ;;
+      Linux)  os="linux" ;;
+      *)      os="" ;;
+    esac
+    case "$(uname -m)" in
+      arm64|aarch64) arch="arm64" ;;
+      x86_64|amd64)  arch="amd64" ;;
+      i386|i686)     arch="i386" ;;
+      *)             arch="" ;;
+    esac
+    suffix="${os}-${arch}"
+
     if [[ -d "$vendor_src" ]]; then
-      # Detect platform suffix (e.g. darwin-arm64, linux-amd64)
-      local os arch suffix
-      case "$(uname -s)" in
-        Darwin) os="darwin" ;;
-        Linux)  os="linux" ;;
-        *)      os="" ;;
-      esac
-      case "$(uname -m)" in
-        arm64|aarch64) arch="arm64" ;;
-        x86_64|amd64)  arch="amd64" ;;
-        i386|i686)     arch="i386" ;;
-        *)             arch="" ;;
-      esac
-      suffix="${os}-${arch}"
 
       for bin_name in gum; do
         local src_bin="${vendor_src}/${bin_name}-${suffix}"
@@ -600,90 +602,80 @@ main() {
 
     # ── install Pilosa vendor (RapidOCR + MarkItDown) ────────────────────
     local pilosa_vendor_dest="${PILOSA_HOME}/vendor/pilosa-${suffix}"
-    local vendor_installed=false
+    local vendor_url="${base_url}/pilosa-vendor-${suffix}.tar.gz"
+    local vendor_tmp="${tmpdir}/pilosa-vendor-${suffix}.tar.gz"
 
-    # 1) Check inside framework tarball for unified vendor (bundled)
-    local pilosa_vendor_src="${vendor_src}/pilosa-vendor-${suffix}"
-    if [[ -d "$pilosa_vendor_src" ]]; then
-      spinner_start "Installing Pilosa vendor (RapidOCR + MarkItDown)"
+    spinner_start "Downloading Pilosa vendor for ${suffix}"
+    if download "$vendor_url" "$vendor_tmp" 2>/dev/null; then
+      spinner_stop
+
+      spinner_start "Installing Pilosa vendor (Python + wrappers)"
       mkdir -p "$pilosa_vendor_dest"
-      cp -r "${pilosa_vendor_src}/"* "$pilosa_vendor_dest/"
+      safe_untar "$vendor_tmp" "$pilosa_vendor_dest" --strip-components=1
       chmod +x "${pilosa_vendor_dest}/rapidocr-cli" 2>/dev/null || true
       chmod +x "${pilosa_vendor_dest}/markitdown-cli" 2>/dev/null || true
       spinner_stop
-      vendor_installed=true
-    else
-      local pilosa_vendor_tarball="${vendor_src}/pilosa-vendor-${suffix}.tar.gz"
-      if [[ -f "$pilosa_vendor_tarball" ]]; then
-        spinner_start "Installing Pilosa vendor (RapidOCR + MarkItDown)"
-        mkdir -p "$pilosa_vendor_dest"
-        safe_untar "$pilosa_vendor_tarball" "$pilosa_vendor_dest" --strip-components=1
-        chmod +x "${pilosa_vendor_dest}/rapidocr-cli" 2>/dev/null || true
-        chmod +x "${pilosa_vendor_dest}/markitdown-cli" 2>/dev/null || true
-        spinner_stop
-        vendor_installed=true
-      fi
-    fi
 
-    # 2) Legacy RapidOCR-only bundle (backward compat — no MarkItDown)
-    if [[ "$vendor_installed" == "false" ]]; then
-      local legacy_dest="${PILOSA_HOME}/vendor/rapidocr/${suffix}"
-      local legacy_src="${vendor_src}/rapidocr-${suffix}"
-      if [[ -d "$legacy_src" ]]; then
-        mkdir -p "$legacy_dest"
-        cp -r "${legacy_src}/"* "$legacy_dest/"
-        chmod +x "${legacy_dest}/rapidocr-cli" 2>/dev/null || true
-        vendor_installed=true
-      else
-        local legacy_tarball="${vendor_src}/rapidocr-${suffix}.tar.gz"
-        if [[ -f "$legacy_tarball" ]]; then
-          mkdir -p "$legacy_dest"
-          safe_untar "$legacy_tarball" "$legacy_dest" --strip-components=1
-          chmod +x "${legacy_dest}/rapidocr-cli" 2>/dev/null || true
-          vendor_installed=true
+      # ── Install Python packages via pip ──────────────────────────
+      local pilosa_python="${pilosa_vendor_dest}/python/bin/python3"
+      if [[ ! -x "$pilosa_python" ]]; then
+        pilosa_python="${pilosa_vendor_dest}/Python.framework/Versions/Current/bin/python3"
+      fi
+      if [[ -x "$pilosa_python" ]]; then
+        spinner_start "Installing Python packages (MarkItDown + RapidOCR)"
+        local pip_ok=0
+        "$pilosa_python" -m pip install --upgrade pip --quiet 2>/dev/null || true
+        if "$pilosa_python" -m pip install \
+          "markitdown[docx,pptx,xlsx,xls,outlook,pdf]==0.1.6" \
+          "rapidocr==3.8.1" \
+          "onnxruntime==1.26.0" \
+          "pypdfium2==5.9.0" \
+          --quiet 2>/dev/null; then
+          pip_ok=1
         fi
-      fi
-    fi
+        spinner_stop
 
-    # 3) Download from release assets if not bundled
-    if [[ "$vendor_installed" == "false" ]]; then
-      # Try unified vendor first
-      local vendor_url="${base_url}/pilosa-vendor-${suffix}.tar.gz"
-      local vendor_tmp="${tmpdir}/pilosa-vendor-${suffix}.tar.gz"
-      spinner_start "Downloading Pilosa vendor for ${suffix}"
-      if download "$vendor_url" "$vendor_tmp" 2>/dev/null; then
-        spinner_stop
-        spinner_start "Installing Pilosa vendor (RapidOCR + MarkItDown)"
-        mkdir -p "$pilosa_vendor_dest"
-        safe_untar "$vendor_tmp" "$pilosa_vendor_dest" --strip-components=1
-        chmod +x "${pilosa_vendor_dest}/rapidocr-cli" 2>/dev/null || true
-        chmod +x "${pilosa_vendor_dest}/markitdown-cli" 2>/dev/null || true
-        spinner_stop
-        vendor_installed=true
-      else
-        spinner_stop
-        # Fall back to legacy RapidOCR-only download
-        local legacy_url="${base_url}/rapidocr-${suffix}.tar.gz"
-        local legacy_tmp="${tmpdir}/rapidocr-${suffix}.tar.gz"
-        spinner_start "Downloading RapidOCR for ${suffix} (legacy)"
-        if download "$legacy_url" "$legacy_tmp" 2>/dev/null; then
+        if [[ $pip_ok -eq 1 ]]; then
+          # Remove Chinese OCR models (English only, saves ~100 MB)
+          spinner_start "Cleaning up unused models"
+          "$pilosa_python" -c "
+import rapidocr, os
+models_dir = os.path.join(os.path.dirname(rapidocr.__file__), 'models')
+for f in os.listdir(models_dir):
+    if f.startswith('ch_'):
+        os.remove(os.path.join(models_dir, f))
+for f in ['ppocr_keys_v1.txt', 'ppocrv5_dict.txt']:
+    path = os.path.join(models_dir, f)
+    if os.path.exists(path): os.remove(path)
+" 2>/dev/null || true
           spinner_stop
-          spinner_start "Installing RapidOCR (legacy)"
-          local legacy_dest="${PILOSA_HOME}/vendor/rapidocr/${suffix}"
-          mkdir -p "$legacy_dest"
-          safe_untar "$legacy_tmp" "$legacy_dest" --strip-components=1
-          chmod +x "${legacy_dest}/rapidocr-cli" 2>/dev/null || true
+
+          # Pre-download English OCR models (avoids delay on first use)
+          spinner_start "Downloading OCR models"
+          "$pilosa_python" -c "
+from rapidocr import RapidOCR, EngineType, LangDet, LangRec, ModelType, OCRVersion
+RapidOCR(params={
+    'Det.engine_type': EngineType.ONNXRUNTIME,
+    'Det.lang_type': LangDet.EN,
+    'Det.model_type': ModelType.MOBILE,
+    'Det.ocr_version': OCRVersion.PPOCRV4,
+    'Rec.engine_type': EngineType.ONNXRUNTIME,
+    'Rec.lang_type': LangRec.EN,
+    'Rec.model_type': ModelType.MOBILE,
+    'Rec.ocr_version': OCRVersion.PPOCRV4,
+})
+print('English models ready')
+" 2>/dev/null || warn "Model download will happen on first use"
           spinner_stop
-          vendor_installed=true
+          ok "Python packages installed"
         else
-          spinner_stop
+          warn "pip install failed — PDF/image OCR and Office doc conversion will not be available"
         fi
+      else
+        warn "Bundled Python not found — PDF/image OCR and Office doc conversion will not be available"
       fi
-    fi
-
-    if [[ "$vendor_installed" == "true" ]]; then
-      ok "Installed Pilosa vendor (RapidOCR + MarkItDown)"
     else
+      spinner_stop
       warn "No Pilosa vendor for ${suffix} (PDF/image OCR and Office doc conversion will not be available)"
     fi
 

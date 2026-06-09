@@ -57,15 +57,7 @@ done
 
 # Collect vendor tarballs as separate release assets
 VENDOR_ASSETS=()
-# Unified vendor (post-merger: single bundle with RapidOCR + MarkItDown)
 for tarball in "${REPO_ROOT}/.bin/lib/vendor"/pilosa-vendor-*.tar.gz; do
-  if [[ -f "$tarball" ]]; then
-    cp "$tarball" "${DIST}/$(basename "$tarball")"
-    VENDOR_ASSETS+=("${DIST}/$(basename "$tarball")")
-  fi
-done
-# Legacy RapidOCR-only vendor (backward compat during transition)
-for tarball in "${REPO_ROOT}/.bin/lib/vendor"/rapidocr-*.tar.gz; do
   if [[ -f "$tarball" ]]; then
     cp "$tarball" "${DIST}/$(basename "$tarball")"
     VENDOR_ASSETS+=("${DIST}/$(basename "$tarball")")

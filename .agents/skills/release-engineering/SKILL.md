@@ -20,20 +20,11 @@ Check vendor bundle state, build missing unified vendor tarballs (RapidOCR + Mar
 
 ## Vendor Tarball Strategy
 
-Two tiers of vendor bundles:
-
 | Tier | Pattern | Contains | When |
 |------|---------|----------|------|
-| Unified | `pilosa-vendor-<platform>.tar.gz` | Standalone Python 3.11 + RapidOCR + MarkItDown | Built natively, full engine support |
-| Legacy | `rapidocr-<platform>.tar.gz` | RapidOCR + onnxruntime only | Fallback when unified can't be built |
+| Vendor | `pilosa-vendor-<platform>.tar.gz` | Standalone Python 3.11 + CLI wrappers (pip packages installed at install time) | Always |
 
-The installer (`install.sh`) tries unified first, then legacy. Platforms without a unified bundle get OCR-only (no MarkItDown).
-
-### Known cross-platform limitations
-
-- `onnxruntime==1.26.0` has no macOS x86_64 wheel for Python 3.11 — darwin-amd64 unified builds fail at pip install step.
-- Linux unified bundles can't be built on macOS (cross-OS). They need CI or native Linux host.
-- Solution for missing platforms: ship legacy `rapidocr-*.tar.gz` as fallback.
+The installer (`install.sh`) downloads the platform-specific vendor tarball from GitHub releases and installs pip packages at install time.
 
 ## Steps
 
@@ -45,23 +36,19 @@ List what exists in `.bin/lib/vendor/`:
 ls -lh .bin/lib/vendor/*.tar.gz
 ```
 
-Identify which platforms have unified vendor and which are legacy-only.
+Identify which platforms have vendor tarballs and which are missing.
 
-### 2. Build missing unified vendor tarballs
+### 2. Build vendor tarballs for all platforms
 
-For the current (native) platform:
-
-```bash
-bash .bin/build-pilosa-vendor.sh
-```
-
-For darwin-amd64 on Apple Silicon (requires Rosetta):
+Build for all 4 platforms — pip packages are installed at install time,
+so cross-platform builds always work:
 
 ```bash
-arch -x86_64 bash .bin/build-pilosa-vendor.sh darwin-amd64
+bash .bin/build-pilosa-vendor.sh darwin-arm64
+bash .bin/build-pilosa-vendor.sh darwin-amd64
+bash .bin/build-pilosa-vendor.sh linux-amd64
+bash .bin/build-pilosa-vendor.sh linux-arm64
 ```
-
-If this fails with pip install errors (e.g., `onnxruntime==1.26.0` wheel missing), skip that platform and note the limitation. The legacy rapidocr bundle will serve as fallback.
 
 ### 3. Clear the working tree
 
@@ -89,7 +76,7 @@ This creates `dist/v<version>/` with:
 - `install.sh`
 - `checksums.txt`
 
-Vendor tarballs are NOT embedded in the framework archive — they are published as standalone release assets. The installer downloads the platform-specific vendor from GitHub releases on first install.
+Vendor tarballs are Python-only (~26 MB each) and are published as standalone release assets. The installer downloads the platform-specific vendor from GitHub releases and installs pip packages at install time.
 
 ### 5. Publish to GitHub
 
@@ -114,7 +101,7 @@ Check that:
 - `pilosa-framework-<version>.tar.gz` exists
 - `install.sh` exists
 - `checksums.txt` exists
-- Platform-relevant vendor tarballs exist (unified for native, legacy for others)
+- `pilosa-vendor-<platform>.tar.gz` (4 platforms) exist
 
 ### 7. Align README
 
@@ -151,7 +138,6 @@ mv .trash/temp/* agent_reports/ && rmdir .trash/temp
 - Always audit vendor state first — never rebuild unnecessarily.
 - Never force-push, force-tag, or delete release assets.
 - Always verify the release assets are uploaded and in `uploaded` state before declaring done.
-- If a native build fails with a pip dependency error, skip that platform and document the limitation.
 - Handle `git status` cleanliness by moving untracked files to `.trash/temp/` — never by deleting or stashing tracked changes.
 - The `publish-release.sh` script checks out the current branch's HEAD — make sure you're on the commit you want to publish.
 
@@ -159,8 +145,7 @@ mv .trash/temp/* agent_reports/ && rmdir .trash/temp
 
 | Script | Path | Purpose |
 |--------|------|---------|
-| Build unified vendor | `.bin/build-pilosa-vendor.sh [platform]` | Creates `pilosa-vendor-<platform>.tar.gz` with standalone Python + both engines |
-| Build legacy vendor | `.bin/build-rapidocr-vendor.sh [platform]` | DEPRECATED — creates `rapidocr-<platform>.tar.gz` with RapidOCR only |
+| Build vendor | `.bin/build-pilosa-vendor.sh [platform]` | Creates `pilosa-vendor-<platform>.tar.gz` with standalone Python 3.11 + CLI wrappers |
 | Package release | `.bin/package-release.sh <version>` | Builds `dist/v<version>/` with framework tarball + checksums |
 | Publish release | `.bin/publish-release.sh <version>` | Uploads assets to GitHub release |
 
