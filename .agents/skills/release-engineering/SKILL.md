@@ -85,10 +85,11 @@ bash .bin/package-release.sh <version>
 ```
 
 This creates `dist/v<version>/` with:
-- `pilosa-framework-<version>.tar.gz`
+- `pilosa-framework-<version>.tar.gz` (CLI + agents + config + gum binaries, ~18MB)
 - `install.sh`
 - `checksums.txt`
-- Copies vendor tarballs from `.bin/lib/vendor/` into the framework archive
+
+Vendor tarballs are NOT embedded in the framework archive — they are published as standalone release assets. The installer downloads the platform-specific vendor from GitHub releases on first install.
 
 ### 5. Publish to GitHub
 
