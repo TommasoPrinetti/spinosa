@@ -1,4 +1,1 @@
 date	session_id	agent	route	operation	query_label	dirs_seen	maps_read	raw_matches	raw_files_read	reports_written	output_path
-2026-06-09	20260609-144500-synthesis	spinosa-searcher	synthesis_report	synthesis	agent-skill-comparison	3	0	0	19	1	agent_reports/03_agent_skill_comparison.md
-20260609-162000-dispatch	spinosa-searcher	synthesis_report	search	cross-platform	.bin/;install.sh;.bin/package-release.sh;.bin/build-spinosa-vendor.sh;.bin/build-rapidocr-vendor.sh;.bin/sync-agents.sh;.bin/check-startup.sh;tests/	5	55	7	1	agent_reports/cross_platform_comparison.md
-2026-06-09	20260609-user-advocate	spinosa-writer	evidence_answer	write	user_advocate_position_paper	agent_reports/	1	0	1	1	agent_reports/04_user_advocate_position.md

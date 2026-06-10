@@ -1,3 +1,6 @@
+# Local design notes (not pushed to GitHub)
+_notes/
+
 # OS junk
 .DS_Store
 .DS_Store?
@@ -71,7 +74,9 @@ __pycache__/
 .spinosa/workspace
 .spinosa/update-report.md
 
-# Release build output
+# Workspace artifacts (generated during use — never commit local reports)
+agent_reports/*.md
+!agent_reports/AGENTS.md
 dist/
 
 # Build artifacts
