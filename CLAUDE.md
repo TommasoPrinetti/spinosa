@@ -170,6 +170,7 @@ Stop and answer when:
 - State blockers or unchecked claims.
 ## Global Rules
 
+- Never read, list, or index `.DS_Store` or `._*` files. Always skip them in glob, find, ls, and read operations.
 - Direct quotes must use the repository verbatim quote format and must be verified against the source. `spinosa-writer` applies the format; `spinosa-verifier` checks quote accuracy, source path validity, and citation completeness.
 - `spinosa-verifier` is mandatory whenever we have quotes.
 - No fixed set of maps is required. Startup creates as many navigation maps as the corpus needs. Maps can be updated and enriched while we search.

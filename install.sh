@@ -650,6 +650,10 @@ main() {
   info "Unpacking framework..."
   safe_untar "${tmpdir}/${archive_name}" "${SPINOSA_HOME}/versions/${VERSION}"
 
+  # Clean macOS metadata files that may have been in the release archive
+  find "${SPINOSA_HOME}/versions/${VERSION}" -name ".DS_Store" -delete 2>/dev/null || true
+  find "${SPINOSA_HOME}/versions/${VERSION}" -name "._*" -delete 2>/dev/null || true
+
   # ── install spinosa CLI ──────────────────────────────────────────────────
   local spinosa_bin="${SPINOSA_HOME}/versions/${VERSION}/spinosa-framework-${VERSION}/.bin/spinosa"
   if [ -f "$spinosa_bin" ]; then
@@ -719,6 +723,9 @@ main() {
       spinner_start "Installing Spinosa vendor (Python + wrappers)"
       mkdir -p "$spinosa_vendor_dest"
       safe_untar "$vendor_tmp" "$spinosa_vendor_dest" --strip-components=1
+      # Clean macOS metadata files from vendor extraction
+      find "$spinosa_vendor_dest" -name ".DS_Store" -delete 2>/dev/null || true
+      find "$spinosa_vendor_dest" -name "._*" -delete 2>/dev/null || true
       chmod +x "${spinosa_vendor_dest}/rapidocr-cli" 2>/dev/null || true
       chmod +x "${spinosa_vendor_dest}/markitdown-cli" 2>/dev/null || true
       spinner_stop

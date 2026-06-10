@@ -1174,7 +1174,7 @@ should_skip_source_file() {
   lower_name="$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]')"
   [[ "$lower_name" == "agents.md" ]] && return 0
   case "$1" in
-    */.DS_Store|*/._*|*/.localized|*/__MACOSX/*|*/.gitkeep|*/node_modules/*|*/.git/*) return 0 ;;
+    */.*|*/__MACOSX/*|*/node_modules/*) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -2097,6 +2097,10 @@ copy_source() {
 
   printf '\n'
   ok "Workspace source copy prepared in ${BOLD}$(dirname "$dest_dir")${RESET}"
+
+  # Clean macOS metadata files that may have been copied from source
+  find "$dest_dir" -name ".DS_Store" -delete 2>/dev/null || true
+  find "$dest_dir" -name "._*" -delete 2>/dev/null || true
 }
 
 choose_preferred_cli() {
@@ -2685,6 +2689,10 @@ run_integrated_onboarding() {
   fi
 
   write_onboarding_summary "$root" "$project_title" "$source_path" "$preferred_cli_label" "$handoff_action_text" "$handoff_result"
+
+  # Final workspace-wide macOS metadata cleanup — belt-and-suspenders
+  find "$root" -name ".DS_Store" -delete 2>/dev/null || true
+  find "$root" -name "._*" -delete 2>/dev/null || true
 }
 
 # ── framework manifest reader ──────────────────────────────────────────────
