@@ -8,7 +8,8 @@
 # Spinosa
 
 Turn a folder of documents into a searchable workspace for AI research agents.
-Everything runs on your machine — no cloud, no API keys, no data leaves your computer.
+All document processing is 100% local — no cloud, no API keys, no uploads.
+(The LLM tools you open the workspace with may use their own API keys.)
 
 ## How it works
 
