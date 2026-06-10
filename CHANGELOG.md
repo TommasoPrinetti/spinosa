@@ -1,6 +1,13 @@
 # Changelog
 
-## v0.5.1 (current)
+## v0.5.2 (current)
+
+- Strip macOS metadata (`.DS_Store`, `._*`) from workspace after onboarding
+- Skip all hidden files (`.*`) during source-to-raw copy — prevents any dotfile leakage
+- Add `.DS_Store` to `.opencode/.gitignore` for git-level protection
+- Instruct LLM to never read, list, or index `.DS_Store` or `._*` files
+
+## v0.5.1
 
 - Rename `pilosa` to `spinosa` with auto-upgrade from old name
 - `pilosa` alias shim — both commands work during transition
