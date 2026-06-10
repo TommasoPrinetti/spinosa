@@ -445,6 +445,8 @@ confirm() {
   local hint="Y/n"
   [[ "$default" == "n" ]] && hint="y/N"
   local reply normalized
+  local old_int_trap
+  old_int_trap="$(trap -p INT || true)"
   trap 'printf "\n  Cancelled.\n" >&2; exit 1' INT
   while true; do
     printf '%s' "${BOLD}${prompt}${RESET} ${DIM}${hint}${RESET}: " >&2
@@ -459,8 +461,12 @@ confirm() {
     reply="${reply:-$default}"
     normalized="$(printf '%s' "$reply" | tr '[:upper:]' '[:lower:]')"
     case "$normalized" in
-      y|yes) return 0 ;;
-      n|no) return 1 ;;
+      y|yes)
+        if [[ -n "$old_int_trap" ]]; then eval "$old_int_trap"; else trap - INT; fi
+        return 0 ;;
+      n|no)
+        if [[ -n "$old_int_trap" ]]; then eval "$old_int_trap"; else trap - INT; fi
+        return 1 ;;
       *) printf '  %s\n' "${R}Please answer y/yes or n/no.${RESET}" >&2 ;;
     esac
   done
@@ -997,9 +1003,11 @@ print_box() {
   printf '\n  %s┌%s┐%s\n' "${DIM}" "$(printf '%.0s─' $(seq 1 "$iw"))" "${RESET}"
   printf '  %s│%s %s%s%s\n' "${DIM}" "${RESET}" "${BOLD}$(truncate_display_path "$1" "$iw")${RESET}" "${DIM}" "${RESET}"
   printf '  %s├%s┤%s\n' "${DIM}" "$(printf '%.0s─' $(seq 1 "$iw"))" "${RESET}"
-  while IFS= read -r line; do
-    printf '  %s│%s %s\n' "${DIM}" "${RESET}" "$(truncate_display_path "$line" "$iw")"
-  done
+  if [[ ! -t 0 ]]; then
+    while IFS= read -r line; do
+      printf '  %s│%s %s\n' "${DIM}" "${RESET}" "$(truncate_display_path "$line" "$iw")"
+    done
+  fi
   printf '  %s└%s┘%s\n' "${DIM}" "$(printf '%.0s─' $(seq 1 "$iw"))" "${RESET}"
 }
 

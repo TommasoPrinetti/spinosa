@@ -1,6 +1,12 @@
 # Changelog
 
-## v0.5.3 (current)
+## v0.5.4 (current)
+
+- Fix `print_box` hanging on stdin when called without piped body — upgrade notice no longer blocks
+- Fix `confirm()` not restoring previous INT trap after exit
+- Fix `print_box` not truncating content to box width (regression in v0.5.3)
+
+## v0.5.3
 
 - Fix progress bars wrapping when line exceeds terminal width — bar and filename now shrink to fit COLS
 - Fix `print_box` content breaking out of box borders — lines truncated to inner width
