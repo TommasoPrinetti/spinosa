@@ -2476,18 +2476,23 @@ markitdown_bin() {
 repair_vendor_tools() {
   [[ "${SPINOSA_NO_REPAIR:-0}" != "1" ]] || return 0
   [[ -t 0 ]] || return 0
-  local needs_repair=0 pkgs=()
+  local needs_repair=0 pkgs=() vendor_dir="${SPINOSA_VENDOR_DIR}-${PLATFORM}"
   if ! rapidocr_ocr_available; then needs_repair=1; pkgs+=("rapidocr"); fi
   if ! markitdown_available; then needs_repair=1; pkgs+=("markitdown"); fi
   [[ "$needs_repair" -eq 1 ]] || return 0
 
-  local python_bin="${SPINOSA_VENDOR_DIR}-${PLATFORM}/python/bin/python3"
-  if [[ ! -x "$python_bin" ]]; then
-    python_bin="${SPINOSA_VENDOR_DIR}-${PLATFORM}/Python.framework/Versions/Current/bin/python3"
+  if [[ ! -d "$vendor_dir" ]]; then
+    echo ""
+    note_cactus "Document processing tools not found — vendor bundle missing"
+    if confirm "Run spinosa upgrade to download the full vendor bundle?" "y"; then
+      cmd_upgrade --reinstall --yes
+    fi
+    return 0
   fi
+
+  local python_bin="${vendor_dir}/python/bin/python3"
   if [[ ! -x "$python_bin" ]]; then
-    local fw_unified="${FRAMEWORK_ROOT:-.}/.bin/lib/vendor/spinosa-${PLATFORM}/python/bin/python3"
-    [[ -x "$fw_unified" ]] && python_bin="$fw_unified"
+    python_bin="${vendor_dir}/Python.framework/Versions/Current/bin/python3"
   fi
   [[ -x "$python_bin" ]] || return 0
 
@@ -4279,18 +4284,21 @@ display_release_notes() {
 cmd_upgrade() {
   local target_version="latest"
   local auto_yes=0
+  local reinstall=0
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --version) target_version="$2"; shift 2 ;;
       --yes|-y) auto_yes=1; shift ;;
+      --reinstall) reinstall=1; shift ;;
       --help|-h)
         printf '  %s\n' "Usage: spinosa upgrade [options]"
         printf '    %s\n' "  --version X.Y.Z   Upgrade to specific version (default: latest)"
         printf '    %s\n' "  --yes             Skip confirmation prompt"
+        printf '    %s\n' "  --reinstall       Reinstall current version"
         printf '    %s\n' "  --help            Show this help"
         return 0
         ;;
-      -*) die "Unknown upgrade option: $1. Valid: --version, --yes, --help" ;;
+      -*) die "Unknown upgrade option: $1. Valid: --version, --yes, --reinstall, --help" ;;
       *) shift ;;
     esac
   done
@@ -4302,7 +4310,7 @@ cmd_upgrade() {
   # must always point to the canonical upstream to prevent supply-chain attacks
   # via compromised environment variables.
   local resolved_version
-  if [[ "$target_version" != "latest" ]]; then
+  if [[ -n "$target_version" && "$target_version" != "latest" ]]; then
     resolved_version="$target_version"
   else
     spinner_start "Resolving latest version"
@@ -4317,9 +4325,11 @@ cmd_upgrade() {
   installed_version="$(framework_version "$FRAMEWORK_ROOT")"
   [[ "$installed_version" == "dev" || -z "$installed_version" ]] && installed_version=""
 
-  if [[ -n "$installed_version" && "$resolved_version" == "$installed_version" ]]; then
-    info "Already on the latest version (v${installed_version}). Nothing to upgrade."
-    return 0
+  if [[ "$reinstall" -ne 1 ]]; then
+    if [[ -n "$installed_version" && "$resolved_version" == "$installed_version" ]]; then
+      info "Already on the latest version (v${installed_version}). Nothing to upgrade."
+      return 0
+    fi
   fi
 
   # ── release notes ──────────────────────────────────────────────────────
@@ -4365,6 +4375,9 @@ cmd_upgrade() {
   local upgrade_args=("--upgrade" "--version" "$resolved_version")
   if [[ "$auto_yes" -eq 1 ]]; then
     upgrade_args+=("--yes")
+  fi
+  if [[ "$reinstall" -eq 1 ]]; then
+    upgrade_args+=("--reinstall")
   fi
 
   bash "$installer" "${upgrade_args[@]}"
