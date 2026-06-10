@@ -1,6 +1,12 @@
 # Changelog
 
-## v0.5.2 (current)
+## v0.5.3 (current)
+
+- Fix progress bars wrapping when line exceeds terminal width — bar and filename now shrink to fit COLS
+- Fix `print_box` content breaking out of box borders — lines truncated to inner width
+- Remove dead `_progress_fixed_overhead` helper
+
+## v0.5.2
 
 - Strip macOS metadata (`.DS_Store`, `._*`) from workspace after onboarding
 - Skip all hidden files (`.*`) during source-to-raw copy — prevents any dotfile leakage

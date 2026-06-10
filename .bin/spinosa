@@ -995,10 +995,10 @@ shell_quote() {
 print_box() {
   local iw=$((COLS > 6 ? COLS - 4 : 10)) ow=$((COLS > 4 ? COLS - 2 : 10))
   printf '\n  %s┌%s┐%s\n' "${DIM}" "$(printf '%.0s─' $(seq 1 "$iw"))" "${RESET}"
-  printf '  %s│%s %s%s%s\n' "${DIM}" "${RESET}" "${BOLD}$1${RESET}" "${DIM}" "${RESET}"
+  printf '  %s│%s %s%s%s\n' "${DIM}" "${RESET}" "${BOLD}$(truncate_display_path "$1" "$iw")${RESET}" "${DIM}" "${RESET}"
   printf '  %s├%s┤%s\n' "${DIM}" "$(printf '%.0s─' $(seq 1 "$iw"))" "${RESET}"
   while IFS= read -r line; do
-    printf '  %s│%s %s\n' "${DIM}" "${RESET}" "$line"
+    printf '  %s│%s %s\n' "${DIM}" "${RESET}" "$(truncate_display_path "$line" "$iw")"
   done
   printf '  %s└%s┘%s\n' "${DIM}" "$(printf '%.0s─' $(seq 1 "$iw"))" "${RESET}"
 }
@@ -1589,23 +1589,44 @@ print_onboarding_preflight() {
 
 render_copy_progress() {
   local processed="$1" total="$2" copied="$3" skipped="$4" current_file="${5:-}"
-  local width=$((COLS > 60 ? 28 : (COLS-36 > 10 ? COLS-36 : 10))) filled=0 bar="" i
-  [[ "$total" -gt 0 ]] && filled=$((processed * width / total))
-  for ((i = 0; i < width; i++)); do
+  local overhead=48 max_file=2 bar_width=2 filled=0 bar="" i
+  local avail=$((COLS - overhead))
+  [[ avail -lt 12 ]] && avail=12
+  bar_width=$((avail * 6 / 10))
+  [[ bar_width -lt 5 ]] && bar_width=5
+  [[ bar_width -gt 28 ]] && bar_width=28
+  max_file=$((avail - bar_width))
+  [[ max_file -lt 5 ]] && max_file=5
+  [[ max_file -gt 50 ]] && max_file=50
+  while (( bar_width + max_file + overhead > COLS && bar_width > 5 )); do bar_width=$((bar_width - 1)); done
+  while (( bar_width + max_file + overhead > COLS && max_file > 5 )); do max_file=$((max_file - 1)); done
+  [[ "$total" -gt 0 ]] && filled=$((processed * bar_width / total))
+  for ((i = 0; i < bar_width; i++)); do
     if (( i < filled )); then bar+="█"; else bar+="░"; fi
   done
-  current_file="$(truncate_display_path "$current_file" 46)"
+  current_file="$(truncate_display_path "$current_file" $max_file)"
   printf '\r\033[2K  %s%s%s %s[%s]%s %d/%d %s (%d copied, %d skipped)' "${C}" "$(spinner_frame "$processed")" "${RESET}" "${C}" "$bar" "${RESET}" "$processed" "$total" "$current_file" "$copied" "$skipped" >&2
 }
 
 render_ocr_progress() {
   local processed="$1" total="$2" converted="$3" skipped="$4" current_file="${5:-}" page_info="${6:-}"
-  local width=$((COLS > 60 ? 28 : (COLS-36 > 10 ? COLS-36 : 10))) filled=0 bar="" i
-  [[ "$total" -gt 0 ]] && filled=$((processed * width / total))
-  for ((i = 0; i < width; i++)); do
+  local overhead=48 max_file=2 bar_width=2 filled=0 bar="" i
+  [[ -n "$page_info" ]] && overhead=$((overhead + 12))
+  local avail=$((COLS - overhead))
+  [[ avail -lt 12 ]] && avail=12
+  bar_width=$((avail * 6 / 10))
+  [[ bar_width -lt 5 ]] && bar_width=5
+  [[ bar_width -gt 28 ]] && bar_width=28
+  max_file=$((avail - bar_width))
+  [[ max_file -lt 5 ]] && max_file=5
+  [[ max_file -gt 48 ]] && max_file=48
+  while (( bar_width + max_file + overhead > COLS && bar_width > 5 )); do bar_width=$((bar_width - 1)); done
+  while (( bar_width + max_file + overhead > COLS && max_file > 5 )); do max_file=$((max_file - 1)); done
+  [[ "$total" -gt 0 ]] && filled=$((processed * bar_width / total))
+  for ((i = 0; i < bar_width; i++)); do
     if (( i < filled )); then bar+="█"; else bar+="░"; fi
   done
-  current_file="$(truncate_display_path "$current_file" 44)"
+  current_file="$(truncate_display_path "$current_file" $max_file)"
   local page_label=""
   [[ -n "$page_info" ]] && page_label=" (page ${page_info})"
   printf '\r\033[2K  %s%s%s %s[%s]%s %d/%d %s%s (%d converted, %d skipped)' "${M}" "$(spinner_frame "${7:-$processed}")" "${RESET}" "${M}" "$bar" "${RESET}" "$processed" "$total" "$current_file" "$page_label" "$converted" "$skipped" >&2
