@@ -823,18 +823,20 @@ SHIM_EOF
   chmod +x "$shim"
   ok "Created wrapper script: ${shim}"
 
-  # ── clean up old pilosa shims (pre-0.5 migration) ──────────────────────
-  local old_pilosa_shim="${SPINOSA_BIN_DIR}/pilosa"
-  if [[ -f "$old_pilosa_shim" ]]; then
-    rm -f "$old_pilosa_shim" && warn "Removed old pilosa shim at ${old_pilosa_shim}"
+  # ── pilosa → spinosa alias shim ─────────────────────────────────────────
+  local pilosa_shim="${SPINOSA_BIN_DIR}/pilosa"
+  if [[ ! -f "$pilosa_shim" ]] || ! grep -q 'exec.*spinosa' "$pilosa_shim" 2>/dev/null; then
+    cat > "$pilosa_shim" << 'PILOSA_SHIM'
+#!/bin/sh
+exec "$(dirname "$0")/spinosa" "$@"
+PILOSA_SHIM
+    chmod +x "$pilosa_shim"
+    ok "Created pilosa → spinosa alias: ${pilosa_shim}"
   fi
+  # Remove old standalone pilosa binary (pre-0.5 migration)
   local old_pilosa_bin="${SPINOSA_HOME}/bin/pilosa"
   if [[ -f "$old_pilosa_bin" ]]; then
     rm -f "$old_pilosa_bin" && warn "Removed old pilosa binary at ${old_pilosa_bin}"
-  fi
-  local old_pilosa_home="$HOME/.pilosa"
-  if [[ -d "$old_pilosa_home" ]] && [[ "$old_pilosa_home" != "$SPINOSA_HOME" ]]; then
-    warn "Found old install at ${old_pilosa_home} — you may remove it manually: rm -rf ${old_pilosa_home}"
   fi
 
   # ── clean up, check PATH, launch dashboard ──────────────────────────────
