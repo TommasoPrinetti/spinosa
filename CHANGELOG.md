@@ -1,6 +1,11 @@
 # Changelog
 
-## v0.5.4 (current)
+## v0.5.5 (current)
+
+- Fix: scan broken when corpus path traverses hidden directories (e.g. Google Drive `.shortcut-targets-by-id`). Reverted `*/.*` ignore pattern to explicit skip list.
+- Fix: bash 3.2 `unbound variable` error when no importable files found. Added guard in `select_all_import_batches`.
+
+## v0.5.4
 
 - Fix `print_box` hanging on stdin when called without piped body — upgrade notice no longer blocks
 - Fix `confirm()` not restoring previous INT trap after exit
