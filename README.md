@@ -7,13 +7,25 @@
 
 # Spinosa
 
-A CLI tool that turns a folder of source files into a searchable knowledge map
-for multi-agent research workflows. Everything runs locally — no cloud, no API keys.
+Spinosa is a CLI tool that prepares the soil for complex natural-language-corpus operations.
+It starts from a corpus folder given, translates all the contents into .md files using @markItDown and @rapidOCR, in order to enable quick reading and data-ingestion for LLM agents. Once it has prepared the soil (workspace we call it) for the sequent agent, is sufficient to copy the prompt and execute in in your favourite local tool, we suggest using Opencode as it features a generous tier of free models, especially deepseek-v4-flash. Any other tools is supported, Codex, Claude Code, Kilocode, Gemini CLI, etc...
 
-## Your starting point: a corpus
+## 0. Installation
 
-You have a folder of research materials. That's your **corpus** — PDFs, Office docs,
-images, notes, CSV exports, audio, anything.
+Open your terminal, launch this command and follow the onboarding procedure. Spinosa CLI will take care of all the technical aspects of tool-downloading and system preparation. Nothing leaves your computer, everything is local for now.
+
+```bash
+curl -fsSL https://github.com/TommasoPrinetti/spinosa/releases/latest/download/install.sh | bash
+```
+
+## 1. The corpus
+
+Before starting spinosa, prepare your corpus folder.
+A "Corpus folder" is a tidied up folder of all the data you need to serach for: books, article, interviews transcripts, PDFs, handwritten notes, .csv, .json, etc... That's your **corpus**. You will be asked to provide the folder path of your corpus when launchign spinosa new, this craetes a sibling folder, pre-processed where all the inputs have been tidied up into .md format.
+
+Currently we're not supporting audio-transcription! (not yet)
+
+This is how your' corpus folder could look like initially.
 
 ```
 corpus/
@@ -32,19 +44,12 @@ Spinosa copies your corpus into a **workspace**, converts everything to searchab
 Markdown (Office docs via MarkItDown, scanned PDFs and images via RapidOCR OCR),
 and builds navigation maps with cross-file wikilinks. The original corpus is never modified.
 
-## Install
-
-```bash
-curl -fsSL https://github.com/TommasoPrinetti/spinosa/releases/latest/download/install.sh | bash
-```
-
-Zero dependencies. Bundled Python handles pip packages at install time.
 
 ## Quick start
 
 ```bash
 # 1. Create a workspace from your corpus
-spinosa new /path/to/corpus
+spinosa new
 
 # 2. Open the workspace with your LLM CLI
 cd /path/to/corpus-spinosa
