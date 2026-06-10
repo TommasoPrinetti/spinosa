@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Publish a Pilosa framework release from the current checkout.
+# Publish a Spinosa framework release from the current checkout.
 # Requires: git, gh, and a clean working tree.
 
 if [[ -z "${1:-}" ]]; then
@@ -15,7 +15,7 @@ TAG="v${VERSION}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 DIST="${REPO_ROOT}/dist/v${VERSION}"
-ARCHIVE="${DIST}/pilosa-framework-${VERSION}.tar.gz"
+ARCHIVE="${DIST}/spinosa-framework-${VERSION}.tar.gz"
 INSTALLER="${DIST}/install.sh"
 CHECKSUMS="${DIST}/checksums.txt"
 
@@ -41,7 +41,7 @@ fi
 CURRENT_BRANCH="$(git branch --show-current)"
 CURRENT_SHA="$(git rev-parse HEAD)"
 
-echo "Publishing Pilosa Framework ${TAG}"
+echo "Publishing Spinosa Framework ${TAG}"
 echo "  Branch: ${CURRENT_BRANCH:-detached}"
 echo "  Commit: ${CURRENT_SHA}"
 echo ""
@@ -57,7 +57,7 @@ done
 
 # Collect vendor tarballs as separate release assets
 VENDOR_ASSETS=()
-for tarball in "${REPO_ROOT}/.bin/lib/vendor"/pilosa-vendor-*.tar.gz; do
+for tarball in "${REPO_ROOT}/.bin/lib/vendor"/spinosa-vendor-*.tar.gz; do
   if [[ -f "$tarball" ]]; then
     cp "$tarball" "${DIST}/$(basename "$tarball")"
     VENDOR_ASSETS+=("${DIST}/$(basename "$tarball")")
@@ -66,12 +66,12 @@ done
 
 BODY="$(mktemp)"
 cat > "$BODY" << EOF
-Pilosa Framework ${TAG}
+Spinosa Framework ${TAG}
 
 ## Install (one command)
 
 \`\`\`sh
-curl -fsSL https://github.com/TommasoPrinetti/pilosa/releases/download/${TAG}/install.sh | bash
+curl -fsSL https://github.com/TommasoPrinetti/spinosa/releases/download/${TAG}/install.sh | bash
 \`\`\`
 
 This installs the pinned stable version (${VERSION}). Zero dependencies.
@@ -80,21 +80,21 @@ Python packages (MarkItDown, RapidOCR) and OCR models are installed via pip on f
 For options, download first:
 
 \`\`\`sh
-curl -fsSL https://github.com/TommasoPrinetti/pilosa/releases/download/${TAG}/install.sh -o install-pilosa.sh
-bash install-pilosa.sh --version ${VERSION}
+curl -fsSL https://github.com/TommasoPrinetti/spinosa/releases/download/${TAG}/install.sh -o install-spinosa.sh
+bash install-spinosa.sh --version ${VERSION}
 \`\`\`
 
 ## Update existing workspace
 
 \`\`\`sh
-pilosa update --version ${VERSION}
+spinosa update --version ${VERSION}
 \`\`\`
 
 ## Update policy
 
 - Framework-owned files are updated from this release.
 - User workspace state is not replaced.
-- Locally modified framework files receive .pilosa-new sidecars unless the manifest marks them always_replace.
+- Locally modified framework files receive .spinosa-new sidecars unless the manifest marks them always_replace.
 EOF
 
 UPLOAD_ASSETS=("$ARCHIVE" "$INSTALLER" "$CHECKSUMS")
@@ -106,7 +106,7 @@ if gh release view "$TAG" >/dev/null 2>&1; then
 else
   gh release create "$TAG" "${UPLOAD_ASSETS[@]}" \
     --target "$CURRENT_BRANCH" \
-    --title "Pilosa Framework ${TAG}" \
+    --title "Spinosa Framework ${TAG}" \
     --notes-file "$BODY"
 fi
 

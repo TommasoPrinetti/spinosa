@@ -1,16 +1,16 @@
 ---
 type: report
-agent: pilosa-searcher
+agent: spinosa-searcher
 created: 2026-06-09
 scope: cross-platform (macOS vs Linux)
 description:
-  - Structured inventory of all platform-branching logic in the Pilosa framework
+  - Structured inventory of all platform-branching logic in the spinosa framework
 verified: true
 connects_to:
-  - .bin/pilosa
+  - .bin/spinosa
   - install.sh
   - .bin/package-release.sh
-  - .bin/build-pilosa-vendor.sh
+  - .bin/build-spinosa-vendor.sh
   - .bin/build-rapidocr-vendor.sh
   - .bin/sync-agents.sh
   - .bin/check-startup.sh
@@ -28,10 +28,10 @@ connects_to:
 | P2 | `install.sh` | 298-308 | `uname -s` / `uname -m` (in `verify_vendor_binaries`) | Same | Same |
 | P3 | `install.sh` | 609-619 | `uname -s` / `uname -m` (vendor install) | Same | Same |
 | P4 | `install.sh` | 725 | `uname -s` == `Linux` (libGL check) | Not entered | Runs `ldconfig` check |
-| P5 | `.bin/pilosa` | 1080 | `uname` == `Darwin` (terminal launch) | Enters macOS branch | Enters Linux branch |
-| P6 | `.bin/pilosa` | 1150 | `uname` == `Darwin` (Claude Desktop) | Enters macOS branch | Enters Linux/else branch |
-| P7 | `.bin/pilosa` | 2458 | `uname -s` (PLATFORM variable) | `darwin-arm64` etc. | `linux-arm64` etc. |
-| P8 | `.bin/build-pilosa-vendor.sh` | 44-56 | `uname -s` / `uname -m` | `darwin-arm64` etc. | `linux-arm64` etc. |
+| P5 | `.bin/spinosa` | 1080 | `uname` == `Darwin` (terminal launch) | Enters macOS branch | Enters Linux branch |
+| P6 | `.bin/spinosa` | 1150 | `uname` == `Darwin` (Claude Desktop) | Enters macOS branch | Enters Linux/else branch |
+| P7 | `.bin/spinosa` | 2458 | `uname -s` (PLATFORM variable) | `darwin-arm64` etc. | `linux-arm64` etc. |
+| P8 | `.bin/build-spinosa-vendor.sh` | 44-56 | `uname -s` / `uname -m` | `darwin-arm64` etc. | `linux-arm64` etc. |
 | P9 | `.bin/build-rapidocr-vendor.sh` | 45-61 | `uname -s` / `uname -m` | Same | Same |
 
 ### 1.2 Architecture normalization
@@ -48,7 +48,7 @@ connects_to:
 
 ## 2. Platform-Branching Logic (Detailed)
 
-### 2.1 [.bin/pilosa] `_launch_in_terminal()` -- Lines 1078-1094
+### 2.1 [.bin/spinosa] `_launch_in_terminal()` -- Lines 1078-1094
 
 ```
 if [[ "$(uname)" == "Darwin" ]]; then
@@ -74,7 +74,7 @@ fi
 
 **Tested:** Tests exist only for the macOS path via `open`; no test harness for Linux terminal emulators.
 
-### 2.2 [.bin/pilosa] `run_cli_with_prompt()` -- Lines 1147-1156
+### 2.2 [.bin/spinosa] `run_cli_with_prompt()` -- Lines 1147-1156
 
 ```
 claude_code_desktop)
@@ -89,7 +89,7 @@ claude_code_desktop)
 
 **End-user effect:** macOS users get a seamless Claude Desktop launch; Linux users must manually paste.
 
-### 2.3 [.bin/pilosa] `file_size_bytes()` -- Lines 1287-1293
+### 2.3 [.bin/spinosa] `file_size_bytes()` -- Lines 1287-1293
 
 ```
 if stat -c %s "$path" >/dev/null 2>&1; then
@@ -102,17 +102,17 @@ elif stat -f %z "$path" >/dev/null 2>&1; then
 
 **End-user effect:** Safe -- both paths are covered. But the preference is Linux-first (inefficient on macOS since it tries and fails the Linux check first).
 
-### 2.4 [.bin/pilosa] `cache_is_fresh()` -- Line 3886
+### 2.4 [.bin/spinosa] `cache_is_fresh()` -- Line 3886
 
 ```
-cache_time="$(stat -f %m "$PILOSA_CACHE" 2>/dev/null || stat -c %Y "$PILOSA_CACHE" 2>/dev/null || echo 0)"
+cache_time="$(stat -f %m "$spinosa_CACHE" 2>/dev/null || stat -c %Y "$spinosa_CACHE" 2>/dev/null || echo 0)"
 ```
 
 **Difference:** macOS uses `stat -f %m`, Linux uses `stat -c %Y`. This function tries macOS first (opposite of `file_size_bytes`).
 
 **End-user effect:** Safe -- both paths are covered.
 
-### 2.5 [.bin/pilosa] `sed -i` in-place editing -- Lines 2669-2670, 2878-2879, 3407-3408, 3790-3794
+### 2.5 [.bin/spinosa] `sed -i` in-place editing -- Lines 2669-2670, 2878-2879, 3407-3408, 3790-3794
 
 ```
 sed -i.bak 's/.../.../' file 2>/dev/null || \     # macOS (requires extension arg)
@@ -123,7 +123,7 @@ sed -i '' 's/.../.../' file 2>/dev/null || true    # Linux (no arg or empty stri
 
 **End-user effect:** Safe -- both paths covered. Creates `.bak` files that are cleaned up.
 
-### 2.6 [.bin/pilosa] `sort -V` version sort -- Lines 76-81
+### 2.6 [.bin/spinosa] `sort -V` version sort -- Lines 76-81
 
 ```
 if sort -V /dev/null 2>/dev/null; then
@@ -137,7 +137,7 @@ fi
 
 **End-user effect:** Safe -- both paths covered.
 
-### 2.7 [.bin/pilosa] `expand_home()` -- Lines 831-837
+### 2.7 [.bin/spinosa] `expand_home()` -- Lines 831-837
 
 ```
 if [[ "$path" == "~"* ]]; then
@@ -155,7 +155,7 @@ fi
 case "$os" in
     Darwin)  OS="darwin" ;;
     Linux)   OS="linux" ;;
-    *)       die "Unsupported OS: $os (Pilosa supports macOS and Linux)" ;;
+    *)       die "Unsupported OS: $os (spinosa supports macOS and Linux)" ;;
 esac
 ```
 
@@ -256,7 +256,7 @@ gum_${GUM_VERSION}_Linux_i386.tar.gz     -> linux-i386
 
 **End-user effect:** Platform-specific Gum binaries provided.
 
-### 2.16 [.bin/build-pilosa-vendor.sh] Python standalone URLs -- Lines 59-70
+### 2.16 [.bin/build-spinosa-vendor.sh] Python standalone URLs -- Lines 59-70
 
 ```
 darwin-arm64 -> os="apple-darwin", arch="aarch64"
@@ -269,7 +269,7 @@ linux-arm64  -> os="unknown-linux-gnu", arch="aarch64"
 
 **End-user effect:** The correct Python binary is bundled for each platform.
 
-### 2.17 [.bin/build-pilosa-vendor.sh] Python binary path -- Lines 72-81
+### 2.17 [.bin/build-spinosa-vendor.sh] Python binary path -- Lines 72-81
 
 ```
 for bin in "${python_dir}/bin/python3" "${python_dir}/Python.framework/Versions/Current/bin/python3"; do
@@ -279,7 +279,7 @@ for bin in "${python_dir}/bin/python3" "${python_dir}/Python.framework/Versions/
 
 **End-user effect:** Both layouts are probed; whichever exists is used. Safe.
 
-### 2.18 [.bin/build-pilosa-vendor.sh] CLI wrapper scripts -- Lines 118-150
+### 2.18 [.bin/build-spinosa-vendor.sh] CLI wrapper scripts -- Lines 118-150
 
 Both `rapidocr-cli` and `markitdown-cli` wrappers probe:
 ```
@@ -319,7 +319,7 @@ sed -i '' \
     "$repo_root/CLAUDE.md" 2>/dev/null || true
 ```
 
-**Difference:** Same macOS/Linux `sed -i` fallback pattern as `.bin/pilosa`.
+**Difference:** Same macOS/Linux `sed -i` fallback pattern as `.bin/spinosa`.
 
 **End-user effect:** Safe -- both paths covered.
 
@@ -355,9 +355,9 @@ All escape sequences used are standard ANSI SGR (Select Graphic Rendition) codes
 
 | File | Lines | Purpose |
 |------|-------|---------|
-| `.bin/pilosa` | 26-27, 457, 459, 515, 517, 524, 526-527, 554, 574, 636, 720, 722, 726, 728, 738-739, 752, 767, 787, 793, 1614, 1625, 1638 | Colors, spinners, progress bars, cursor positioning |
+| `.bin/spinosa` | 26-27, 457, 459, 515, 517, 524, 526-527, 554, 574, 636, 720, 722, 726, 728, 738-739, 752, 767, 787, 793, 1614, 1625, 1638 | Colors, spinners, progress bars, cursor positioning |
 | `install.sh` | 50-51, 59, 81, 94, 110, 126 | Colors, spinners, progress bars |
-| `.bin/build-pilosa-vendor.sh` | 33-36 | Colors (bash CLI wrappers) |
+| `.bin/build-spinosa-vendor.sh` | 33-36 | Colors (bash CLI wrappers) |
 | `.bin/build-rapidocr-vendor.sh` | 33-36 | Colors |
 | `.bin/check-startup.sh` | 8 | Colors |
 | `tests/test_cli.sh` | 21 | Colors |
@@ -367,7 +367,7 @@ All escape sequences used are standard ANSI SGR (Select Graphic Rendition) codes
 
 ## 4. Clipboard Support
 
-### 4.1 `copy_to_clipboard()` -- `.bin/pilosa` lines 968-981
+### 4.1 `copy_to_clipboard()` -- `.bin/spinosa` lines 968-981
 
 ```
 copy_to_clipboard() {
@@ -399,10 +399,10 @@ copy_to_clipboard() {
 
 | File | Line | Usage | Platform-safe? |
 |------|------|-------|----------------|
-| `install.sh` | 10 | `mktemp /tmp/pilosa-install.XXXXXX` | Yes -- `mktemp` is cross-platform |
-| `.bin/pilosa` | 1102, 1104, 1120, 1122, 1138, 1140, 1161, 1163 | `mktemp /tmp/pilosa-prompt.XXXXXX` etc. | Yes |
-| `.bin/pilosa` | 3135 | `mktemp -d` (update) | Yes |
-| `.bin/build-pilosa-vendor.sh` | 96 | `/tmp/python-standalone-${platform}.tar.gz` | Yes |
+| `install.sh` | 10 | `mktemp /tmp/spinosa-install.XXXXXX` | Yes -- `mktemp` is cross-platform |
+| `.bin/spinosa` | 1102, 1104, 1120, 1122, 1138, 1140, 1161, 1163 | `mktemp /tmp/spinosa-prompt.XXXXXX` etc. | Yes |
+| `.bin/spinosa` | 3135 | `mktemp -d` (update) | Yes |
+| `.bin/build-spinosa-vendor.sh` | 96 | `/tmp/python-standalone-${platform}.tar.gz` | Yes |
 | `.bin/build-rapidocr-vendor.sh` | 135 | Same pattern | Yes |
 | `.bin/package-release.sh` | 26, 185 | `mktemp -d` | Yes |
 
@@ -412,11 +412,11 @@ copy_to_clipboard() {
 
 | Use | Locations | Platform-safe? |
 |-----|-----------|----------------|
-| `$HOME/.pilosa` (install root) | `install.sh:43`, `.bin/pilosa:34` | Yes |
+| `$HOME/.spinosa` (install root) | `install.sh:43`, `.bin/spinosa:34` | Yes |
 | `$HOME/.local/bin` (shim dir) | `install.sh:44` | Yes -- XDG convention |
 | `$HOME/.config/fish/config.fish` | `install.sh:781` | Yes |
 | `$HOME/.zshrc`, `.bashrc`, `.bash_profile` | `install.sh:782-783` | Yes |
-| `$HOME/Projects`, `$HOME/Work`, `$HOME/Documents` | `.bin/pilosa:3815` (default scan roots) | Yes |
+| `$HOME/Projects`, `$HOME/Work`, `$HOME/Documents` | `.bin/spinosa:3815` (default scan roots) | Yes |
 
 **Verdict:** All paths are platform-agnostic.
 
@@ -466,31 +466,31 @@ note "        sudo pacman -S mesa           (Arch)"
 
 | # | Feature | macOS | Linux | Affected File | Lines |
 |---|---------|-------|-------|---------------|-------|
-| D1 | Terminal launch | `open .command` via Finder | `x-terminal-emulator` / `gnome-terminal` / `xterm` | `.bin/pilosa` | 1080-1094 |
-| D2 | Claude Desktop handoff | `open claude://` deep link | Clipboard copy only | `.bin/pilosa` | 1147-1156 |
+| D1 | Terminal launch | `open .command` via Finder | `x-terminal-emulator` / `gnome-terminal` / `xterm` | `.bin/spinosa` | 1080-1094 |
+| D2 | Claude Desktop handoff | `open claude://` deep link | Clipboard copy only | `.bin/spinosa` | 1147-1156 |
 | D3 | libGL check | Not performed | Checks and warns if missing | `install.sh` | 724-730 |
 | D4 | Cross-platform vendor builds | Can build all platforms | Can build all platforms (native) | `build-rapidocr-vendor.sh` | 63-71 |
-| D5 | Python framework layout | `Python.framework/Versions/...` | `bin/python3` | `build-pilosa-vendor.sh`, `build-rapidocr-vendor.sh` | 72-81, 104-117 |
+| D5 | Python framework layout | `Python.framework/Versions/...` | `bin/python3` | `build-spinosa-vendor.sh`, `build-rapidocr-vendor.sh` | 72-81, 104-117 |
 | D6 | Binary support | `arm64`, `amd64` | `arm64`, `amd64`, `i386` | all detection blocks | multiple |
 
 ### 7.2 Safe Differences (both paths covered)
 
 | # | Feature | macOS path | Linux path | Files | Lines |
 |---|---------|-----------|------------|-------|-------|
-| S1 | `stat` file size | `stat -f %z` | `stat -c %s` | `.bin/pilosa` | 1287-1293 |
-| S2 | `stat` mtime | `stat -f %m` | `stat -c %Y` | `.bin/pilosa` | 3886 |
+| S1 | `stat` file size | `stat -f %z` | `stat -c %s` | `.bin/spinosa` | 1287-1293 |
+| S2 | `stat` mtime | `stat -f %m` | `stat -c %Y` | `.bin/spinosa` | 3886 |
 | S3 | `sed -i` | `sed -i.bak` (needs arg) | `sed -i ''` (needs empty arg) | multiple | 2669-2670, 2878-2879, 3407-3408, 3790-3794 |
-| S4 | `sort -V` | Falls back to field sort | Uses `sort -V` | `.bin/pilosa` | 76-81 |
+| S4 | `sort -V` | Falls back to field sort | Uses `sort -V` | `.bin/spinosa` | 76-81 |
 | S5 | `date` parsing | `date -j -f` | `date -d` | `install.sh` | 268 |
 | S6 | SHA tools | `shasum -a 256` | `sha256sum` | multiple | 850-856, 227-233, 197, 278, 310 |
 | S7 | tar Apple Double | `COPYFILE_DISABLE=1` | No-op env var | `package-release.sh` | 300 |
-| S8 | Clipboard | `pbcopy` | `xclip` / `xsel` / `clip.exe` | `.bin/pilosa` | 968-981 |
+| S8 | Clipboard | `pbcopy` | `xclip` / `xsel` / `clip.exe` | `.bin/spinosa` | 968-981 |
 
 ### 7.3 Platform-Exclusive Features
 
 | # | Feature | Platform | Description | File | Lines |
 |---|---------|----------|-------------|------|-------|
-| E1 | `.DS_Store` cleanup | macOS | Finder creates these; framework explicitly removes them | `.bin/pilosa`, `.bin/package-release.sh` | 96-97, 3013-3014 |
+| E1 | `.DS_Store` cleanup | macOS | Finder creates these; framework explicitly removes them | `.bin/spinosa`, `.bin/package-release.sh` | 96-97, 3013-3014 |
 | E2 | Shell profiles | macOS (zsh default) | `~/.zshrc` is primary target | `install.sh` | 780-785 |
 | E3 | Shell profiles | Linux (bash default) | `~/.bashrc` or `~/.profile` is primary target | `install.sh` | 780-785 |
 

@@ -24,7 +24,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 
-echo "=== Pilosa Agent Sync ==="
+echo "=== Spinosa Agent Sync ==="
 echo "Source: $REPO_ROOT/.agents/agents/"
 echo ""
 
@@ -132,13 +132,13 @@ OPENCODE_EOF
     # ── Emit Claude agent ────────────────────────────────────────────
     claude_tools=""
     case "$agent" in
-        pilosa-searcher)    claude_tools="Read, Grep, Glob" ;;
-        pilosa-analyst)     claude_tools="Read" ;;
-        pilosa-writer)      claude_tools="Read, Write" ;;
-        pilosa-verifier)    claude_tools="Read, Grep, Glob, Write" ;;
-        pilosa-janitor)     claude_tools="Read, Grep, Glob, Write" ;;
-        pilosa-mapper)      claude_tools="Read, Write" ;;
-        pilosa-serendippo)  claude_tools="Read, Grep, Glob, Write" ;;
+        spinosa-searcher)    claude_tools="Read, Grep, Glob" ;;
+        spinosa-analyst)     claude_tools="Read" ;;
+        spinosa-writer)      claude_tools="Read, Write" ;;
+        spinosa-verifier)    claude_tools="Read, Grep, Glob, Write" ;;
+        spinosa-janitor)     claude_tools="Read, Grep, Glob, Write" ;;
+        spinosa-mapper)      claude_tools="Read, Write" ;;
+        spinosa-serendippo)  claude_tools="Read, Grep, Glob, Write" ;;
     esac
 
     cat > "$REPO_ROOT/.claude/agents/$agent_file" << CLAUDE_EOF

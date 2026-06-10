@@ -1,11 +1,11 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/Banner-dithered.jpg">
-    <img src="assets/Banner-dithered.jpg" alt="Pilosa Framework" width="100%">
+    <source media="(prefers-color-scheme: dark)" srcset="assets/Banner_Spinosa.png">
+    <img src="assets/Banner_Spinosa.png" alt="Spinosa Framework" width="100%">
   </picture>
 </p>
 
-# Pilosa
+# Spinosa
 
 A CLI tool that takes a folder of source files and turns it into a searchable knowledge map for multi-agent research workflows.
 
@@ -22,16 +22,16 @@ The original source folder is never modified. The workspace is self-contained. A
 ## Install
 
 ```bash
-curl -fsSL https://github.com/TommasoPrinetti/pilosa/releases/download/v0.4.13/install.sh | bash
+curl -fsSL https://github.com/TommasoPrinetti/spinosa/releases/download/v0.4.13/install.sh | bash
 ```
 
-This installs the pinned stable version (`0.4.7`) to `~/.pilosa/`. A bundled Python handles pip packages at install time. No system Python, npm, or Go required. Requires bash and internet access for first install.
+This installs the pinned stable version (`0.4.7`) to `~/.spinosa/`. A bundled Python handles pip packages at install time. No system Python, npm, or Go required. Requires bash and internet access for first install.
 
 For custom versions or options, download the script first:
 
 ```bash
-curl -fsSL https://github.com/TommasoPrinetti/pilosa/releases/download/v0.4.13/install.sh -o install-pilosa.sh
-bash install-pilosa.sh --help
+curl -fsSL https://github.com/TommasoPrinetti/spinosa/releases/download/v0.4.13/install.sh -o install-spinosa.sh
+bash install-spinosa.sh --help
 ```
 
 ## Quick start
@@ -46,7 +46,7 @@ bash install-pilosa.sh --help
 ### 1. Install
 
 ```bash
-curl -fsSL https://github.com/TommasoPrinetti/pilosa/releases/download/v0.4.13/install.sh | bash
+curl -fsSL https://github.com/TommasoPrinetti/spinosa/releases/download/v0.4.13/install.sh | bash
 ```
 
 ### 2. Create a workspace
@@ -54,7 +54,7 @@ curl -fsSL https://github.com/TommasoPrinetti/pilosa/releases/download/v0.4.13/i
 From the dashboard, select **New workspace** and provide your source folder. Or run:
 
 ```bash
-pilosa new /path/to/source/folder
+spinosa new /path/to/source/folder
 ```
 
 This runs the onboarding flow:
@@ -80,10 +80,10 @@ After startup, ask research questions normally. The router directs them to speci
 
 ## Dashboard
 
-Run `pilosa` without arguments to open the interactive dashboard:
+Run `spinosa` without arguments to open the interactive dashboard:
 
 ```bash
-pilosa
+spinosa
 ```
 
 Available options:
@@ -95,83 +95,83 @@ Available options:
 | Update workspace | Update workspace framework files |
 | Check workspace | Validate workspace integrity |
 | Sync agents | Sync agent and skill mirrors |
-| Upgrade Pilosa | Upgrade to latest release |
+| Upgrade Spinosa | Upgrade to latest release |
 | System health | Check system health and environment |
-| Uninstall | Remove Pilosa from this system |
+| Uninstall | Remove Spinosa from this system |
 | Help | Show help information |
 
 ## Commands
 
-### `pilosa new [directory]`
+### `spinosa new [directory]`
 
 Create a new workspace and run setup. If no directory is given, you are prompted for the path.
 
 ```bash
-pilosa new /path/to/source
+spinosa new /path/to/source
 ```
 
 Flags: `--gum`, `--no-gum`, `--no-color`, `--help`
 
-### `pilosa prepare [workspace]`
+### `spinosa prepare [workspace]`
 
 Set up an existing workspace.
 
 \`\`\`bash
-pilosa prepare /path/to/workspace
+spinosa prepare /path/to/workspace
 \`\`\`
 
-### `pilosa update [workspace]`
+### `spinosa update [workspace]`
 
 Update workspace framework files. Shows a plan and asks for confirmation.
 
 ```bash
-pilosa update /path/to/workspace
-pilosa update  # if inside a workspace
+spinosa update /path/to/workspace
+spinosa update  # if inside a workspace
 ```
 
 Flags: `--version X.Y.Z`, `--dry-run`, `--yes`, `--help`
 
-### `pilosa upgrade`
+### `spinosa upgrade`
 
-Upgrade the Pilosa CLI to the latest release.
+Upgrade the Spinosa CLI to the latest release.
 
 ```bash
-pilosa upgrade
-pilosa upgrade --yes
+spinosa upgrade
+spinosa upgrade --yes
 ```
 
-### `pilosa check [workspace]`
+### `spinosa check [workspace]`
 
 Validate workspace integrity. Checks required files, source location, and map coverage.
 
 ```bash
-pilosa check /path/to/workspace
-pilosa check  # if inside a workspace
+spinosa check /path/to/workspace
+spinosa check  # if inside a workspace
 ```
 
-### `pilosa sync`
+### `spinosa sync`
 
 Sync helpers from original sources.
 
 ```bash
-pilosa sync
+spinosa sync
 ```
 
-### `pilosa health`
+### `spinosa health`
 
 Check system health and environment.
 
 ```bash
-pilosa health
+spinosa health
 ```
 
-### `pilosa uninstall`
+### `spinosa uninstall`
 
-Remove Pilosa from your system. Does not affect research workspaces.
+Remove Spinosa from your system. Does not affect research workspaces.
 
 ```bash
-pilosa uninstall
-pilosa uninstall --yes
+spinosa uninstall
+spinosa uninstall --yes
 ```
 
 ## Security
@@ -187,7 +187,7 @@ pilosa uninstall --yes
 workspace/
 ├── AGENTS.md                    Orchestrator routing contract
 ├── .bin/
-│   ├── pilosa                    CLI entry point
+│   ├── spinosa                    CLI entry point
 │   └── lib/
 │       └── metrics.sh            Metric helpers
 ├── .agents/                     Canonical agent and skill source
@@ -224,8 +224,8 @@ workspace/
 ### Clone and build
 
 ```bash
-git clone https://github.com/TommasoPrinetti/pilosa.git
-cd pilosa
+git clone https://github.com/TommasoPrinetti/spinosa.git
+cd spinosa
 ```
 
 ### Branch strategy
@@ -242,7 +242,7 @@ git push -u origin my-project
 ### Sync agents
 
 ```bash
-pilosa sync
+spinosa sync
 ```
 
 ### Tests

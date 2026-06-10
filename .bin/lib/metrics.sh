@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Shared Unicode metric helpers for Pilosa reports and agent session ledgers.
+# Shared Unicode metric helpers for Spinosa reports and agent session ledgers.
 
-pilosa_bar() {
+spinosa_bar() {
   local value="${1:-0}" total="${2:-0}" width="${3:-16}"
   local filled empty
 
@@ -17,7 +17,7 @@ pilosa_bar() {
   printf '%*s' "$empty" '' | tr ' ' '░'
 }
 
-pilosa_sparkchar() {
+spinosa_sparkchar() {
   case "${1:-0}" in
     0) printf '▁' ;; 1) printf '▂' ;; 2) printf '▃' ;; 3) printf '▄' ;;
     4) printf '▅' ;; 5) printf '▆' ;; 6) printf '▇' ;; 7) printf '█' ;;
@@ -25,7 +25,7 @@ pilosa_sparkchar() {
   esac
 }
 
-pilosa_sparkline() {
+spinosa_sparkline() {
   local values=("$@")
   local min max value index first=1
 
@@ -55,14 +55,14 @@ pilosa_sparkline() {
     fi
     [[ "$index" -lt 0 ]] && index=0
     [[ "$index" -gt 7 ]] && index=7
-    pilosa_sparkchar "$index"
+    spinosa_sparkchar "$index"
   done
 }
 
-pilosa_metric_box() {
+spinosa_metric_box() {
   local title="$1"
   shift
-  local width="${PILOSA_METRIC_BOX_WIDTH:-64}"
+  local width="${SPINOSA_METRIC_BOX_WIDTH:-64}"
   local rule line
 
   rule="$(printf '%*s' "$width" '' | tr ' ' '─')"
@@ -73,50 +73,50 @@ pilosa_metric_box() {
   printf '└%s┘\n' "$rule"
 }
 
-pilosa_metrics_header() {
+spinosa_metrics_header() {
   printf 'date\tsession_id\tagent\troute\toperation\tquery_label\tdirs_seen\tmaps_read\traw_matches\traw_files_read\treports_written\toutput_path\n'
 }
 
-pilosa_session_id() {
-  if [[ -n "${PILOSA_SESSION_ID:-}" ]]; then
-    printf '%s\n' "$PILOSA_SESSION_ID"
+spinosa_session_id() {
+  if [[ -n "${SPINOSA_SESSION_ID:-}" ]]; then
+    printf '%s\n' "$SPINOSA_SESSION_ID"
   else
     date +%Y%m%d-%H%M%S
   fi
 }
 
-pilosa_tsv_field() {
+spinosa_tsv_field() {
   printf '%s' "${1:-}" | tr '\t\r\n' '   '
 }
 
-pilosa_metrics_append() {
+spinosa_metrics_append() {
   local ledger="${1:-}"
   shift || true
 
   if [[ -z "$ledger" || "$#" -ne 11 ]]; then
-    printf 'usage: pilosa_metrics_append LEDGER session_id agent route operation query_label dirs_seen maps_read raw_matches raw_files_read reports_written output_path\n' >&2
+    printf 'usage: spinosa_metrics_append LEDGER session_id agent route operation query_label dirs_seen maps_read raw_matches raw_files_read reports_written output_path\n' >&2
     return 2
   fi
 
   mkdir -p "$(dirname "$ledger")"
-  [[ -f "$ledger" ]] || pilosa_metrics_header > "$ledger"
+  [[ -f "$ledger" ]] || spinosa_metrics_header > "$ledger"
 
   {
-    pilosa_tsv_field "$(date +%Y-%m-%d)"
+    spinosa_tsv_field "$(date +%Y-%m-%d)"
     for field in "$@"; do
       printf '\t'
-      pilosa_tsv_field "$field"
+      spinosa_tsv_field "$field"
     done
     printf '\n'
   } >> "$ledger"
 }
 
-pilosa_metrics_summary() {
+spinosa_metrics_summary() {
   local ledger="${1:-logs/session_metrics.tsv}"
   local summary rows matches files reports agents
 
   if [[ ! -f "$ledger" ]]; then
-    pilosa_metric_box "Agent Metrics" "No session metrics ledger found."
+    spinosa_metric_box "Agent Metrics" "No session metrics ledger found."
     return 0
   fi
 
@@ -135,10 +135,10 @@ pilosa_metrics_summary() {
   ' "$ledger")"
 
   IFS=$'\t' read -r rows agents matches files reports <<< "$summary"
-  pilosa_metric_box "Agent Metrics" \
-    "Sessions  $(pilosa_bar "${rows:-0}" "${rows:-0}" 16)  ${rows:-0} rows" \
-    "Agents    $(pilosa_bar "${agents:-0}" "${agents:-0}" 16)  ${agents:-0} seen" \
-    "Matches   $(pilosa_bar "${matches:-0}" "${matches:-0}" 16)  ${matches:-0} raw matches" \
-    "Files     $(pilosa_bar "${files:-0}" "${files:-0}" 16)  ${files:-0} files read" \
-    "Reports   $(pilosa_bar "${reports:-0}" "${reports:-0}" 16)  ${reports:-0} reports"
+  spinosa_metric_box "Agent Metrics" \
+    "Sessions  $(spinosa_bar "${rows:-0}" "${rows:-0}" 16)  ${rows:-0} rows" \
+    "Agents    $(spinosa_bar "${agents:-0}" "${agents:-0}" 16)  ${agents:-0} seen" \
+    "Matches   $(spinosa_bar "${matches:-0}" "${matches:-0}" 16)  ${matches:-0} raw matches" \
+    "Files     $(spinosa_bar "${files:-0}" "${files:-0}" 16)  ${files:-0} files read" \
+    "Reports   $(spinosa_bar "${reports:-0}" "${reports:-0}" 16)  ${reports:-0} reports"
 }

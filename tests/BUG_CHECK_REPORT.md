@@ -1,4 +1,4 @@
-# Pilosa CLI Test Suite - Bug Check Report
+# Spinosa CLI Test Suite - Bug Check Report
 
 ## Executive Summary
 
@@ -43,7 +43,7 @@ trap cleanup_on_exit EXIT INT TERM
 ### 4. Slow Workspace Discovery (Performance)
 **Location:** `discover_workspaces_with_permission()`  
 **Symptom:** Takes 5-10 seconds to find workspaces  
-**Fix:** Implemented persistent registry at `~/.pilosa/workspaces.txt`:
+**Fix:** Implemented persistent registry at `~/.spinosa/workspaces.txt`:
 - Instant lookup (< 50ms vs 5000ms scan)
 - Auto-updated when workspaces are created
 - Manual refresh option in dashboard
@@ -134,7 +134,7 @@ Success: 100%
 ## Files Modified
 
 ### Core Fixes
-- `.bin/pilosa` - Main CLI script (6 bug fixes)
+- `.bin/spinosa` - Main CLI script (6 bug fixes)
 - `install.sh` - Version bump to 0.3.0
 
 ### Test Suite

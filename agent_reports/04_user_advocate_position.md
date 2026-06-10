@@ -41,7 +41,7 @@
 ### OK / SUCCESS MESSAGES
 | String | Verdict | Why |
 |--------|---------|-----|
-| `System health check passed` | **confusing** | Vague. Passed *what*? What was checked? The `pilosa health` description at least lists items, but the success message does not. |
+| `System health check passed` | **confusing** | Vague. Passed *what*? What was checked? The `spinosa health` description at least lists items, but the success message does not. |
 | `Check passed.` | **confusing** | What passed? User might think the *workspace* passed, but maybe it was something else. |
 | `N workspace(s) discovered` | **confusing** | Where? How? Should say where they were found. |
 | `Sync complete — N agents, skills mirrored to 3 platforms.` | **confusing** | "Mirrored to 3 platforms" — user doesn't know they have 3 sets of agent files. |
@@ -59,8 +59,8 @@
 ### ERRORS
 | String | Verdict | Why |
 |--------|---------|-----|
-| `Framework not found. Is Pilosa installed?` | **clear** | Problem + possible cause. |
-| `Not a valid Pilosa workspace: <path>` | **clear** | Tells user the path is wrong. |
+| `Framework not found. Is spinosa installed?` | **clear** | Problem + possible cause. |
+| `Not a valid spinosa workspace: <path>` | **clear** | Tells user the path is wrong. |
 | `Cannot read from terminal. Use --yes to skip prompts.` | **clear** | Problem + solution. This is the gold standard for error messages. |
 | `Release manifest missing from archive` | **confusing** | "Manifest" is internal. User doesn't know what a release manifest is. |
 
@@ -68,18 +68,18 @@
 | String | Verdict | Why |
 |--------|---------|-----|
 | `Running smoke test...` | **confusing** | Same issue as info messages. |
-| `Created shim: <path>` | **blocking** | "Shim" is opaque. Say "Created launcher script" or "Added pilosa command". |
+| `Created shim: <path>` | **blocking** | "Shim" is opaque. Say "Created launcher script" or "Added spinosa command". |
 | `Smoke test passed` | **confusing** | What passed? What was tested? |
-| `Smoke test failed — pilosa may need PATH update` | **confusing** | "Smoke test" + "PATH" — two technical terms. User may not know PATH is the shell's lookup list. |
-| `Pilosa installed successfully!` | **clear** | Strong, positive, unambiguous. |
-| `Added <path> to <file>` | **confusing** | Added *what* to *what*? User sees a path and a filename. Say "Added pilosa to your PATH in <file>". |
+| `Smoke test failed — spinosa may need PATH update` | **confusing** | "Smoke test" + "PATH" — two technical terms. User may not know PATH is the shell's lookup list. |
+| `spinosa installed successfully!` | **clear** | Strong, positive, unambiguous. |
+| `Added <path> to <file>` | **confusing** | Added *what* to *what*? User sees a path and a filename. Say "Added spinosa to your PATH in <file>". |
 
 ### CONFIRMATIONS
 | String | Verdict | Why |
 |--------|---------|-----|
-| `Remove Pilosa from this system?` | **clear** | Direct, understandable. |
+| `Remove spinosa from this system?` | **clear** | Direct, understandable. |
 | `Apply sync? (deletes and regenerates vendor agent files)` | **confusing** | "Vendor agent files" — what are those? |
-| `Search your home directory for existing Pilosa workspaces?` | **clear** | Good — explains scope. |
+| `Search your home directory for existing spinosa workspaces?` | **clear** | Good — explains scope. |
 | `Nothing leaves your computer — no data is uploaded, stored, or shared.` | **clear** | Excellent reassurance. |
 
 ---
@@ -90,7 +90,7 @@ Ranked by impact (1 = most confusing):
 
 1. **"Shim"** — Appears in installer output (`Created shim:`). Zero-meaning to anyone outside systems programming. They will google it, find hardware shims, and be more confused.
 
-2. **"Agent mirrors" / "Canonical sources"** — The `pilosa sync` command is the most jargon-dense string in the entire CLI. Three completely opaque concepts chained together.
+2. **"Agent mirrors" / "Canonical sources"** — The `spinosa sync` command is the most jargon-dense string in the entire CLI. Three completely opaque concepts chained together.
 
 3. **"LLM CLI"** — This appears in the prompt `Preferred LLM CLI`. A researcher who is not a developer will not know:
    - What LLM stands for (assumes knowledge)
@@ -108,7 +108,7 @@ Ranked by impact (1 = most confusing):
 
 8. **"Corpus"** — "Corpus folder". This is academic, but not universal across research fields. A historian might say "archives", a journalist says "sources", a scientist says "data".
 
-9. **"Onboarding"** — Used as a command name (`pilosa onboard`, `Run onboarding`). HR term. The actual action is "preparing your workspace" or "setting up your research folder". The disconnect causes hesitation.
+9. **"Onboarding"** — Used as a command name (`spinosa onboard`, `Run onboarding`). HR term. The actual action is "preparing your workspace" or "setting up your research folder". The disconnect causes hesitation.
 
 10. **"Gum"** — `--gum` / `--no-gum`. An opaque flag name referencing a third-party library. User has no way to guess what it means. Even the help text doesn't explain it (just says "Use interactive Gum prompts" — which assumes they know Gum).
 
@@ -128,7 +128,7 @@ Ranked by impact (1 = most confusing):
 | `Validate workspace integrity and configuration` | `Check that your workspace structure is complete and working` | Action-oriented, no jargon |
 | `Sync agent and skill mirrors from canonical sources` | `Update agent files for your AI tools from the master copies` | "Master copies" vs "canonical", "AI tools" vs "agents" |
 | `Run onboarding on an existing workspace` | `Prepare an existing workspace for research` | "Prepare" is a real action; "onboarding" is corporate jargon |
-| `Reports framework installation status...` | unclear | Break into: "Check that Pilosa is installed, find your workspaces, and detect available AI assistants" |
+| `Reports framework installation status...` | unclear | Break into: "Check that spinosa is installed, find your workspaces, and detect available AI assistants" |
 | `--gum  Use interactive Gum prompts` | `--gum  Use arrow-key menus (requires Gum)` | And change flag to something else eventually |
 
 ### PROMPTS
@@ -170,11 +170,11 @@ Ranked by impact (1 = most confusing):
 
 | Current | Replacement | Rationale |
 |---------|-------------|-----------|
-| `Running smoke test...` | `Verifying pilosa works...` | Explains what is being tested |
-| `Created shim: <path>` | `Added pilosa command to: <path>` | "Shim" → "command" |
-| `Smoke test passed` | `pilosa works correctly.` | Action confirmed in plain terms |
-| `Smoke test failed — pilosa may need PATH update` | `The 'pilosa' command didn't work yet. Adding it to your PATH should fix this.` | "PATH" is still techy but at least it says *what* is happening |
-| `Added <path> to <file>` | `Updated PATH in <file>` | Or "Added pilosa to your PATH in <file>" |
+| `Running smoke test...` | `Verifying spinosa works...` | Explains what is being tested |
+| `Created shim: <path>` | `Added spinosa command to: <path>` | "Shim" → "command" |
+| `Smoke test passed` | `spinosa works correctly.` | Action confirmed in plain terms |
+| `Smoke test failed — spinosa may need PATH update` | `The 'spinosa' command didn't work yet. Adding it to your PATH should fix this.` | "PATH" is still techy but at least it says *what* is happening |
+| `Added <path> to <file>` | `Updated PATH in <file>` | Or "Added spinosa to your PATH in <file>" |
 
 ### CONFIRMATIONS
 

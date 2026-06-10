@@ -23,7 +23,7 @@ Append-only request trail and compact operation memory for user prompts, source 
 - **Sub-agents** may append compact count/path rows to `session_metrics.tsv`.
 - **Sub-agents** return proposed `user_requests.md` summaries to the orchestrator when traceability is needed.
 - **Source intake and external access routes** must include authorization/status details in the proposed log summary.
-- `pilosa-janitor`, `pilosa-searcher`, `pilosa-verifier`, `pilosa-mapper`, and `pilosa-serendippo` may append only to `session_metrics.tsv`; they never edit `user_requests.md`.
+- `spinosa-janitor`, `spinosa-searcher`, `spinosa-verifier`, `spinosa-mapper`, and `spinosa-serendippo` may append only to `session_metrics.tsv`; they never edit `user_requests.md`.
 
 ## Operations
 

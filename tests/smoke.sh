@@ -2,16 +2,17 @@
 set -euo pipefail
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Pilosa Smoke Tests
+# Spinosa Smoke Tests
 # ═══════════════════════════════════════════════════════════════════════════
 # Plain bash — zero dependencies. Run with: bash tests/smoke.sh
 #
 # Tests:
 #   1. Syntax checks on all shell scripts
-#   2. pilosa help outputs expected commands
-#   3. pilosa check on a minimal workspace
-#   4. pilosa sync in dev mode
-#   5. pilosa uninstall --yes on a temp install
+#   2. spinosa help outputs expected commands
+#   3. spinosa check on a minimal workspace
+#   4. spinosa sync in dev mode
+#   5. spinosa uninstall --yes on a temp install
+#   6. (numbered test ordering continued below)
 # ═══════════════════════════════════════════════════════════════════════════
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -28,7 +29,7 @@ trap cleanup EXIT
 # ── Test 1: Syntax checks ───────────────────────────────────────────────────
 echo "Test 1: Syntax checks"
 for script in \
-  "$REPO_ROOT/.bin/pilosa" \
+  "$REPO_ROOT/.bin/spinosa" \
   "$REPO_ROOT/install.sh" \
   "$REPO_ROOT/.bin/package-release.sh" \
   "$REPO_ROOT/.bin/check-startup.sh" \
@@ -42,31 +43,31 @@ for script in \
   fi
 done
 
-# ── Test 2: pilosa help ─────────────────────────────────────────────────────
+# ── Test 2: spinosa help ─────────────────────────────────────────────────────
 echo ""
-echo "Test 2: pilosa help"
-HELP_OUTPUT="$($REPO_ROOT/.bin/pilosa help 2>/dev/null || true)"
+echo "Test 2: spinosa help"
+HELP_OUTPUT="$($REPO_ROOT/.bin/spinosa help 2>/dev/null || true)"
 for cmd in new prepare update upgrade check sync uninstall; do
-  if echo "$HELP_OUTPUT" | grep -q "pilosa $cmd"; then
-    pass "help mentions 'pilosa $cmd'"
+  if echo "$HELP_OUTPUT" | grep -q "spinosa $cmd"; then
+    pass "help mentions 'spinosa $cmd'"
   else
-    fail "help missing 'pilosa $cmd'"
+    fail "help missing 'spinosa $cmd'"
   fi
 done
-NEW_HELP_OUTPUT="$($REPO_ROOT/.bin/pilosa new --help 2>/dev/null || true)"
+NEW_HELP_OUTPUT="$($REPO_ROOT/.bin/spinosa new --help 2>/dev/null || true)"
 if echo "$NEW_HELP_OUTPUT" | grep -q -- "--gum" && ! echo "$NEW_HELP_OUTPUT" | grep -qi "default, if installed"; then
   pass "new help documents Gum as opt-in"
 else
   fail "new help still suggests Gum is default"
 fi
 
-# ── Test 3: pilosa check on minimal workspace ───────────────────────────────
+# ── Test 3: spinosa check on minimal workspace ───────────────────────────────
 echo ""
-echo "Test 3: pilosa check on minimal workspace"
+echo "Test 3: spinosa check on minimal workspace"
 
-# Create a minimal workspace manually (simulating what pilosa new would do)
+# Create a minimal workspace manually (simulating what spinosa new would do)
 WS_DIR="$TMPDIR/test-workspace"
-mkdir -p "$WS_DIR/.pilosa"
+mkdir -p "$WS_DIR/.spinosa"
 mkdir -p "$WS_DIR/system"
 mkdir -p "$WS_DIR/raw"
 mkdir -p "$WS_DIR/maps"
@@ -115,7 +116,7 @@ type: template
 # Template
 EOF
 
-cat > "$WS_DIR/.pilosa/workspace" << 'EOF'
+cat > "$WS_DIR/.spinosa/workspace" << 'EOF'
 workspace_version: 1
 framework_version: 0.1.0
 created: 2026-01-01
@@ -123,7 +124,7 @@ project_name: Test Project
 setup_status: workspace_started
 EOF
 
-cp "$REPO_ROOT/.pilosa/framework-files.tsv" "$WS_DIR/.pilosa/framework-files.tsv"
+cp "$REPO_ROOT/.spinosa/framework-files.tsv" "$WS_DIR/.spinosa/framework-files.tsv"
 
 # Write an overview map at maps/ root
 mkdir -p "$WS_DIR/maps/overview"
@@ -162,166 +163,200 @@ cat > "$WS_DIR/.obsidian/appearance.json" << 'EOF'
 EOF
 
 # Run check
-CHECK_OUTPUT="$($REPO_ROOT/.bin/pilosa check "$WS_DIR" 2>/dev/null || true)"
+CHECK_OUTPUT="$($REPO_ROOT/.bin/spinosa check "$WS_DIR" 2>/dev/null || true)"
 if echo "$CHECK_OUTPUT" | grep -q "Check passed"; then
-  pass "pilosa check passed on minimal workspace"
+  pass "spinosa check passed on minimal workspace"
 else
-  fail "pilosa check failed on minimal workspace"
+  fail "spinosa check failed on minimal workspace"
   echo "    Output: $CHECK_OUTPUT" | head -5
 fi
 
-# ── Test 4: pilosa sync (dev mode) ──────────────────────────────────────────
+# ── Test 4: spinosa sync (dev mode) ──────────────────────────────────────────
 echo ""
-echo "Test 4: pilosa sync (dev mode)"
-# pilosa sync requires FRAMEWORK_ROOT to resolve; in dev mode it looks for .pilosa/framework-files.tsv
-SYNC_OUTPUT="$($REPO_ROOT/.bin/pilosa sync 2>/dev/null || true)"
+echo "Test 4: spinosa sync (dev mode)"
+# spinosa sync requires FRAMEWORK_ROOT to resolve; in dev mode it looks for .spinosa/framework-files.tsv
+SYNC_OUTPUT="$($REPO_ROOT/.bin/spinosa sync 2>/dev/null || true)"
 if echo "$SYNC_OUTPUT" | grep -q "Sync complete"; then
-  pass "pilosa sync completed in dev mode"
+  pass "spinosa sync completed in dev mode"
 else
   # sync may fail for other reasons (missing tools), but let's see
-  if echo "$SYNC_OUTPUT" | grep -q "pilosa sync"; then
-    pass "pilosa sync ran in dev mode"
+  if echo "$SYNC_OUTPUT" | grep -q "spinosa sync"; then
+    pass "spinosa sync ran in dev mode"
   else
-    fail "pilosa sync failed in dev mode"
+    fail "spinosa sync failed in dev mode"
     echo "    Output: $SYNC_OUTPUT" | head -5
   fi
 fi
 
-# ── Test 5: pilosa uninstall --yes on temp install ──────────────────────────
+# ── Test 5: spinosa uninstall --yes on temp install ──────────────────────────
 echo ""
-echo "Test 5: pilosa uninstall --yes"
+echo "Test 5: spinosa uninstall --yes"
 FAKE_HOME="$TMPDIR/fake-home"
-mkdir -p "$FAKE_HOME/.pilosa/bin"
+mkdir -p "$FAKE_HOME/.spinosa/bin"
 mkdir -p "$FAKE_HOME/.local/bin"
-cp "$REPO_ROOT/.bin/pilosa" "$FAKE_HOME/.pilosa/bin/pilosa"
-cat > "$FAKE_HOME/.local/bin/pilosa" << 'EOF'
+cp "$REPO_ROOT/.bin/spinosa" "$FAKE_HOME/.spinosa/bin/spinosa"
+cat > "$FAKE_HOME/.local/bin/spinosa" << 'EOF'
 #!/bin/sh
-exec "$HOME/.pilosa/bin/pilosa" "$@"
+exec "$HOME/.spinosa/bin/spinosa" "$@"
 EOF
-chmod +x "$FAKE_HOME/.local/bin/pilosa"
+chmod +x "$FAKE_HOME/.local/bin/spinosa"
 
-UNINSTALL_OUTPUT="$(HOME="$FAKE_HOME" PILOSA_HOME="$FAKE_HOME/.pilosa" PILOSA_BIN_DIR="$FAKE_HOME/.local/bin" "$REPO_ROOT/.bin/pilosa" uninstall --yes 2>/dev/null || true)"
-if [[ ! -d "$FAKE_HOME/.pilosa" ]] && [[ ! -f "$FAKE_HOME/.local/bin/pilosa" ]]; then
-  pass "pilosa uninstall removed files"
+UNINSTALL_OUTPUT="$(HOME="$FAKE_HOME" SPINOSA_HOME="$FAKE_HOME/.spinosa" SPINOSA_BIN_DIR="$FAKE_HOME/.local/bin" "$REPO_ROOT/.bin/spinosa" uninstall --yes 2>/dev/null || true)"
+if [[ ! -d "$FAKE_HOME/.spinosa" ]] && [[ ! -f "$FAKE_HOME/.local/bin/spinosa" ]]; then
+  pass "spinosa uninstall removed files"
 else
-  fail "pilosa uninstall did not remove files"
+  fail "spinosa uninstall did not remove files"
 fi
 
 
 
-# ── Test 7: pilosa new uses plain prompts by default ────────────────────────
+# ── Test 7: spinosa new flag-based pipeline (single extension) ─────────────
 echo ""
-echo "Test 7: pilosa new plain prompt default"
-FAKE_BIN="$TMPDIR/fake-bin"
-mkdir -p "$FAKE_BIN"
-# No pdftotext mock needed — RapidOCR OCR handles PDFs when bundled
-
-FAKE_GUM_MARKER="$TMPDIR/fake-gum-used"
-FAKE_PILOSA_HOME="$TMPDIR/fake-pilosa-home"
-mkdir -p "$FAKE_PILOSA_HOME/bin"
-cat > "$FAKE_BIN/gum" << EOF
-#!/bin/sh
-if [ "\$1" = "--version" ]; then
-  echo "fake gum"
-  exit 0
-fi
-touch "$FAKE_GUM_MARKER"
-exit 9
-EOF
-chmod +x "$FAKE_BIN/gum"
-cp "$FAKE_BIN/gum" "$FAKE_PILOSA_HOME/bin/gum"
-
-NEW_CORPUS="$TMPDIR/new-corpus"
-mkdir -p "$NEW_CORPUS"
-cat > "$NEW_CORPUS/note.txt" << 'EOF'
+echo "Test 7: spinosa new flag-based pipeline (txt only)"
+T7_CORPUS="$TMPDIR/t7-corpus"
+mkdir -p "$T7_CORPUS"
+cat > "$T7_CORPUS/note.txt" << 'EOF'
 temporary source note
 EOF
-cat > "$NEW_CORPUS/paper.pdf" << 'EOF'
+cat > "$T7_CORPUS/paper.pdf" << 'EOF'
 fake pdf bytes
 EOF
 
-NEW_OUTPUT="$(printf '\nn\n4\n1\n3\n1\n' | PILOSA_HOME="$FAKE_PILOSA_HOME" PATH="$FAKE_BIN:$PATH" "$REPO_ROOT/.bin/pilosa" new "$NEW_CORPUS" --numbered --no-color 2>&1 || true)"
-NEW_WS="$TMPDIR/new-corpus-pilosa"
-# RapidOCR OCR not bundled: .txt imported, .pdf skipped with OCR notice
-if [[ -f "$NEW_WS/.pilosa/workspace" ]] && [[ -f "$NEW_WS/raw/note__txt.md" ]] && [[ ! -f "$NEW_WS/raw/paper.md" ]] && [[ ! -f "$NEW_WS/raw/paper.pdf" ]] && [[ -f "$NEW_WS/.pilosa/onboarding-summary.md" ]] && [[ ! -f "$FAKE_GUM_MARKER" ]] && echo "$NEW_OUTPUT" | grep -q "● All supported files" && echo "$NEW_OUTPUT" | grep -q "● \.pdf" && echo "$NEW_OUTPUT" | grep -q "Import these files into the workspace" && echo "$NEW_OUTPUT" | grep -q "prepare a working copy for analysis" && echo "$NEW_OUTPUT" | grep -q "Ready to import 1 files into the workspace" && ! echo "$NEW_OUTPUT" | grep -q "Copy into raw/" && grep -q "Selected extension batches: \.txt" "$NEW_WS/.pilosa/onboarding-summary.md" && grep -q "Files imported into workspace: 1" "$NEW_WS/.pilosa/onboarding-summary.md" && grep -q "PDF and image available for OCR: 1" "$NEW_WS/.pilosa/onboarding-summary.md"; then
-  pass "pilosa new completed without implicit Gum, classified PDF as OCR-convertible, and wrote onboarding summary"
+T7_OUTPUT="$("$REPO_ROOT/.bin/spinosa" new "$T7_CORPUS" --numbered --no-color \
+  --project-name Test --extensions txt --cli opencode --launch copy 2>&1 || true)"
+T7_WS="$TMPDIR/t7-corpus-spinosa"
+
+if [[ -f "$T7_WS/.spinosa/workspace" ]] && [[ -f "$T7_WS/raw/note__txt.md" ]] && \
+   [[ ! -f "$T7_WS/raw/paper.md" ]] && [[ -f "$T7_WS/.spinosa/onboarding-summary.md" ]] && \
+   grep -q "Selected extension batches: \.txt" "$T7_WS/.spinosa/onboarding-summary.md" && \
+   grep -q "Files imported into workspace: 1" "$T7_WS/.spinosa/onboarding-summary.md" && \
+   grep -q "Scanned PDFs and images available for OCR: 1" "$T7_WS/.spinosa/onboarding-summary.md"; then
+  pass "spinosa new flag-based pipeline imports txt, skips pdf, writes summary"
 else
-  fail "pilosa new plain default failed"
-  echo "    Output: $NEW_OUTPUT" | head -20
+  fail "spinosa new flag-based pipeline failed"
+  echo "    Output: $T7_OUTPUT" | head -10
 fi
 
-# ── Test 8: pilosa new can rescan another source before copy ─────────────────
+# ── Test 8: spinosa new multi-extension import ────────────────────────────
 echo ""
-echo "Test 8: pilosa new rescan source choice"
-ALT_SOURCE_A="$TMPDIR/alt-source-a"
-ALT_SOURCE_B="$TMPDIR/alt-source-b"
-mkdir -p "$ALT_SOURCE_A" "$ALT_SOURCE_B"
-cat > "$ALT_SOURCE_A/first.txt" << 'EOF'
-first source
+echo "Test 8: spinosa new multi-extension flag parsing"
+T8_CORPUS="$TMPDIR/t8-corpus"
+mkdir -p "$T8_CORPUS"
+cat > "$T8_CORPUS/note.txt" << 'EOF'
+text source with pdf companion
 EOF
-cat > "$ALT_SOURCE_B/second.txt" << 'EOF'
-second source
+cat > "$T8_CORPUS/paper.pdf" << 'EOF'
+pdf companion
 EOF
 
-ALT_OUTPUT="$(printf '\nn\n3\n2\n%s\n3\n1\n3\n1\n' "$ALT_SOURCE_B" | PILOSA_HOME="$FAKE_PILOSA_HOME" PATH="$FAKE_BIN:$PATH" "$REPO_ROOT/.bin/pilosa" new "$ALT_SOURCE_A" --numbered --no-color 2>&1 || true)"
-ALT_WS="$TMPDIR/alt-source-a-pilosa"
-if [[ -f "$ALT_WS/raw/second__txt.md" ]] && [[ ! -f "$ALT_WS/raw/first__txt.md" ]] && grep -q "Source location: $ALT_SOURCE_B" "$ALT_WS/.pilosa/onboarding-summary.md" && grep -q "Files imported into workspace: 1" "$ALT_WS/.pilosa/onboarding-summary.md"; then
-  pass "pilosa new can switch source folders after scan and writes the chosen source to summary"
+T8_OUTPUT="$("$REPO_ROOT/.bin/spinosa" new "$T8_CORPUS" --numbered --no-color \
+  --project-name Test --extensions txt,pdf --cli opencode --launch copy 2>&1 || true)"
+T8_WS="$TMPDIR/t8-corpus-spinosa"
+
+if [[ -f "$T8_WS/raw/note__txt.md" ]] && [[ ! -f "$T8_WS/raw/paper.md" ]] && \
+   grep -q "Selected extension batches: \.txt, \.pdf" "$T8_WS/.spinosa/onboarding-summary.md"; then
+  pass "spinosa new parses --extensions txt,pdf, imports txt, skips pdf"
 else
-  fail "pilosa new rescan source choice failed"
-  echo "    Output: $ALT_OUTPUT" | head -10
+  fail "spinosa new multi-extension flag parsing failed"
+  echo "    Output: $T8_OUTPUT" | head -15
 fi
 
-# ── Test 9: pilosa new can import only chosen extension batches ─────────────
+# ── Test 9: spinosa new PDF skip when OCR not bundled ──────────────────────
 echo ""
-echo "Test 9: pilosa new extension batch filtering"
-FILTER_CORPUS="$TMPDIR/filter-corpus"
-mkdir -p "$FILTER_CORPUS"
-cat > "$FILTER_CORPUS/note.txt" << 'EOF'
-text source note
+echo "Test 9: spinosa new PDF skip (no OCR)"
+T9_CORPUS="$TMPDIR/t9-corpus"
+mkdir -p "$T9_CORPUS"
+cat > "$T9_CORPUS/note.txt" << 'EOF'
+text source
 EOF
-cat > "$FILTER_CORPUS/table.csv" << 'EOF'
-col
-row
-EOF
-cat > "$FILTER_CORPUS/paper.pdf" << 'EOF'
+cat > "$T9_CORPUS/paper.pdf" << 'EOF'
 fake pdf bytes
 EOF
 
-FILTER_OUTPUT="$(printf '\nn\n1\n4\n5\n1\n3\n1\n' | PILOSA_HOME="$FAKE_PILOSA_HOME" PATH="$FAKE_BIN:$PATH" "$REPO_ROOT/.bin/pilosa" new "$FILTER_CORPUS" --numbered --no-color 2>&1 || true)"
-FILTER_WS="$TMPDIR/filter-corpus-pilosa"
-# .txt imported, .csv native-copied, .pdf skipped (OCR not bundled)
-if [[ -f "$FILTER_WS/raw/note__txt.md" ]] && [[ -f "$FILTER_WS/raw/table.csv" ]] && [[ ! -f "$FILTER_WS/raw/paper.md" ]] && grep -q "Selected extension batches: \.txt, \.csv" "$FILTER_WS/.pilosa/onboarding-summary.md" && grep -q "PDF and image available for OCR: 1" "$FILTER_WS/.pilosa/onboarding-summary.md"; then
-  pass "pilosa new imports only the selected extension batches and tracks OCR files separately"
+T9_OUTPUT="$("$REPO_ROOT/.bin/spinosa" new "$T9_CORPUS" --numbered --no-color \
+  --project-name Test --extensions txt,pdf --cli opencode --launch copy 2>&1 || true)"
+T9_WS="$TMPDIR/t9-corpus-spinosa"
+
+if [[ -f "$T9_WS/raw/note__txt.md" ]] && [[ ! -f "$T9_WS/raw/paper.md" ]] && \
+   echo "$T9_OUTPUT" | grep -q "RapidOCR not available" && \
+   grep -q "OCR mode: rapidocr_not_bundled" "$T9_WS/.spinosa/onboarding-summary.md"; then
+  pass "spinosa new skips PDF when RapidOCR not available"
 else
-  fail "pilosa new extension batch filtering failed"
-  echo "    Output: $FILTER_OUTPUT" | head -10
+  fail "spinosa new PDF skip failed"
+  echo "    Output: $T9_OUTPUT" | head -15
 fi
 
-# ── Test 10: pilosa new gracefully skips PDFs when RapidOCR OCR not bundled ─
+# ── Test 10: spinosa new custom project name ──────────────────────────────
 echo ""
-echo "Test 10: pilosa new RapidOCR OCR not bundled"
-FAIL_CORPUS="$TMPDIR/fail-corpus"
-mkdir -p "$FAIL_CORPUS"
-cat > "$FAIL_CORPUS/note.txt" << 'EOF'
-fallback source note
-EOF
-cat > "$FAIL_CORPUS/paper.pdf" << 'EOF'
-broken pdf bytes
+echo "Test 10: spinosa new custom project name"
+T10_CORPUS="$TMPDIR/t10-corpus"
+mkdir -p "$T10_CORPUS"
+cat > "$T10_CORPUS/note.txt" << 'EOF'
+project name test
 EOF
 
-FAIL_OUTPUT="$(printf '\nn\n4\n1\n3\n1\n' | PILOSA_HOME="$FAKE_PILOSA_HOME" PATH="$FAKE_BIN:$PATH" "$REPO_ROOT/.bin/pilosa" new "$FAIL_CORPUS" --numbered --no-color 2>&1 || true)"
-FAIL_WS="$TMPDIR/fail-corpus-pilosa"
-if [[ -f "$FAIL_WS/raw/note__txt.md" ]] && [[ ! -f "$FAIL_WS/raw/paper.md" ]] && echo "$FAIL_OUTPUT" | grep -q "RapidOCR OCR not available" && grep -q "PDF and image available for OCR: 1" "$FAIL_WS/.pilosa/onboarding-summary.md" && grep -q "OCR mode: rapidocr_not_bundled" "$FAIL_WS/.pilosa/onboarding-summary.md"; then
-  pass "pilosa new skips PDFs cleanly when RapidOCR OCR is not bundled"
+T10_OUTPUT="$("$REPO_ROOT/.bin/spinosa" new "$T10_CORPUS" --numbered --no-color \
+  --project-name "My Research Project" --extensions txt --cli opencode --launch copy 2>&1 || true)"
+T10_WS="$TMPDIR/t10-corpus-spinosa"
+
+if grep -q "project_name: My Research Project" "$T10_WS/.spinosa/workspace" 2>/dev/null; then
+  pass "spinosa new uses --project-name as workspace project name"
 else
-  fail "pilosa new RapidOCR OCR not bundled handling failed"
-  echo "    Output: $FAIL_OUTPUT" | head -10
+  fail "spinosa new custom project name failed"
+  echo "    Output: $T10_OUTPUT" | head -10
 fi
 
-# ── Test 11: install.sh version pinning ──────────────────────────────────────
+# ── Test 11: spinosa new records OpenCode in summary ──────────────────────
 echo ""
-echo "Test 11: install.sh version pinning"
+echo "Test 11: spinosa new OpenCode CLI selection"
+T11_CORPUS="$TMPDIR/t11-corpus"
+mkdir -p "$T11_CORPUS"
+cat > "$T11_CORPUS/note.txt" << 'EOF'
+cli selection test
+EOF
+
+T11_OUTPUT="$("$REPO_ROOT/.bin/spinosa" new "$T11_CORPUS" --numbered --no-color \
+  --project-name Test --extensions txt --cli opencode --launch copy 2>&1 || true)"
+T11_WS="$TMPDIR/t11-corpus-spinosa"
+
+if grep -q "Preferred CLI:.*OpenCode" "$T11_WS/.spinosa/onboarding-summary.md" 2>/dev/null || \
+   grep -q "OpenCode" "$T11_WS/.spinosa/onboarding-summary.md" 2>/dev/null; then
+  pass "spinosa new records OpenCode as preferred CLI"
+else
+  fail "spinosa new OpenCode selection not recorded"
+fi
+
+# ── Test 12: spinosa new filtered import excludes unrequested types ───────
+echo ""
+echo "Test 12: spinosa new filtered import (only txt, not csv or json)"
+T12_CORPUS="$TMPDIR/t12-corpus"
+mkdir -p "$T12_CORPUS"
+cat > "$T12_CORPUS/note.txt" << 'EOF'
+txt only
+EOF
+cat > "$T12_CORPUS/table.csv" << 'EOF'
+col,row
+EOF
+cat > "$T12_CORPUS/data.json" << 'EOF'
+{"k": "v"}
+EOF
+
+T12_OUTPUT="$("$REPO_ROOT/.bin/spinosa" new "$T12_CORPUS" --numbered --no-color \
+  --project-name Test --extensions txt --cli opencode --launch copy 2>&1 || true)"
+T12_WS="$TMPDIR/t12-corpus-spinosa"
+
+if [[ -f "$T12_WS/raw/note__txt.md" ]] && [[ ! -f "$T12_WS/raw/table.csv" ]] && \
+   [[ ! -f "$T12_WS/raw/data.json.md" ]] && \
+   grep -q "Selected extension batches: \.txt" "$T12_WS/.spinosa/onboarding-summary.md"; then
+  pass "spinosa new imports only .txt, excludes .csv and .json"
+else
+  fail "spinosa new filtered import failed"
+  echo "    Output: $T12_OUTPUT" | head -10
+fi
+
+# ── Test 13: install.sh version pinning ──────────────────────────────────────
+echo ""
+echo "Test 13: install.sh version pinning"
 HELP_OUTPUT="$(bash "$REPO_ROOT/install.sh" --help 2>/dev/null || true)"
 PINNED="$(grep 'PINNED_VERSION=' "$REPO_ROOT/install.sh" | head -1 | sed 's/.*PINNED_VERSION="\([^"]*\)".*/\1/')"
 if [[ -n "$PINNED" ]] && echo "$HELP_OUTPUT" | grep -q "default: ${PINNED}"; then
@@ -332,7 +367,7 @@ fi
 
 # ── Test 12: install.sh --upgrade and --reinstall flags ──────────────────────
 echo ""
-echo "Test 12: install.sh --upgrade and --reinstall flags"
+echo "Test 14: install.sh --upgrade and --reinstall flags"
 HELP_OUTPUT="$(bash "$REPO_ROOT/install.sh" --help 2>/dev/null || true)"
 if echo "$HELP_OUTPUT" | grep -q "\-\-upgrade"; then
   pass "install.sh has --upgrade flag"
@@ -345,9 +380,9 @@ else
   fail "install.sh missing --reinstall flag"
 fi
 
-# ── Test 13: install.sh --min-days on old release ─────────────────────────
+# ── Test 15: install.sh --min-days on old release ─────────────────────────
 echo ""
-echo "Test 13: install.sh --min-days on old release"
+echo "Test 15: install.sh --min-days on old release"
 # Mock the GitHub release API so this stays deterministic offline.
 MIN_DAYS_BIN="$TMPDIR/min-days-bin"
 mkdir -p "$MIN_DAYS_BIN"
@@ -365,15 +400,15 @@ else
   echo "    Output: $MIN_DAYS_OUTPUT" | head -3
 fi
 
-# ── Test 14: install.sh --verify-only ───────────────────────────────────────
+# ── Test 16: install.sh --verify-only ───────────────────────────────────────
 echo ""
-echo "Test 14: install.sh --verify-only"
+echo "Test 16: install.sh --verify-only"
 FAKE_INSTALL="$TMPDIR/fake-verify"
-mkdir -p "$FAKE_INSTALL/.pilosa/versions/0.1.0/pilosa-framework-0.1.0/metadata"
-mkdir -p "$FAKE_INSTALL/.pilosa/versions/0.1.0/pilosa-framework-0.1.0/.bin/lib/vendor"
+mkdir -p "$FAKE_INSTALL/.spinosa/versions/0.1.0/spinosa-framework-0.1.0/metadata"
+mkdir -p "$FAKE_INSTALL/.spinosa/versions/0.1.0/spinosa-framework-0.1.0/.bin/lib/vendor"
 
 # Create a fake binary and its checksum
-FAKE_GUM="$FAKE_INSTALL/.pilosa/versions/0.1.0/pilosa-framework-0.1.0/.bin/lib/vendor/gum-darwin-arm64"
+FAKE_GUM="$FAKE_INSTALL/.spinosa/versions/0.1.0/spinosa-framework-0.1.0/.bin/lib/vendor/gum-darwin-arm64"
 cat > "$FAKE_GUM" << 'EOF'
 #!/bin/sh
 echo "fake gum"
@@ -382,13 +417,13 @@ chmod +x "$FAKE_GUM"
 
 # Compute checksum and write manifest (3-field format: hash name suffix)
 GUM_HASH="$(sha256sum "$FAKE_GUM" 2>/dev/null | awk '{print $1}' || shasum -a 256 "$FAKE_GUM" 2>/dev/null | awk '{print $1}')"
-printf '%s  %s  %s\n' "$GUM_HASH" "gum" "darwin-arm64" > "$FAKE_INSTALL/.pilosa/versions/0.1.0/pilosa-framework-0.1.0/metadata/vendor-checksums.txt"
+printf '%s  %s  %s\n' "$GUM_HASH" "gum" "darwin-arm64" > "$FAKE_INSTALL/.spinosa/versions/0.1.0/spinosa-framework-0.1.0/metadata/vendor-checksums.txt"
 
 # Also install the binary in the expected location (renamed to base name)
-mkdir -p "$FAKE_INSTALL/.pilosa/bin"
-cp "$FAKE_GUM" "$FAKE_INSTALL/.pilosa/bin/gum"
+mkdir -p "$FAKE_INSTALL/.spinosa/bin"
+cp "$FAKE_GUM" "$FAKE_INSTALL/.spinosa/bin/gum"
 
-VERIFY_OUTPUT="$(HOME="$FAKE_INSTALL" PILOSA_HOME="$FAKE_INSTALL/.pilosa" bash "$REPO_ROOT/install.sh" --verify-only 2>/dev/null || true)"
+VERIFY_OUTPUT="$(HOME="$FAKE_INSTALL" SPINOSA_HOME="$FAKE_INSTALL/.spinosa" bash "$REPO_ROOT/install.sh" --verify-only 2>/dev/null || true)"
 if echo "$VERIFY_OUTPUT" | grep -q "Verification complete"; then
   pass "--verify-only verifies installed binaries"
 else
@@ -396,11 +431,11 @@ else
   echo "    Output: $VERIFY_OUTPUT" | head -3
 fi
 
-# ── Test 15: pilosa upgrade --help ─────────────────────────────────────────
+# ── Test 17: spinosa upgrade --help ─────────────────────────────────────────
 echo ""
-echo "Test 15: pilosa upgrade --help"
-UPGRADE_HELP="$($REPO_ROOT/.bin/pilosa upgrade --help 2>/dev/null || true)"
-if echo "$UPGRADE_HELP" | grep -q "pilosa upgrade"; then
+echo "Test 17: spinosa upgrade --help"
+UPGRADE_HELP="$($REPO_ROOT/.bin/spinosa upgrade --help 2>/dev/null || true)"
+if echo "$UPGRADE_HELP" | grep -q "spinosa upgrade"; then
   pass "upgrade command has help"
 else
   fail "upgrade command missing help"

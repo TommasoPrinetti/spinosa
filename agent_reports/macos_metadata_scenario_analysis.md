@@ -6,7 +6,7 @@ mission: Find real-world scenarios where macOS metadata files cause problems for
 created: 2026-06-09
 status: complete
 connects_to:
-  - .bin/pilosa
+  - .bin/spinosa
   - .gitignore
   - system/startup.md
 ---
@@ -19,10 +19,10 @@ All findings are grounded in these source files:
 
 | File | Lines | Relevance |
 |------|-------|-----------|
-| `.bin/pilosa` | 1159-1168 | `should_skip_source_file()` — the sole file filter for onboarding |
-| `.bin/pilosa` | 1439-1508 | `scan_source()` — corpus scanning with `find -type f` |
-| `.bin/pilosa` | 1601-2087 | `copy_source()` — file copy and conversion pipeline |
-| `.bin/pilosa` | 2919-2922 | Post-framework-copy `.DS_Store` cleanup |
+| `.bin/spinosa` | 1159-1168 | `should_skip_source_file()` — the sole file filter for onboarding |
+| `.bin/spinosa` | 1439-1508 | `scan_source()` — corpus scanning with `find -type f` |
+| `.bin/spinosa` | 1601-2087 | `copy_source()` — file copy and conversion pipeline |
+| `.bin/spinosa` | 2919-2922 | Post-framework-copy `.DS_Store` cleanup |
 | `.gitignore` | 1-48 | Git exclusion patterns |
 | `system/startup.md` | 93-106 | Phase 2.1 corpus survey with `find` exclusion list |
 
@@ -68,7 +68,7 @@ A file named `._interview.pdf` is classified as extension `pdf`, which routes it
 
 ## Scenario 1: Researcher with Finder-browsed corpus
 
-**Setup**: A researcher has a folder of interview PDFs and images. They have opened it in Finder, creating `.DS_Store` in every subdirectory. They also have `.localized` files from macOS localization. They run `pilosa new /path/to/corpus`.
+**Setup**: A researcher has a folder of interview PDFs and images. They have opened it in Finder, creating `.DS_Store` in every subdirectory. They also have `.localized` files from macOS localization. They run `spinosa new /path/to/corpus`.
 
 ### `.DS_Store` files in subdirectories
 
@@ -120,7 +120,7 @@ A file named `._interview.pdf` is classified as extension `pdf`, which routes it
 
 ## Scenario 2: Cross-platform team (macOS commits, Linux checks)
 
-**Setup**: User A on macOS creates a workspace, commits to git. User B on Linux clones and runs `pilosa check`.
+**Setup**: User A on macOS creates a workspace, commits to git. User B on Linux clones and runs `spinosa check`.
 
 ### `.gitignore` Coverage Audit
 
@@ -146,22 +146,22 @@ A file named `._interview.pdf` is classified as extension `pdf`, which routes it
 
 **`__MACOSX` directory concern**:
 - `.gitignore` has no pattern for `__MACOSX` (e.g., `__MACOSX/` or `**/__MACOSX`)
-- However, `pilosa new` does NOT copy directories (only files), so `__MACOSX/` would not appear in `raw/`
+- However, `spinosa new` does NOT copy directories (only files), so `__MACOSX/` would not appear in `raw/`
 - Only a concern if `__MACOSX/` is somehow in the framework tree or workspace root
 
-**`pilosa check` on Linux**:
+**`spinosa check` on Linux**:
 - `cmd_check()` (line 3334-3497) validates: required files, placeholders, setup status, source location, maps
 - It does NOT scan `raw/` contents for stray files
-- A workspace with `._*` files in `raw/` (from Scenario 1) would pass `pilosa check` **silently**
+- A workspace with `._*` files in `raw/` (from Scenario 1) would pass `spinosa check` **silently**
 - Only if `._*` files overwrote real source files would errors surface later (broken wikilinks, missing content)
 
-**Verdict**: Git tracking is well-handled by `.gitignore`. The silent risk is that `._*` files in `raw/` are never validated by `pilosa check`.
+**Verdict**: Git tracking is well-handled by `.gitignore`. The silent risk is that `._*` files in `raw/` are never validated by `spinosa check`.
 
 ---
 
 ## Scenario 3: CI/CD Pipeline
 
-**Setup**: CI runner on Linux processes a corpus synced from macOS via rsync (which preserves `._` files). The CI runs `pilosa new`.
+**Setup**: CI runner on Linux processes a corpus synced from macOS via rsync (which preserves `._` files). The CI runs `spinosa new`.
 
 ### The rsync factor
 
@@ -188,7 +188,7 @@ When syncing from macOS to Linux via `rsync -a`:
 
 ## Scenario 4: USB Drive from Mac to Linux
 
-**Setup**: User copies corpus from a Mac-formatted USB drive to a Linux machine. The drive has `._` files and `.DS_Store` from the macOS filesystem. They run `pilosa new`.
+**Setup**: User copies corpus from a Mac-formatted USB drive to a Linux machine. The drive has `._` files and `.DS_Store` from the macOS filesystem. They run `spinosa new`.
 
 ### Cross-platform filesystem context
 
@@ -246,7 +246,7 @@ Same as Scenario 1 + additional concerns:
 
 ### Primary Fix: Add `._*` to `should_skip_source_file()` (CRITICAL)
 
-In `.bin/pilosa`, line 1159-1168, add a pattern for AppleDouble files:
+In `.bin/spinosa`, line 1159-1168, add a pattern for AppleDouble files:
 
 ```bash
 should_skip_source_file() {
@@ -280,7 +280,7 @@ In `system/startup.md`, line 103:
 find raw/ -type f -not -name ".DS_Store" -not -name "._*" -not -name "AGENTS.md" -not -name "INDEX.md" -not -name "REPO_GUIDE.md" -not -name ".gitkeep" | wc -l
 ```
 
-### Validation: `pilosa check` should warn about stray macOS files
+### Validation: `spinosa check` should warn about stray macOS files
 
 Add a check in `cmd_check()` to scan `raw/` for files matching `._*` patterns and emit a warning if found.
 
@@ -289,8 +289,8 @@ Add a check in `cmd_check()` to scan `raw/` for files matching `._*` patterns an
 ## Verifier Note
 
 This analysis was produced through direct code reading of:
-- `/Users/tommasoprinetti/Documents/pilosa-main/.bin/pilosa` — all 4450 lines (entry point, file classification, copy pipeline)
-- `/Users/tommasoprinetti/Documents/pilosa-main/.gitignore` — 90 lines (git exclusion patterns)
-- `/Users/tommasoprinetti/Documents/pilosa-main/system/startup.md` — 499 lines (workspace indexing protocol)
+- `/Users/tommasoprinetti/Documents/spinosa-main/.bin/spinosa` — all 4450 lines (entry point, file classification, copy pipeline)
+- `/Users/tommasoprinetti/Documents/spinosa-main/.gitignore` — 90 lines (git exclusion patterns)
+- `/Users/tommasoprinetti/Documents/spinosa-main/system/startup.md` — 499 lines (workspace indexing protocol)
 
 All claims about code behavior are traceable to specific line numbers in these files.

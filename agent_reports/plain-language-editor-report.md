@@ -66,7 +66,7 @@ Reading these strings feels like decoding a developer's brain dump. Here's my hi
 | Before | After |
 |--------|-------|
 | `MarkItDown not available — skipping MarkItDown pass` | `Document reader not installed — skipping document processing` |
-| `Your modified framework files stay unchanged. The release copy is written beside each one as .pilosa-new.` | `Your modified files were kept as-is. The new version was saved beside each one with a .pilosa-new suffix.` |
+| `Your modified framework files stay unchanged. The release copy is written beside each one as .spinosa-new.` | `Your modified files were kept as-is. The new version was saved beside each one with a .spinosa-new suffix.` |
 | `Some mirrors are out of date` | `Some files are out of date` |
 
 ### ERRORS
@@ -78,7 +78,7 @@ Reading these strings feels like decoding a developer's brain dump. Here's my hi
 | `Failed to validate agent manifest` | `Could not read the agent setup file` |
 | `Cannot write to destination — permission denied` | (Keep — this one is clear) |
 
-## 3. Mini Style Guide: 5 Rules for Pilosa Strings
+## 3. Mini Style Guide: 5 Rules for spinosa Strings
 
 ### Rule 1: One verb per sentence. One idea per sentence.
 **Bad:** "Sync agent and skill mirrors from canonical to ensure workspace integrity."
@@ -95,7 +95,7 @@ Compound acronyms ("LLM CLI") build a wall. Write the full phrase once, then may
 
 ### Rule 5: Warnings say what happened and what to do. Errors say what happened and what it means.
 - Warning: "Document reader not installed. Install it with: pip install markitdown."
-- Error: "The framework version does not match. Run 'pilosa update' to fix this."
+- Error: "The framework version does not match. Run 'spinosa update' to fix this."
 
 Errors that only say what happened ("aborting for safety") leave the researcher stranded. Always include the next step or the consequence in plain words.
 

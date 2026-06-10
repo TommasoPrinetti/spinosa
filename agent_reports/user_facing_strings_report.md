@@ -1,7 +1,7 @@
 # User-Facing Text Strings: Complete Extraction
 
 **Date:** 2026-06-09  
-**Files scanned:** `.bin/pilosa` (4461 lines), `install.sh` (875 lines), `README.md` (271 lines)  
+**Files scanned:** `.bin/spinosa` (4461 lines), `install.sh` (875 lines), `README.md` (271 lines)  
 **Report scope:** Every message a user sees — help text, prompts, info/warn/ok/fail messages, menu options, confirmations, error messages, status updates.
 
 ---
@@ -29,54 +29,54 @@
 
 ## 1. HELP TEXT / USAGE STRINGS
 
-### `.bin/pilosa` — Top-level comment block (lines 11-20)
+### `.bin/spinosa` — Top-level comment block (lines 11-20)
 ```
-Usage: pilosa [new|onboard|update|check|sync|uninstall|help]
+Usage: spinosa [new|onboard|update|check|sync|uninstall|help]
 
 Commands:
-  new       Create a new Pilosa workspace and run onboarding
+  new       Create a new spinosa workspace and run onboarding
   onboard   Run onboarding on an existing workspace
   update    Update workspace framework files from a release
   check     Validate workspace integrity and configuration
   sync      Sync agent and skill mirrors from canonical sources
-  uninstall Remove Pilosa from this system
+  uninstall Remove spinosa from this system
   help      Show this help
 ```
 
-### `.bin/pilosa` — `cmd_uninstall` (line 2646)
-- Line 2646: `echo "Usage: pilosa uninstall [--yes] [--no-color]"`
+### `.bin/spinosa` — `cmd_uninstall` (line 2646)
+- Line 2646: `echo "Usage: spinosa uninstall [--yes] [--no-color]"`
 
-### `.bin/pilosa` — `cmd_help` (lines 2693-2703)
+### `.bin/spinosa` — `cmd_help` (lines 2693-2703)
 - `Usage:`
-- `pilosa new [directory]    Create a new workspace and run onboarding`
-- `pilosa onboard [dir]     Run onboarding on an existing workspace`
-- `pilosa update [dir]      Update workspace framework files`
-- `pilosa upgrade           Upgrade Pilosa CLI to latest release`
-- `pilosa check [directory] Validate workspace integrity`
-- `pilosa health            Show system health status`
-- `pilosa sync              Sync agent and skill mirrors from canonical`
-- `pilosa uninstall         Remove Pilosa from this system`
-- `pilosa dashboard         Open interactive dashboard`
-- `pilosa help              Show this help`
+- `spinosa new [directory]    Create a new workspace and run onboarding`
+- `spinosa onboard [dir]     Run onboarding on an existing workspace`
+- `spinosa update [dir]      Update workspace framework files`
+- `spinosa upgrade           Upgrade spinosa CLI to latest release`
+- `spinosa check [directory] Validate workspace integrity`
+- `spinosa health            Show system health status`
+- `spinosa sync              Sync agent and skill mirrors from canonical`
+- `spinosa uninstall         Remove spinosa from this system`
+- `spinosa dashboard         Open interactive dashboard`
+- `spinosa help              Show this help`
 
-### `.bin/pilosa` — `cmd_onboard` (lines 2747-2754)
-- `Usage: pilosa onboard [workspace-directory] [options]`
+### `.bin/spinosa` — `cmd_onboard` (lines 2747-2754)
+- `Usage: spinosa onboard [workspace-directory] [options]`
 - `  --source-dir PATH  Pre-select source folder (skip prompt)`
 - `  --no-color         Disable colored output`
 - `  --gum              Use interactive Gum prompts`
 - `  --no-gum           Use plain shell prompts`
 - `Example:`
-- `  pilosa onboard --source-dir /Users/me/Documents/archive`
+- `  spinosa onboard --source-dir /Users/me/Documents/archive`
 
-### `.bin/pilosa` — `cmd_new` (lines 2821-2826)
-- `Usage: pilosa new [corpus-directory] [options]`
+### `.bin/spinosa` — `cmd_new` (lines 2821-2826)
+- `Usage: spinosa new [corpus-directory] [options]`
 - `  --numbered   Force numbered menus instead of arrow-key menus`
 - `  --no-color   Disable colored output`
 - `  --gum        Use interactive Gum prompts`
 - `  --no-gum     Use plain shell prompts`
 
-### `.bin/pilosa` — `cmd_update` (lines 3000-3008)
-- `Usage: pilosa update [workspace] [options]`
+### `.bin/spinosa` — `cmd_update` (lines 3000-3008)
+- `Usage: spinosa update [workspace] [options]`
 - `  --version X.Y.Z   Target framework version`
 - `  --release-dir DIR Use a local dist/vX.Y.Z directory`
 - `  --dry-run         Show what would change without writing`
@@ -85,32 +85,32 @@ Commands:
 - `  --gum             Use interactive Gum prompts`
 - `  --no-gum          Use plain shell confirmations`
 
-### `.bin/pilosa` — `cmd_check` (lines 3342-3344)
-- `Usage: pilosa check [workspace-directory]`
+### `.bin/spinosa` — `cmd_check` (lines 3342-3344)
+- `Usage: spinosa check [workspace-directory]`
 - `  Validates workspace integrity: required files, placeholders,`
 - `  setup status, source location, maps, and retrieval coverage.`
 
-### `.bin/pilosa` — `cmd_sync` (lines 3512-3515)
-- `Usage: pilosa sync [options]`
+### `.bin/spinosa` — `cmd_sync` (lines 3512-3515)
+- `Usage: spinosa sync [options]`
 - `  --dry-run   Show what would change without writing`
 - `  --yes       Skip confirmation prompt`
 
-### `.bin/pilosa` — `cmd_health` (lines 4056-4059)
-- `Usage: pilosa health`
+### `.bin/spinosa` — `cmd_health` (lines 4056-4059)
+- `Usage: spinosa health`
 - `  Reports framework installation status, vendor engine availability,`
 - `  workspace discovery, and detected LLM CLIs.`
 
-### `.bin/pilosa` — `cmd_upgrade` (lines 4205-4209)
-- `Usage: pilosa upgrade [options]`
+### `.bin/spinosa` — `cmd_upgrade` (lines 4205-4209)
+- `Usage: spinosa upgrade [options]`
 - `  --version X.Y.Z   Upgrade to specific version (default: latest)`
 - `  --yes             Skip confirmation prompt`
 - `  --help            Show this help`
 
-### `.bin/pilosa` — main error (line 4455)
+### `.bin/spinosa` — main error (line 4455)
 - `Unknown command: <arg>`
 
 ### `install.sh` — help text (lines 151-171)
-- `Usage: bash install-pilosa.sh [options]`
+- `Usage: bash install-spinosa.sh [options]`
 - `Install / Upgrade:`
 - `  --version X.Y.Z   Install specific version (default: <pinned>)`
 - `  --latest          Use latest release instead of pinned version`
@@ -124,14 +124,14 @@ Commands:
 - `Paths:`
 - `  --no-gum          Skip bundled binary installation (Gum)`
 - `  --no-modify-path  Don't modify shell config files (~/.zshrc, etc.)`
-- `  --prefix PATH     Install root (default: ~/.pilosa)`
+- `  --prefix PATH     Install root (default: ~/.spinosa)`
 - `  --bin-dir PATH    Shim directory (default: ~/.local/bin)`
 
 ---
 
 ## 2. MENU OPTIONS
 
-### Dashboard main menu (`.bin/pilosa` lines 4405-4414)
+### Dashboard main menu (`.bin/spinosa` lines 4405-4414)
 | Value | Label | Description |
 |-------|-------|-------------|
 | `new` | `New workspace` | `Create a new workspace and run onboarding` |
@@ -139,13 +139,13 @@ Commands:
 | `update` | `Update workspace` | `Update workspace framework files` |
 | `check` | `Check workspace` | `Validate workspace integrity` |
 | `sync` | `Sync agents` | `Sync agent and skill mirrors` |
-| `upgrade` | `Upgrade Pilosa` | `Upgrade to latest release` |
+| `upgrade` | `Upgrade spinosa` | `Upgrade to latest release` |
 | `health` | `System health` | `Check system health and environment` |
-| `uninstall` | `Uninstall` | `Remove Pilosa from this system` |
+| `uninstall` | `Uninstall` | `Remove spinosa from this system` |
 | `help` | `Help` | `Show help information` |
-| `quit` | `Quit` | `Exit Pilosa` |
+| `quit` | `Quit` | `Exit spinosa` |
 
-### Preferred CLI selection (`.bin/pilosa` lines 2093-2101)
+### Preferred CLI selection (`.bin/spinosa` lines 2093-2101)
 | Value | Label | Description |
 |-------|-------|-------------|
 | `opencode` | `OpenCode` | `run the OpenCode CLI with the startup prompt` |
@@ -157,21 +157,21 @@ Commands:
 | `kilo` | `Kilo` | `run the Kilo terminal CLI in this workspace` |
 | `other` | `Other` | `copy a generic launch command for another tool` |
 
-### Handoff action (`.bin/pilosa` lines 2146-2150)
+### Handoff action (`.bin/spinosa` lines 2146-2150)
 | Value | Label | Description |
 |-------|-------|-------------|
 | `copy_command` | `Copy launch command` | `keep the command in your clipboard and run it yourself` |
 | `run_now` | `Run launch command now` | `open the selected CLI immediately when supported` |
 
-### File type multi-select (`.bin/pilosa` lines 2109-2131)
+### File type multi-select (`.bin/spinosa` lines 2109-2131)
 - `All supported files` - `toggle every supported file type on or off`
 - Per-extension: `.ext` - `<count> file(s)` optionally with `(MarkItDown)` / `(OCR)` / `(MarkItDown / OCR)` tags
 
-### Batch file type selection view (`.bin/pilosa` lines 661, 722-731)
+### Batch file type selection view (`.bin/spinosa` lines 661, 722-731)
 - `Continue with selected file types`
 - `Cancel selection`
 
-### Workspace selection (`.bin/pilosa` lines 4003-4004)
+### Workspace selection (`.bin/spinosa` lines 4003-4004)
 - `Find other workspaces` - `scan directories for workspaces`
 - `Enter path manually` - `type a workspace path`
 
@@ -186,7 +186,7 @@ Commands:
 - **Line 2502:** `Specify the folder containing your research materials (documents, PDFs, notes).`
 - **Line 2503:** `These files will be copied into the workspace for analysis.`
 - **Line 2504:** `Nothing in the original folder is moved, renamed, or edited.`
-- **Line 2506:** `Choose another source folder and Pilosa will rescan it before writing anything.`
+- **Line 2506:** `Choose another source folder and spinosa will rescan it before writing anything.`
 - **Line 3929:** `Workspace path` — hint: `(Enter workspace path, Esc to go back)`
 - **Line 4036:** `Workspace path` (from manual entry)
 - **Line 2102:** `Preferred LLM CLI`
@@ -210,7 +210,7 @@ Commands:
 
 ## 4. INFO MESSAGES (info())
 
-### `.bin/pilosa`
+### `.bin/spinosa`
 - **Line 1552:** `Environment preflight`
 - **Line 1567:** `Free space near workspace: <bytes>`
 - **Line 1575:** `Detected handoff targets: <list>`
@@ -238,7 +238,7 @@ Commands:
 - **Line 1673:** `MarkItDown Processing N files with MarkItDown...`
 - **Line 1887:** `OCR Processing N scanned images and PDFs with RapidOCR...`
 - **Line 806:** `Running smoke test...`
-- **Line 865:** `Launching Pilosa dashboard...`
+- **Line 865:** `Launching spinosa dashboard...`
 - **Line 1513:** `Source scan complete` (format: `✓ Source scan complete`)
 - **Line 846:** `Cannot write to <file> — add it manually:`
 - **Line 850:** `No shell config found for <shell>.`
@@ -246,12 +246,12 @@ Commands:
 - **Line 4029:** `No new workspaces found`
 - **Line 4239:** `Already on the latest version (v<version>). Nothing to upgrade.`
 
-### `.bin/pilosa` — Uninstall
-- **Line 2657:** `Pilosa is not installed (<path> not found).`
+### `.bin/spinosa` — Uninstall
+- **Line 2657:** `spinosa is not installed (<path> not found).`
 - **Line 2658:** `Found stray shim at <path>`
 - **Line 2662:** `This will remove:`
 - **Line 2663:** `  <path>/  (framework + binary)`
-- **Line 2664:** `  <path>/pilosa  (shim)`
+- **Line 2664:** `  <path>/spinosa  (shim)`
 - **Line 2682:** `Any research workspaces you created are still intact.`
 - **Line 2683:** `To remove a workspace, delete its directory.`
 
@@ -285,7 +285,7 @@ Commands:
 
 ## 5. OK / SUCCESS MESSAGES (ok())
 
-### `.bin/pilosa`
+### `.bin/spinosa`
 - **Line 1513:** `✓ Source scan complete`
 - **Line 1553:** `Workspace writable: <bold>path</bold>`
 - **Line 1555:** `OCR RapidOCR available for scanned PDFs and images`
@@ -296,8 +296,8 @@ Commands:
 - **Line 2374:** `Onboarding summary written`
 - **Line 2522:** `Source: <bold>path</bold>`
 - **Line 2676:** `Removed <path>`
-- **Line 2677:** `Removed <path>/pilosa`
-- **Line 2680:** `Pilosa uninstalled.`
+- **Line 2677:** `Removed <path>/spinosa`
+- **Line 2680:** `spinosa uninstalled.`
 - **Line 2858:** `Corpus: <bold>path</bold>`
 - **Line 2873:** `Workspace: <bold>path</bold>`
 - **Line 2891:** `Project:   <bold>name</bold>`
@@ -331,7 +331,7 @@ Commands:
 - **Line 376:** `N vendor binary checksum(s) verified`
 - **Line 573:** `Verification complete`
 - **Line 611:** `Framework checksum verified`
-- **Line 632:** `Installed pilosa CLI`
+- **Line 632:** `Installed spinosa CLI`
 - **Line 663:** `Installed <binary>`
 - **Line 717:** `MarkItDown + RapidOCR installed`
 - **Line 722:** `RapidOCR import verified`
@@ -341,13 +341,13 @@ Commands:
 - **Line 798:** `Created shim: <path>`
 - **Line 808:** `Smoke test passed`
 - **Line 843:** `Added <path> to <file>`
-- **Line 858:** `Pilosa installed successfully!`
+- **Line 858:** `spinosa installed successfully!`
 
 ---
 
 ## 6. WARNINGS (warn())
 
-### `.bin/pilosa`
+### `.bin/spinosa`
 - **Line 1607:** `No copyable files found in source location.`
 - **Line 1656:** `MarkItDown not available — skipping MarkItDown pass`
 - **Line 1809:** `MarkItDown failed for <file>, skipping`
@@ -364,14 +364,14 @@ Commands:
 - **Line 2610:** `Could not run <CLI>. Copying the launch command instead.`
 - **Line 2666:** `Research workspaces are NOT affected.`
 - **Line 3115:** `Cannot compute checksum: <path>`
-- **Line 3157:** `Your modified framework files stay unchanged. The release copy is written beside each one as .pilosa-new.`
+- **Line 3157:** `Your modified framework files stay unchanged. The release copy is written beside each one as .spinosa-new.`
 - **Line 3159:** `Forced replacements can overwrite local edits. Keep this policy only for files that must track the framework.`
 - **Line 3163:** `Directory refreshes copy release contents recursively into existing framework directories.`
 - **Line 3201:** `Retired clean framework files will be left in place.`
 - **Line 3247:** `Conflict: <path> → wrote <sidecar>`
 - **Line 3282:** `Retired file modified locally, left in place: <path>`
 - **Line 3552:** `Dry run — no changes made`
-- **Line 4072:** `Framework not found — is Pilosa installed?`
+- **Line 4072:** `Framework not found — is spinosa installed?`
 - **Line 4253:** `Could not fetch release notes`
 - **Line 4276:** `Could not download release installer. Falling back to raw main branch...`
 - **Line 1084:** `codex was not found on PATH.`
@@ -394,13 +394,13 @@ Commands:
 - **Line 772:** `pip install failed — PDF/image OCR and Office doc conversion will not be available`
 - **Line 776:** `Bundled Python not found — PDF/image OCR and Office doc conversion will not be available`
 - **Line 780:** `Could not download vendor bundle for <platform>`
-- **Line 810:** `Smoke test failed — pilosa may need PATH update`
+- **Line 810:** `Smoke test failed — spinosa may need PATH update`
 
 ---
 
 ## 7. FAIL / ERROR MESSAGES (fail() / die())
 
-### `.bin/pilosa` — die() messages
+### `.bin/spinosa` — die() messages
 - **Line 860:** `Neither curl nor wget found. Please install one.`
 - **Line 868:** `No SHA-256 tool found. Cannot verify release artifact.`
 - **Line 869:** `Checksum mismatch for <file>`
@@ -412,10 +412,10 @@ Commands:
 - **Line 958:** `Release manifest missing from archive`
 - **Line 1549:** `Workspace raw/ directory is missing: <path>`
 - **Line 1550:** `Workspace raw/ directory is not writable: <path>`
-- **Line 2815:** `--force is not supported for pilosa new.`
-- **Line 2895:** `Framework not found. Is Pilosa installed? Check <path>/versions/`
+- **Line 2815:** `--force is not supported for spinosa new.`
+- **Line 2895:** `Framework not found. Is spinosa installed? Check <path>/versions/`
 - **Line 2898:** `Framework manifest not found: <path>`
-- **Line 2960:** `Not a valid Pilosa workspace: <path>`
+- **Line 2960:** `Not a valid spinosa workspace: <path>`
 - **Line 3011:** `Unknown update option: <arg>. Valid: ...`
 - **Line 3017:** `Unexpected extra workspace argument: <arg>`
 - **Line 3041:** `Manifest not found: <path>`
@@ -423,15 +423,15 @@ Commands:
 - **Line 3350:** `Unexpected extra argument: <arg>`
 - **Line 3525:** `Framework root not found. Cannot sync without framework.`
 - **Line 3534:** `Canonical agents directory not found: <path>`
-- **Line 3960:** `Not a valid Pilosa workspace: <path>`
+- **Line 3960:** `Not a valid spinosa workspace: <path>`
 - **Line 4037:** `Path is required`
-- **Line 4040:** `Not a valid Pilosa workspace: <path>`
+- **Line 4040:** `Not a valid spinosa workspace: <path>`
 - **Line 4061:** `Unknown option: <arg>. Valid: --help`
 - **Line 4211:** `Unknown upgrade option: <arg>. Valid: --version, --yes, --help`
 - **Line 4278:** `Could not download installer`
 
 ### `install.sh` — die() messages
-- **Line 16:** `Pilosa requires bash. Install it first:`
+- **Line 16:** `spinosa requires bash. Install it first:`
 - **Line 17:** `  apk add bash`
 - **Line 20:** `  sudo apt-get install bash`
 - **Line 22:** `  brew install bash`
@@ -439,7 +439,7 @@ Commands:
 - **Line 131:** `Invalid version: <ver> (use X.Y.Z or 'latest')`
 - **Line 146:** `Invalid bin directory path: <path>`
 - **Line 172:** `Unknown option: <arg>`
-- **Line 184:** `Unsupported OS: <os> (Pilosa supports macOS and Linux)`
+- **Line 184:** `Unsupported OS: <os> (spinosa supports macOS and Linux)`
 - **Line 191:** `Unsupported architecture: <arch>`
 - **Line 207:** `Neither curl nor wget found. Please install one.`
 - **Line 230:** `Cannot read archive: <archive>`
@@ -456,13 +456,13 @@ Commands:
 - **Line 480:** `Cannot read from terminal. Use --yes to skip prompts.`
 - **Line 509:** `Cannot read from terminal. Use --yes to skip prompts.`
 - **Line 549:** `Cannot read from terminal. Use --yes to skip prompts.`
-- **Line 564:** `No Pilosa installation found at <path>`
+- **Line 564:** `No spinosa installation found at <path>`
 - **Line 570:** `Could not find installed framework`
 - **Line 600:** `Failed to download framework from <url>`
 - **Line 613:** `Framework checksum mismatch — aborting for safety`
 - **Line 616:** `Archive not found in checksums file — aborting for safety`
 - **Line 619:** `No checksums.txt available — aborting for safety`
-- **Line 634:** `pilosa CLI not found in archive`
+- **Line 634:** `spinosa CLI not found in archive`
 
 ### `install.sh` — fail() messages
 - **Line 760:** `OCR models could not be pre-downloaded — will download on first use`
@@ -473,7 +473,7 @@ Commands:
 
 ## 8. NOTE / HINT MESSAGES (note())
 
-### `.bin/pilosa`
+### `.bin/spinosa`
 - **Line 1535:** `MarkItDown handles Office docs, EPUB, HTML, and text-based PDFs.`
 - **Line 1536:** `RapidOCR handles scanned PDFs and images via off-line OCR.`
 - **Line 1557:** `RapidOCR not available — scanned PDFs and images will be skipped.`
@@ -502,55 +502,55 @@ Commands:
 
 ## 9. HEADER / SECTION TITLES
 
-### `.bin/pilosa`
+### `.bin/spinosa`
 - **Line 2601:** `Copy this prompt and paste it in your tool`
-- **Line 2654:** `Pilosa — Uninstall`
-- **Line 2691:** `Pilosa — Research Framework CLI`
-- **Line 2807:** `Pilosa — New Workspace`
-- **Line 2981:** `Pilosa — Update Workspace`
+- **Line 2654:** `spinosa — Uninstall`
+- **Line 2691:** `spinosa — Research Framework CLI`
+- **Line 2807:** `spinosa — New Workspace`
+- **Line 2981:** `spinosa — Update Workspace`
 - **Line 3056:** `Comparing framework files...`
 - **Line 3216:** `Applying update...`
-- **Line 3367:** `Pilosa — Workspace Check`
+- **Line 3367:** `spinosa — Workspace Check`
 - **Line 3477:** `Check failed:`
 - **Line 3494:** `Warnings:`
-- **Line 3528:** `Pilosa — Sync Agents & Skills`
-- **Line 4066:** `Pilosa — System Health`
-- **Line 4216:** `Pilosa — Upgrade`
-- **Line 4305:** `Pilosa — Research Framework`
+- **Line 3528:** `spinosa — Sync Agents & Skills`
+- **Line 4066:** `spinosa — System Health`
+- **Line 4216:** `spinosa — Upgrade`
+- **Line 4305:** `spinosa — Research Framework`
 
 ### `install.sh`
-- **Line 521:** `Pilosa Framework Installer`
+- **Line 521:** `spinosa Framework Installer`
 
 ---
 
 ## 10. CONFIRMATIONS (confirm())
 
-### `.bin/pilosa`
-- **Line 2670:** `Remove Pilosa from this system?`
-- **Line 3175:** `Keep local framework edits and write release copies as .pilosa-new sidecars?`
+### `.bin/spinosa`
+- **Line 2670:** `Remove spinosa from this system?`
+- **Line 3175:** `Keep local framework edits and write release copies as .spinosa-new sidecars?`
 - **Line 3183:** `Replace forced framework files listed above?`
 - **Line 3191:** `Refresh framework directories recursively?`
 - **Line 3199:** `Remove retired clean framework files listed above?`
-- **Line 3205:** `Apply this Pilosa framework update now?`
+- **Line 3205:** `Apply this spinosa framework update now?`
 - **Line 3558:** `Apply sync? (deletes and regenerates vendor agent files)`
-- **Line 3777:** `Pilosa can auto-discover your workspaces.`
-- **Line 3778:** `Search your home directory for existing Pilosa workspaces?`
-- **Line 3779:** `Scans for .pilosa/workspace marker files (5 folders deep at most).`
+- **Line 3777:** `spinosa can auto-discover your workspaces.`
+- **Line 3778:** `Search your home directory for existing spinosa workspaces?`
+- **Line 3779:** `Scans for .spinosa/workspace marker files (5 folders deep at most).`
 - **Line 3780:** `Nothing leaves your computer — no data is uploaded, stored, or shared.`
 - **Line 3783:** `Allow workspace discovery?`
-- **Line 4257:** `Download and run the Pilosa installer to upgrade?`
+- **Line 4257:** `Download and run the spinosa installer to upgrade?`
 
 ### `install.sh`
 - **Line 449:** `Reinstall? [y/N]: `
 - **Line 477:** `Upgrade? [Y/n]: `
 - **Line 506:** `Downgrade? [y/N]: `
-- **Line 546:** `Install Pilosa v<ver>? [Y/n]: `
+- **Line 546:** `Install spinosa v<ver>? [Y/n]: `
 
 ---
 
 ## 11. SPINNER / PROGRESS STRINGS
 
-### `.bin/pilosa`
+### `.bin/spinosa`
 - **Line 907:** `Resolving latest version`
 - **Line 1470:** `scanning <path>` (live scan status)
 - **Line 1587:** Progress bar: `<spinner> [████░░░] N/N <file> (N copied, N skipped)`
@@ -567,8 +567,8 @@ Commands:
 
 ### `install.sh`
 - **Line 597:** `Downloading framework v<version>`
-- **Line 678:** `Downloading Pilosa vendor for <platform> (attempt N/max)`
-- **Line 693:** `Installing Pilosa vendor (Python + wrappers)`
+- **Line 678:** `Downloading spinosa vendor for <platform> (attempt N/max)`
+- **Line 693:** `Installing spinosa vendor (Python + wrappers)`
 - **Line 706:** `Installing Python packages (MarkItDown + RapidOCR)`
 - **Line 724:** `Cleaning up unused models`
 - **Line 738:** `Downloading OCR models`
@@ -577,7 +577,7 @@ Commands:
 
 ## 12. CANCEL / ABORT MESSAGES
 
-### `.bin/pilosa`
+### `.bin/spinosa`
 - **Line 438:** `Cancelled.` (INT trap)
 - **Line 455:** `Please answer y/yes or n/no.`
 - **Line 488:** `Invalid choice. Try again.`
@@ -612,15 +612,15 @@ Commands:
 - For fish shell: `fish_add_path <path>`
 
 ### Post-install banner (line 858)
-- `Pilosa installed successfully!`
+- `spinosa installed successfully!`
 
 ### Smoke test (lines 806-810)
 - `Running smoke test...`
 - `Smoke test passed`
-- `Smoke test failed — pilosa may need PATH update`
+- `Smoke test failed — spinosa may need PATH update`
 
 ### Line 521
-- `Pilosa Framework Installer`
+- `spinosa Framework Installer`
 
 ---
 
@@ -638,7 +638,7 @@ Commands:
 6. `The original source folder is never modified. The workspace is self-contained. All conversion runs 100% locally — no cloud, no API keys.`
 
 ### Install section (line 28)
-`This installs the pinned stable version (0.4.7) to ~/.pilosa/. A bundled Python handles pip packages at install time. No system Python, npm, or Go required. Requires bash and internet access for first install.`
+`This installs the pinned stable version (0.4.7) to ~/.spinosa/. A bundled Python handles pip packages at install time. No system Python, npm, or Go required. Requires bash and internet access for first install.`
 
 ### Quick start prerequisites (lines 39-44)
 > The CLI setup works fine on its own, but actually using the workspace requires one of these LLM CLIs:
@@ -666,18 +666,18 @@ The LLM will:
 `After startup, ask research questions normally. The orchestrator routes them through sub-agents.`
 
 ### Dashboard section (lines 83-101)
-- `Run pilosa without arguments to open the interactive dashboard`
-- Table: New workspace, Onboard workspace, Update workspace, Check workspace, Sync agents, Upgrade Pilosa, System health, Uninstall, Help
+- `Run spinosa without arguments to open the interactive dashboard`
+- Table: New workspace, Onboard workspace, Update workspace, Check workspace, Sync agents, Upgrade spinosa, System health, Uninstall, Help
 
 ### Commands section (lines 105-175)
-- `pilosa new [directory]`: `Create a new workspace and run onboarding. If no directory is given, you are prompted for the path.`
-- `pilosa onboard [workspace]`: `Re-run onboarding on an existing workspace.`
-- `pilosa update [workspace]`: `Update workspace framework files. Shows a plan and asks for confirmation.`
-- `pilosa upgrade`: `Upgrade the Pilosa CLI to the latest release.`
-- `pilosa check [workspace]`: `Validate workspace integrity. Checks required files, source location, and map coverage.`
-- `pilosa sync`: `Regenerate vendor-specific agent mirrors and sync skills from canonical sources.`
-- `pilosa health`: `Check system health and environment.`
-- `pilosa uninstall`: `Remove Pilosa from your system. Does not affect research workspaces.`
+- `spinosa new [directory]`: `Create a new workspace and run onboarding. If no directory is given, you are prompted for the path.`
+- `spinosa onboard [workspace]`: `Re-run onboarding on an existing workspace.`
+- `spinosa update [workspace]`: `Update workspace framework files. Shows a plan and asks for confirmation.`
+- `spinosa upgrade`: `Upgrade the spinosa CLI to the latest release.`
+- `spinosa check [workspace]`: `Validate workspace integrity. Checks required files, source location, and map coverage.`
+- `spinosa sync`: `Regenerate vendor-specific agent mirrors and sync skills from canonical sources.`
+- `spinosa health`: `Check system health and environment.`
+- `spinosa uninstall`: `Remove spinosa from your system. Does not affect research workspaces.`
 
 ### Security section (lines 178-183)
 - `The installer uses a pinned stable version, not latest`
@@ -687,7 +687,7 @@ The LLM will:
 
 ### Workspace structure (lines 184-211)
 - `AGENTS.md` : `Orchestrator routing contract`
-- `.bin/pilosa` : `CLI entry point`
+- `.bin/spinosa` : `CLI entry point`
 - `.agents/` : `Canonical agent and skill source`
 - `.opencode/` : `Generated mirror for OpenCode`
 - `.claude/` : `Generated mirror for Claude`
@@ -718,7 +718,7 @@ These are terms appearing in user-facing text that assume internal architecture 
 | Term | Location | Issue |
 |------|----------|-------|
 | **"onboarding"** | Help text, menus, prompts throughout | Used as a feature name but never explained from user perspective |
-| **"handoff"** | `.bin/pilosa` L1575, L2145-2151, L2604-2618 | Means "launching the CLI tool" — non-obvious to new users |
+| **"handoff"** | `.bin/spinosa` L1575, L2145-2151, L2604-2618 | Means "launching the CLI tool" — non-obvious to new users |
 | **"handoff targets"** | L1575 | Internal jargon — what is a "handoff target"? |
 | **"handoff action"** | L2145, L2604 | Unclear to new users |
 | **"startup handoff"** | L2586 | The startup prompt is being "handed off" to an LLM — unclear |
@@ -733,7 +733,7 @@ These are terms appearing in user-facing text that assume internal architecture 
 | **"maps"** | Help text, README | `maps/` directory with "navigation maps" and "wikilinks" — wiki jargon |
 | **"wikilinks"** | README L17 | Markdown `[[wikilink]]` syntax — not explained for non-obsidian users |
 | **"MarkItDown" / "RapidOCR"** | README, progress messages | Internal tool names shown without explanation of what they do |
-| **"sidecars"** | L3150, L3157, L3175, L3247 | ".pilosa-new sidecars" — developer term for parallel backup files |
+| **"sidecars"** | L3150, L3157, L3175, L3247 | ".spinosa-new sidecars" — developer term for parallel backup files |
 | **"retired files"** | L3126-3144, L3265-3285 | Framework files no longer needed in new releases |
 | **"native-readable file"** | L1522 | Classification label shown to user; unclear what "native" means |
 | **"binary copyable"** | L1530 | Another classification that's jargon-y |
@@ -754,15 +754,15 @@ These are terms appearing in user-facing text that assume internal architecture 
 | Concept | Variant 1 | Variant 2 | Variant 3 | Locations |
 |---------|-----------|-----------|-----------|-----------|
 | **Source folder** | `source folder` | `corpus folder` | `source files folder` | L2502 vs L2839 vs L2500 |
-| **Uninstall scope** | `Remove Pilosa from this system?` | `Remove Pilosa from your system. Does not affect research workspaces.` | — | L2670 vs README L170 |
-| **Smoke test** | `Smoke test passed` | `Smoke test failed — pilosa may need PATH update` | — | install.sh L808-810 |
+| **Uninstall scope** | `Remove spinosa from this system?` | `Remove spinosa from your system. Does not affect research workspaces.` | — | L2670 vs README L170 |
+| **Smoke test** | `Smoke test passed` | `Smoke test failed — spinosa may need PATH update` | — | install.sh L808-810 |
 | **Sync description** | `Sync agent and skill mirrors from canonical sources` (help) | `Regenerate vendor-specific agent mirrors and sync skills from canonical sources` (README) | `Sync agent and skill mirrors` (menu) | L19 vs README L154 vs L4409 |
 | **Check description** | `Validate workspace integrity and configuration` (help) | `Validate workspace integrity` (menu) | `Checks required files, source location, and map coverage.` (README) | L17 vs L4408 vs README L145 |
 | **Health description** | `Show system health status` (help) | `Check system health and environment` (menu/README) | — | L2699 vs L4411 |
-| **Upgrade description** | `Upgrade Pilosa CLI to latest release` (help) | `Upgrade to latest release` (menu) | `Upgrade the Pilosa CLI to the latest release.` (README) | L2697 vs L4410 vs README L136 |
+| **Upgrade description** | `Upgrade spinosa CLI to latest release` (help) | `Upgrade to latest release` (menu) | `Upgrade the spinosa CLI to the latest release.` (README) | L2697 vs L4410 vs README L136 |
 | **Update description** | `Update workspace framework files from a release` (help) | `Update workspace framework files` (menu/README) | — | L16 vs L4407 |
 | **CLI names** | `Claude Code / Claude Code Desktop` | `Codex / Codex App` | `OpenCode / OpenCode Desktop / Kilo` | L2093-2100 |
-| **"Project" vs "workspace"** | `Project name` (onboarding asks) | Workspace dir auto-named `<corpus>-pilosa` | — | L2882 vs L2865 |
+| **"Project" vs "workspace"** | `Project name` (onboarding asks) | Workspace dir auto-named `<corpus>-spinosa` | — | L2882 vs L2865 |
 | **"Framework" overloading** | The tool itself | The release artifact | The research paradigm | Throughout |
 
 ---
@@ -770,16 +770,16 @@ These are terms appearing in user-facing text that assume internal architecture 
 ## VERIFICATION NOTES
 
 - **Total distinct user-facing strings found:** ~310+ across all three files
-- **`die()` calls:** 36 in `.bin/pilosa`, 18 in `install.sh`
-- **`warn()` calls:** ~40 in `.bin/pilosa`, ~15 in `install.sh`
+- **`die()` calls:** 36 in `.bin/spinosa`, 18 in `install.sh`
+- **`warn()` calls:** ~40 in `.bin/spinosa`, ~15 in `install.sh`
 - **`info()` calls:** ~50+ across both scripts
 - **`ok()` calls:** ~55+ across both scripts
 - **`note()` calls:** ~25+ across both scripts
-- **`confirm()` calls:** 10 in `.bin/pilosa`, 5 in `install.sh`
+- **`confirm()` calls:** 10 in `.bin/spinosa`, 5 in `install.sh`
 - **All quotes verified against source files:** YES
 - **Jargon/assumed-knowledge items flagged:** 28 distinct terms
 - **Inconsistent terminology pairs:** 11 documented above
 
 ---
 
-*Report generated by pilosa-searcher. File: /Users/tommasoprinetti/Documents/pilosa-main/agent_reports/user_facing_strings_report.md*
+*Report generated by spinosa-searcher. File: /Users/tommasoprinetti/Documents/spinosa-main/agent_reports/user_facing_strings_report.md*

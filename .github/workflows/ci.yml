@@ -14,10 +14,10 @@ jobs:
 
       - name: Shell syntax check
         run: |
-          bash -n .bin/pilosa
+          bash -n .bin/spinosa
           bash -n .bin/package-release.sh
           bash -n .bin/publish-release.sh
-          bash -n .bin/build-pilosa-vendor.sh
+          bash -n .bin/build-spinosa-vendor.sh
           bash -n install.sh
 
       - name: CLI unit tests

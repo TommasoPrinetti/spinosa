@@ -3,10 +3,10 @@ type: report
 created: 2026-06-05
 updated: 2026-06-05
 status: draft
-scope: Audit of all Pilosa agent definitions, skills, and vendor mirrors
+scope: Audit of all spinosa agent definitions, skills, and vendor mirrors
 ---
 
-# Pilosa Agent & Skill Audit Report
+# spinosa Agent & Skill Audit Report
 
 ```
 ┌─ Corpus Navigation ──────────────────────────────────────────────┐
@@ -29,13 +29,13 @@ The audit found **3 CRITICAL truncation bugs** affecting vendor agent mirrors, *
 
 Two canonical agents lack metrics logging entirely:
 
-**pilosa-analyst** (`.agents/agents/pilosa-analyst.md`)
+**spinosa-analyst** (`.agents/agents/spinosa-analyst.md`)
 - **Issue**: No `logs/session_metrics.tsv` write permission (line 12-13: only `read: allow` + `write: maps/` with constraint).
 - **Issue**: No metrics step in workflow (lines 19-27); the workflow has 4 steps, none mention metrics.
 - **Issue**: No metrics rule in Rules section (lines 49-59).
 - **Severity**: Medium. All other 5 programmable agents (searcher, verifier, mapper, serendippo, janitor) append metrics. Analyst is invisible to session tracking.
 
-**pilosa-writer** (`.agents/agents/pilosa-writer.md`)
+**spinosa-writer** (`.agents/agents/spinosa-writer.md`)
 - **Issue**: No `logs/session_metrics.tsv` write permission (line 12-13: only `read: allow` + `write: agent_reports/`).
 - **Issue**: No metrics step in workflow (lines 24-33, 8 steps, none mention metrics).
 - **Issue**: No metrics rule in Rules section (lines 268-280).
@@ -61,13 +61,13 @@ All 7 descriptions accurately reflect actual defined behavior. No mismatches fou
 
 The OpenCode and Claude mirrors for **searcher**, **writer**, and **mapper** are severely truncated. The body content stops immediately at the first opening markdown code fence, losing most of the agent definition. This is a sync script bug.
 
-#### pilosa-searcher
+#### spinosa-searcher
 
 | Platform | File | Lines |
 |---|---|---|
-| Canonical | `.agents/agents/pilosa-searcher.md` | 95 |
-| OpenCode | `.opencode/agents/pilosa-searcher.md` | **33** (missing 62) |
-| Claude | `.claude/agents/pilosa-searcher.md` | **28** (missing 67) |
+| Canonical | `.agents/agents/spinosa-searcher.md` | 95 |
+| OpenCode | `.opencode/agents/spinosa-searcher.md` | **33** (missing 62) |
+| Claude | `.claude/agents/spinosa-searcher.md` | **28** (missing 67) |
 
 **Missing content** (canonical lines 40-95):
 - Full evidence packet frontmatter template (the `navigation:` block with maps_accessed, raw_files_scanned, etc.)
@@ -78,13 +78,13 @@ The OpenCode and Claude mirrors for **searcher**, **writer**, and **mapper** are
 **Exact truncation point** (OpenCode line 33, Claude line 28):
 `Write to agent_reports/evidence_packet.md:` followed by newline then ` ```markdown`. The file ends at the opening code fence.
 
-#### pilosa-writer
+#### spinosa-writer
 
 | Platform | File | Lines |
 |---|---|---|
-| Canonical | `.agents/agents/pilosa-writer.md` | **288** |
-| OpenCode | `.opencode/agents/pilosa-writer.md` | **33** (missing 255) |
-| Claude | `.claude/agents/pilosa-writer.md` | **30** (missing 258) |
+| Canonical | `.agents/agents/spinosa-writer.md` | **288** |
+| OpenCode | `.opencode/agents/spinosa-writer.md` | **33** (missing 255) |
+| Claude | `.claude/agents/spinosa-writer.md` | **30** (missing 258) |
 
 **Missing content** (canonical lines 38-288):
 - **Entire Report Template** (including Navigation Dashboard with Unicode charts)
@@ -96,13 +96,13 @@ The OpenCode and Claude mirrors for **searcher**, **writer**, and **mapper** are
 
 **Impact**: The Writer mirror has essentially no usable definition. The Unicode chart specification, the Writer's most distinctive capability, is entirely absent.
 
-#### pilosa-mapper
+#### spinosa-mapper
 
 | Platform | File | Lines |
 |---|---|---|
-| Canonical | `.agents/agents/pilosa-mapper.md` | 117 |
-| OpenCode | `.opencode/agents/pilosa-mapper.md` | **41** (missing 76) |
-| Claude | `.claude/agents/pilosa-mapper.md` | **38** (missing 79) |
+| Canonical | `.agents/agents/spinosa-mapper.md` | 117 |
+| OpenCode | `.opencode/agents/spinosa-mapper.md` | **41** (missing 76) |
+| Claude | `.claude/agents/spinosa-mapper.md` | **38** (missing 79) |
 
 **Missing content** (canonical lines 48-117):
 - Full extraction packet template (structured data format with batch_id, Processed Files table, Extraction Packets with key passages, concept signals, connections)
@@ -116,10 +116,10 @@ The remaining 4 agents (**analyst**, **verifier**, **serendippo**, **janitor**) 
 
 | Agent | Canonical | OpenCode | Claude | Body match? |
 |---|---|---|---|---|
-| pilosa-analyst | 59 lines | 55 lines | 52 lines | YES |
-| pilosa-verifier | 57 lines | 52 lines | 47 lines | YES |
-| pilosa-serendippo | 180 lines | 174 lines | 169 lines | YES |
-| pilosa-janitor | 95 lines | 89 lines | 83 lines | YES |
+| spinosa-analyst | 59 lines | 55 lines | 52 lines | YES |
+| spinosa-verifier | 57 lines | 52 lines | 47 lines | YES |
+| spinosa-serendippo | 180 lines | 174 lines | 169 lines | YES |
+| spinosa-janitor | 95 lines | 89 lines | 83 lines | YES |
 
 ### 2.3 Permissions Not Equivalent
 
@@ -130,15 +130,15 @@ All vendor mirrors use broader permission models that do not preserve canonical 
 
 **Specific permission issues**:
 
-1. **pilosa-janitor** (`.opencode/agents/pilosa-janitor.md`, line 12): Has `bash: allow` permission **not present in canonical**. Canonical janitor has no bash permission.
+1. **spinosa-janitor** (`.opencode/agents/spinosa-janitor.md`, line 12): Has `bash: allow` permission **not present in canonical**. Canonical janitor has no bash permission.
 
-2. **pilosa-janitor** (both `.opencode/` and `.claude/`): Missing the canonical `move: .trash/` permission (canonical line 17-18). This is the janitor's defining permission.
+2. **spinosa-janitor** (both `.opencode/` and `.claude/`): Missing the canonical `move: .trash/` permission (canonical line 17-18). This is the janitor's defining permission.
 
-3. **pilosa-mapper** (`.claude/agents/pilosa-mapper.md`, line 6): Only `tools: Read` — needs Write for extraction packets and maps.
+3. **spinosa-mapper** (`.claude/agents/spinosa-mapper.md`, line 6): Only `tools: Read` — needs Write for extraction packets and maps.
 
-4. **pilosa-analyst** (`.opencode/agents/pilosa-analyst.md`, line 9): `edit: allow` but canonical only permits writes to `maps/` with constraints.
+4. **spinosa-analyst** (`.opencode/agents/spinosa-analyst.md`, line 9): `edit: allow` but canonical only permits writes to `maps/` with constraints.
 
-5. **pilosa-verifier** (`.opencode/agents/pilosa-verifier.md`, line 11): `edit: allow` but canonical restricts writes to `agent_reports/` and `logs/session_metrics.tsv`.
+5. **spinosa-verifier** (`.opencode/agents/spinosa-verifier.md`, line 11): `edit: allow` but canonical restricts writes to `agent_reports/` and `logs/session_metrics.tsv`.
 
 ### 2.4 Frontmatter Field Differences (Platform-Specific, Not Errors)
 
@@ -150,7 +150,7 @@ All vendor mirrors use broader permission models that do not preserve canonical 
 
 ### 2.5 `.codex/agents/` (TOML — Separate Format, Intentional)
 
-Contains TOML files (`pilosa-searcher.toml` etc.) — a completely different format from canonical `.md` files. AGENTS.md documents this as "Codex-native TOML agents (manually maintained, not part of the sync script)." Content is simplified vs. canonical (e.g., writer TOML has 75 lines with no Unicode chart types). Expected for a manually-maintained separate format.
+Contains TOML files (`spinosa-searcher.toml` etc.) — a completely different format from canonical `.md` files. AGENTS.md documents this as "Codex-native TOML agents (manually maintained, not part of the sync script)." Content is simplified vs. canonical (e.g., writer TOML has 75 lines with no Unicode chart types). Expected for a manually-maintained separate format.
 
 ---
 
@@ -196,13 +196,13 @@ All 7 canonical skills use: `name, type: skill, scope, description, created, upd
 
 | Agent | Has write to session_metrics.tsv? | Has metrics instruction? | Session visible? |
 |---|---|---|---|
-| pilosa-searcher | YES (line 17) | YES (step 6, line 95) | YES |
-| **pilosa-analyst** | **NO** | **NO** | **NO** |
-| **pilosa-writer** | **NO** | **NO** | **NO** |
-| pilosa-verifier | YES (line 16) | YES (step 9, line 57) | YES |
-| pilosa-mapper | YES (line 15) | YES (step 7, line 117) | YES |
-| pilosa-serendippo | YES (line 18) | YES (Phase 4, line 169) | YES |
-| pilosa-janitor | YES (line 16) | YES (step 7, line 95) | YES |
+| spinosa-searcher | YES (line 17) | YES (step 6, line 95) | YES |
+| **spinosa-analyst** | **NO** | **NO** | **NO** |
+| **spinosa-writer** | **NO** | **NO** | **NO** |
+| spinosa-verifier | YES (line 16) | YES (step 9, line 57) | YES |
+| spinosa-mapper | YES (line 15) | YES (step 7, line 117) | YES |
+| spinosa-serendippo | YES (line 18) | YES (Phase 4, line 169) | YES |
+| spinosa-janitor | YES (line 16) | YES (step 7, line 95) | YES |
 
 **Gap**: 2 of 7 canonical agents (29%) cannot write metrics and have no metrics instructions. Analyst and Writer operations will never appear in `logs/session_metrics.tsv`.
 
@@ -214,13 +214,13 @@ All 7 canonical skills use: `name, type: skill, scope, description, created, upd
 
 | Parent Agent | Fallback Skill | Consistent? |
 |---|---|---|
-| pilosa-searcher | evidence-search | YES — same scope (evidence_retrieval), same workflow |
-| pilosa-analyst | context-analysis | YES — same scope concept, same analytical framing |
-| pilosa-writer | report-writing | YES — same scope (report_synthesis), same template |
-| pilosa-verifier | claim-verification | YES — same scope (claim_verification), same steps |
-| pilosa-janitor | workspace-cleanup | YES — same scope (workspace_hygiene), same workflow |
-| **pilosa-mapper** | **(none)** | **GAP — no fallback skill exists** |
-| **pilosa-serendippo** | **(none)** | **GAP — no fallback skill exists** |
+| spinosa-searcher | evidence-search | YES — same scope (evidence_retrieval), same workflow |
+| spinosa-analyst | context-analysis | YES — same scope concept, same analytical framing |
+| spinosa-writer | report-writing | YES — same scope (report_synthesis), same template |
+| spinosa-verifier | claim-verification | YES — same scope (claim_verification), same steps |
+| spinosa-janitor | workspace-cleanup | YES — same scope (workspace_hygiene), same workflow |
+| **spinosa-mapper** | **(none)** | **GAP — no fallback skill exists** |
+| **spinosa-serendippo** | **(none)** | **GAP — no fallback skill exists** |
 
 ### 5.2 Missing Fallback Skills
 
@@ -230,7 +230,7 @@ The orchestrator dispatch table (`.agents/skills/orchestrator-dispatch/SKILL.md`
 
 ### 5.3 Minor Scope Naming Inconsistency
 
-Canonical agent `pilosa-analyst` has scope `project_context` while its fallback skill `context-analysis` has scope `contextual_analysis`. Different labels, same concept. Not a functional bug.
+Canonical agent `spinosa-analyst` has scope `project_context` while its fallback skill `context-analysis` has scope `contextual_analysis`. Different labels, same concept. Not a functional bug.
 
 ---
 
@@ -238,7 +238,7 @@ Canonical agent `pilosa-analyst` has scope `project_context` while its fallback 
 
 ### 6.1 Superfluous File in agent_reports/
 
-**File**: `/Users/tommasoprinetti/Documents/pilosa-main/agent_reports/AGENTS.md`
+**File**: `/Users/tommasoprinetti/Documents/spinosa-main/agent_reports/AGENTS.md`
 This is a copy of the root orchestrator playbook placed inside `agent_reports/`. AGENTS.md files are repository control instructions and should NOT reside in the reports directory. The orchestrator dispatch skill (line 20) explicitly prohibits importing AGENTS.md files as source evidence; the same principle should apply to `agent_reports/`.
 
 ### 6.2 Sync Script Root Cause Analysis
@@ -250,7 +250,7 @@ The truncation bug follows a consistent pattern across all 3 affected agents:
 - This affects agents with early code blocks most severely (searcher: first block at line 39, writer: first block at line 37, mapper: first block at line 47)
 - Agents with later or no code blocks are unaffected
 
-### 6.3 `.claude/agents/pilosa-mapper.md` Tool Insufficiency
+### 6.3 `.claude/agents/spinosa-mapper.md` Tool Insufficiency
 
 Line 6: `tools: Read` — the mapper writes extraction packets and maps. Needs `Write`. (Secondary to truncation issue.)
 
@@ -259,24 +259,24 @@ Line 6: `tools: Read` — the mapper writes extraction packets and maps. Needs `
 ## 7. SUMMARY BY SEVERITY
 
 ### CRITICAL (3)
-1. `pilosa-searcher` mirror truncated (missing 62-67 lines) — `.opencode/agents/pilosa-searcher.md:33`, `.claude/agents/pilosa-searcher.md:28`
-2. `pilosa-writer` mirror truncated (missing 255-258 lines) — `.opencode/agents/pilosa-writer.md:33`, `.claude/agents/pilosa-writer.md:30`
-3. `pilosa-mapper` mirror truncated (missing 76-79 lines) — `.opencode/agents/pilosa-mapper.md:41`, `.claude/agents/pilosa-mapper.md:38`
+1. `spinosa-searcher` mirror truncated (missing 62-67 lines) — `.opencode/agents/spinosa-searcher.md:33`, `.claude/agents/spinosa-searcher.md:28`
+2. `spinosa-writer` mirror truncated (missing 255-258 lines) — `.opencode/agents/spinosa-writer.md:33`, `.claude/agents/spinosa-writer.md:30`
+3. `spinosa-mapper` mirror truncated (missing 76-79 lines) — `.opencode/agents/spinosa-mapper.md:41`, `.claude/agents/spinosa-mapper.md:38`
 
 ### HIGH (2)
-4. No fallback skills for `pilosa-mapper` and `pilosa-serendippo` (no SKILL.md exists)
+4. No fallback skills for `spinosa-mapper` and `spinosa-serendippo` (no SKILL.md exists)
 5. Vendor permissions not equivalent to canonical (all 14 OpenCode + Claude mirrors use blanket edit)
 
 ### MEDIUM (5)
-6. `pilosa-analyst` missing metrics support — `.agents/agents/pilosa-analyst.md` lines 12-13
-7. `pilosa-writer` missing metrics support — `.agents/agents/pilosa-writer.md` lines 12-13
-8. OpenCode janitor extra `bash: allow` — `.opencode/agents/pilosa-janitor.md` line 12
-9. OpenCode/Claude janitor missing `move: .trash/` — `.opencode/agents/pilosa-janitor.md`, `.claude/agents/pilosa-janitor.md`
+6. `spinosa-analyst` missing metrics support — `.agents/agents/spinosa-analyst.md` lines 12-13
+7. `spinosa-writer` missing metrics support — `.agents/agents/spinosa-writer.md` lines 12-13
+8. OpenCode janitor extra `bash: allow` — `.opencode/agents/spinosa-janitor.md` line 12
+9. OpenCode/Claude janitor missing `move: .trash/` — `.opencode/agents/spinosa-janitor.md`, `.claude/agents/spinosa-janitor.md`
 10. Scope name mismatch: analyst `project_context` vs skill `contextual_analysis`
 
 ### LOW (2)
-11. Superfluous AGENTS.md in agent_reports/ — `/Users/tommasoprinetti/Documents/pilosa-main/agent_reports/AGENTS.md`
-12. Claude mapper only `tools: Read` (needs Write) — `.claude/agents/pilosa-mapper.md` line 6
+11. Superfluous AGENTS.md in agent_reports/ — `/Users/tommasoprinetti/Documents/spinosa-main/agent_reports/AGENTS.md`
+12. Claude mapper only `tools: Read` (needs Write) — `.claude/agents/spinosa-mapper.md` line 6
 
 ### NO ISSUES
 - All 7 canonical agent frontmatter fields present and correct

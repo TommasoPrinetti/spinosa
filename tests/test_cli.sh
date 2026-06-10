@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Pilosa CLI Test Suite
+# Spinosa CLI Test Suite
 # Usage: bash tests/test_cli.sh
 
 # ── Test Framework ──────────────────────────────────────────────────────────
@@ -12,9 +12,9 @@ SUITE_START_TIME=0
 TEST_START_TIME=0
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-PILOSA_BIN="$REPO_ROOT/.bin/pilosa"
-TEST_HOME="$HOME/.pilosa-test-$$"
-export PILOSA_HOME="$TEST_HOME"
+SPINOSA_BIN="$REPO_ROOT/.bin/spinosa"
+TEST_HOME="$HOME/.spinosa-test-$$"
+export SPINOSA_HOME="$TEST_HOME"
 
 # Colors
 if [[ -t 1 ]]; then
@@ -58,7 +58,7 @@ test_fail() {
 # Create a test harness that loads functions without executing main
 create_test_harness() {
   # Strip the main case statement and save to file
-  sed '/^case "${1:-}" in$/,$d' "$PILOSA_BIN" > "$TEST_HOME/stripped.sh"
+  sed '/^case "${1:-}" in$/,$d' "$SPINOSA_BIN" > "$TEST_HOME/stripped.sh"
   
   cat > "$TEST_HOME/harness.sh" <<HARNESS_EOF
 #!/usr/bin/env bash
@@ -74,8 +74,8 @@ run_test() {
   create_test_harness
   bash -c "
     set -euo pipefail
-    export PILOSA_HOME='$TEST_HOME'
-    export PILOSA_BIN='$PILOSA_BIN'
+    export SPINOSA_HOME='$TEST_HOME'
+    export SPINOSA_BIN='$SPINOSA_BIN'
     source '$TEST_HOME/harness.sh'
     $test_code
   " 2>&1
@@ -86,8 +86,8 @@ setup() {
   printf '%s\n' "${BOLD}Setting up test environment...${RESET}"
   mkdir -p "$TEST_HOME"
   # Create a test workspace
-  mkdir -p "$TEST_HOME/test-workspace/.pilosa"
-  cat > "$TEST_HOME/test-workspace/.pilosa/workspace" <<EOF
+  mkdir -p "$TEST_HOME/test-workspace/.spinosa"
+  cat > "$TEST_HOME/test-workspace/.spinosa/workspace" <<EOF
 workspace_version: 1
 framework_version: 0.3.0
 created: 2026-06-06
@@ -108,7 +108,7 @@ teardown() {
 
 test_syntax_check() {
   test_start "Bash syntax check"
-  if bash -n "$PILOSA_BIN" 2>&1; then
+  if bash -n "$SPINOSA_BIN" 2>&1; then
     test_pass "No syntax errors"
   else
     test_fail "Syntax errors found"
@@ -118,8 +118,8 @@ test_syntax_check() {
 test_help_command() {
   test_start "Help command"
   local output
-  if output=$("$PILOSA_BIN" help 2>&1); then
-    if [[ "$output" == *"Usage:"* ]] && [[ "$output" == *"pilosa new"* ]]; then
+  if output=$("$SPINOSA_BIN" help 2>&1); then
+    if [[ "$output" == *"Usage:"* ]] && [[ "$output" == *"spinosa new"* ]]; then
       test_pass "Help output correct"
     else
       test_fail "Help output incomplete"
@@ -131,7 +131,7 @@ test_help_command() {
 
 test_ctrl_c_handling() {
   test_start "Ctrl-C handling (SIGINT trap)"
-  if grep -q "trap cleanup_on_exit EXIT INT TERM" "$PILOSA_BIN" 2>&1; then
+  if grep -q "trap cleanup_on_exit EXIT INT TERM" "$SPINOSA_BIN" 2>&1; then
     test_pass "Global trap is defined"
   else
     test_fail "Global trap not found in script"
@@ -208,7 +208,7 @@ test_workspace_registry_write() {
   local output
   if output=$(run_test "
     register_workspace '/tmp/test-ws' 'Test Project'
-    cat \"\$PILOSA_HOME/workspaces.txt\"
+    cat \"\$SPINOSA_HOME/workspaces.txt\"
   "); then
     if [[ "$output" == *"/tmp/test-ws|Test Project|"* ]]; then
       test_pass "Workspace registered"
@@ -226,7 +226,7 @@ test_workspace_registry_read() {
 /tmp/ws1|Project One|2026-06-06
 /tmp/ws2|Project Two|2026-06-06
 EOF
-  mkdir -p /tmp/ws1/.pilosa /tmp/ws2/.pilosa
+  mkdir -p /tmp/ws1/.spinosa /tmp/ws2/.spinosa
   local output
   if output=$(run_test "
     load_registry
@@ -245,15 +245,15 @@ EOF
 test_workspace_registry_update() {
   test_start "Workspace registry update (no duplicates)"
   rm -f "$TEST_HOME/workspaces.txt"
-  mkdir -p /tmp/ws-test/.pilosa
-  cat > /tmp/ws-test/.pilosa/workspace <<EOF
+  mkdir -p /tmp/ws-test/.spinosa
+  cat > /tmp/ws-test/.spinosa/workspace <<EOF
 project_name: Test
 EOF
   local output
   if output=$(run_test "
     update_registry '/tmp/ws-test'
     update_registry '/tmp/ws-test'
-    wc -l < \"\$PILOSA_HOME/workspaces.txt\"
+    wc -l < \"\$SPINOSA_HOME/workspaces.txt\"
   "); then
     if [[ "$output" == *"1"* ]]; then
       test_pass "No duplicate entries"
@@ -319,7 +319,7 @@ EOF
   cat > "$TEST_HOME/workspaces.txt" <<EOF
 /tmp/registry-ws|Registry Project|2026-06-06
 EOF
-  mkdir -p /tmp/registry-ws/.pilosa
+  mkdir -p /tmp/registry-ws/.spinosa
   local output
   if output=$(run_test "
     load_config
@@ -401,7 +401,7 @@ test_registry_persists_across_calls() {
   rm -f "$TEST_HOME/workspaces.txt"
   
   # Create the workspace directory structure
-  mkdir -p /tmp/persist-ws/.pilosa
+  mkdir -p /tmp/persist-ws/.spinosa
   
   # First call - register workspace
   run_test "register_workspace '/tmp/persist-ws' 'Persist Test'" > /dev/null 2>&1
@@ -446,7 +446,7 @@ test_workspace_selection_invalid_path() {
     echo \"EXIT=\$?\"
   " || true)
   
-  if [[ "$output" == *"Not a valid Pilosa workspace"* ]] || [[ "$output" == *"EXIT=1"* ]]; then
+  if [[ "$output" == *"Not a valid Spinosa workspace"* ]] || [[ "$output" == *"EXIT=1"* ]]; then
     test_pass "Invalid path rejected"
   else
     test_fail "Invalid path not rejected" "$output"
@@ -496,7 +496,7 @@ EOF
 
 test_registry_handles_deleted_workspaces() {
   test_start "Registry handles deleted workspaces"
-  mkdir -p /tmp/will-delete/.pilosa
+  mkdir -p /tmp/will-delete/.spinosa
   cat > "$TEST_HOME/workspaces.txt" <<EOF
 /tmp/will-delete|Will Delete|2026-06-06
 /tmp/also-gone|Also Gone|2026-06-06
@@ -547,7 +547,7 @@ test_performance_registry_vs_scan() {
 /tmp/perf-ws1|Perf Test 1|2026-06-06
 /tmp/perf-ws2|Perf Test 2|2026-06-06
 EOF
-  mkdir -p /tmp/perf-ws1/.pilosa /tmp/perf-ws2/.pilosa
+  mkdir -p /tmp/perf-ws1/.spinosa /tmp/perf-ws2/.spinosa
   
   # Time registry load
   local registry_start=$(date +%s%N 2>/dev/null || echo "0")
@@ -616,7 +616,7 @@ main() {
   SUITE_START_TIME=$(date +%s 2>/dev/null || echo "0")
   
   printf '%s\n' "${BOLD}═══════════════════════════════════════════════════════════════${RESET}"
-  printf '%s\n' "${BOLD}Pilosa CLI Test Suite${RESET}"
+  printf '%s\n' "${BOLD}Spinosa CLI Test Suite${RESET}"
   printf '%s\n' "═══════════════════════════════════════════════════════════════"
   
   setup

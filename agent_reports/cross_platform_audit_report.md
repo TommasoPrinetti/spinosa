@@ -1,14 +1,14 @@
 ---
 type: audit_report
-agent: pilosa-auditor
-description: Comprehensive cross-platform audit of Pilosa framework shell scripts
+agent: spinosa-auditor
+description: Comprehensive cross-platform audit of spinosa framework shell scripts
 created: 2026-06-08
 scope: .bin/*.sh, install.sh, tests/*.sh
 platforms_audited: macOS (Darwin/BSD), Linux (GNU), Windows (native/WSL/Git Bash)
 severity: HIGH / MEDIUM / LOW
 ---
 
-# Cross-Platform Audit Report — Pilosa Framework
+# Cross-Platform Audit Report — spinosa Framework
 
 ## Summary
 
@@ -28,11 +28,11 @@ severity: HIGH / MEDIUM / LOW
 
 | File | Line | Code | Platform |
 |------|------|------|----------|
-| `.bin/pilosa` | 1077 | `open "$_ltmp_codex"` | Linux, Windows |
-| `.bin/pilosa` | 1099 | `open "$_ltmp_oc"` | Linux, Windows |
-| `.bin/pilosa` | 1121 | `open "$_ltmp_cc"` | Linux, Windows |
-| `.bin/pilosa` | 1132 | `open "claude://code/new?q=${encoded_prompt}&folder=${root}"` | Linux, Windows |
-| `.bin/pilosa` | 1149 | `open "$_ltmp_kl"` | Linux, Windows |
+| `.bin/spinosa` | 1077 | `open "$_ltmp_codex"` | Linux, Windows |
+| `.bin/spinosa` | 1099 | `open "$_ltmp_oc"` | Linux, Windows |
+| `.bin/spinosa` | 1121 | `open "$_ltmp_cc"` | Linux, Windows |
+| `.bin/spinosa` | 1132 | `open "claude://code/new?q=${encoded_prompt}&folder=${root}"` | Linux, Windows |
+| `.bin/spinosa` | 1149 | `open "$_ltmp_kl"` | Linux, Windows |
 
 These are all inside `run_cli_with_prompt()` in `if [[ "$(uname)" == "Darwin" ]]` blocks. On Linux they fall through to the `else` branch, so the `open` command itself is never reached. **Safe at runtime** due to Darwin guard.
 
@@ -45,7 +45,7 @@ These are all inside `run_cli_with_prompt()` in `if [[ "$(uname)" == "Darwin" ]]
 
 | File | Line | Code |
 |------|------|------|
-| `.bin/pilosa` | 1683 | `if [[ -n "$_ocr_bin" ]] && mkfifo "$_ocr_fifo" 2>/dev/null; then` |
+| `.bin/spinosa` | 1683 | `if [[ -n "$_ocr_bin" ]] && mkfifo "$_ocr_fifo" 2>/dev/null; then` |
 
 In the OCR pipeline. On failure, falls to line 1765 which warns `"Could not create FIFO - OCR skipped"`. **OCR feature breaks, but not the whole script.**
 
@@ -57,8 +57,8 @@ In the OCR pipeline. On failure, falls to line 1765 which warns `"Could not crea
 | File | Line | Code |
 |------|------|------|
 | `install.sh` | 65-66 | `elif [ -r /dev/tty ]; then ... < /dev/tty` |
-| `install.sh` | 725 | `exec "${PILOSA_BIN_DIR}/pilosa" </dev/tty` |
-| `.bin/pilosa` | 103 | `{ [[ -r /dev/tty ]] && IFS= read -r "$@" < /dev/tty; }` |
+| `install.sh` | 725 | `exec "${spinosa_BIN_DIR}/spinosa" </dev/tty` |
+| `.bin/spinosa` | 103 | `{ [[ -r /dev/tty ]] && IFS= read -r "$@" < /dev/tty; }` |
 
 The `read_from_tty()` function handles this gracefully. The `exec </dev/tty` at line 725 of `install.sh` is more problematic — would fail on native Windows.
 
@@ -83,7 +83,7 @@ All use `2>/dev/null || echo "0"` fallback, so the test silently degrades to 0ms
 
 | File | Line | Code |
 |------|------|------|
-| `.bin/pilosa` | 3752 | `exec "$0" "${BASH_ARGV[@]}"` |
+| `.bin/spinosa` | 3752 | `exec "$0" "${BASH_ARGV[@]}"` |
 
 `BASH_ARGV` is only available when `extdebug` is enabled. In standard bash, this array is empty. Could cause re-exec without args.
 
@@ -94,8 +94,8 @@ All use `2>/dev/null || echo "0"` fallback, so the test silently degrades to 0ms
 
 | File | Line | Code |
 |------|------|------|
-| `.bin/pilosa` | 1048, 1130 | `python3 -c 'import sys, urllib.parse; ...'` for URL encoding |
-| `.bin/pilosa` | 3839 | `curl | python3 -c "import sys, json..."` for release notes |
+| `.bin/spinosa` | 1048, 1130 | `python3 -c 'import sys, urllib.parse; ...'` for URL encoding |
+| `.bin/spinosa` | 3839 | `curl | python3 -c "import sys, json..."` for release notes |
 
 URL encoding has a `sed` fallback. JSON parsing for release notes (line 3839) has no fallback.
 
@@ -111,14 +111,14 @@ Same as H1 note above. Line 1049 prints an `open "claude://..."` command on all 
 ### M1: `pbcopy` — 2 instances (macOS-only)
 | File | Line | Code |
 |------|------|------|
-| `.bin/pilosa` | 957-958 | `pbcopy` |
+| `.bin/spinosa` | 957-958 | `pbcopy` |
 
 **Already handled:** The `copy_to_clipboard()` function falls back to `xclip`, `xsel`, and `clip.exe`. **No action needed.**
 
 ### M2: `sed -i` BSD vs GNU differences — 8 instances
 | File | Lines | Pattern |
 |------|-------|---------|
-| `.bin/pilosa` | 2304-2305, 2505-2506, 3030-3031, 3395-3399 | `sed -i.bak ... \|\| sed -i '' ...` |
+| `.bin/spinosa` | 2304-2305, 2505-2506, 3030-3031, 3395-3399 | `sed -i.bak ... \|\| sed -i '' ...` |
 | `sync-agents.sh` | 200-210 | Same pattern |
 
 **Already handled:** Every usage has a fallback. **No action needed.**
@@ -126,15 +126,15 @@ Same as H1 note above. Line 1049 prints an `open "claude://..."` command on all 
 ### M3: `stat` with BSD vs GNU flags — 2 locations
 | File | Line | Pattern |
 |------|------|---------|
-| `.bin/pilosa` | 1230-1233 | `stat -c %s` (GNU) \|\| `stat -f %z` (BSD) |
-| `.bin/pilosa` | 3491 | `stat -f %m` (BSD) \|\| `stat -c %Y` (GNU) |
+| `.bin/spinosa` | 1230-1233 | `stat -c %s` (GNU) \|\| `stat -f %z` (BSD) |
+| `.bin/spinosa` | 3491 | `stat -f %m` (BSD) \|\| `stat -c %Y` (GNU) |
 
 **Already handled:** Both use `||` fallback with both formats tested. **No action needed.**
 
 ### M4: `sort -V` fallback — 1 instance
 | File | Line | Code |
 |------|------|------|
-| `.bin/pilosa` | 65-68 | Checks if `sort -V` works, falls back to `sort -t. -k1,1n -k2,2n -k3,3n` |
+| `.bin/spinosa` | 65-68 | Checks if `sort -V` works, falls back to `sort -t. -k1,1n -k2,2n -k3,3n` |
 
 **Already handled:** No action needed.
 
@@ -153,7 +153,7 @@ Same as H1 note above. Line 1049 prints an `open "claude://..."` command on all 
 | File | Line | Code | Need fix? |
 |------|------|------|-----------|
 | `sync-agents.sh` | 189 | `count=$(find ... | wc -l)` | **YES** — missing `tr -d ' '` |
-| `.bin/pilosa` | 3386 | `... | wc -l | tr -d ' '` | **OK** — already strips |
+| `.bin/spinosa` | 3386 | `... | wc -l | tr -d ' '` | **OK** — already strips |
 
 **Fix:** Add `tr -d ' '` to `sync-agents.sh` line 189.
 
@@ -181,12 +181,12 @@ The `-delete` action is widely supported but non-POSIX. The `2>/dev/null || true
 ### M11: `tests/test_cli.sh` fragile sed harness — 1 instance
 | File | Line | Code |
 |------|------|------|
-| `tests/test_cli.sh` | 61 | `sed '/^case "${1:-}" in$/,$d' "$PILOSA_BIN"` |
+| `tests/test_cli.sh` | 61 | `sed '/^case "${1:-}" in$/,$d' "$spinosa_BIN"` |
 
 Relies on exact whitespace match of the `case` statement. If formatting changes, tests silently break.
 
 ### M12: `tr '[:upper:]' '[:lower:]'` locale-dependent — ~10 instances
-Extensive use throughout `.bin/pilosa`. May not work correctly in Turkish or other locales.
+Extensive use throughout `.bin/spinosa`. May not work correctly in Turkish or other locales.
 
 ---
 
@@ -211,7 +211,7 @@ Used for drawing lines. Bash-specific (all scripts require bash).
 Line 182: If no `.md` files exist, glob literal passes to `cp`, silently fails.
 
 ### L7: `df -Pk` with `awk` assumes POSIX output
-Line 1255 in `.bin/pilosa`. The `-Pk` flags are POSIX, so this is actually correct.
+Line 1255 in `.bin/spinosa`. The `-Pk` flags are POSIX, so this is actually correct.
 
 ---
 
@@ -253,7 +253,7 @@ Line 1255 in `.bin/pilosa`. The `-Pk` flags are POSIX, so this is actually corre
 
 | File | Lines | Role |
 |------|-------|------|
-| `.bin/pilosa` | 4151 | Main CLI entry point |
+| `.bin/spinosa` | 4151 | Main CLI entry point |
 | `install.sh` | 733 | Framework installer |
 | `.bin/check-startup.sh` | 293 | Legacy validation |
 | `.bin/lib/metrics.sh` | 144 | Shared metrics helpers |

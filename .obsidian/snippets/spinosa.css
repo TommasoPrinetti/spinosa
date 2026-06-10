@@ -1,5 +1,5 @@
 /* ══════════════════════════════════════════════════════════════════════════════
-   Pilosa — Obsidian CSS Snippet
+   Spinosa — Obsidian CSS Snippet
    Accent: #8F2DFF (vibrant purple)
    Font: Source Serif 4 (serif)
    ══════════════════════════════════════════════════════════════════════════════ */
@@ -31,10 +31,10 @@ body {
   --accent-l: 59%;
 
   /* Heading colors */
-  --pilosa-h1: #8F2DFF;
-  --pilosa-h2: #6b4f9e;
-  --pilosa-h3: #4a7c59;
-  --pilosa-h4: #c4922a;
+  --spinosa-h1: #8F2DFF;
+  --spinosa-h2: #6b4f9e;
+  --spinosa-h3: #4a7c59;
+  --spinosa-h4: #c4922a;
 
   /* Borders */
   --background-modifier-border: #e0dcd5;
@@ -61,10 +61,10 @@ body {
   --accent-l: 59%;
 
   /* Heading colors — slightly brighter for dark mode */
-  --pilosa-h1: #a666ff;
-  --pilosa-h2: #8a70b8;
-  --pilosa-h3: #5fa373;
-  --pilosa-h4: #d4a840;
+  --spinosa-h1: #a666ff;
+  --spinosa-h2: #8a70b8;
+  --spinosa-h3: #5fa373;
+  --spinosa-h4: #d4a840;
 
   /* Borders */
   --background-modifier-border: #3a3a3a;
@@ -76,22 +76,22 @@ body {
 /* ── Heading Colors ──────────────────────────────────────────────────────── */
 .markdown-preview-view h1,
 .cm-s-obsidian .cm-header-1 {
-  color: var(--pilosa-h1);
+  color: var(--spinosa-h1);
 }
 
 .markdown-preview-view h2,
 .cm-s-obsidian .cm-header-2 {
-  color: var(--pilosa-h2);
+  color: var(--spinosa-h2);
 }
 
 .markdown-preview-view h3,
 .cm-s-obsidian .cm-header-3 {
-  color: var(--pilosa-h3);
+  color: var(--spinosa-h3);
 }
 
 .markdown-preview-view h4,
 .cm-s-obsidian .cm-header-4 {
-  color: var(--pilosa-h4);
+  color: var(--spinosa-h4);
 }
 
 /* ── Links ───────────────────────────────────────────────────────────────── */
@@ -125,12 +125,12 @@ body {
 /* ── Code Blocks ─────────────────────────────────────────────────────────── */
 .markdown-preview-view pre {
   font-family: var(--font-monospace-theme);
-  border-left: 3px solid var(--pilosa-h2);
+  border-left: 3px solid var(--spinosa-h2);
 }
 
 /* ── Blockquotes ─────────────────────────────────────────────────────────── */
 .markdown-preview-view blockquote {
-  border-left: 3px solid var(--pilosa-h2);
+  border-left: 3px solid var(--spinosa-h2);
   padding-left: 1em;
   color: var(--text-muted);
 }
@@ -232,7 +232,7 @@ body {
   background: linear-gradient(
     to right,
     transparent,
-    var(--pilosa-h2),
+    var(--spinosa-h2),
     transparent
   );
 }
@@ -250,7 +250,7 @@ body {
 /* ── Tags ────────────────────────────────────────────────────────────────── */
 .tag {
   background: rgba(143, 45, 255, 0.1);
-  color: var(--pilosa-h1);
+  color: var(--spinosa-h1);
   border-radius: 3px;
   padding: 0.1em 0.4em;
   font-size: 0.85em;
@@ -269,7 +269,7 @@ body {
 
 /* ── Checkboxes ──────────────────────────────────────────────────────────── */
 .markdown-preview-view .task-list-item-checkbox:checked {
-  accent-color: var(--pilosa-h1);
+  accent-color: var(--spinosa-h1);
 }
 
 /* ── Search Highlights ───────────────────────────────────────────────────── */

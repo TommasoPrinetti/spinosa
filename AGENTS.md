@@ -2,7 +2,7 @@
 type: project_context
 scope: [repo-wide guidance for standard coding agents]
 description:
-  - Root routing contract for coding agents and the Pilosa orchestrator.
+  - Root routing contract for coding agents and the Spinosa orchestrator.
   - Read this first to understand setup gates, sub-agent chains, and write boundaries.
 connects_to:
   - system/startup.md
@@ -11,7 +11,7 @@ connects_to:
 created: 2026-05-26
 updated: 2026-06-04
 ---
-# Pilosa Framework
+# Spinosa Framework
 
 Read this before any source work. Route every prompt through the correct sub-agent pipeline, enforce source boundaries, and return verified results.
 
@@ -33,7 +33,7 @@ Use `.bin/lib/metrics.sh` when shell access is available:
 
 ```bash
 source .bin/lib/metrics.sh
-pilosa_metrics_append logs/session_metrics.tsv "$session_id" "pilosa-searcher" "$route" "search" "$query_label" "maps/;raw/" "$maps_read" "$raw_matches" "$raw_files_read" "$reports_written" "$output_path"
+spinosa_metrics_append logs/session_metrics.tsv "$session_id" "spinosa-searcher" "$route" "search" "$query_label" "maps/;raw/" "$maps_read" "$raw_matches" "$raw_files_read" "$reports_written" "$output_path"
 ```
 
 Rules:
@@ -48,7 +48,7 @@ Rules:
 - Do not edit `raw/` files bodies. If you edit a file in `raw/` is just to edit it's yaml header.
 - Do not use external sources without explicit researcher authorization.
 - To answer source-grounded questions, orchestrate the correct sub-agent pipeline.
-- Check any outputs with `pilosa-verifier` before reporting them as complete.
+- Check any outputs with `spinosa-verifier` before reporting them as complete.
 
 ## After you receive a request - execute this loop
 
@@ -93,21 +93,21 @@ Choose a sequence of sub-agents to invoke in order to arrive the best way at the
 | ClassName           | DefaultSequence                                                                 | WhenToUse                                                                             |
 | ------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
 | `fast_path`         | (none)                                                                          | Only class where you answer directly                                                  |
-| `clarify_search`    | skip (or `pilosa-searcher` if term disambiguation needed)                       | Skip if question is well-formed                                                       |
-| `find_material`     | `pilosa-searcher` -> `pilosa-verifier`                                          | `pilosa-verifier` verifies the located path exists                                    |
-| `evidence_answer`   | `pilosa-searcher` + `pilosa-analyst` -> `pilosa-writer` -> `pilosa-verifier`    | `pilosa-analyst` runs parallel to `pilosa-searcher`; `pilosa-writer` synthesizes both |
-| `synthesis_report`  | `pilosa-searcher` xN + `pilosa-analyst` -> `pilosa-writer` -> `pilosa-verifier` | `pilosa-analyst` provides broader context alongside evidence                          |
-| `verification`      | `pilosa-verifier`                                                               | Stand-alone                                                                           |
-| `index_maintenance` | `pilosa-searcher` (if search) -> `pilosa-verifier`                              | Stand-alone                                                                           |
-| `cleanup`           | `pilosa-janitor`                                                                | User-confirmation gate required before any move                                       |
-| `deep_index`        | `pilosa-mapper` -> `pilosa-verifier`                                            | Deep corpus indexing — mapper extracts and writes maps                                |
-| `serendipity`       | `pilosa-serendippo`                                                             | Holistic connection discovery across the corpus                                       |
+| `clarify_search`    | skip (or `spinosa-searcher` if term disambiguation needed)                       | Skip if question is well-formed                                                       |
+| `find_material`     | `spinosa-searcher` -> `spinosa-verifier`                                          | `spinosa-verifier` verifies the located path exists                                    |
+| `evidence_answer`   | `spinosa-searcher` + `spinosa-analyst` -> `spinosa-writer` -> `spinosa-verifier`    | `spinosa-analyst` runs parallel to `spinosa-searcher`; `spinosa-writer` synthesizes both |
+| `synthesis_report`  | `spinosa-searcher` xN + `spinosa-analyst` -> `spinosa-writer` -> `spinosa-verifier` | `spinosa-analyst` provides broader context alongside evidence                          |
+| `verification`      | `spinosa-verifier`                                                               | Stand-alone                                                                           |
+| `index_maintenance` | `spinosa-searcher` (if search) -> `spinosa-verifier`                              | Stand-alone                                                                           |
+| `cleanup`           | `spinosa-janitor`                                                                | User-confirmation gate required before any move                                       |
+| `deep_index`        | `spinosa-mapper` -> `spinosa-verifier`                                            | Deep corpus indexing — mapper extracts and writes maps                                |
+| `serendipity`       | `spinosa-serendippo`                                                             | Holistic connection discovery across the corpus                                       |
 
 ### 4. Dispatch sub-agents
 
 Once decided the pipeline of sub-agents, dispatch them and start asking.
 
-Note: Searcher and `pilosa-analyst` run in parallel when both are in the sequence. `pilosa-writer` waits for both before synthesizing.
+Note: Searcher and `spinosa-analyst` run in parallel when both are in the sequence. `spinosa-writer` waits for both before synthesizing.
 
 See the **Sub-Agent Pipeline** table below for what each agent does. See **Sub-Agent Invocation Rules** for how to call them.
 
@@ -115,11 +115,11 @@ See the **Sub-Agent Pipeline** table below for what each agent does. See **Sub-A
 
 - Clean user prompt and turn it into a clear, defined sub-agent task, prior sub-agent outputs (file paths or inline), and route constraints.
 - Do not invent facts, source evidence, arguments, or route constraints.
-- Use fenced `pilosa-subagent` blocks when documenting or preparing a handoff. These blocks are clarity markers, not a substitute for native spawn.
+- Use fenced `spinosa-subagent` blocks when documenting or preparing a handoff. These blocks are clarity markers, not a substitute for native spawn.
 - File-based handoff: Sub-agents write results to `agent_reports/` and return file paths. Pass paths, not content, between agents. Agents write and edit files that are the information core between their sessions.
 
-```pilosa-subagent
-agent: pilosa-searcher
+```spinosa-subagent
+agent: spinosa-searcher
 role: Searcher
 task: Find evidence for the cleaned user prompt.
 inputs:
@@ -134,13 +134,13 @@ fallback_skill: .agents/skills/evidence-search/SKILL.md
 
 | NativeAgent         | Role                                                                                  |
 | ------------------- | ------------------------------------------------------------------------------------- |
-| `pilosa-searcher`   | Searches map first, raw files, and dictionary for evidence                            |
-| `pilosa-mapper`     | Reads raw files in batch, extracts content-grounded fragments; writes navigation maps |
-| `pilosa-serendippo` | Holistic serendipitous research — finds hidden connections across files               |
-| `pilosa-analyst`    | Provides broader contextual analysis from project context                             |
-| `pilosa-writer`     | Synthesizes findings into reports                                                     |
-| `pilosa-verifier`   | Verifies claims, quotes, and paths                                                    |
-| `pilosa-janitor`    | Audits hygiene and archives stale files                                               |
+| `spinosa-searcher`   | Searches map first, raw files, and dictionary for evidence                            |
+| `spinosa-mapper`     | Reads raw files in batch, extracts content-grounded fragments; writes navigation maps |
+| `spinosa-serendippo` | Holistic serendipitous research — finds hidden connections across files               |
+| `spinosa-analyst`    | Provides broader contextual analysis from project context                             |
+| `spinosa-writer`     | Synthesizes findings into reports                                                     |
+| `spinosa-verifier`   | Verifies claims, quotes, and paths                                                    |
+| `spinosa-janitor`    | Audits hygiene and archives stale files                                               |
 
 Canonical agent definitions live in `.agents/agents/`. Vendor directories (`.opencode/agents/`, `.claude/agents/`, `.codex/agents/`) are generated mirrors with platform-specific frontmatter or TOML wrappers.
 Fallback SKILL.md files live in `.agents/skills/`; vendor skill directories are generated mirrors. The orchestrator may reference `orchestrator-dispatch` for chain selection.
@@ -154,9 +154,9 @@ Go on summoning sub-agents and reasoning if you see new traces and paths come up
 Stop and answer when:
 
 - Fast-path answer is complete.
-- Sub-agent chain is complete (`pilosa-writer` produced a report and `pilosa-verifier` passed or corrected it).
-- `pilosa-verifier` completed a verification.
-- `pilosa-janitor` produced a report and the user confirmed.
+- Sub-agent chain is complete (`spinosa-writer` produced a report and `spinosa-verifier` passed or corrected it).
+- `spinosa-verifier` completed a verification.
+- `spinosa-janitor` produced a report and the user confirmed.
 - A blocker prevents honest progress.
 ### 5. Finishing
 
@@ -167,8 +167,8 @@ Stop and answer when:
 - State blockers or unchecked claims.
 ## Global Rules
 
-- Direct quotes must use the repository verbatim quote format and must be verified against the source. `pilosa-writer` applies the format; `pilosa-verifier` checks quote accuracy, source path validity, and citation completeness.
-- `pilosa-verifier` is mandatory whenever we have quotes.
+- Direct quotes must use the repository verbatim quote format and must be verified against the source. `spinosa-writer` applies the format; `spinosa-verifier` checks quote accuracy, source path validity, and citation completeness.
+- `spinosa-verifier` is mandatory whenever we have quotes.
 - No fixed set of maps is required. Startup creates as many navigation maps as the corpus needs. Maps can be updated and enriched while we search.
 - Report blockers honestly. Never invent support.
 - Use the `question` tool whenever you're missing context or directioning.

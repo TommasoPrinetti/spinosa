@@ -10,7 +10,7 @@ updated: 2026-06-04
 
 # system — Architecture & Context
 
-Core system files that define how Pilosa operates. All other directories depend on these.
+Core system files that define how Spinosa operates. All other directories depend on these.
 
 ## Contents
 

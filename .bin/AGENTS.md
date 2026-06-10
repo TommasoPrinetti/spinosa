@@ -18,7 +18,7 @@ Mechanical scripts for CLI setup, release packaging, and validation. Human-maint
 ## Sub-agent ownership
 
 - **None.** No sub-agent operates here.
-- The orchestrator reads setup output from `pilosa new` during startup but never edits scripts.
+- The orchestrator reads setup output from `spinosa new` during startup but never edits scripts.
 
 ## Operations
 
@@ -30,12 +30,12 @@ Mechanical scripts for CLI setup, release packaging, and validation. Human-maint
 
 | File | Purpose |
 |---|---|
-| `pilosa` | CLI entry point; creates workspaces, runs integrated onboarding, validates workspaces, syncs agents |
-| `check-startup.sh` | Legacy developer validation helper (superseded by `pilosa check`) |
-| `sync-agents.sh` | Legacy agent sync script (superseded by `pilosa sync`) |
+| `spinosa` | CLI entry point; creates workspaces, runs integrated onboarding, validates workspaces, syncs agents |
+| `check-startup.sh` | Legacy developer validation helper (superseded by `spinosa check`) |
+| `sync-agents.sh` | Legacy agent sync script (superseded by `spinosa sync`) |
 | `lib/metrics.sh` | Shared Unicode metric helpers for reports and session ledgers |
 
 ## See also
 
-- [[startup]] — protocol that reads `pilosa new` setup output
+- [[startup]] — protocol that reads `spinosa new` setup output
 - [[AGENTS]] — orchestrator playbook

@@ -34,10 +34,10 @@ updated: 2026-06-04
 
 ## Who Writes Maps
 
-- **Startup**: `pilosa-mapper` writes all maps.
-- **Normal operations**: `pilosa-mapper` (deep maintenance), `pilosa-serendippo`, `pilosa-searcher`, `pilosa-analyst` can write maps when the orchestrator grants `map_write` route constraint.
+- **Startup**: `spinosa-mapper` writes all maps.
+- **Normal operations**: `spinosa-mapper` (deep maintenance), `spinosa-serendippo`, `spinosa-searcher`, `spinosa-analyst` can write maps when the orchestrator grants `map_write` route constraint.
 - **Verification**: map content is self-correcting through agent use, not through dedicated verifier gate.
-- **Force update:** `pilosa-mapper` can be executed to enlarge, enrich and update the maps
+- **Force update:** `spinosa-mapper` can be executed to enlarge, enrich and update the maps
 
 ## Validation
 

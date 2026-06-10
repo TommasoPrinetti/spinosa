@@ -1,13 +1,13 @@
 ---
 type: analysis_report
 created: 2026-06-08
-scope: .bin/pilosa CLI and install.sh flow mapping
+scope: .bin/spinosa CLI and install.sh flow mapping
 ---
 
-# Pilosa CLI and Install Script Flow Analysis
+# spinosa CLI and Install Script Flow Analysis
 
-## File: `/Users/tommasoprinetti/Documents/pilosa-main/.bin/pilosa` (3936 lines)
-## File: `/Users/tommasoprinetti/Documents/pilosa-main/install.sh` (689 lines)
+## File: `/Users/tommasoprinetti/Documents/spinosa-main/.bin/spinosa` (3936 lines)
+## File: `/Users/tommasoprinetti/Documents/spinosa-main/install.sh` (689 lines)
 
 ---
 
@@ -45,16 +45,16 @@ esac
 | Item | Detail |
 |---|---|
 | `set -euo pipefail` | Strict mode -- any unset variable or failed command kills the script |
-| `PILOSA_HOME` | `$HOME/.pilosa` (overrideable) |
-| `PILOSA_REPO` | `TommasoPrinetti/pilosa` |
+| `spinosa_HOME` | `$HOME/.spinosa` (overrideable) |
+| `spinosa_REPO` | `TommasoPrinetti/spinosa` |
 | `FRAMEWORK_ROOT` | Resolved at line 86 via `resolve_framework_root()` |
 | `cleanup_on_exit` trap | Kills spinner, runs `stty sane`. Registered for EXIT, INT, TERM |
 | `USE_GUM` | Default 0; set to 1 via `--gum` flag or `USE_GUM=1` env |
 
 ### `resolve_framework_root()` (lines 53-84)
 
-- **Dev mode**: Checks if `SCRIPT_DIR/../` has `.pilosa/framework-files.tsv`
-- **Installed mode**: Looks in `~/.pilosa/versions/<latest>/` using `sort -V` (with portable fallback)
+- **Dev mode**: Checks if `SCRIPT_DIR/../` has `.spinosa/framework-files.tsv`
+- **Installed mode**: Looks in `~/.spinosa/versions/<latest>/` using `sort -V` (with portable fallback)
 - **Failure**: Returns empty string. Commands that need framework (like `cmd_new`) will `die`.
 
 ---
@@ -69,19 +69,19 @@ cmd_new()
   Collects positional args into new_args[]
 ```
 
-**Note**: `--force` explicitly dies with message "--force is not supported for pilosa new." This is confusing -- it is accepted by the parser but always fails.
+**Note**: `--force` explicitly dies with message "--force is not supported for spinosa new." This is confusing -- it is accepted by the parser but always fails.
 
 ### Complete Flow
 
 | Step | Action | User Interaction |
 |------|--------|------------------|
 | 1 | Corpus root prompt | `prompt_input "Corpus folder" "" "e.g. ~/Documents/my-research"` -- loop until valid directory |
-| 2 | Auto-generate workspace path | `${parent}/${corpus_name}-pilosa` with numeric suffix collision avoidance. No user prompt. |
+| 2 | Auto-generate workspace path | `${parent}/${corpus_name}-spinosa` with numeric suffix collision avoidance. No user prompt. |
 | 3 | Project name prompt | `prompt_input "Project name" "$default_name"` -- loop until non-empty |
 | 4 | Framework check | `die` if FRAMEWORK_ROOT empty or manifest missing |
 | 5 | Create workspace dir + copy framework files | `mkdir -p`, `cp -a` from manifest. Creates raw/, maps/, logs/, agent_reports/, .trash/ with .gitkeep |
-| 6 | Write workspace metadata | Creates `.pilosa/workspace` and `.pilosa/manifest.tsv` |
-| 7 | Register workspace | Appends to `~/.pilosa/workspaces.txt` |
+| 6 | Write workspace metadata | Creates `.spinosa/workspace` and `.spinosa/manifest.tsv` |
+| 7 | Register workspace | Appends to `~/.spinosa/workspaces.txt` |
 | 8 | `run_integrated_onboarding` | **This is the big flow -- see below** |
 
 ### `run_integrated_onboarding()` (lines 2055-2171)
@@ -105,7 +105,7 @@ This is a shared function used by both `cmd_new` and `cmd_onboard`.
 | 3.5 | 2153-2154 | Print startup prompt preview + launch command preview | `print_box` |
 | 3.6 | 2156 | `choose_handoff_action` | `prompt_choose` -- "Copy launch command" or "Run launch command now" |
 | 3.7 | 2159-2168 | Execute handoff | `run_cli_with_prompt` or `copy_to_clipboard` |
-| 3.8 | 2170 | `write_onboarding_summary` | Writes `.pilosa/onboarding-summary.md` |
+| 3.8 | 2170 | `write_onboarding_summary` | Writes `.spinosa/onboarding-summary.md` |
 
 ### Exit Points
 
@@ -122,18 +122,18 @@ This is a shared function used by both `cmd_new` and `cmd_onboard`.
 
 - Creates entire workspace directory tree
 - Copies files from source into workspace
-- Writes .pilosa/workspace, .pilosa/manifest.tsv, .pilosa/onboarding-summary.md
+- Writes .spinosa/workspace, .spinosa/manifest.tsv, .spinosa/onboarding-summary.md
 - Writes system/context.md, system/configuration.md
 - Copies AGENTS.md to CLAUDE.md if preferred CLI is Claude Code
 - Writes .obsidian/appearance.json
-- Registers workspace in ~/.pilosa/workspaces.txt
-- May exec a new process (Claude, Codex, etc.) if "Run now" chosen -- **this replaces the pilosa process**
+- Registers workspace in ~/.spinosa/workspaces.txt
+- May exec a new process (Claude, Codex, etc.) if "Run now" chosen -- **this replaces the spinosa process**
 
 ### User Gotchas
 
 1. **`--force` is accepted but always dies** (line 2368): Confusing UX
 2. **Arrow key menu with `q` to cancel**: `arrow_select` returns 1 on `q`, causing `cmd_onboard` to `return 1`. The main dispatcher swallows this with `|| true`, so the user sees no error but no success either.
-3. **`exec` in `run_cli_with_prompt`**: If user picks "Run now" with a supported CLI, the process is replaced. No return to pilosa.
+3. **`exec` in `run_cli_with_prompt`**: If user picks "Run now" with a supported CLI, the process is replaced. No return to spinosa.
 4. **No way to go back**: Once you start onboarding, there is no "back" option. The source folder rescan loop is the only escape (via `choose_scan_action` returning "rescan").
 5. **`choose_import_batches` loops indefinitely**: If user deselects all items and tries to continue, they get "Select at least one file type" warning and must re-select. There is no cancel option.
 
@@ -148,7 +148,7 @@ cmd_onboard()
   Parse: --no-color, --gum, --no-gum, --source-dir PATH, --help|-h
   Positional args into onboard_args[]
   Resolves workspace via require_workspace()
-  Extracts project name from .pilosa/workspace or prompts
+  Extracts project name from .spinosa/workspace or prompts
 ```
 
 ### Complete Flow
@@ -157,8 +157,8 @@ cmd_onboard()
 |------|--------|---------|
 | 1 | `require_workspace` | If not in workspace: discover or prompt for path |
 | 2 | `cd` to workspace | `die` on failure |
-| 3 | Extract project_name from .pilosa/workspace | `prompt_input` if missing |
-| 4 | Extract source_dir from .pilosa/workspace or --source-dir | Info if previous location found; warn if doesn't exist |
+| 3 | Extract project_name from .spinosa/workspace | `prompt_input` if missing |
+| 4 | Extract source_dir from .spinosa/workspace or --source-dir | Info if previous location found; warn if doesn't exist |
 | 5 | `run_integrated_onboarding` | Same as cmd_new steps |
 
 ### Exit Points
@@ -173,7 +173,7 @@ cmd_onboard()
 ### Side Effects
 
 - Writes same files as cmd_new's onboarding
-- Modifies .pilosa/workspace (project_name, setup_status)
+- Modifies .spinosa/workspace (project_name, setup_status)
 - Copies source files into raw/
 - May exec a CLI process
 
@@ -232,9 +232,9 @@ cmd_update()
 
 - Downloads release tarball to temp dir
 - Copies/overwrites framework files in workspace
-- Creates `.pilosa-new` sidecar files for conflicts
-- Rewrites `.pilosa/manifest.tsv`
-- Updates `.pilosa/workspace` version
+- Creates `.spinosa-new` sidecar files for conflicts
+- Rewrites `.spinosa/manifest.tsv`
+- Updates `.spinosa/workspace` version
 - Removes retired framework files
 - Cleans up temp dir
 
@@ -242,7 +242,7 @@ cmd_update()
 
 1. **Four sequential confirmation prompts**: Users may find the multi-step confirmation tedious. The `--yes` flag bypasses all.
 2. **`--yes` bypasses the final "Apply this update?" default is `n`**: With `--yes`, the update applies silently. Without it, default is "n" so declining is the safe default.
-3. **Sidecar naming**: Files get `.pilosa-new` suffix. No guidance on how to resolve conflicts later.
+3. **Sidecar naming**: Files get `.spinosa-new` suffix. No guidance on how to resolve conflicts later.
 4. **`prepare_release_framework` calls `die` on failure**: If the download fails, the script exits immediately. Temp dir cleanup happens via the global EXIT trap.
 
 ---
@@ -263,7 +263,7 @@ cmd_upgrade()
 |------|------|--------|------------------|
 | 1 | 3706-3718 | Fetch release notes from GitHub API | spinner; `fetch_release_notes` uses curl + python3 |
 | 2 | 3713-3714 | `display_release_notes` | Formatted box display |
-| 3 | 3722-3727 | Confirm download | `confirm "Download and run the Pilosa installer to upgrade?"` |
+| 3 | 3722-3727 | Confirm download | `confirm "Download and run the spinosa installer to upgrade?"` |
 | 4 | 3729-3753 | Download installer.sh from GitHub | First tries release tag, falls back to raw main branch |
 | 5 | 3758-3763 | Build upgrade_args | `--upgrade`, optional `--version`, optional `--yes` |
 | 6 | 3766 | `bash "$installer" "${upgrade_args[@]}"` | Runs install.sh |
@@ -283,7 +283,7 @@ cmd_upgrade()
 ### Side Effects
 
 - Downloads installer.sh to temp dir
-- Executes install.sh with `--upgrade` flag (which replaces the pilosa binary, framework, vendor binaries)
+- Executes install.sh with `--upgrade` flag (which replaces the spinosa binary, framework, vendor binaries)
 - Cleans up temp dir
 
 ### User Gotchas
@@ -309,7 +309,7 @@ cmd_check()
 | Step | Line | Action | Prompts |
 |------|------|--------|---------|
 | 1 | 2883-2889 | Resolve workspace, cd | `require_workspace` or die |
-| 2 | 2898-2910 | Check required files exist | AGENTS.md, system/configuration.md, system/startup.md, system/context.md, system/yaml_header_template.md, .pilosa/framework-files.tsv |
+| 2 | 2898-2910 | Check required files exist | AGENTS.md, system/configuration.md, system/startup.md, system/context.md, system/yaml_header_template.md, .spinosa/framework-files.tsv |
 | 3 | 2912-2923 | Check for placeholder strings | Reads configuration.md + context.md |
 | 4 | 2925-2931 | Check setup_status | Fail if "cli_started", warn if "workspace_started" not found |
 | 5 | 2933-2942 | Check source_location | Extract from config, verify directory exists |
@@ -334,7 +334,7 @@ cmd_check()
 ### User Gotchas
 
 1. **Uses `exit 1` on failure (line 3012)**: This is inconsistent with other commands which use `return 1`. With `exit 1`, the global EXIT trap fires and the script terminates. Since the main dispatcher uses `|| true`, this means the script exits with code 0 anyway (the `|| true` overrides). This is confusing but harmless.
-2. **No way to check non-workspace directories**: The check only works on valid Pilosa workspaces.
+2. **No way to check non-workspace directories**: The check only works on valid spinosa workspaces.
 
 ---
 
@@ -393,18 +393,18 @@ cmd_sync()
 ```
 cmd_uninstall()
   Parse: --no-color, --yes/-y, --help|-h
-  Reads PILOSA_BIN_DIR (default: ~/.local/bin)
+  Reads spinosa_BIN_DIR (default: ~/.local/bin)
 ```
 
 ### Complete Flow
 
 | Step | Line | Action | Prompts |
 |------|------|--------|---------|
-| 1 | 2220-2224 | Check if Pilosa is installed | Info if not found |
+| 1 | 2220-2224 | Check if spinosa is installed | Info if not found |
 | 2 | 2226-2232 | Show what will be removed | Info output |
-| 3 | 2234-2239 | Confirm | `confirm "Remove Pilosa from this system?"` (unless --yes) |
-| 4 | 2241 | Remove PILOSA_HOME | `rm -rf "$PILOSA_HOME"` |
-| 5 | 2242 | Remove shim | `rm -f "$bin_dir/pilosa"` |
+| 3 | 2234-2239 | Confirm | `confirm "Remove spinosa from this system?"` (unless --yes) |
+| 4 | 2241 | Remove spinosa_HOME | `rm -rf "$spinosa_HOME"` |
+| 5 | 2242 | Remove shim | `rm -f "$bin_dir/spinosa"` |
 | 6 | 2244-2249 | Completion message | Info output |
 
 ### Exit Points
@@ -419,13 +419,13 @@ cmd_uninstall()
 
 ### Side Effects
 
-- Deletes `~/.pilosa/` recursively (framework, binary, versions, config, vendor, workspace cache)
-- Deletes `~/.local/bin/pilosa` shim
+- Deletes `~/.spinosa/` recursively (framework, binary, versions, config, vendor, workspace cache)
+- Deletes `~/.local/bin/spinosa` shim
 
 ### User Gotchas
 
 1. **No per-workspace cleanup**: The warning "Research workspaces are NOT affected" is shown, but there is no guidance on where workspaces are or how to remove them.
-2. **Aggressive `rm -rf`**: Deletes entire PILOSA_HOME with no undo.
+2. **Aggressive `rm -rf`**: Deletes entire spinosa_HOME with no undo.
 3. **No confirmation of what workspaces exist**: Could warn about registered workspaces before deleting.
 
 ---
@@ -444,7 +444,7 @@ cmd_dashboard()
 | Step | Line | Action | Prompts |
 |------|------|--------|---------|
 | 1 | 3775-3777 | Get framework version | None |
-| 2 | 3787-3792 | Check if in workspace | Reads .pilosa/workspace |
+| 2 | 3787-3792 | Check if in workspace | Reads .spinosa/workspace |
 | 3 | 3799-3848 | If not in workspace: ask scan permission, discover workspaces | `ask_scan_permission` if first time |
 | 4 | 3853-3876 | Detect LLM CLIs | Spinner |
 | 5 | 3880-3912 | **Main menu loop** | `prompt_choose` with 9 options |
@@ -459,8 +459,8 @@ cmd_dashboard()
 
 ### Side Effects
 
-- Asks scan permission (writes to ~/.pilosa/config.yaml)
-- Discovers and caches workspaces (writes ~/.pilosa/workspace_cache.txt, ~/.pilosa/workspaces.txt)
+- Asks scan permission (writes to ~/.spinosa/config.yaml)
+- Discovers and caches workspaces (writes ~/.spinosa/workspace_cache.txt, ~/.spinosa/workspaces.txt)
 - Dispatches to other commands (which have their own side effects)
 
 ### User Gotchas
@@ -525,11 +525,11 @@ main "$@"
 | 8 | 502-506 | Download framework tarball | Spinner |
 | 9 | 508-524 | Verify checksum | Spinner |
 | 10 | 527-528 | Unpack tarball | `tar -xzf` |
-| 11 | 530-538 | Install pilosa CLI | `cp` + `chmod` |
+| 11 | 530-538 | Install spinosa CLI | `cp` + `chmod` |
 | 12 | 541-617 | Install vendor binaries (Gum, RapidOCR) | Spinner for downloads |
-| 13 | 619-626 | Create shim | Writes `~/.local/bin/pilosa` |
+| 13 | 619-626 | Create shim | Writes `~/.local/bin/spinosa` |
 | 14 | 632-645 | PATH check | Warns if not on PATH |
-| 15 | 647-654 | Smoke test | Runs `pilosa help` |
+| 15 | 647-654 | Smoke test | Runs `spinosa help` |
 | 16 | 656-681 | Success banner | Info output |
 
 ### `prompt_upgrade()` (lines 332-425)
@@ -560,12 +560,12 @@ Handles three cases:
 
 ### Side Effects
 
-- Creates `~/.pilosa/` directory tree
+- Creates `~/.spinosa/` directory tree
 - Downloads and unpacks tarball
-- Copies pilosa CLI binary
+- Copies spinosa CLI binary
 - Copies Gum binary (if not --no-gum)
 - Installs RapidOCR (bundled or downloaded)
-- Creates shim at `~/.local/bin/pilosa`
+- Creates shim at `~/.local/bin/spinosa`
 - Verifies vendor binary checksums
 
 ### User Gotchas
@@ -573,7 +573,7 @@ Handles three cases:
 1. **`read_from_tty` failure is fatal**: If running in a non-interactive context without `--yes`, the installer dies with "Cannot read from terminal."
 2. **install.sh uses `set -eu` (not pipefail)**: Missing pipes won't cause failures.
 3. **RapidOCR installation**: If not bundled and download fails, it silently warns and continues. No way to force it.
-4. **Shim creation overwrites**: The shim at `~/.local/bin/pilosa` is overwritten without backup.
+4. **Shim creation overwrites**: The shim at `~/.local/bin/spinosa` is overwritten without backup.
 5. **`--min-days` is security-focused**: Rejects very new releases to avoid zero-day compromised uploads. Good security practice.
 
 ---
@@ -589,7 +589,7 @@ new)       shift; cmd_new "$@" || true ;;
 
 This means if `cmd_new` exits with code 1 (e.g., user cancels, or a `die` call), the main case statement exits with code 0. The user cannot tell from the exit code whether the command succeeded or failed.
 
-**Impact**: CI/automation cannot detect failures. Shell scripts calling `pilosa new` will think it succeeded even when it failed.
+**Impact**: CI/automation cannot detect failures. Shell scripts calling `spinosa new` will think it succeeded even when it failed.
 
 ### 2. `die()` vs `return` Inconsistency
 
@@ -623,11 +623,11 @@ Gum is optional and private-installed:
 
 ### 6. Framework Resolution in Installed Mode
 
-When pilosa is installed via install.sh:
-- Binary lives at `~/.pilosa/bin/pilosa`
-- Framework is at `~/.pilosa/versions/<version>/pilosa-framework-<version>/`
+When spinosa is installed via install.sh:
+- Binary lives at `~/.spinosa/bin/spinosa`
+- Framework is at `~/.spinosa/versions/<version>/spinosa-framework-<version>/`
 - `resolve_framework_root()` uses `ls -1 | sort -V | tail -1` to find latest version
-- In dev mode, framework is detected by `.pilosa/framework-files.tsv` in parent dir
+- In dev mode, framework is detected by `.spinosa/framework-files.tsv` in parent dir
 
 ---
 
@@ -641,7 +641,7 @@ When pilosa is installed via install.sh:
 | User cancels all confirmations | cmd_update | Returns 0 with message "Update cancelled." |
 | User enters invalid path | cmd_onboard | Loops forever with error messages until valid path given |
 | No LLM CLI installed | cmd_new | Handoff continues; "Other" option copies generic command |
-| `pilosa` not on PATH after install | install.sh | Warns and shows instructions, but smoke test may fail |
+| `spinosa` not on PATH after install | install.sh | Warns and shows instructions, but smoke test may fail |
 | Running in CI/non-interactive | All commands | Most prompts work via stdin fallback, but arrow menus always fall back to numbered |
 
 ---

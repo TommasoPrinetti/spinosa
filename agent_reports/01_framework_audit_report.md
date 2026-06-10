@@ -2,16 +2,16 @@
 type: audit_report
 role: framework_structure_audit
 purpose: [comprehensive audit of YAML frontmatter, links, content, missing files, and framework-files.tsv]
-scope: [all framework root files, system/, logs/, maps/, raw/, agent_reports/, .trash/, .bin/, .pilosa/]
-generated_by: pilosa-orchestrator
+scope: [all framework root files, system/, logs/, maps/, raw/, agent_reports/, .trash/, .bin/, .spinosa/]
+generated_by: spinosa-orchestrator
 generated_at: 2026-06-05
 processing_status: audit_complete
 created: 2026-06-05
 updated: 2026-06-05
 ---
-# Pilosa Framework Structure Audit
+# spinosa Framework Structure Audit
 
-Audit of 22 files across the Pilosa framework. Covers YAML frontmatter compliance, wikilink validity, `connects_to` accuracy, content consistency, missing AGENTS.md files, and `framework-files.tsv` registry correctness.
+Audit of 22 files across the spinosa framework. Covers YAML frontmatter compliance, wikilink validity, `connects_to` accuracy, content consistency, missing AGENTS.md files, and `framework-files.tsv` registry correctness.
 
 ---
 
@@ -21,9 +21,9 @@ Audit of 22 files across the Pilosa framework. Covers YAML frontmatter complianc
 
 | File | Path | Lines | Issue |
 |---|---|---|---|
-| `README.md` | `/Users/tommasoprinetti/Documents/pilosa-main/README.md` | 1–170 | **No YAML frontmatter block.** File opens directly with whitespace (line 1), then an ASCII art block (lines 3–10). Per `system/yaml_header_template.md` line 20: "Use a small, stable yaml header on every framework file." README is listed in `framework-files.tsv` as a framework file. |
-| `LICENSE` | `/Users/tommasoprinetti/Documents/pilosa-main/LICENSE` | 1–131 | **No YAML frontmatter.** File opens with `Required Notice:` on line 1. Listed in `framework-files.tsv` (line 3) as a framework file. Debatable whether a license file needs frontmatter, but the policy is stated as "every framework file." |
-| `.trash/AGENTS.md` | `/Users/tommasoprinetti/Documents/pilosa-main/.trash/AGENTS.md` | 1–25 | **No YAML frontmatter.** Opens directly with `# .trash/ — Retired Files` on line 1. Every other AGENTS.md in the repository has proper YAML frontmatter. This is a framework file (`framework-files.tsv` line 34, policy: `replace_if_unmodified`). This contradicts the framework's own stated rules. |
+| `README.md` | `/Users/tommasoprinetti/Documents/spinosa-main/README.md` | 1–170 | **No YAML frontmatter block.** File opens directly with whitespace (line 1), then an ASCII art block (lines 3–10). Per `system/yaml_header_template.md` line 20: "Use a small, stable yaml header on every framework file." README is listed in `framework-files.tsv` as a framework file. |
+| `LICENSE` | `/Users/tommasoprinetti/Documents/spinosa-main/LICENSE` | 1–131 | **No YAML frontmatter.** File opens with `Required Notice:` on line 1. Listed in `framework-files.tsv` (line 3) as a framework file. Debatable whether a license file needs frontmatter, but the policy is stated as "every framework file." |
+| `.trash/AGENTS.md` | `/Users/tommasoprinetti/Documents/spinosa-main/.trash/AGENTS.md` | 1–25 | **No YAML frontmatter.** Opens directly with `# .trash/ — Retired Files` on line 1. Every other AGENTS.md in the repository has proper YAML frontmatter. This is a framework file (`framework-files.tsv` line 34, policy: `replace_if_unmodified`). This contradicts the framework's own stated rules. |
 
 ### 1.2 — Non-standard field names
 
@@ -53,7 +53,7 @@ Audit of 22 files across the Pilosa framework. Covers YAML frontmatter complianc
 
 | File | Line | Style | Detail |
 |---|---|---|---|
-| `system/configuration.md` | 5–6 | Comma-separated two-sentence string | `"Operating profile for the current Pilosa project or framework template.,Agents read this first..."` — uses a comma to splice two sentences in a single string. Most other files use YAML list format (`- ...`). |
+| `system/configuration.md` | 5–6 | Comma-separated two-sentence string | `"Operating profile for the current spinosa project or framework template.,Agents read this first..."` — uses a comma to splice two sentences in a single string. Most other files use YAML list format (`- ...`). |
 | `system/context.md` | 5 | Semicolon-separated string | `"Read by Writer for synthesis; updated by startup during indexing."` — uses semicolons. Most other files use YAML list format. |
 
 ---
@@ -122,12 +122,12 @@ Per the framework's own conventions, every directory that contains framework fil
 
 | Directory | Path | Has AGENTS.md? | Notes |
 |---|---|---|---|
-| `.agents/` | `/Users/tommasoprinetti/Documents/pilosa-main/.agents/` | **NO** | Contains canonical agent definitions (`agents/`) and skills (`skills/`). Listed in `framework-files.tsv` (line 10) as `replace_if_unmodified`. AGENTS.md would help agents understand the canonical structure. |
-| `.claude/` | `/Users/tommasoprinetti/Documents/pilosa-main/.claude/` | **NO** | Generated mirror of agent definitions and skills. `framework-files.tsv` line 11. |
-| `.codex/` | `/Users/tommasoprinetti/Documents/pilosa-main/.codex/` | **NO** | Manually maintained TOML agents + generated skill mirrors. `framework-files.tsv` line 12. |
-| `.opencode/` | `/Users/tommasoprinetti/Documents/pilosa-main/.opencode/` | **NO** | Generated mirror with `package.json` (listed in `framework-files.tsv` line 15). Contains `agents/` and `skills/` subdirectories. |
-| `.pilosa/` | `/Users/tommasoprinetti/Documents/pilosa-main/.pilosa/` | **NO** | CLI metadata directory containing `framework-files.tsv` and `retired-framework-files.tsv`. Not in the README tree diagram but is a real directory used by the CLI. |
-| `.bin/lib/` | `/Users/tommasoprinetti/Documents/pilosa-main/.bin/lib/` | **NO** | Subdirectory of `.bin/` containing `metrics.sh`. Covered indirectly by `.bin/AGENTS.md`, which does not mention `lib/`. |
+| `.agents/` | `/Users/tommasoprinetti/Documents/spinosa-main/.agents/` | **NO** | Contains canonical agent definitions (`agents/`) and skills (`skills/`). Listed in `framework-files.tsv` (line 10) as `replace_if_unmodified`. AGENTS.md would help agents understand the canonical structure. |
+| `.claude/` | `/Users/tommasoprinetti/Documents/spinosa-main/.claude/` | **NO** | Generated mirror of agent definitions and skills. `framework-files.tsv` line 11. |
+| `.codex/` | `/Users/tommasoprinetti/Documents/spinosa-main/.codex/` | **NO** | Manually maintained TOML agents + generated skill mirrors. `framework-files.tsv` line 12. |
+| `.opencode/` | `/Users/tommasoprinetti/Documents/spinosa-main/.opencode/` | **NO** | Generated mirror with `package.json` (listed in `framework-files.tsv` line 15). Contains `agents/` and `skills/` subdirectories. |
+| `.spinosa/` | `/Users/tommasoprinetti/Documents/spinosa-main/.spinosa/` | **NO** | CLI metadata directory containing `framework-files.tsv` and `retired-framework-files.tsv`. Not in the README tree diagram but is a real directory used by the CLI. |
+| `.bin/lib/` | `/Users/tommasoprinetti/Documents/spinosa-main/.bin/lib/` | **NO** | Subdirectory of `.bin/` containing `metrics.sh`. Covered indirectly by `.bin/AGENTS.md`, which does not mention `lib/`. |
 
 **Existing AGENTS.md files (for reference):**
 
@@ -146,14 +146,14 @@ Per the framework's own conventions, every directory that contains framework fil
 
 ## 5. FRAMEWORK-FILES.TSV ISSUES
 
-File: `/Users/tommasoprinetti/Documents/pilosa-main/.pilosa/framework-files.tsv` (35 data rows)
+File: `/Users/tommasoprinetti/Documents/spinosa-main/.spinosa/framework-files.tsv` (35 data rows)
 
 ### 5.1 — Missing entries
 
 | Missing file | Detail |
 |---|---|
-| `.bin/AGENTS.md` | File **exists** at `/Users/tommasoprinetti/Documents/pilosa-main/.bin/AGENTS.md` with proper YAML frontmatter (7 lines). Not listed in `framework-files.tsv`. Every other AGENTS.md is listed (lines 2, 18, 24, 26, 29, 32, 34). This file should be listed with role `framework` and policy `replace_if_unmodified`. |
-| `CLAUDE.md` | File **exists** at `/Users/tommasoprinetti/Documents/pilosa-main/CLAUDE.md` (175 lines, verbatim copy of AGENTS.md). Regenerated by `.bin/sync-agents.sh` (line 179: `cp "$REPO_ROOT/AGENTS.md" "$REPO_ROOT/CLAUDE.md"`). Should be listed, likely with role `framework` and policy `always_replace` (since it is regenerated from AGENTS.md on sync, not user-modifiable). |
+| `.bin/AGENTS.md` | File **exists** at `/Users/tommasoprinetti/Documents/spinosa-main/.bin/AGENTS.md` with proper YAML frontmatter (7 lines). Not listed in `framework-files.tsv`. Every other AGENTS.md is listed (lines 2, 18, 24, 26, 29, 32, 34). This file should be listed with role `framework` and policy `replace_if_unmodified`. |
+| `CLAUDE.md` | File **exists** at `/Users/tommasoprinetti/Documents/spinosa-main/CLAUDE.md` (175 lines, verbatim copy of AGENTS.md). Regenerated by `.bin/sync-agents.sh` (line 179: `cp "$REPO_ROOT/AGENTS.md" "$REPO_ROOT/CLAUDE.md"`). Should be listed, likely with role `framework` and policy `always_replace` (since it is regenerated from AGENTS.md on sync, not user-modifiable). |
 
 ### 5.2 — Existence verification of listed entries
 
@@ -166,9 +166,9 @@ All paths listed in `framework-files.tsv` that are individual files were verifie
 | 4 | `LICENSE` | ✅ |
 | 5 | `.bin/check-startup.sh` | ✅ |
 | 6 | `.bin/sync-agents.sh` | ✅ |
-| 7 | `.bin/pilosa` | ✅ |
+| 7 | `.bin/spinosa` | ✅ |
 | 8 | `.bin/lib/metrics.sh` | ✅ |
-| 9 | `.pilosa/retired-framework-files.tsv` | ✅ |
+| 9 | `.spinosa/retired-framework-files.tsv` | ✅ |
 | 10 | `.agents/` | ✅ (directory) |
 | 11 | `.claude/` | ✅ (directory) |
 | 12 | `.codex/` | ✅ (directory) |
@@ -204,7 +204,7 @@ All paths listed in `framework-files.tsv` that are individual files were verifie
 | 21 | `system/context.md` | `never_replace` | Correct — user state. ✅ |
 | 30 | `logs/user_requests.md` | `never_replace` | Correct — user state. ✅ |
 | 31 | `logs/session_metrics.tsv` | `never_replace` | Correct — user state. ✅ |
-| 3 | `README.md` | `replace_if_unmodified` | Debatable — README has no YAML frontmatter so `updated` date cannot be checked for staleness. The `pilosa update` command (line 1200+ in `.bin/pilosa`) may not be able to detect "unmodified" without a manifest hash comparison. However, the CLI does compute SHA256 hashes for the manifest (line 1242), so this works at the content level. |
+| 3 | `README.md` | `replace_if_unmodified` | Debatable — README has no YAML frontmatter so `updated` date cannot be checked for staleness. The `spinosa update` command (line 1200+ in `.bin/spinosa`) may not be able to detect "unmodified" without a manifest hash comparison. However, the CLI does compute SHA256 hashes for the manifest (line 1242), so this works at the content level. |
 | 34 | `.trash/AGENTS.md` | `replace_if_unmodified` | This file lacks YAML frontmatter entirely, so the CLI cannot read an `updated` date. However, SHA256 manifest comparison handles this at the content level. |
 
 ---
@@ -220,7 +220,7 @@ The `description` field format varies significantly across the framework, making
 | YAML list (`- ...`) | `- Root routing contract for coding agents...` | `AGENTS.md`, `.bin/AGENTS.md`, `raw/AGENTS.md`, `maps/AGENTS.md`, `agent_reports/AGENTS.md`, `system/dictionary.md`, `system/workspace_index.md`, `system/yaml_header_template.md`, `system/startup.md` |
 | Single string | `"Architecture, instructions, templates..."` | `system/AGENTS.md` |
 | Semicolon-separated string | `"Read by Writer for synthesis; updated by startup..."` | `system/context.md` |
-| Comma-spliced string | `"Operating profile for the current Pilosa project or framework template.,Agents read this..."` | `system/configuration.md` |
+| Comma-spliced string | `"Operating profile for the current spinosa project or framework template.,Agents read this..."` | `system/configuration.md` |
 
 The `yaml_header_template.md` (line 30) specifies `connects_to` uses bare paths, but does **not** standardize the `description` format. The template shows `- [path]` list format for `connects_to` but the `description` in the same template (line 9-10) also uses the `- ...` list format. This suggests list format is the intended convention, but it is not explicitly documented.
 
@@ -239,7 +239,7 @@ Compare with other generated files like maps (which use `map_template.md` line 3
 `.bin/AGENTS.md` lines 31-33 list only two scripts in its table:
 
 ```
-| `pilosa` | CLI entry point... |
+| `spinosa` | CLI entry point... |
 | `check-startup.sh` | Developer validation helper... |
 ```
 
@@ -257,13 +257,13 @@ Multiple fields use `[filled by startup]` or `[filled by CLI onboarding]` (lines
 
 ## 7. LEGACY / RETIRED FILES
 
-File: `/Users/tommasoprinetti/Documents/pilosa-main/.pilosa/retired-framework-files.tsv`
+File: `/Users/tommasoprinetti/Documents/spinosa-main/.spinosa/retired-framework-files.tsv`
 
 | Line | Path | Reason |
 |---|---|---|
-| 2 | `onboard.command` | `replaced_by_pilosa_new` |
-| 3 | `onboard.cmd` | `replaced_by_pilosa_new` |
-| 4 | `.bin/onboard.sh` | `replaced_by_pilosa_new` |
+| 2 | `onboard.command` | `replaced_by_spinosa_new` |
+| 3 | `onboard.cmd` | `replaced_by_spinosa_new` |
+| 4 | `.bin/onboard.sh` | `replaced_by_spinosa_new` |
 
 These files no longer exist in the repository (verified — not found in directory listing). The registry is accurate. ✅
 
@@ -283,7 +283,7 @@ These files no longer exist in the repository (verified — not found in directo
 7. **`AGENTS.md`** and **`CLAUDE.md`** line 18 — Grammatical error "You provides" → "You provide".
 
 ### Medium (should address)
-8. **Six directories lack AGENTS.md**: `.agents/`, `.claude/`, `.codex/`, `.opencode/`, `.pilosa/`, `.bin/lib/`.
+8. **Six directories lack AGENTS.md**: `.agents/`, `.claude/`, `.codex/`, `.opencode/`, `.spinosa/`, `.bin/lib/`.
 9. **`system/system_architecture_map.md`** — Missing `status` field; updated date (2026-06-02) is older than peers.
 10. **`system/dictionary.md`** and **`logs/user_requests.md`** — Stale `updated` dates equal `created`.
 11. **`maps/AGENTS.md`** — `connects_to` is sparse (only `AGENTS.md`).
@@ -320,11 +320,11 @@ These files no longer exist in the repository (verified — not found in directo
 | 19 | `agent_reports/AGENTS.md` | 58 |
 | 20 | `.trash/AGENTS.md` | 25 |
 | 21 | `.bin/AGENTS.md` | 39 |
-| 22 | `.bin/pilosa` | 1623 (audited lines 1–100, 1200–1299) |
+| 22 | `.bin/spinosa` | 1623 (audited lines 1–100, 1200–1299) |
 | 23 | `.bin/check-startup.sh` | 293 |
 | 24 | `.bin/sync-agents.sh` | 183 |
 | 25 | `.bin/lib/metrics.sh` | 144 |
-| 26 | `.pilosa/framework-files.tsv` | 35 |
-| 27 | `.pilosa/retired-framework-files.tsv` | 4 |
+| 26 | `.spinosa/framework-files.tsv` | 35 |
+| 27 | `.spinosa/retired-framework-files.tsv` | 4 |
 
 Total audited: 27 files. Total lines read: ~4,600.

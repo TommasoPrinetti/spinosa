@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Pilosa CLI Interactive Test Suite
+# Spinosa CLI Interactive Test Suite
 # Tests the dashboard and interactive flows as a real user would experience them
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-PILOSA_BIN="$REPO_ROOT/.bin/pilosa"
-TEST_HOME="$HOME/.pilosa-interactive-test-$$"
-export PILOSA_HOME="$TEST_HOME"
+SPINOSA_BIN="$REPO_ROOT/.bin/spinosa"
+TEST_HOME="$HOME/.spinosa-interactive-test-$$"
+export SPINOSA_HOME="$TEST_HOME"
 
 # Colors
 if [[ -t 1 ]]; then
@@ -39,7 +39,7 @@ test_fail() {
   [[ -n "${2:-}" ]] && printf '    %s%s%s\n' "${DIM}" "$2" "${RESET}"
 }
 
-# Run pilosa with simulated input and timeout
+# Run spinosa with simulated input and timeout
 # Usage: run_interactive "input_sequence" timeout_seconds
 run_interactive() {
   local input="$1"
@@ -49,8 +49,8 @@ run_interactive() {
   # Create a temporary expect-like script
   cat > "$TEST_HOME/interact.sh" <<INTERACT_EOF
 #!/usr/bin/env bash
-export PILOSA_HOME="$TEST_HOME"
-export PILOSA_BIN="$PILOSA_BIN"
+export SPINOSA_HOME="$TEST_HOME"
+export SPINOSA_BIN="$SPINOSA_BIN"
 
 # Feed input with delays to simulate real typing
 {
@@ -59,7 +59,7 @@ export PILOSA_BIN="$PILOSA_BIN"
     echo "\$inp"
     sleep 0.3
   done
-} | "$PILOSA_BIN" 2>&1
+} | "$SPINOSA_BIN" 2>&1
 INTERACT_EOF
   chmod +x "$TEST_HOME/interact.sh"
   
@@ -98,8 +98,8 @@ setup() {
   
   # Create test workspaces
   for i in 1 2 3; do
-    mkdir -p "$TEST_HOME/workspace-$i/.pilosa"
-    cat > "$TEST_HOME/workspace-$i/.pilosa/workspace" <<EOF
+    mkdir -p "$TEST_HOME/workspace-$i/.spinosa"
+    cat > "$TEST_HOME/workspace-$i/.spinosa/workspace" <<EOF
 workspace_version: 1
 framework_version: 0.3.0
 created: 2026-06-06
@@ -144,7 +144,7 @@ test_dashboard_shows_menu() {
   local output
   output=$(run_interactive "9" 3)
   
-  if output_contains "$output" "Pilosa — Research Framework" && \
+  if output_contains "$output" "Spinosa — Research Framework" && \
      output_contains "$output" "New workspace" && \
      output_contains "$output" "Update workspace" && \
      output_contains "$output" "Check workspace"; then
@@ -191,7 +191,7 @@ test_menu_selection_help() {
   output=$(run_interactive "9" 3)
   
   if output_contains "$output" "Usage:" && \
-     output_contains "$output" "pilosa new"; then
+     output_contains "$output" "spinosa new"; then
     test_pass "Help command executed from menu"
   else
     test_fail "Help not shown" "$(echo "$output" | head -30)"
@@ -217,7 +217,7 @@ test_ctrl_c_during_menu() {
   
   # Send Ctrl-C (ASCII 3) immediately
   local output
-  output=$(printf '\x03' | "$PILOSA_BIN" 2>&1 &
+  output=$(printf '\x03' | "$SPINOSA_BIN" 2>&1 &
     local pid=$!
     sleep 2
     if kill -0 "$pid" 2>/dev/null; then
@@ -242,7 +242,7 @@ test_ctrl_c_during_spinner() {
   output=$( (
     sleep 0.5
     printf '\x03'
-  ) | "$PILOSA_BIN" health 2>&1 &
+  ) | "$SPINOSA_BIN" health 2>&1 &
     local pid=$!
     sleep 3
     if kill -0 "$pid" 2>/dev/null; then
@@ -252,11 +252,11 @@ test_ctrl_c_during_spinner() {
   )
   
   # Should not leave orphan processes
-  if ! pgrep -f "pilosa.*health" > /dev/null 2>&1; then
+  if ! pgrep -f "spinosa.*health" > /dev/null 2>&1; then
     test_pass "No orphan processes after Ctrl-C"
   else
     test_fail "Orphan process left behind"
-    pkill -f "pilosa.*health" 2>/dev/null || true
+    pkill -f "spinosa.*health" 2>/dev/null || true
   fi
 }
 
@@ -303,7 +303,7 @@ test_permission_prompt_first_run() {
   local output
   output=$(run_interactive "n" 3)
   
-  if output_contains "$output" "Pilosa needs to discover" || \
+  if output_contains "$output" "Spinosa needs to discover" || \
      output_contains "$output" "Allow workspace discovery"; then
     test_pass "Permission prompt shown"
   else
@@ -329,7 +329,7 @@ test_permission_granted_flow() {
   local output
   output=$(run_interactive "y|9" 5)
   
-  if output_contains "$output" "Pilosa — Research Framework"; then
+  if output_contains "$output" "Spinosa — Research Framework"; then
     test_pass "Dashboard works after granting permission"
   else
     test_fail "Dashboard failed after permission" "$(echo "$output" | head -20)"
@@ -352,7 +352,7 @@ test_upgrade_shows_release_notes() {
   output=$(run_interactive "n" 10)
   
   if output_contains "$output" "Release Notes" || \
-     output_contains "$output" "Pilosa Framework" || \
+     output_contains "$output" "Spinosa Framework" || \
      output_contains "$output" "Download and run"; then
     test_pass "Release notes shown or upgrade prompt displayed"
   else
@@ -380,7 +380,7 @@ test_empty_input_handling() {
   
   # Send just newlines
   local output
-  output=$(printf '\n\n\n' | "$PILOSA_BIN" 2>&1 &
+  output=$(printf '\n\n\n' | "$SPINOSA_BIN" 2>&1 &
     local pid=$!
     sleep 3
     if kill -0 "$pid" 2>/dev/null; then
@@ -412,14 +412,14 @@ test_invalid_menu_selection() {
   fi
 }
 
-test_concurrent_pilosa_instances() {
-  test_start "Multiple pilosa instances don't conflict"
+test_concurrent_spinosa_instances() {
+  test_start "Multiple spinosa instances don't conflict"
   
   # Start two instances
-  "$PILOSA_BIN" help > "$TEST_HOME/out1.txt" 2>&1 &
+  "$SPINOSA_BIN" help > "$TEST_HOME/out1.txt" 2>&1 &
   PID1=$!
   
-  "$PILOSA_BIN" help > "$TEST_HOME/out2.txt" 2>&1 &
+  "$SPINOSA_BIN" help > "$TEST_HOME/out2.txt" 2>&1 &
   PID2=$!
   
   # Wait for both
@@ -465,7 +465,7 @@ print_summary() {
 
 main() {
   printf '%s\n' "${BOLD}═══════════════════════════════════════════════════════════════${RESET}"
-  printf '%s\n' "${BOLD}Pilosa CLI Interactive Test Suite${RESET}"
+  printf '%s\n' "${BOLD}Spinosa CLI Interactive Test Suite${RESET}"
   printf '%s\n' "═══════════════════════════════════════════════════════════════"
   
   setup
@@ -498,7 +498,7 @@ main() {
   test_rapid_menu_navigation
   test_empty_input_handling
   test_invalid_menu_selection
-  test_concurrent_pilosa_instances
+  test_concurrent_spinosa_instances
   
   teardown
   print_summary

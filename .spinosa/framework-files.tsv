@@ -6,14 +6,15 @@ LICENSE	framework	replace_if_unmodified
 .editorconfig	framework	replace_if_unmodified
 .bin/check-startup.sh	framework	replace_if_unmodified
 .bin/sync-agents.sh	framework	replace_if_unmodified
-.bin/pilosa	framework	replace_if_unmodified
+.bin/spinosa	framework	replace_if_unmodified
 .bin/AGENTS.md	framework	replace_if_unmodified
 .bin/lib/metrics.sh	framework	replace_if_unmodified
 .bin/lib/rapidocr-cli.py	framework	replace_if_unmodified
 .bin/lib/markitdown-cli.py	framework	replace_if_unmodified
 .bin/lib/CONVERTER_PROTOCOL.md	framework	replace_if_unmodified
-.bin/build-pilosa-vendor.sh	framework	replace_if_unmodified
-.pilosa/retired-framework-files.tsv	framework	replace_if_unmodified
+.bin/build-spinosa-vendor.sh	framework	replace_if_unmodified
+.spinosa/retired-framework-files.tsv	framework	replace_if_unmodified
+.bin/pilosa	framework	replace_if_unmodified
 .agents/	framework	replace_if_unmodified
 .claude/	framework	replace_if_unmodified
 .codex/	framework	replace_if_unmodified
@@ -43,4 +44,4 @@ agent_reports/.gitkeep	framework	replace_if_unmodified
 .trash/.gitkeep	framework	replace_if_unmodified
 CLAUDE.md	generated_state	exclude_from_update
 .obsidian/appearance.json	framework	replace_if_unmodified
-.obsidian/snippets/pilosa.css	framework	replace_if_unmodified
+.obsidian/snippets/spinosa.css	framework	replace_if_unmodified

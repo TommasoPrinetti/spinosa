@@ -20,7 +20,7 @@ Startup.md is the only authority that can mark setup complete. `.bin/check-start
 
 ## What Onboarding Already Did
 
-The CLI command (`pilosa new`) has already:
+The CLI command (`spinosa new`) has already:
 
 - Collected project name, source location, and preferred LLM CLI
 - Scanned the source corpus and copied accepted files into `raw/` (text, native-readable, PDFs)
@@ -113,7 +113,7 @@ Separately account for unsupported files and skipped media that remain only at t
 
 ### Step 1: Spawn batches until all files are read
 
-Split raw copies into batches and spawn `pilosa-mapper` sub-agents aggressively — as many as you can in parallel. Do not throttle. Spam sub-agents until every file is covered.
+Split raw copies into batches and spawn `spinosa-mapper` sub-agents aggressively — as many as you can in parallel. Do not throttle. Spam sub-agents until every file is covered.
 
 Each batch reads files and extracts:
 
@@ -247,7 +247,7 @@ Cross-file synthesis is now part of Step 4 in section 2.4 (Write Theme Maps). Th
 
 ## 2.6 Serendipitous Connection Discovery
 
-**Dedicated step.** After maps are written (group maps and/or theme maps), spawn `pilosa-serendippo` to find hidden connections that batch processing misses.
+**Dedicated step.** After maps are written (group maps and/or theme maps), spawn `spinosa-serendippo` to find hidden connections that batch processing misses.
 
 ### Purpose
 
@@ -257,11 +257,11 @@ The mapper agent reads files in structured batches — efficient but linear. The
 
 - After mapper has processed all files and maps are written (2.4 Steps 2-4)
 - Maps exist and have initial navigation coverage
-- `pilosa-serendippo` can use existing maps as a starting point
+- `spinosa-serendippo` can use existing maps as a starting point
 
 ### How It Works
 
-1. Spawn `pilosa-serendippo` with access to `maps/` (structural overview, group maps, theme maps) and `raw/`
+1. Spawn `spinosa-serendippo` with access to `maps/` (structural overview, group maps, theme maps) and `raw/`
 2. It reads existing maps to identify under-connected concepts
 3. It roams through raw files, following threads and finding connections
 4. It writes a serendipity report to `agent_reports/serendipity_report.md`
@@ -269,7 +269,7 @@ The mapper agent reads files in structured batches — efficient but linear. The
 
 ### Arrival Metric
 
-`pilosa-serendippo` runs until the orchestrator signals completion or the researcher intervenes. There is no fixed endpoint — this is an open-ended discovery process.
+`spinosa-serendippo` runs until the orchestrator signals completion or the researcher intervenes. There is no fixed endpoint — this is an open-ended discovery process.
 
 ### Output
 
@@ -340,8 +340,8 @@ Recovery behavior:
 - keep `setup_status: cli_started` until validation passes.
 
 Sub-agent delegation:
-- Dictionary + concept extraction: `pilosa-mapper` reads files in batches (spawned aggressively in parallel), extracts terms and content-grounded fragments in one pass
-- Map writing: `pilosa-mapper` writes maps directly from extraction batches (structural overview, group maps, theme maps)
+- Dictionary + concept extraction: `spinosa-mapper` reads files in batches (spawned aggressively in parallel), extracts terms and content-grounded fragments in one pass
+- Map writing: `spinosa-mapper` writes maps directly from extraction batches (structural overview, group maps, theme maps)
 - Startup owns merge, conflict resolution, and validation; sub-agents never set `setup_status: workspace_started`.
 
 ## 2.11 Progress Tracking And Checkpointing

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# build-pilosa-vendor.sh — Build Pilosa vendor bundle (Python + wrappers only)
+# build-spinosa-vendor.sh — Build Spinosa vendor bundle (Python + wrappers only)
 #
 # Creates a self-contained vendor directory with:
 #   - Standalone Python 3.11 (no system Python needed, includes pip + SSL)
@@ -11,13 +11,13 @@
 # vendor tarball small (~26 MB) and cross-platform compatible.
 #
 # Usage:
-#   ./build-pilosa-vendor.sh [platform]
+#   ./build-spinosa-vendor.sh [platform]
 #
 # Platforms: darwin-arm64, darwin-amd64, linux-amd64, linux-arm64
 # If omitted, builds for current platform.
 #
 # Output:
-#   .bin/lib/vendor/pilosa-vendor-<platform>.tar.gz
+#   .bin/lib/vendor/spinosa-vendor-<platform>.tar.gz
 
 set -euo pipefail
 
@@ -82,10 +82,10 @@ find_python_bin() {
 
 build_platform() {
     local platform="$1"
-    local vendor_dir="${VENDOR_BASE}/pilosa-vendor-${platform}"
+    local vendor_dir="${VENDOR_BASE}/spinosa-vendor-${platform}"
     local python_dir="${vendor_dir}/python"
 
-    log "Building Pilosa vendor bundle for: ${platform}"
+    log "Building Spinosa vendor bundle for: ${platform}"
     log "Python version: ${PYTHON_VERSION}"
 
     rm -rf "${vendor_dir}"
@@ -144,7 +144,7 @@ build_platform() {
     # Create rapidocr-cli bash launcher
     cat > "${vendor_dir}/rapidocr-cli" << 'WRAPPER_EOF'
 #!/usr/bin/env bash
-# RapidOCR CLI wrapper for Pilosa
+# RapidOCR CLI wrapper for Spinosa
 # Uses bundled standalone Python — no system Python required
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PYTHON_BIN="${SCRIPT_DIR}/python/bin/python3"
@@ -162,7 +162,7 @@ WRAPPER_EOF
     # Create markitdown-cli bash launcher
     cat > "${vendor_dir}/markitdown-cli" << 'MDWRAP_EOF'
 #!/usr/bin/env bash
-# MarkItDown CLI wrapper for Pilosa
+# MarkItDown CLI wrapper for Spinosa
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PYTHON_BIN="${SCRIPT_DIR}/python/bin/python3"
 if [[ ! -x "${PYTHON_BIN}" ]]; then
@@ -179,14 +179,14 @@ MDWRAP_EOF
     # Package
     log "Creating archive..."
     cd "${VENDOR_BASE}"
-    COPYFILE_DISABLE=1 tar -czf "pilosa-vendor-${platform}.tar.gz" "pilosa-vendor-${platform}/"
+    COPYFILE_DISABLE=1 tar -czf "spinosa-vendor-${platform}.tar.gz" "spinosa-vendor-${platform}/"
 
     local archive_size vendor_size
-    archive_size=$(du -h "pilosa-vendor-${platform}.tar.gz" | cut -f1)
-    vendor_size=$(du -sh "pilosa-vendor-${platform}" | cut -f1)
-    log "Archive created: pilosa-vendor-${platform}.tar.gz (${archive_size} compressed, ${vendor_size} uncompressed)"
+    archive_size=$(du -h "spinosa-vendor-${platform}.tar.gz" | cut -f1)
+    vendor_size=$(du -sh "spinosa-vendor-${platform}" | cut -f1)
+    log "Archive created: spinosa-vendor-${platform}.tar.gz (${archive_size} compressed, ${vendor_size} uncompressed)"
 
-    rm -rf "pilosa-vendor-${platform}"
+    rm -rf "spinosa-vendor-${platform}"
     log "Build complete for ${platform}"
 }
 
@@ -198,11 +198,11 @@ main() {
         platform="$(detect_platform)" || return $?
     fi
 
-    log "Pilosa Vendor Builder"
+    log "Spinosa Vendor Builder"
     log "====================="
     log "Platform: ${platform}"
     log "Python: ${PYTHON_VERSION}"
-    log "Output: ${VENDOR_BASE}/pilosa-vendor-${platform}.tar.gz"
+    log "Output: ${VENDOR_BASE}/spinosa-vendor-${platform}.tar.gz"
     echo ""
 
     mkdir -p "${VENDOR_BASE}"

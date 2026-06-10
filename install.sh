@@ -1,5 +1,5 @@
 #!/bin/sh
-# ── install.sh — Pilosa Framework Installer (auto-re-execs with bash) ──────
+# ── install.sh — Spinosa Framework Installer (auto-re-execs with bash) ──────
 
 if [ -z "${BASH_VERSION-}" ]; then
   if command -v bash >/dev/null 2>&1; then
@@ -7,13 +7,13 @@ if [ -z "${BASH_VERSION-}" ]; then
       exec bash "$0" "$@"
     fi
     # Piped mode — bash is available but we're in sh
-    TMP_SCRIPT="$(mktemp /tmp/pilosa-install.XXXXXX)"
+    TMP_SCRIPT="$(mktemp /tmp/spinosa-install.XXXXXX)"
     trap 'rm -f "$TMP_SCRIPT"' EXIT
     cat > "$TMP_SCRIPT"
     exec bash "$TMP_SCRIPT" "$@"
   fi
   echo "" >&2
-  echo "  Pilosa requires bash. Install it first:" >&2
+  echo "  Spinosa requires bash. Install it first:" >&2
   if command -v apk >/dev/null 2>&1; then
     echo "    apk add bash" >&2
   elif command -v apt-get >/dev/null 2>&1; then
@@ -40,9 +40,9 @@ UPGRADE=0
 REINSTALL=0
 MIN_DAYS=""
 YES=0
-PILOSA_HOME="${PILOSA_HOME:-$HOME/.pilosa}"
-PILOSA_BIN_DIR="${PILOSA_BIN_DIR:-$HOME/.local/bin}"
-REPO="TommasoPrinetti/pilosa"
+SPINOSA_HOME="${SPINOSA_HOME:-$HOME/.spinosa}"
+SPINOSA_BIN_DIR="${SPINOSA_BIN_DIR:-$HOME/.local/bin}"
+REPO="TommasoPrinetti/spinosa"
 
 # ── colors (only if terminal) ──────────────────────────────────────────────
 if [ -t 2 ] && [ "${NO_COLOR:-}" != "1" ]; then
@@ -139,16 +139,16 @@ while [ $# -gt 0 ]; do
     --no-gum)     NO_GUM=1; shift ;;
     --no-modify-path) NO_MODIFY_PATH=true; shift ;;
     --min-days)   MIN_DAYS="$2"; shift 2 ;;
-    --prefix)     PILOSA_HOME="$2"; shift 2 ;;
+    --prefix)     SPINOSA_HOME="$2"; shift 2 ;;
     --bin-dir)
-      PILOSA_BIN_DIR="$2"; shift 2
-      if [[ ! "$PILOSA_BIN_DIR" =~ ^[a-zA-Z0-9_/.-]+$ ]]; then
-        die "Invalid bin directory path: $PILOSA_BIN_DIR"
+      SPINOSA_BIN_DIR="$2"; shift 2
+      if [[ ! "$SPINOSA_BIN_DIR" =~ ^[a-zA-Z0-9_/.-]+$ ]]; then
+        die "Invalid bin directory path: $SPINOSA_BIN_DIR"
       fi
       ;;
     --yes|-y)     YES=1; shift ;;
     --help|-h)
-      echo "Usage: bash install-pilosa.sh [options]"
+      echo "Usage: bash install-spinosa.sh [options]"
       echo ""
       echo "Install / Upgrade:"
       echo "  --version X.Y.Z   Install specific version (default: $PINNED_VERSION)"
@@ -165,7 +165,7 @@ while [ $# -gt 0 ]; do
       echo "Paths:"
       echo "  --no-gum          Skip bundled binary installation (Gum)"
       echo "  --no-modify-path  Don't modify shell config files (~/.zshrc, etc.)"
-      echo "  --prefix PATH     Install root (default: ~/.pilosa)"
+      echo "  --prefix PATH     Install root (default: ~/.spinosa)"
       echo "  --bin-dir PATH    Shim directory (default: ~/.local/bin)"
       exit 0
       ;;
@@ -181,7 +181,7 @@ detect_platform() {
   case "$os" in
     Darwin)  OS="darwin" ;;
     Linux)   OS="linux" ;;
-    *)       die "Unsupported OS: $os (Pilosa supports macOS and Linux)" ;;
+    *)       die "Unsupported OS: $os (Spinosa supports macOS and Linux)" ;;
   esac
 
   case "$arch" in
@@ -355,7 +355,7 @@ verify_vendor_binaries() {
     # Only verify binaries for this platform
     [ "$plat_suffix" = "$suffix" ] || continue
 
-    local installed_bin="${PILOSA_HOME}/bin/${bin_name}"
+    local installed_bin="${SPINOSA_HOME}/bin/${bin_name}"
     if [ ! -f "$installed_bin" ]; then
       continue
     fi
@@ -369,7 +369,7 @@ verify_vendor_binaries() {
   done < "$checksums_file"
 
   if [ "$failed" -gt 0 ]; then
-    die "${failed} vendor binary checksum(s) failed. Remove ${PILOSA_HOME} and re-install, or use --no-gum."
+    die "${failed} vendor binary checksum(s) failed. Remove ${SPINOSA_HOME} and re-install, or use --no-gum."
   fi
 
   if [ "$verified" -gt 0 ]; then
@@ -415,8 +415,8 @@ compare_versions() {
 }
 
 get_installed_version() {
-  if [ -d "${PILOSA_HOME}/versions" ]; then
-    ls -1 "${PILOSA_HOME}/versions" 2>/dev/null | sort -t. -k1,1n -k2,2n -k3,3n | tail -1
+  if [ -d "${SPINOSA_HOME}/versions" ]; then
+    ls -1 "${SPINOSA_HOME}/versions" 2>/dev/null | sort -t. -k1,1n -k2,2n -k3,3n | tail -1
   fi
 }
 
@@ -441,7 +441,7 @@ prompt_upgrade() {
       info "Already on v${target}. No upgrade needed."
       return 1
     fi
-    printf '  %sPilosa v%s is already installed.%s\n' "${Y}" "$installed" "${RESET}"
+    printf '  %sSpinosa v%s is already installed.%s\n' "${Y}" "$installed" "${RESET}"
     if [ "$YES" -eq 1 ]; then
       info "Skipping reinstall prompt (--yes)."
       return 1
@@ -469,7 +469,7 @@ prompt_upgrade() {
       info "Installing v${target} (over v${installed})..."
       return 0
     fi
-    printf '  %sPilosa v%s is installed. v%s is available.%s\n' "${G}" "$installed" "$target" "${RESET}"
+    printf '  %sSpinosa v%s is installed. v%s is available.%s\n' "${G}" "$installed" "$target" "${RESET}"
     if [ "$YES" -eq 1 ]; then
       info "Auto-upgrading (--yes)."
       return 0
@@ -518,18 +518,18 @@ prompt_upgrade() {
 # ── main install flow ──────────────────────────────────────────────────────
 main() {
   echo ""
-  printf '  %s%sPilosa Framework Installer%s\n\n' "${BOLD}" "${C}" "${RESET}"
+  printf '  %s%sSpinosa Framework Installer%s\n\n' "${BOLD}" "${C}" "${RESET}"
 
   detect_platform
   resolve_version
   check_release_age "$VERSION" "$MIN_DAYS"
 
   local base_url="https://github.com/${REPO}/releases/download/v${VERSION}"
-  local archive_name="pilosa-framework-${VERSION}.tar.gz"
+  local archive_name="spinosa-framework-${VERSION}.tar.gz"
 
   info "Version: ${VERSION}"
-  info "Install root: ${PILOSA_HOME}"
-  info "Bin directory: ${PILOSA_BIN_DIR}"
+  info "Install root: ${SPINOSA_HOME}"
+  info "Bin directory: ${SPINOSA_BIN_DIR}"
   echo ""
 
   # ── check for existing installation ────────────────────────────────────
@@ -543,7 +543,7 @@ main() {
     else
       # Fresh install — confirm unless --yes
       if [ "$YES" -eq 0 ]; then
-        printf '  %sInstall Pilosa v%s?%s [Y/n]: ' "${BOLD}" "$VERSION" "${RESET}"
+        printf '  %sInstall Spinosa v%s?%s [Y/n]: ' "${BOLD}" "$VERSION" "${RESET}"
         local reply
         if ! read_from_tty reply; then
           die "Cannot read from terminal. Use --yes to skip prompts."
@@ -559,13 +559,13 @@ main() {
   # ── verify-only mode ──────────────────────────────────────────────────
   if [ "$VERIFY_ONLY" -eq 1 ]; then
     local existing_version
-    existing_version="$(ls -1 "${PILOSA_HOME}/versions" 2>/dev/null | sort -t. -k1,1n -k2,2n -k3,3n | tail -1)"
+    existing_version="$(ls -1 "${SPINOSA_HOME}/versions" 2>/dev/null | sort -t. -k1,1n -k2,2n -k3,3n | tail -1)"
     if [ -z "$existing_version" ]; then
-      die "No Pilosa installation found at ${PILOSA_HOME}"
+      die "No Spinosa installation found at ${SPINOSA_HOME}"
     fi
-    local fw_dir="${PILOSA_HOME}/versions/${existing_version}"
+    local fw_dir="${SPINOSA_HOME}/versions/${existing_version}"
     local fw_subdir
-    fw_subdir="$(find "$fw_dir" -maxdepth 1 -type d -name 'pilosa-framework-*' 2>/dev/null | head -1)"
+    fw_subdir="$(find "$fw_dir" -maxdepth 1 -type d -name 'spinosa-framework-*' 2>/dev/null | head -1)"
     if [ -z "$fw_subdir" ]; then
       die "Could not find installed framework"
     fi
@@ -578,16 +578,16 @@ main() {
     info "Dry run — would download:"
     info "  ${base_url}/${archive_name}"
     info "  ${base_url}/checksums.txt"
-    info "Would install to: ${PILOSA_HOME}/versions/${VERSION}/"
-    info "Would create shim: ${PILOSA_BIN_DIR}/pilosa"
+    info "Would install to: ${SPINOSA_HOME}/versions/${VERSION}/"
+    info "Would create shim: ${SPINOSA_BIN_DIR}/spinosa"
     echo ""
     return 0
   fi
 
   # ── create directories ──────────────────────────────────────────────────
-  mkdir -p "${PILOSA_HOME}/bin"
-  mkdir -p "${PILOSA_HOME}/versions/${VERSION}"
-  mkdir -p "${PILOSA_BIN_DIR}"
+  mkdir -p "${SPINOSA_HOME}/bin"
+  mkdir -p "${SPINOSA_HOME}/versions/${VERSION}"
+  mkdir -p "${SPINOSA_BIN_DIR}"
 
   # ── download framework ──────────────────────────────────────────────────
   local tmpdir
@@ -622,21 +622,21 @@ main() {
 
   # ── unpack framework ────────────────────────────────────────────────────
   info "Unpacking framework..."
-  safe_untar "${tmpdir}/${archive_name}" "${PILOSA_HOME}/versions/${VERSION}"
+  safe_untar "${tmpdir}/${archive_name}" "${SPINOSA_HOME}/versions/${VERSION}"
 
-  # ── install pilosa CLI ──────────────────────────────────────────────────
-  local pilosa_bin="${PILOSA_HOME}/versions/${VERSION}/pilosa-framework-${VERSION}/.bin/pilosa"
-  if [ -f "$pilosa_bin" ]; then
-    cp "$pilosa_bin" "${PILOSA_HOME}/bin/pilosa"
-    chmod +x "${PILOSA_HOME}/bin/pilosa"
-    ok "Installed pilosa CLI"
+  # ── install spinosa CLI ──────────────────────────────────────────────────
+  local spinosa_bin="${SPINOSA_HOME}/versions/${VERSION}/spinosa-framework-${VERSION}/.bin/spinosa"
+  if [ -f "$spinosa_bin" ]; then
+    cp "$spinosa_bin" "${SPINOSA_HOME}/bin/spinosa"
+    chmod +x "${SPINOSA_HOME}/bin/spinosa"
+    ok "Installed spinosa CLI"
   else
-    die "pilosa CLI not found in archive"
+    die "spinosa CLI not found in archive"
   fi
 
   # ── install bundled binaries ───────────────────────────────────────────
   if [ "$NO_GUM" -eq 0 ]; then
-    local vendor_src="${PILOSA_HOME}/versions/${VERSION}/pilosa-framework-${VERSION}/.bin/lib/vendor"
+    local vendor_src="${SPINOSA_HOME}/versions/${VERSION}/spinosa-framework-${VERSION}/.bin/lib/vendor"
 
     # Detect platform suffix (e.g. darwin-arm64, linux-amd64)
     local os arch suffix
@@ -658,8 +658,8 @@ main() {
       for bin_name in gum; do
         local src_bin="${vendor_src}/${bin_name}-${suffix}"
         if [[ -f "$src_bin" ]]; then
-          cp "$src_bin" "${PILOSA_HOME}/bin/${bin_name}"
-          chmod +x "${PILOSA_HOME}/bin/${bin_name}"
+          cp "$src_bin" "${SPINOSA_HOME}/bin/${bin_name}"
+          chmod +x "${SPINOSA_HOME}/bin/${bin_name}"
           ok "Installed ${bin_name}"
         else
           warn "No ${bin_name} binary for ${suffix}"
@@ -667,15 +667,15 @@ main() {
       done
     fi
 
-    # ── install Pilosa vendor (RapidOCR + MarkItDown) ────────────────────
-    local pilosa_vendor_dest="${PILOSA_HOME}/vendor/pilosa-${suffix}"
-    local vendor_url="${base_url}/pilosa-vendor-${suffix}.tar.gz"
-    local vendor_tmp="${tmpdir}/pilosa-vendor-${suffix}.tar.gz"
+    # ── install Spinosa vendor (RapidOCR + MarkItDown) ────────────────────
+    local spinosa_vendor_dest="${SPINOSA_HOME}/vendor/spinosa-${suffix}"
+    local vendor_url="${base_url}/spinosa-vendor-${suffix}.tar.gz"
+    local vendor_tmp="${tmpdir}/spinosa-vendor-${suffix}.tar.gz"
 
     # Retry download up to 3 times with 3-second backoff
     local retries=0 max_retries=3 download_ok=false
     while [[ $retries -lt $max_retries ]]; do
-      spinner_start "Downloading Pilosa vendor for ${suffix} (attempt $((retries + 1))/${max_retries})"
+      spinner_start "Downloading Spinosa vendor for ${suffix} (attempt $((retries + 1))/${max_retries})"
       if download "$vendor_url" "$vendor_tmp"; then
         spinner_stop
         download_ok=true
@@ -690,23 +690,23 @@ main() {
     done
 
     if $download_ok; then
-      spinner_start "Installing Pilosa vendor (Python + wrappers)"
-      mkdir -p "$pilosa_vendor_dest"
-      safe_untar "$vendor_tmp" "$pilosa_vendor_dest" --strip-components=1
-      chmod +x "${pilosa_vendor_dest}/rapidocr-cli" 2>/dev/null || true
-      chmod +x "${pilosa_vendor_dest}/markitdown-cli" 2>/dev/null || true
+      spinner_start "Installing Spinosa vendor (Python + wrappers)"
+      mkdir -p "$spinosa_vendor_dest"
+      safe_untar "$vendor_tmp" "$spinosa_vendor_dest" --strip-components=1
+      chmod +x "${spinosa_vendor_dest}/rapidocr-cli" 2>/dev/null || true
+      chmod +x "${spinosa_vendor_dest}/markitdown-cli" 2>/dev/null || true
       spinner_stop
 
       # ── Install Python packages via pip ──────────────────────────
-      local pilosa_python="${pilosa_vendor_dest}/python/bin/python3"
-      if [[ ! -x "$pilosa_python" ]]; then
-        pilosa_python="${pilosa_vendor_dest}/Python.framework/Versions/Current/bin/python3"
+      local spinosa_python="${spinosa_vendor_dest}/python/bin/python3"
+      if [[ ! -x "$spinosa_python" ]]; then
+        spinosa_python="${spinosa_vendor_dest}/Python.framework/Versions/Current/bin/python3"
       fi
-      if [[ -x "$pilosa_python" ]]; then
+      if [[ -x "$spinosa_python" ]]; then
         progress_start "Installing Python packages (MarkItDown + RapidOCR)"
         local pip_ok=0
-        "$pilosa_python" -m pip install --upgrade pip --quiet 2>/dev/null || true
-        if "$pilosa_python" -m pip install \
+        "$spinosa_python" -m pip install --upgrade pip --quiet 2>/dev/null || true
+        if "$spinosa_python" -m pip install \
           "markitdown[docx,pptx,xlsx,xls,outlook,pdf]==0.1.6" \
           "rapidocr==3.8.1" \
           "onnxruntime==1.26.0" \
@@ -718,11 +718,11 @@ main() {
 
         if [[ $pip_ok -eq 1 ]]; then
           # Verify rapidocr imports before model operations
-          if "$pilosa_python" -c "from rapidocr import RapidOCR" 2>/dev/null; then
+          if "$spinosa_python" -c "from rapidocr import RapidOCR" 2>/dev/null; then
             ok "RapidOCR import verified"
             # Remove Chinese OCR models (English only, saves ~100 MB)
             progress_start "Cleaning up unused models"
-            "$pilosa_python" -c "
+            "$spinosa_python" -c "
 import rapidocr, os
 models_dir = os.path.join(os.path.dirname(rapidocr.__file__), 'models')
 for f in os.listdir(models_dir):
@@ -736,9 +736,9 @@ for f in ['ppocr_keys_v1.txt', 'ppocrv5_dict.txt']:
 
             # Pre-download English OCR models
             progress_start "Downloading OCR models"
-            local ocr_log="${PILOSA_HOME}/logs/ocr-model-download.log"
+            local ocr_log="${SPINOSA_HOME}/logs/ocr-model-download.log"
             mkdir -p "$(dirname "$ocr_log")"
-            if "$pilosa_python" -c "
+            if "$spinosa_python" -c "
 import logging
 logging.getLogger('RapidOCR').setLevel(logging.WARNING)
 logging.getLogger('onnxruntime').setLevel(logging.WARNING)
@@ -770,7 +770,7 @@ RapidOCR(params={
           fi
         else
           warn "pip install failed — PDF/image OCR and Office doc conversion will not be available"
-          rm -f "${pilosa_vendor_dest}/rapidocr-cli" "${pilosa_vendor_dest}/markitdown-cli" 2>/dev/null || true
+          rm -f "${spinosa_vendor_dest}/rapidocr-cli" "${spinosa_vendor_dest}/markitdown-cli" 2>/dev/null || true
         fi
       else
         warn "Bundled Python not found — PDF/image OCR and Office doc conversion will not be available"
@@ -779,23 +779,37 @@ RapidOCR(params={
     if ! $download_ok; then
       warn "Could not download vendor bundle for ${suffix}"
       note "URL: ${vendor_url}"
-      note "Check your internet connection or download manually and extract to: ${pilosa_vendor_dest}"
+      note "Check your internet connection or download manually and extract to: ${spinosa_vendor_dest}"
       note "PDF/image OCR and Office doc conversion will not be available"
     fi
 
     # Verify vendor binary checksums against the release manifest
-    local fw_root="${PILOSA_HOME}/versions/${VERSION}/pilosa-framework-${VERSION}"
+    local fw_root="${SPINOSA_HOME}/versions/${VERSION}/spinosa-framework-${VERSION}"
     verify_vendor_binaries "$fw_root"
   fi
 
   # ── create shim ─────────────────────────────────────────────────────────
-  local shim="${PILOSA_BIN_DIR}/pilosa"
+  local shim="${SPINOSA_BIN_DIR}/spinosa"
   cat > "$shim" << SHIM_EOF
 #!/bin/sh
-exec "${PILOSA_HOME}/bin/pilosa" "\$@"
+exec "${SPINOSA_HOME}/bin/spinosa" "\$@"
 SHIM_EOF
   chmod +x "$shim"
   ok "Created wrapper script: ${shim}"
+
+  # ── clean up old pilosa shims (pre-0.5 migration) ──────────────────────
+  local old_pilosa_shim="${SPINOSA_BIN_DIR}/pilosa"
+  if [[ -f "$old_pilosa_shim" ]]; then
+    rm -f "$old_pilosa_shim" && warn "Removed old pilosa shim at ${old_pilosa_shim}"
+  fi
+  local old_pilosa_bin="${SPINOSA_HOME}/bin/pilosa"
+  if [[ -f "$old_pilosa_bin" ]]; then
+    rm -f "$old_pilosa_bin" && warn "Removed old pilosa binary at ${old_pilosa_bin}"
+  fi
+  local old_pilosa_home="$HOME/.pilosa"
+  if [[ -d "$old_pilosa_home" ]] && [[ "$old_pilosa_home" != "$SPINOSA_HOME" ]]; then
+    warn "Found old install at ${old_pilosa_home} — you may remove it manually: rm -rf ${old_pilosa_home}"
+  fi
 
   # ── clean up, check PATH, launch dashboard ──────────────────────────────
   trap - EXIT
@@ -804,10 +818,10 @@ SHIM_EOF
   # ── basic test ──────────────────────────────────────────────────────────
   echo ""
   info "Running basic test..."
-  if "${PILOSA_BIN_DIR}/pilosa" help >/dev/null 2>&1; then
+  if "${SPINOSA_BIN_DIR}/spinosa" help >/dev/null 2>&1; then
     ok "Basic test passed"
   else
-    warn "Basic test failed. pilosa may need a PATH update."
+    warn "Basic test failed. spinosa may need a PATH update."
   fi
 
   #
@@ -832,15 +846,15 @@ SHIM_EOF
 
     local path_line=""
     case "$current_shell" in
-      fish) path_line="fish_add_path $PILOSA_BIN_DIR" ;;
-      *)    path_line="export PATH=\"$PILOSA_BIN_DIR:\$PATH\"" ;;
+      fish) path_line="fish_add_path $SPINOSA_BIN_DIR" ;;
+      *)    path_line="export PATH=\"$SPINOSA_BIN_DIR:\$PATH\"" ;;
     esac
 
     if [[ -n "$config_file" ]]; then
       if [[ -w "$config_file" ]]; then
         if ! grep -Fxq "$path_line" "$config_file" 2>/dev/null; then
-          printf '\n# Pilosa\n%s\n' "$path_line" >> "$config_file"
-          ok "Added ${PILOSA_BIN_DIR} to ${config_file}"
+          printf '\n# Spinosa\n%s\n' "$path_line" >> "$config_file"
+          ok "Added ${SPINOSA_BIN_DIR} to ${config_file}"
         fi
       else
         info "Cannot write to ${config_file} — add it manually:"
@@ -855,16 +869,16 @@ SHIM_EOF
 
   echo ""
   divider
-  printf '\n  %s%sPilosa installed successfully!%s\n\n' "${BOLD}" "${G}" "${RESET}"
+  printf '\n  %s%sSpinosa installed successfully!%s\n\n' "${BOLD}" "${G}" "${RESET}"
 
   # Source the right profile so PATH is live for the dashboard launch
   if [[ "${NO_MODIFY_PATH:-false}" != "true" ]] && [[ -n "${config_file:-}" ]] && [[ -f "${config_file:-}" ]]; then
     source "${config_file}" 2>/dev/null || true
   fi
 
-  info "Launching Pilosa dashboard..."
+  info "Launching Spinosa dashboard..."
   sleep 1
-  exec "${PILOSA_BIN_DIR}/pilosa" </dev/tty
+  exec "${SPINOSA_BIN_DIR}/spinosa" </dev/tty
 }
 
 # ── helpers ─────────────────────────────────────────────────────────────────

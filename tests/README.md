@@ -1,8 +1,8 @@
-# Pilosa CLI Test Suite
+# Spinosa CLI Test Suite
 
 ## Overview
 
-Comprehensive test suite for the Pilosa CLI system, covering core functionality, configuration management, workspace registry, and performance metrics.
+Comprehensive test suite for the Spinosa CLI system, covering core functionality, configuration management, workspace registry, and performance metrics.
 
 ## Running Tests
 

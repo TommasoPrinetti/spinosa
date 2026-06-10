@@ -1,7 +1,7 @@
 # CLI Text Audit — Group Decision
 
 **Date:** 2026-06-09
-**Files audited:** `.bin/pilosa` (4461 lines), `install.sh` (875 lines), `README.md` (271 lines)
+**Files audited:** `.bin/spinosa` (4461 lines), `install.sh` (875 lines), `README.md` (271 lines)
 **Total strings:** ~310 user-facing
 **Process:** 5-persona task force (Text Surveyor, Jargon Hunter, Tone Architect, User Advocate, Plain Language Editor) — position papers followed by deliberation
 
@@ -32,7 +32,7 @@ These 5 replacements have consensus from ALL 5 personas:
 | 3 | "LLM CLI" / "LLM CLIs" (20+ locations) | help, prompts, menus, README | "AI tool" — consensus, not "AI assistant" (User Advocate conceded) |
 | 4 | "smoke test" | install.sh L806-810 | "basic test" — "Running basic test..." |
 | 5 | "shim" | install.sh L792-798 | "wrapper" — "Created wrapper: /path" |
-| 6 | "--gum" / "Gum" in help text | install.sh L125, pilosa L67-68 | Annotate first use: "Gum (interactive display tool)" |
+| 6 | "--gum" / "Gum" in help text | install.sh L125, spinosa L67-68 | Annotate first use: "Gum (interactive display tool)" |
 | 7 | "sidecars" | update output L3329 | "backup copies" — "Backup copies written: N" |
 | 8 | "preflight" | L1543 | "environment check" — "Running environment check" |
 
@@ -40,7 +40,7 @@ These 5 replacements have consensus from ALL 5 personas:
 
 | # | String | Location | Fix |
 |---|--------|----------|-----|
-| 9 | "onboarding"/"onboard" (10+ locations) | help, menus, prompts | "setup"/"prepare" — "pilosa prepare [dir]" |
+| 9 | "onboarding"/"onboard" (10+ locations) | help, menus, prompts | "setup"/"prepare" — "spinosa prepare [dir]" |
 | 10 | "agent" / "sub-agents" (user-facing) | README L18, help text, sync output | "helper" / "specialists" (Text Surveyor preferred "specialist"; merged) |
 | 11 | "orchestrator" | README L18 | "router" — "Routes questions to specialist helpers" |
 | 12 | "canonical" / "canonical sources" | help text, README | "original sources" or "primary sources" |
@@ -72,7 +72,7 @@ These 5 replacements have consensus from ALL 5 personas:
 | `warn()` | ALWAYS end with period | "MarkItDown is not available." ✓ (was em-dash) |
 | `note()` | ALWAYS end with period | "MarkItDown handles Office docs." ✓ |
 | `die()` | ALWAYS end with period | "Framework not found." ✓ |
-| `header()` | NEVER end with period | "Pilosa — New Workspace" ✓ |
+| `header()` | NEVER end with period | "spinosa — New Workspace" ✓ |
 | Spinner | NEVER end with period | "Scanning files" ✓ |
 
 **Person rule:** Third-person in status messages. Second-person imperative in prompts only.
@@ -81,20 +81,20 @@ These 5 replacements have consensus from ALL 5 personas:
 
 | File | Line | Current | Fix |
 |---|---|---|---|
-| `.bin/pilosa` | 3492 | `ok "Check passed."` | `ok "Check passed"` |
-| `.bin/pilosa` | 2680 | `ok "Pilosa uninstalled."` | `ok "Pilosa uninstalled"` |
-| `.bin/pilosa` | 3324 | `ok "Update complete."` | `ok "Update complete"` |
-| `.bin/pilosa` | 1470 | "scanning" (lowercase spinner) | "Scanning" |
-| `.bin/pilosa` | 4276 | "Could not download release installer." | Third-person: "Release installer download failed." |
-| `install.sh` | 58 | `warn()` no `>&2` | Add `>&2` (match .bin/pilosa) |
-| `install.sh` | 565 | `die "No Pilosa installation found"` | `die "No Pilosa installation found."` |
+| `.bin/spinosa` | 3492 | `ok "Check passed."` | `ok "Check passed"` |
+| `.bin/spinosa` | 2680 | `ok "spinosa uninstalled."` | `ok "spinosa uninstalled"` |
+| `.bin/spinosa` | 3324 | `ok "Update complete."` | `ok "Update complete"` |
+| `.bin/spinosa` | 1470 | "scanning" (lowercase spinner) | "Scanning" |
+| `.bin/spinosa` | 4276 | "Could not download release installer." | Third-person: "Release installer download failed." |
+| `install.sh` | 58 | `warn()` no `>&2` | Add `>&2` (match .bin/spinosa) |
+| `install.sh` | 565 | `die "No spinosa installation found"` | `die "No spinosa installation found."` |
 | `install.sh` | 570 | `die "Could not find installed framework"` | `die "Could not find installed framework."` |
 
 ---
 
 ## FIXES ORDERED BY FILE AND LINE
 
-### `.bin/pilosa`
+### `.bin/spinosa`
 
 | Line(s) | Current | Replace with |
 |---------|---------|-------------|
@@ -106,15 +106,15 @@ These 5 replacements have consensus from ALL 5 personas:
 | 2145-2155 | `Handoff action` | `Launch method` / `How to launch` |
 | 2586 | `startup handoff` | `startup prompt` |
 | 2601 | `Copy this prompt and paste it in your tool` | `Copy this prompt and paste it in your AI tool` (or keep — clear enough) |
-| 2646 | pilosa uninstall help | Keep OK |
+| 2646 | spinosa uninstall help | Keep OK |
 | 2698 | `Validate workspace integrity` | `Check workspace structure` |
 | 2700 | `Sync agent and skill mirrors from canonical` | `Sync helpers from original sources` |
 | 2839 | `Corpus folder` | `Source folder` |
 | 2843 | `Corpus folder` (prompt) | `Source folder` |
 | 3328-3330 | `Retired files removed` / `Sidecars written` | `Old files removed` / `Backup copies written` |
 | 3492 | `Check passed.` | `Check passed` |
-| 3512 | `pilosa sync` help text | Update for "Sync helpers from original sources" |
-| 4056-4059 | `pilosa health` help | Keep, already clean |
+| 3512 | `spinosa sync` help text | Update for "Sync helpers from original sources" |
+| 4056-4059 | `spinosa health` help | Keep, already clean |
 
 ### `install.sh`
 
@@ -138,8 +138,8 @@ These 5 replacements have consensus from ALL 5 personas:
 
 | File | Issue | Fix |
 |---|---|---|
-| `install.sh:58` | `warn()` outputs to stdout (no `>&2`) | Add `>&2` to match `.bin/pilosa` convention |
-| `.bin/pilosa` L1470 | `scanning` lowercase in spinner | Capitalise to `Scanning` |
+| `install.sh:58` | `warn()` outputs to stdout (no `>&2`) | Add `>&2` to match `.bin/spinosa` convention |
+| `.bin/spinosa` L1470 | `scanning` lowercase in spinner | Capitalise to `Scanning` |
 
 ---
 
@@ -152,7 +152,7 @@ These 5 replacements have consensus from ALL 5 personas:
 - Minority opinions represented: User Advocate's "AI assistant" noted but not adopted; Text Surveyor's "specialist" noted for agent merged to "helper"; Tone Architect's punctuation guide adopted as team standard
 - Action items: 23 term replacements, 18 punctuation fixes, 1 bug fix (stdout/stderr), 2 consistency fixes
 
-**Blocker:** The `pilosa-verifier` should verify every changed string against the actual source file before applying to ensure line numbers haven't shifted.
+**Blocker:** The `spinosa-verifier` should verify every changed string against the actual source file before applying to ensure line numbers haven't shifted.
 
 ---
 

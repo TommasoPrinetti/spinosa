@@ -6,7 +6,7 @@ purpose:
   - logs
   - sub-agents
   - and evidence layers connect
-description: Architecture map for Pilosa's orchestration, evidence, and output layers.,Agents use this only when they need structural context beyond the root contract.
+description: Architecture map for Spinosa's orchestration, evidence, and output layers.,Agents use this only when they need structural context beyond the root contract.
 scope:
   - repo-wide architecture
 connects_to:
@@ -27,7 +27,7 @@ status: active
 
 ## Core Architecture
 
-Pilosa is a two-layer research system.
+Spinosa is a two-layer research system.
 
 ```txt
 Source location
@@ -37,7 +37,7 @@ Source location
         | CLI copies files unchanged into raw/,
         | agent builds dictionary, headers, and maps
         v
-Pilosa workspace
+Spinosa workspace
   writable indexed collection
   raw copies with YAML headers, maps, dictionary, logs, reports
         |
