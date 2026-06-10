@@ -179,7 +179,7 @@ MDWRAP_EOF
     # Package
     log "Creating archive..."
     cd "${VENDOR_BASE}"
-    COPYFILE_DISABLE=1 tar -czf "spinosa-vendor-${platform}.tar.gz" "spinosa-vendor-${platform}/"
+    COPYFILE_DISABLE=1 tar --no-xattrs -czf "spinosa-vendor-${platform}.tar.gz" "spinosa-vendor-${platform}/"
 
     local archive_size vendor_size
     archive_size=$(du -h "spinosa-vendor-${platform}.tar.gz" | cut -f1)

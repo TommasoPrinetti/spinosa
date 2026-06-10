@@ -298,7 +298,7 @@ echo ""
 # ── Create tarball ──────────────────────────────────────────────────────────
 echo "Creating archive..."
 
-COPYFILE_DISABLE=1 tar -czf "${DIST}/${FRAMEWORK_ARCHIVE}" -C "$STAGE" "spinosa-framework-${VERSION}" 2>/dev/null
+COPYFILE_DISABLE=1 tar --no-xattrs -czf "${DIST}/${FRAMEWORK_ARCHIVE}" -C "$STAGE" "spinosa-framework-${VERSION}" 2>/dev/null
 
 # ── Stage install.sh ────────────────────────────────────────────────────────
 echo "Staging install.sh..."
