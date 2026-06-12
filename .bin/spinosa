@@ -1398,7 +1398,7 @@ selected_copy_count() {
   for i in "${!IMPORT_BATCH_EXTENSIONS[@]}"; do
     ext="${IMPORT_BATCH_EXTENSIONS[$i]}"
     if import_extension_selected "$ext"; then
-      if [[ "$ext" != "pdf" ]] && ! ext_in_list "$ext" "$IMAGE_EXTENSIONS" && ! ext_in_list "$ext" "$MARKITDOWN_EXTENSIONS"; then
+      if ! ext_in_list "$ext" "$IMAGE_EXTENSIONS" && ! ext_in_list "$ext" "$MARKITDOWN_EXTENSIONS"; then
         total=$((total + IMPORT_BATCH_COUNTS[$i]))
       fi
     fi
