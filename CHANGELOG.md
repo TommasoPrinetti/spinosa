@@ -1,6 +1,10 @@
 # Changelog
 
-## v0.5.5 (current)
+## v0.5.6 (current)
+
+- Fix: PDF-only corpus import blocked — `selected_copy_count()` excluded PDFs from the file count, so `copy_source()` exited early before the MarkItDown pass could handle text-based PDFs.
+
+## v0.5.5
 
 - Fix: scan broken when corpus path traverses hidden directories (e.g. Google Drive `.shortcut-targets-by-id`). Reverted `*/.*` ignore pattern to explicit skip list.
 - Fix: bash 3.2 `unbound variable` error when no importable files found. Added guard in `select_all_import_batches`.
