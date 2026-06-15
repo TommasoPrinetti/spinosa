@@ -22,8 +22,8 @@ Startup.md is the only authority that can mark setup complete. `.bin/check-start
 
 The CLI command (`spinosa new`) has already:
 
-- Collected project name, source location, and preferred LLM CLI
-- Scanned the source corpus and copied accepted files into `raw/` (text, native-readable, PDFs)
+- Collected project name and preferred LLM CLI
+- Imported accepted files into `raw/` (text, native-readable, PDFs)
 - Populated partly `context.md` and `configuration.md` with `setup_status: cli_started`
 
 **Startup does not repeat onboarding.** Startup takes the raw corpus and builds the workspace content: dictionary, content-grounded extraction packets, navigation maps, and validation.
@@ -32,7 +32,7 @@ The CLI command (`spinosa new`) has already:
 
 Your job is to:
 
-1. **Verify onboarding completed** — confirm setup files exist and source location is valid
+1. **Verify onboarding completed** — confirm setup files exist and `raw/` contains the imported corpus
 2. **Build the master dictionary** from corpus evidence
 3. **Extract content-grounded fragments** from raw files
 4. **Write multi-level navigation maps** that help future LLMs find relevant files by structure, concept, and key passage
@@ -40,6 +40,17 @@ Your job is to:
 6. **Run startup validation and retrieval tests**
 
 You can use `set_goal` function to pursue this mission.
+
+## Completion Criteria
+
+Startup is finished only when:
+
+- `setup_status` is `workspace_started` in both [[context]] and [[configuration]]
+- [[dictionary]] contains the master dictionary
+- [[workspace_index]] records total raw files, extraction coverage, maps, and known gaps
+- [[maps/]] contains the navigation maps needed to retrieve the corpus
+- [[agent_reports/]] contains a startup report with validation and retrieval-test results
+- Every non-skipped raw file has been accounted for, or the startup report names the blocker
 
 ## Non-Negotiable
 
@@ -80,8 +91,8 @@ Quick verification that onboarding completed correctly. This phase should take u
 Read [[context]] and [[configuration]]. Check:
 
 - `context.md` exists and has `setup_status: cli_started`
-- `configuration.md` exists with `source_location` filled (not `[path]`)
-- Source location directory exists on disk
+- `configuration.md` exists with `active_corpus_path: raw/`
+- `raw/` exists
 - No blocking placeholders remain (`[path]`, `[project name]`)
 
 ---
@@ -105,7 +116,7 @@ find raw/ -type f -not -name ".DS_Store" -not -name "AGENTS.md" -not -name "INDE
 
 Record this number as `TOTAL_FILES` in `workspace_index.md` under "Extraction Progress". Every subsequent step checks against this number.
 
-Separately account for unsupported files and skipped media that remain only at the source location. Record media counts, extensions, and processing gaps in `workspace_index.md` and the startup report as source media coverage.
+Separately account for skipped media only from onboarding/import summaries available inside the workspace.
 
 ## 2.2 Build Dictionary And Extract Content-Grounded Fragments
 
@@ -416,7 +427,7 @@ If startup is interrupted:
 Write one startup report in [[agent_reports/]] with the following fields:
 
 - configuration status,
-- Source location verified,
+- Active raw corpus verified,
 - raw copy coverage,
 - skipped media coverage,
 - maps created,
@@ -424,7 +435,7 @@ Write one startup report in [[agent_reports/]] with the following fields:
 - extraction coverage (files summarized, key passages captured, concept signals),
 - cross-cutting themes identified,
 - validation and retrieval test results,
-- remaining non-text files at source location,
+- skipped non-text media reported by onboarding,
 - recommended next actions.
 
 ## Startup Report Dashboard

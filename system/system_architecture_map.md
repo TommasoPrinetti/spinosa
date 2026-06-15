@@ -30,11 +30,11 @@ status: active
 Spinosa is a two-layer research system.
 
 ```txt
-Source location
-  read-only original sources
-  canonical evidence layer
+raw/
+  imported corpus copies
+  active evidence layer
         |
-        | CLI copies files unchanged into raw/,
+        | CLI imports accepted files into raw/,
         | agent builds dictionary, headers, and maps
         v
 Spinosa workspace
@@ -75,7 +75,7 @@ The home session is the orchestrator. It is governed by `AGENTS.md` and controls
 
 ## Setup Lifecycle
 
-Initial setup creates the translation layer between the source location and the workspace. The **startup** skill executes the protocol in [[startup]], which has two phases:
+Initial setup imports accepted corpus files into the workspace. The **startup** skill executes the protocol in [[startup]], which has two phases:
 
 ```txt
 Setup draft / user startup prompt

@@ -49,8 +49,8 @@ if echo "$config" | grep -q "workspace_type: research_framework" && \
 fi
 
 if [[ "$is_template_repo" == "true" ]]; then
-  if ! echo "$config" | grep -q 'source_location: "\[filled by CLI onboarding\]"'; then
-    failures+=("Template configuration must keep source_location onboarding placeholder.")
+  if ! echo "$config" | grep -q 'active_corpus_path: raw/'; then
+    failures+=("Template configuration must set active_corpus_path: raw/.")
   fi
   if ! echo "$blueprint" | grep -q '\[filled by startup\]'; then
     failures+=("Template context must keep startup placeholders.")
@@ -93,18 +93,14 @@ if echo "$startup_text" | grep -qE "To be discovered|Not specified during fast s
   warnings+=("Legacy fast-setup markers remain in blueprint/config.")
 fi
 
-# ── check source location ───────────────────────────────────────────────────
-source_path="$(echo "$config" | sed -n 's/.*source_location: *["'\'']*\([^"'\'']*\)["'\'']*.*/\1/p' | head -1)"
-
-if [[ -z "$source_path" || "$source_path" == "[path]" ]]; then
-  failures+=("source_location is missing or still a placeholder.")
-else
-  # check both relative and absolute
-  local_path="$source_path"
-  [[ ! -d "$local_path" ]] && local_path="$ROOT/$source_path"
-  if [[ ! -d "$local_path" ]]; then
-    failures+=("Source location does not exist: $source_path")
-  fi
+# ── check active raw corpus ─────────────────────────────────────────────────
+active_corpus_path="$(echo "$config" | sed -n 's/.*active_corpus_path: *["'\'']*\([^"'\'']*\)["'\'']*.*/\1/p' | head -1)"
+[[ -z "$active_corpus_path" ]] && active_corpus_path="raw/"
+if [[ "$active_corpus_path" != "raw/" && "$active_corpus_path" != "raw" ]]; then
+  failures+=("active_corpus_path must be raw/: $active_corpus_path")
+fi
+if [[ ! -d "$ROOT/raw" ]]; then
+  failures+=("Active corpus directory does not exist: raw/")
 fi
 
 # ── check external policy ───────────────────────────────────────────────────

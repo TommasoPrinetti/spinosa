@@ -17,7 +17,7 @@ Core system files that define how Spinosa operates. All other directories depend
 | File                         | Purpose                                                                                   |
 | ---------------------------- | ----------------------------------------------------------------------------------------- |
 | `context.md`                 | Project context: scope, names, particularities. Read by Writer; updated by startup.       |
-| `configuration.md`           | Operating profile: source policy, source location, evidence standards, enabled workflows. |
+| `configuration.md`           | Operating profile: source policy, active corpus path, evidence standards, enabled workflows. |
 | `startup.md`                 | Workspace indexing protocol (read by orchestrator).                                       |
 | `dictionary.md`              | Shared vocabulary of canonical names, places, organizations, concepts.                    |
 | `yaml_header_template.md`    | Canonical YAML frontmatter schema for raw copies.                                         |

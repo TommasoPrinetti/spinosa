@@ -23,7 +23,7 @@ connects_to:
 - URLs or repos the user provided: [filled by startup]
 
 ## Sources
-- Source location: [filled by CLI onboarding]
+- Active corpus: raw/
 - Main source types: [filled by startup]
 - Expected incoming sources: [filled by startup]
 

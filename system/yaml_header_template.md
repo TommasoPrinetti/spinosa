@@ -75,7 +75,7 @@ updated: YYYY-MM-DD
 ```
 
 Rules:
-- `source` uses a relative path from the repo root (e.g., `raw/folder/file.md`). The source location is stored in [[context]] for reference during onboarding only.
+- `source` uses a relative path from the repo root (e.g., `raw/folder/file.md`).
 - `original_format` records the source file extension before conversion (e.g., `pdf`, `docx`, `txt`). Replaces the former `text_type` field. Used for provenance tracking and re-onboarding idempotency checks.
 - `converter_engine` records which engine produced this `.md` file: `renamer` (extension rename only), `native` (copied unchanged), `markitdown` (MarkItDown conversion), or `rapidocr` (OCR via RapidOCR). Enables engine-specific re-classification warnings on re-onboarding.
 - `language` is the ISO 639-1 code of the source file's primary language (en, fr, pt, es, etc.).

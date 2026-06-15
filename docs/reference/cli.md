@@ -66,7 +66,7 @@ During `spinosa new` and source intake, each file is classified and routed to th
 | **MarkItDown** | docx, pptx, xlsx, xls, epub, html, msg, zip, text-based PDF | Converted to `.md` |
 | **OCR** | scanned PDF, jpg, png, gif, webp, heic, tif, bmp, svg | OCR-processed to `.md` |
 | **Native** | md, csv, json, yaml, xml, log, org, adoc, rst, tex, bib | Copied unchanged |
-| **Skipped** | mp4, mov, avi, mkv (video), mp3, wav, aac, flac (audio) | Left at source location |
+| **Skipped** | mp4, mov, avi, mkv (video), mp3, wav, aac, flac (audio) | Reported in onboarding summary |
 | **Ignored** | AGENTS.md, .DS_Store, ._*, node_modules, .git | Skipped entirely |
 
 ## PDF classification
