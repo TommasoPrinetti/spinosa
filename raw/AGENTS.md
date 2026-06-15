@@ -22,10 +22,10 @@ updated: 2026-06-04
 - Header generation and repair may edit YAML frontmatter only.
 - Onboarding copies text-like files, native-readable files, and PDFs here.
 - `AGENTS.md` files are control instructions, not evidence; they must never be imported, mapped, headered, or cited.
-- Images, video, and audio stay at the source location unless a later processing pass creates text artifacts.
+- Skipped media are recorded in `.spinosa/onboarding-summary.md` unless a later processing pass creates text artifacts in `raw/`.
 
 ## Validation
 
 - Raw copies use `type: raw_copy` and the schema in `yaml_header_template.md`.
 - `source:` uses a repo-relative `raw/...` path.
-- Source location paths belong in `system/context.md` for reference during onboarding only.
+- Corpus work should use `raw/` paths and onboarding-summary counts, not import-origin paths.

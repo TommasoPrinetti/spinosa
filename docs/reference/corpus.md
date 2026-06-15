@@ -66,7 +66,7 @@ keywords: ["shoreline retreat", "sea defences"]
 `system/configuration.md` stores your workspace settings:
 
 ```yaml
-source_location: "/path/to/your/documents"
+active_corpus_path: raw/
 external_sources_allowed: no
 converter_policy: local_only
 claim_standard: source_link_required
@@ -83,7 +83,7 @@ preferred_llm_cli: opencode
 
 `system/context.md` stores the project's research context. During startup, the agent fills in:
 - Project title and description
-- Source location and types
+- Active corpus path and source types
 - Key actors, institutions, places found in your documents
 - Research methods inferred from your sources
 - Known blind spots and gaps

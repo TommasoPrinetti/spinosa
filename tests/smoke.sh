@@ -99,7 +99,7 @@ type: configuration
 ---
 # Configuration
 
-source_location: /tmp/test-sources
+active_corpus_path: raw/
 external_sources_allowed: no
 EOF
 
@@ -158,12 +158,6 @@ cat > "$WS_DIR/system/workspace_index.md" << 'EOF'
 | File | Type | Summary |
 |------|------|---------|
 | raw/test.md | source | test source |
-EOF
-
-# Create fake source location
-mkdir -p /tmp/test-sources
-cat > /tmp/test-sources/test.md << 'EOF'
-# Test Source
 EOF
 
 # Create .obsidian files
@@ -242,7 +236,13 @@ if [[ -f "$T7_WS/.spinosa/workspace" ]] && [[ -f "$T7_WS/raw/note__txt.md" ]] &&
    [[ ! -f "$T7_WS/raw/paper.md" ]] && [[ -f "$T7_WS/.spinosa/onboarding-summary.md" ]] && \
    grep -q "Selected extension batches: \.txt" "$T7_WS/.spinosa/onboarding-summary.md" && \
    grep -q "Files imported into workspace: 1" "$T7_WS/.spinosa/onboarding-summary.md" && \
-   grep -q "Scanned PDFs and images available for OCR: 1" "$T7_WS/.spinosa/onboarding-summary.md"; then
+   grep -q "Scanned PDFs and images available for OCR: 1" "$T7_WS/.spinosa/onboarding-summary.md" && \
+   echo "$T7_OUTPUT" | grep -q "Active corpus: raw/" && \
+   echo "$T7_OUTPUT" | grep -q ".spinosa/onboarding-summary.md" && \
+   echo "$T7_OUTPUT" | grep -q "Finished means:" && \
+   echo "$T7_OUTPUT" | grep -q "Do not inspect, validate, mention, or rely on the original import folder" && \
+   ! echo "$T7_OUTPUT" | grep -q "Source location:" && \
+   ! echo "$T7_OUTPUT" | grep -q "already validated"; then
   pass "spinosa new flag-based pipeline imports txt, skips pdf, writes summary"
 else
   fail "spinosa new flag-based pipeline failed"

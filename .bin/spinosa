@@ -2183,8 +2183,7 @@ write_setup_files() {
   local root="$1" project_title="$2" source_path="$3" preferred_cli="$4"
   local context="$root/system/context.md" config="$root/system/configuration.md"
   local agents="$root/AGENTS.md" claude="$root/CLAUDE.md"
-  local safe_source claude_created="no"
-  safe_source="$(sanitize_yaml "$source_path")"
+  local claude_created="no"
 
   mkdir -p "$(dirname "$context")" "$(dirname "$config")"
   cat > "$context" << CONTEXT_EOF
@@ -2193,7 +2192,7 @@ type: information
 agent: setup_cli
 description:
   - Project blueprint filled during onboarding and startup.
-  - Agents read this to understand scope, source location, evidence rules, and researcher preferences.
+  - Agents read this to understand scope, active corpus, evidence rules, and researcher preferences.
 created: $TODAY
 updated: $TODAY
 setup_status: cli_started
@@ -2214,8 +2213,8 @@ connects_to:
 - none provided during fast setup
 
 ## Sources
-- Source location: ${source_path:-[path]}
-- Main source types: [inferred during startup from the source material]
+- Active corpus: raw/
+- Main source types: [inferred during startup from the raw corpus]
 - Expected incoming sources: [inferred during startup]
 
 ## Research Vocabulary
@@ -2263,19 +2262,18 @@ Agents read this before major work.
 \`\`\`yaml
 workspace_type: research_framework
 research_mode: evolving_complex_corpus
-source_location: "$safe_source"
-source_mode: protected_append_only
+active_corpus_path: raw/
+source_mode: imported_raw_corpus
 
 source_policy: internal_first
-active_corpus_path: raw/
-active_corpus_policy: raw_first_after_onboarding
+active_corpus_policy: raw_only_after_onboarding
 external_sources_allowed: no
 
 claim_standard: source_link_required
 l2_policy: verifier_required
 
 protected_paths:
-  - "$safe_source"
+  - raw/
   - context.md
 
 stale_after_days: 30
@@ -2284,11 +2282,11 @@ preferred_llm_cli: "$preferred_cli"
 
 ## Notes
 - This file was initialized by \`spinosa new\`.
-- The CLI collected: project name, source location, and preferred LLM CLI. It scanned the source location and transposed accepted files (text, native, Office documents, EPUB/HTML, and PDFs) into raw/. Office documents and text-based PDFs were converted via MarkItDown. Scanned PDFs and images were processed via RapidOCR OCR. Videos, audio, and AGENTS.md control files were skipped.
-- After onboarding, the source location remains immutable original storage. Normal source-grounded work starts from raw/.
+- The CLI collected: project name and preferred LLM CLI. It imported accepted files into raw/. Office documents and text-based PDFs were converted via MarkItDown. Scanned PDFs and images were processed via RapidOCR OCR. Videos, audio, and AGENTS.md control files were skipped.
+- After onboarding, normal source-grounded work starts from raw/.
 - During startup, project description and helpful artifact URLs are optional. If absent, the LLM CLI agent records them as not provided, keeps external_sources_allowed at its default \`no\`, and infers working scope from the raw corpus.
 - When setup_status reaches workspace_started, the startup workflow has built the master dictionary, generated YAML headers, created multi-level navigation maps in maps/, and passed validation.
-- This file never grants permission to edit the source location or \`raw/\`.
+- This file never grants permission to edit \`raw/\`.
 CONFIG_EOF
 
   if [[ "$preferred_cli" == "Claude Code" && -f "$agents" ]]; then
@@ -2347,7 +2345,7 @@ updated: $TODAY
 ## Workspace
 - Project: ${project_title}
 - Workspace: ${root}
-- Source location: ${source_path}
+- Active corpus: raw/
 
 ## Scan Summary
 - Text-based files to rename to Markdown: ${SCAN_MARKDOWN_COUNT} ($(format_bytes "$SCAN_MARKDOWN_BYTES"))
@@ -2386,31 +2384,45 @@ startup_prompt_text() {
   cat << PROMPT_EOF
 Workspace: ${root}
 
-This is the Spinosa startup prompt. The user has completed spinosa new setup.
+This Spinosa workspace has completed CLI onboarding.
 
 Read these files first, in this order:
 1. AGENTS.md
 2. system/configuration.md
 3. system/context.md
 4. system/yaml_header_template.md
+5. system/startup.md
+6. .spinosa/onboarding-summary.md
 
 The setup draft already contains:
 - Project name: ${project_title}
-- Source location: ${source_path} (already validated, files transposed to raw/ — Office docs converted via MarkItDown, scanned PDFs and images via RapidOCR OCR, videos/audio/AGENTS.md skipped)
+- Active corpus: raw/
 - Preferred LLM CLI: ${preferred_cli}
+- The CLI already imported supported files into raw/.
+- Skipped media and conversion counts, if needed, are in .spinosa/onboarding-summary.md.
 
 Optional context not collected by fast setup:
 - Project description (if absent, infer from the raw corpus)
 - Helpful artifact URLs or file paths (if absent, record none provided)
 - External source policy defaults to no; ask only if external URL access is needed or the user requests external sources.
 
-Then execute system/startup.md. Specifically:
-- Phase 1: Verify onboarding completed (setup files exist, source location valid)
-- Phase 2: Index, Map, Validate — build the master dictionary, extract content-grounded fragments, generate YAML headers, write multi-level navigation maps, run serendipitous connection discovery, update workspace_index.md, run validation and retrieval tests
-- Set setup_status to workspace_started in both system/context.md and system/configuration.md
-- Write the startup report to agent_reports/
+Corpus boundary:
+- Treat raw/ as the only source corpus.
+- Do not inspect, validate, mention, or rely on the original import folder.
+- Do not edit raw/.
+- External sources are disabled unless the user explicitly asks for them.
 
-Do not re-ask questions the CLI draft already answered. Do not stop after one index. Do not edit the source location or \`raw/\`.
+Execute system/startup.md.
+
+Finished means:
+- setup_status is workspace_started in both system/context.md and system/configuration.md.
+- system/dictionary.md contains the master dictionary.
+- system/workspace_index.md records total raw files, extraction coverage, maps, and known gaps.
+- maps/ contains the navigation maps needed to retrieve the corpus.
+- agent_reports/ contains a startup report with validation and retrieval-test results.
+- Every non-skipped raw file has been accounted for, or the startup report names the blocker.
+
+Do not re-ask questions the CLI draft already answered. Do not stop after a partial index.
 PROMPT_EOF
 }
 
@@ -3398,7 +3410,7 @@ cmd_check() {
       --help|-h)
         printf '  %s\n' "Usage: spinosa check [workspace-directory]"
         printf '    %s\n' "  Validates workspace integrity: required files, placeholders,"
-        printf '    %s\n' "  setup status, source location, maps, and retrieval coverage."
+        printf '    %s\n' "  setup status, active raw corpus, maps, and retrieval coverage."
         return 0
         ;;
       -*) die "Unknown option: $1. Valid: --help" ;;
@@ -3463,16 +3475,14 @@ cmd_check() {
     warnings+=("setup_status: workspace_started was not found.")
   fi
 
-  # ── source location ───────────────────────────────────────────────
-  local source_path
-  source_path="$(echo "$config" | sed -n 's/.*source_location: *["'"'"']*\([^"'"'"']*\)["'"'"']*.*/\1/p' | head -1)"
-  if [[ -z "$source_path" || "$source_path" == "[path]" ]]; then
-    failures+=("source_location is missing or still a placeholder.")
-  else
-    local local_path="$source_path"
-    [[ ! -d "$local_path" ]] && local_path="$workspace_path/$source_path"
-    [[ ! -d "$local_path" ]] && failures+=("Source location does not exist: $source_path")
+  # ── active raw corpus ─────────────────────────────────────────────
+  local active_corpus_path
+  active_corpus_path="$(echo "$config" | sed -n 's/.*active_corpus_path: *["'"'"']*\([^"'"'"']*\)["'"'"']*.*/\1/p' | head -1)"
+  [[ -z "$active_corpus_path" ]] && active_corpus_path="raw/"
+  if [[ "$active_corpus_path" != "raw/" && "$active_corpus_path" != "raw" ]]; then
+    failures+=("active_corpus_path must be raw/: $active_corpus_path")
   fi
+  [[ -d "$workspace_path/raw" ]] || failures+=("Active corpus directory does not exist: raw/")
 
   # ── external policy ───────────────────────────────────────────────
   if ! echo "$config" | grep -qE "external_sources_allowed: *(yes|no)"; then
