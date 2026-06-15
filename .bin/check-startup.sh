@@ -5,7 +5,7 @@ set -euo pipefail
 if [[ "${NO_COLOR:-}" == "1" ]] || [[ ! -t 1 ]]; then
   R="" G="" Y="" BOLD="" RESET=""
 else
-  R=$'\033[31m' G=$'\033[32m' Y=$'\033[33m' BOLD=$'\033[1m' RESET=$'\033[0m'
+  R=$'\033[31m' G=$'\033[32m' Y=$'\033[92m' BOLD=$'\033[1m' RESET=$'\033[0m'
 fi
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -39,6 +39,38 @@ config="$(read_file "system/configuration.md")"
 blueprint="$(read_file "system/context.md")"
 startup_text="${config}
 ${blueprint}"
+
+config_status="$(echo "$config" | sed -n 's/^setup_status: *//p' | head -1)"
+context_status="$(echo "$blueprint" | sed -n 's/^setup_status: *//p' | head -1)"
+is_template_repo=false
+if echo "$config" | grep -q "workspace_type: research_framework" && \
+   [[ "$config_status" == "not_started" ]] && [[ "$context_status" == "not_started" ]]; then
+  is_template_repo=true
+fi
+
+if [[ "$is_template_repo" == "true" ]]; then
+  if ! echo "$config" | grep -q 'source_location: "\[filled by CLI onboarding\]"'; then
+    failures+=("Template configuration must keep source_location onboarding placeholder.")
+  fi
+  if ! echo "$blueprint" | grep -q '\[filled by startup\]'; then
+    failures+=("Template context must keep startup placeholders.")
+  fi
+  if ! echo "$config" | grep -qE "external_sources_allowed: *(yes|no)"; then
+    failures+=("external_sources_allowed is missing or invalid.")
+  fi
+
+  if [[ ${#failures[@]} -gt 0 ]]; then
+    printf '%s\n' "${BOLD}${R}Startup check failed:${RESET}"
+    for f in "${failures[@]}"; do
+      printf '  %s %s\n' "${R}✗${RESET}" "$f"
+    done
+    exit 1
+  fi
+
+  printf '%s\n' "${G}${BOLD}Startup check passed.${RESET}"
+  printf '  %s Framework template mode: onboarding/startup placeholders are expected.\n' "${Y}⚠${RESET}"
+  exit 0
+fi
 
 # ── check for leftover placeholders ─────────────────────────────────────────
 for marker in "[path]" "[project name]"; do

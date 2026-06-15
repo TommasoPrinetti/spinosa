@@ -23,8 +23,8 @@ ORIGINAL_ARGS=("$@")
 if [[ "${NO_COLOR:-}" == "1" ]] || [[ ! -t 1 ]]; then
   R="" G="" B="" Y="" C="" M="" PG="" DIM="" BOLD="" RESET=""
 else
-  R=$'\033[31m' G=$'\033[32m' B=$'\033[34m' Y=$'\033[33m'
-  C=$'\033[36m' M=$'\033[35m' DIM=$'\033[2m' BOLD=$'\033[1m' RESET=$'\033[0m'
+  R=$'\033[31m' G=$'\033[32m' B=$'\033[92m' Y=$'\033[92m'
+  C=$'\033[92m' M=$'\033[92m' DIM=$'\033[2m' BOLD=$'\033[1m' RESET=$'\033[0m'
   PG=$'\033[92m'
 fi
 
@@ -36,7 +36,6 @@ SPINOSA_HOME="${SPINOSA_HOME:-$HOME/.spinosa}"
 SPINOSA_REPO="${SPINOSA_REPO:-TommasoPrinetti/spinosa}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TODAY="$(date +%Y-%m-%d)"
-USE_GUM="${USE_GUM:-0}"
 
 # ── global cleanup trap ────────────────────────────────────────────────────
 cleanup_on_exit() {
@@ -49,7 +48,13 @@ cleanup_on_exit() {
   stty sane 2>/dev/null || true
 }
 
-trap cleanup_on_exit EXIT INT TERM
+cleanup_on_signal() {
+  cleanup_on_exit
+  exit 130
+}
+
+trap cleanup_on_exit EXIT
+trap cleanup_on_signal INT TERM
 
 # Source file classes used by integrated onboarding.
 MARKDOWN_EXTENSIONS="txt|rtf|textile|wiki|mediawiki|dokuwiki|pmwiki|outliner|workflowy|dynalist|yaml|yml|toml|css|js|ts|py|rb|sh|log|ini|cfg|conf|tex|bib|org|adoc|rst|tiddlywiki|logseq|roam|obsidian"
@@ -151,84 +156,15 @@ spinner_stop() {
   printf '\r\033[2K' >&2
 }
 
-gum_available() {
-  [[ "$USE_GUM" == "1" && -t 0 ]] || return 1
-  local bin
-  if [[ -x "${SPINOSA_HOME}/bin/gum" ]]; then
-    bin="${SPINOSA_HOME}/bin/gum"
-  else
-    bin="$(command -v gum 2>/dev/null)" || return 1
-  fi
-  # Verify gum can actually open a TTY
-  "$bin" --version >/dev/null 2>&1 || return 1
-  return 0
-}
-
-gum_bin() {
-  if [[ -x "${SPINOSA_HOME}/bin/gum" ]]; then
-    echo "${SPINOSA_HOME}/bin/gum"
-  else
-    command -v gum 2>/dev/null
-  fi
-}
-
-gum_input() {
-  local prompt="$1" value="${2:-}" bin
-  bin="$(gum_bin)" || return 127
-  "$bin" input --placeholder "$prompt" --value "$value"
-}
-
-gum_file() {
-  local title="$1" bin
-  bin="$(gum_bin)" || return 127
-  "$bin" file --directory --title "$title"
-}
-
-gum_choose() {
-  local prompt="$1" bin
-  shift
-  bin="$(gum_bin)" || return 127
-  "$bin" choose --header "$prompt" "$@"
-}
-
-gum_multi_choose() {
-  local prompt="$1" selected_csv="$2" bin
-  shift 2
-  bin="$(gum_bin)" || return 127
-  if [[ -n "$selected_csv" ]]; then
-    "$bin" choose --header "$prompt" --no-limit --ordered --selected="$selected_csv" "$@"
-  else
-    "$bin" choose --header "$prompt" --no-limit --ordered "$@"
-  fi
-}
-
-gum_confirm() {
-  local prompt="$1" bin
-  bin="$(gum_bin)" || return 127
-  "$bin" confirm "$prompt"
-}
-
 prompt_input() {
   local prompt="$1" default="${2:-}" hint="${3:-}" value=""
-  if gum_available; then
-    value="$(gum_input "$prompt" "$default")" || value=""
-    reset_terminal
-  fi
-  if [[ -z "$value" ]]; then
-    value="$(ask "$prompt" "$default" "$hint")"
-  fi
+  value="$(ask "$prompt" "$default" "$hint")"
   echo "$value"
 }
 
 prompt_directory() {
   local prompt="$1" default="${2:-}" hint="${3:-}" value=""
-  if gum_available; then
-    value="$(gum_file "$prompt")" || value=""
-    reset_terminal
-  fi
-  if [[ -z "$value" ]]; then
-    value="$(ask "$prompt" "$default" "$hint")"
-  fi
+  value="$(ask "$prompt" "$default" "$hint")"
   echo "$value"
 }
 
@@ -295,39 +231,10 @@ option_display() {
   fi
 }
 
-option_gum_display() {
-  local spec="$1" label desc
-  label="$(option_label "$spec")"
-  desc="$(option_description "$spec")"
-  if [[ -n "$desc" ]]; then
-    printf '%s - %s' "$label" "$desc"
-  else
-    printf '%s' "$label"
-  fi
-}
-
 prompt_choose() {
   local prompt="$1"
   shift
   local options=("$@")
-  if gum_available; then
-    local choice="" displays=() i
-    for i in "${!options[@]}"; do
-      displays+=("$(option_gum_display "${options[$i]}")")
-    done
-    if choice="$(gum_choose "$prompt" "${displays[@]}")"; then
-      reset_terminal
-      for i in "${!displays[@]}"; do
-        if [[ "${displays[$i]}" == "$choice" ]]; then
-          echo "$(option_value "${options[$i]}")"
-          return 0
-        fi
-      done
-      echo "$choice"
-      return 0
-    fi
-    reset_terminal
-  fi
   arrow_select "$prompt" "${options[@]}"
 }
 
@@ -356,58 +263,11 @@ prompt_multi_choose() {
     MULTI_CHOOSE_SELECTED+=("$value")
   done
 
-  if gum_available; then
-    local displays=() preselected=() choice value
-    for option in "${options[@]}"; do
-      value="$(option_value "$option")"
-      displays+=("$(option_gum_display "$option")")
-      [[ "$value" == "__all__" ]] || preselected+=("$(option_gum_display "$option")")
-    done
-    local selected_csv=""
-    if [[ ${#preselected[@]} -gt 0 ]]; then
-      selected_csv="$(join_by "," "${preselected[@]}")"
-    fi
-    local gum_output=""
-    if gum_output="$(gum_multi_choose "$prompt" "$selected_csv" "${displays[@]}")"; then
-      reset_terminal
-      MULTI_CHOOSE_SELECTED=()
-      local line i
-      while IFS= read -r line; do
-        [[ -n "$line" ]] || continue
-        for i in "${!displays[@]}"; do
-          if [[ "${displays[$i]}" == "$line" ]]; then
-            value="$(option_value "${options[$i]}")"
-            [[ "$value" == "__all__" ]] || MULTI_CHOOSE_SELECTED+=("$value")
-            break
-          fi
-        done
-      done <<< "$gum_output"
-      MULTI_CHOOSE_RESULTS=()
-      local selected_value
-      for selected_value in "${MULTI_CHOOSE_SELECTED[@]-}"; do
-        [[ -n "$selected_value" ]] && MULTI_CHOOSE_RESULTS+=("$selected_value")
-      done
-      return 0
-    fi
-    reset_terminal
-    return 1
-  fi
-
   multi_arrow_select "$prompt" "${options[@]}"
 }
 
 prompt_confirm() {
   local prompt="$1" default="${2:-y}"
-  if gum_available; then
-    local status=0
-    if gum_confirm "$prompt"; then
-      status=0
-    else
-      status=$?
-    fi
-    reset_terminal
-    return "$status"
-  fi
   confirm "$prompt" "$default"
 }
 
@@ -451,9 +311,9 @@ confirm() {
     if ! read_from_tty reply; then
       # If read_from_tty fails (no tty), try reading from stdin
       if ! IFS= read -r reply; then
-        # If stdin also fails (EOF), use default
+        # Fail closed for noninteractive automation; destructive callers must pass --yes.
         printf '\n  %s\n' "${R}Cannot read from terminal.${RESET}" >&2
-        reply="$default"
+        return 1
       fi
     fi
     reply="${reply:-$default}"
@@ -467,7 +327,6 @@ confirm() {
 }
 
 reset_terminal() {
-  stty sane 2>/dev/null || true
   printf '\033[?25h' >&2
 }
 
@@ -484,13 +343,13 @@ select_menu() {
   local choice
   while true; do
     printf '%s' "${DIM}  Enter number [1-${#options[@]}]: ${RESET}" >&2
-    if ! read_from_tty choice; then
-      # If read_from_tty fails (no tty), try reading from stdin
-      if ! IFS= read -r choice; then
-        # If stdin also fails (EOF), default to 1
-        choice="1"
-      fi
-    fi
+	    if ! read_from_tty choice; then
+	      # If read_from_tty fails (no tty), try reading from stdin
+	      if ! IFS= read -r choice; then
+	        printf '\n  %s\n' "${R}Cannot read from terminal.${RESET}" >&2
+	        return 1
+	      fi
+	    fi
     if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#options[@]} )); then
       echo "$(option_value "${options[$((choice-1))]}")"
       return
@@ -517,26 +376,35 @@ arrow_select() {
   local count=${#options[@]}
   local current=0
   local key seq part
-  local old_stty
-  old_stty=$(stty -g 2>/dev/null) || { select_menu "$prompt" "${options[@]}"; return; }
+  local old_stty old_int_trap old_term_trap
+  old_stty="$(stty -g 2>/dev/null)" || { select_menu "$prompt" "${options[@]}"; return; }
+  old_int_trap="$(trap -p INT || true)"
+  old_term_trap="$(trap -p TERM || true)"
 
   render_arrow_options() {
     local i
     for i in "${!options[@]}"; do
       if (( i == current )); then
-        printf '\r\033[2K  %s %s %s\n' "${C}" "▶" "$(option_display "${options[$i]}" 1)" >&2
+        printf '\r\033[2K  %s›%s %s\n' "${C}" "${RESET}" "$(option_display "${options[$i]}" 1)" >&2
       else
         printf '\r\033[2K    %s\n' "$(option_display "${options[$i]}")" >&2
       fi
     done
   }
 
-  clear_arrow_options() {
-    local i
-    printf '\033[%dF' "$count" >&2
-    for i in "${!options[@]}"; do
-      printf '\r\033[2K\n' >&2
-    done
+  restore_arrow_terminal() {
+    stty "$old_stty" 2>/dev/null || true
+    printf '\033[?25h' >&2
+  }
+
+  restore_arrow_traps() {
+    if [[ -n "$old_int_trap" ]]; then eval "$old_int_trap"; else trap - INT; fi
+    if [[ -n "$old_term_trap" ]]; then eval "$old_term_trap"; else trap - TERM; fi
+  }
+
+  cleanup_arrow() {
+    restore_arrow_terminal
+    restore_arrow_traps
   }
 
   printf '\n  %s\n' "${BOLD}${prompt}${RESET}" >&2
@@ -544,30 +412,12 @@ arrow_select() {
   render_arrow_options
 
   if ! stty raw -echo 2>/dev/null; then
-    clear_arrow_options
-    printf '\n  %s arrow-key mode failed, falling back to numbered menu\n' "${Y}⚠${RESET}" >&2
+    printf '\033[%dF' "$count" >&2
     select_menu "$prompt" "${options[@]}"
     return
   fi
-
-  local old_int_trap old_term_trap old_exit_trap
-  old_int_trap="$(trap -p INT || true)"
-  old_term_trap="$(trap -p TERM || true)"
-  old_exit_trap="$(trap -p EXIT || true)"
-
-  restore_arrow_traps() {
-    if [[ -n "$old_int_trap" ]]; then eval "$old_int_trap"; else trap - INT; fi
-    if [[ -n "$old_term_trap" ]]; then eval "$old_term_trap"; else trap - TERM; fi
-    if [[ -n "$old_exit_trap" ]]; then eval "$old_exit_trap"; else trap - EXIT; fi
-  }
-
-  cleanup_arrow() {
-    stty "$old_stty" 2>/dev/null || true
-    printf '\033[?25h' >&2
-    restore_arrow_traps
-  }
-  trap 'cleanup_arrow; printf "\n  Cancelled.\n" >&2; exit 1' INT TERM
-  trap 'cleanup_arrow' EXIT
+  printf '\033[?25l' >&2
+  trap 'restore_arrow_terminal; printf "\n  Cancelled.\n" >&2; exit 130' INT TERM
 
   while true; do
     IFS= read -r -n 1 -s key 2>/dev/null || { cleanup_arrow; return 1; }
@@ -579,8 +429,8 @@ arrow_select() {
           [[ ${#seq} -ge 2 ]] && break
         done
         case "$seq" in
-          '[A'|'OA') ((current--)); ((current < 0)) && current=$((count - 1)) ;;
-          '[B'|'OB') ((current++)); ((current >= count)) && current=0 ;;
+          '[A'|'OA') current=$(( (current + count - 1) % count )) ;;
+          '[B'|'OB') current=$(( (current + 1) % count )) ;;
           *) continue ;;
         esac
         printf '\033[%dF' "$count" >&2
@@ -588,6 +438,8 @@ arrow_select() {
         ;;
       ''|$'\r'|$'\n')
         cleanup_arrow
+        printf '\033[%dF' "$count" >&2
+        render_arrow_options
         echo "$(option_value "${options[$current]}")"
         return
         ;;
@@ -635,7 +487,8 @@ toggle_multi_option() {
     for regular_value in "${MULTI_CHOOSE_SELECTED[@]-}"; do
       [[ "$regular_value" == "$value" ]] || updated+=("$regular_value")
     done
-    MULTI_CHOOSE_SELECTED=("${updated[@]}")
+    MULTI_CHOOSE_SELECTED=()
+    [[ ${#updated[@]} -eq 0 ]] || MULTI_CHOOSE_SELECTED=("${updated[@]}")
   else
     MULTI_CHOOSE_SELECTED+=("$value")
   fi
@@ -671,7 +524,12 @@ multi_select_menu() {
     printf '  %s %s\n' "${DIM}${continue_index}.${RESET}" "Continue with selected file types" >&2
     printf '  %s %s\n' "${DIM}${cancel_index}.${RESET}" "Cancel selection" >&2
     printf '%s' "${DIM}  Enter number to toggle or continue: ${RESET}" >&2
-    read_from_tty choice || choice="$continue_index"
+	    if ! read_from_tty choice; then
+	      if ! IFS= read -r choice; then
+	        printf '\n  %s\n\n' "${R}Cannot read from terminal.${RESET}" >&2
+	        return 1
+	      fi
+	    fi
     if [[ "$choice" =~ ^[0-9]+$ ]]; then
       if (( choice >= 1 && choice <= ${#options[@]} )); then
         toggle_multi_option "$(option_value "${options[$((choice-1))]}")"
@@ -710,77 +568,70 @@ multi_arrow_select() {
   fi
 
   local total_rows=$(( ${#options[@]} + 2 ))
-  local current=${#options[@]} key seq part
-  local old_stty
-  old_stty=$(stty -g 2>/dev/null) || { multi_select_menu "$prompt" "${options[@]}"; return; }
+  local continue_row=${#options[@]}
+  local cancel_row=$(( ${#options[@]} + 1 ))
+  local current="$continue_row"
+  local key seq part
+  local old_stty old_int_trap old_term_trap
+  old_stty="$(stty -g 2>/dev/null)" || { multi_select_menu "$prompt" "${options[@]}"; return; }
+  old_int_trap="$(trap -p INT || true)"
+  old_term_trap="$(trap -p TERM || true)"
 
   render_multi_arrow_rows() {
-    local i option value
+    local i option value prefix selected current_flag
     for ((i = 0; i < total_rows; i++)); do
+      prefix="    "
+      (( i == current )) && prefix="  ${C}›${RESET} "
       if (( i < ${#options[@]} )); then
         option="${options[$i]}"
         value="$(option_value "$option")"
-        local row="    "
-        (( i == current )) && row="  ${C}▶${RESET} "
-        if multi_option_is_selected "$value"; then
-          render_multi_option_line "$option" 1 "$row" $(( i == current ? 1 : 0 ))
-        else
-          render_multi_option_line "$option" 0 "$row" $(( i == current ? 1 : 0 ))
-        fi
-      elif (( i == ${#options[@]} )); then
-        if (( i == current )); then
-          printf '\r\033[2K  %s▶%s %sContinue with selected file types%s\n' "${C}" "${RESET}" "${BOLD}" "${RESET}" >&2
-        else
-          printf '\r\033[2K    Continue with selected file types\n' >&2
-        fi
+        selected=0
+        multi_option_is_selected "$value" && selected=1
+        current_flag=0
+        (( i == current )) && current_flag=1
+        render_multi_option_line "$option" "$selected" "$prefix" "$current_flag"
+      elif (( i == continue_row )); then
+        printf '\r\033[2K%s%sContinue with selected file types%s\n' "$prefix" "${BOLD}" "${RESET}" >&2
       else
-        if (( i == current )); then
-          printf '\r\033[2K  %s▶%s %sCancel selection%s\n' "${C}" "${RESET}" "${BOLD}" "${RESET}" >&2
-        else
-          printf '\r\033[2K    Cancel selection\n' >&2
-        fi
+        printf '\r\033[2K%sCancel selection\n' "$prefix" >&2
       fi
     done
   }
 
-  clear_multi_arrow_rows() {
-    local i
-    printf '\033[%dF' "$total_rows" >&2
-    for ((i = 0; i < total_rows; i++)); do
-      printf '\r\033[2K\n' >&2
-    done
+  restore_multi_arrow_terminal() {
+    stty "$old_stty" 2>/dev/null || true
+    printf '\033[?25h' >&2
   }
-
-  printf '\n  %s\n' "${BOLD}${prompt}${RESET}" >&2
-  printf '  %s\n' "${DIM}↑/↓ to move, Space to select, Enter to confirm, q to cancel${RESET}" >&2
-  render_multi_arrow_rows
-
-  if ! stty raw -echo 2>/dev/null; then
-    clear_multi_arrow_rows
-    printf '\n  %s arrow-key mode failed, falling back to numbered menu\n' "${Y}⚠${RESET}" >&2
-    multi_select_menu "$prompt" "${options[@]}"
-    return
-  fi
-  printf '\033[?25l' >&2
-
-  local old_int_trap old_term_trap old_exit_trap
-  old_int_trap="$(trap -p INT || true)"
-  old_term_trap="$(trap -p TERM || true)"
-  old_exit_trap="$(trap -p EXIT || true)"
 
   restore_multi_arrow_traps() {
     if [[ -n "$old_int_trap" ]]; then eval "$old_int_trap"; else trap - INT; fi
     if [[ -n "$old_term_trap" ]]; then eval "$old_term_trap"; else trap - TERM; fi
-    if [[ -n "$old_exit_trap" ]]; then eval "$old_exit_trap"; else trap - EXIT; fi
   }
 
   cleanup_multi_arrow() {
-    stty "$old_stty" 2>/dev/null || true
-    printf '\033[?25h' >&2
+    restore_multi_arrow_terminal
     restore_multi_arrow_traps
   }
-  trap 'cleanup_multi_arrow; printf "\n  Cancelled.\n" >&2; exit 1' INT TERM
-  trap 'cleanup_multi_arrow' EXIT
+
+  finish_multi_arrow() {
+    MULTI_CHOOSE_RESULTS=()
+    local selected_value
+    for selected_value in "${MULTI_CHOOSE_SELECTED[@]-}"; do
+      [[ -n "$selected_value" ]] && MULTI_CHOOSE_RESULTS+=("$selected_value")
+    done
+  }
+
+  printf '\n  %s\n' "${BOLD}${prompt}${RESET}" >&2
+  printf '  %s\n' "${DIM}↑/↓ to move, Space to select, Enter to continue, q to cancel${RESET}" >&2
+  render_multi_arrow_rows
+
+  if ! stty raw -echo 2>/dev/null; then
+    printf '\033[%dF' "$total_rows" >&2
+    multi_select_menu "$prompt" "${options[@]}"
+    return
+  fi
+  printf '\033[?25l' >&2
+  trap 'restore_multi_arrow_terminal; printf "\n  Cancelled.\n" >&2; exit 130' INT TERM
 
   while true; do
     IFS= read -r -n 1 -s key 2>/dev/null || { cleanup_multi_arrow; return 1; }
@@ -792,27 +643,28 @@ multi_arrow_select() {
           [[ ${#seq} -ge 2 ]] && break
         done
         case "$seq" in
-          '[A'|'OA') ((current--)); ((current < 0)) && current=$((total_rows - 1)) ;;
-          '[B'|'OB') ((current++)); ((current >= total_rows)) && current=0 ;;
+          '[A'|'OA') current=$(( (current + total_rows - 1) % total_rows )) ;;
+          '[B'|'OB') current=$(( (current + 1) % total_rows )) ;;
           *) continue ;;
         esac
         printf '\033[%dF' "$total_rows" >&2
         render_multi_arrow_rows
         ;;
-      ' '|''|$'\r'|$'\n')
+      ' ')
         if (( current < ${#options[@]} )); then
           toggle_multi_option "$(option_value "${options[$current]}")"
           printf '\033[%dF' "$total_rows" >&2
           render_multi_arrow_rows
-        elif (( current == ${#options[@]} )); then
+        fi
+        ;;
+      ''|$'\r'|$'\n')
+        if (( current == continue_row )); then
           cleanup_multi_arrow
-          MULTI_CHOOSE_RESULTS=()
-          local selected_value
-          for selected_value in "${MULTI_CHOOSE_SELECTED[@]-}"; do
-            [[ -n "$selected_value" ]] && MULTI_CHOOSE_RESULTS+=("$selected_value")
-          done
+          printf '\033[%dF' "$total_rows" >&2
+          render_multi_arrow_rows
+          finish_multi_arrow
           return 0
-        else
+        elif (( current == cancel_row )); then
           cleanup_multi_arrow
           printf '\n  Cancelled.\n' >&2
           return 1
@@ -848,7 +700,6 @@ expand_home() {
   echo "$path"
 }
 
-# ── Gum integration (optional, private install) ─────────────────────────────
 # ── checksum helper ─────────────────────────────────────────────────────────
 sha256_file() {
   if command -v sha256sum >/dev/null 2>&1; then
@@ -879,6 +730,47 @@ verify_checksum() {
   [[ "$actual" == "$expected" ]] || die "Checksum mismatch for $(basename "$file")"
 }
 
+safe_untar() {
+  local archive="$1" dest="$2"
+  shift 2
+
+  local listing verbose_listing
+  listing="$(tar -tzf "$archive" 2>/dev/null)" || die "Cannot read archive: $archive"
+  verbose_listing="$(tar -tzvf "$archive" 2>/dev/null)" || die "Cannot inspect archive: $archive"
+
+  if printf '%s\n' "$listing" | grep -qE '(^|/)\.\.(/|$)'; then
+    die "Archive contains path traversal entries: $(basename "$archive")"
+  fi
+  if printf '%s\n' "$listing" | grep -qE '^/'; then
+    die "Archive contains absolute paths: $(basename "$archive")"
+  fi
+
+  local line target
+  while IFS= read -r line; do
+    [[ "$line" == l* && "$line" == *" -> "* ]] || continue
+    target="${line##* -> }"
+    if [[ "$target" == /* ]] || [[ "$target" =~ (^|/)\.\.(/|$) ]]; then
+      die "Archive contains unsafe symlink target: $(basename "$archive")"
+    fi
+  done <<< "$verbose_listing"
+
+  tar -xzf "$archive" -C "$dest" --no-same-owner "$@"
+}
+
+copy_dir_contents() {
+  local src="$1" dst="$2"
+  local src_real="" framework_real=""
+  mkdir -p "$dst"
+  src_real="$(cd "$src" 2>/dev/null && pwd -P)" || die "Cannot copy missing directory: $src"
+  if [[ -n "${FRAMEWORK_ROOT:-}" ]]; then
+    framework_real="$(cd "$FRAMEWORK_ROOT" 2>/dev/null && pwd -P)" || framework_real=""
+    if [[ -n "$framework_real" && "$src_real" == "$framework_real" ]]; then
+      die "Refusing to copy framework root as a directory; check .spinosa/framework-files.tsv for blank or unsafe paths."
+    fi
+  fi
+  cp -a "$src"/. "$dst"/
+}
+
 manifest_hash() {
   local manifest="$1" path="$2"
   awk -F '\t' -v p="$path" '$1 == p { print $2; exit }' "$manifest"
@@ -896,6 +788,16 @@ framework_version() {
 is_release_managed_role() {
   local role="$1"
   [[ "$role" != "user_state" && "$role" != "generated_state" ]]
+}
+
+is_framework_manifest_entry() {
+  local path="$1" role="$2"
+  [[ -n "$path" ]] || return 1
+  [[ "$path" != "path" ]] || return 1
+  if [[ "$path" == "." || "$path" == "/" || "$path" == ./* || "$path" == ../* || "$path" == *"/../"* ]]; then
+    die "Unsafe framework manifest path: $path"
+  fi
+  is_release_managed_role "$role"
 }
 
 next_sidecar_path() {
@@ -963,7 +865,7 @@ prepare_release_framework() {
   [[ -n "$expected" ]] || die "${archive_name} not found in checksums.txt"
   verify_checksum "$archive_path" "$expected"
 
-  tar -xzf "$archive_path" -C "$tmpdir"
+	  safe_untar "$archive_path" "$tmpdir"
   framework_dir="${tmpdir}/spinosa-framework-${version}"
   [[ -f "${framework_dir}/.spinosa/framework-files.tsv" ]] || die "Release manifest missing from archive"
   printf '%s\t%s\n' "$version" "$framework_dir"
@@ -1009,6 +911,8 @@ preferred_cli_name() {
     claude_code_desktop) echo "Claude Code Desktop" ;;
     codex) echo "Codex" ;;
     codex_app) echo "Codex App" ;;
+    gemini) echo "Gemini" ;;
+    qwen) echo "Qwen" ;;
     opencode) echo "OpenCode" ;;
     opencode_desktop) echo "OpenCode Desktop" ;;
     kilo) echo "Kilo" ;;
@@ -1021,6 +925,7 @@ handoff_action_label() {
   case "$1" in
     copy_command) echo "Copy launch command" ;;
     run_now) echo "Run launch command now" ;;
+    selected_cli) echo "Open selected CLI" ;;
     *) echo "$1" ;;
   esac
 }
@@ -1045,6 +950,16 @@ build_launch_command() {
       ;;
     opencode_desktop)
       printf 'opencode %s\n' "$root_cmd"
+      ;;
+    gemini)
+      printf 'cd %s && gemini -i "$(cat <<'\''SPINOSA_STARTUP_PROMPT'\''\n' "$root_cmd"
+      printf '%s\n' "$prompt"
+      printf 'SPINOSA_STARTUP_PROMPT\n)"\n'
+      ;;
+    qwen)
+      printf 'cd %s && qwen -i "$(cat <<'\''SPINOSA_STARTUP_PROMPT'\''\n' "$root_cmd"
+      printf '%s\n' "$prompt"
+      printf 'SPINOSA_STARTUP_PROMPT\n)"\n'
       ;;
     claude_code)
       printf 'cd %s && claude "$(cat <<'\''SPINOSA_STARTUP_PROMPT'\''\n' "$root_cmd"
@@ -1090,14 +1005,14 @@ _launch_in_terminal() {
 run_cli_with_prompt() {
   local root="$1" cli="$2" prompt="$3"
   case "$cli" in
-    codex)
-      command -v codex >/dev/null 2>&1 || { warn "codex was not found on PATH."; return 1; }
-      local _ptmp_codex _ltmp_codex
-      _ptmp_codex="$(mktemp /tmp/spinosa-prompt.XXXXXX)"
-      printf '%s' "$prompt" > "$_ptmp_codex"
-      _ltmp_codex="$(mktemp /tmp/spinosa-launch.XXXXXX.sh)"
-      printf '#!/bin/bash\ncd %s && codex -C %s "$(cat %s)"\nrm -f %s\n' \
-        "$(printf '%q' "$root")" "$(printf '%q' "$root")" "$(printf '%q' "$_ptmp_codex")" "$(printf '%q' "$_ptmp_codex")" > "$_ltmp_codex"
+	    codex)
+	      command -v codex >/dev/null 2>&1 || { warn "codex was not found on PATH."; return 1; }
+	      local _ptmp_codex _ltmp_codex
+	      _ptmp_codex="$(mktemp /tmp/spinosa-prompt.XXXXXX)"
+	      printf '%s' "$prompt" > "$_ptmp_codex"
+	      _ltmp_codex="$(mktemp /tmp/spinosa-launch.XXXXXX.sh)"
+	      printf '#!/bin/bash\n_prompt=%s\ntrap '\''rm -f "$0" "$_prompt"'\'' EXIT\ncd %s && codex -C %s "$(cat "$_prompt")"\n' \
+	        "$(printf '%q' "$_ptmp_codex")" "$(printf '%q' "$root")" "$(printf '%q' "$root")" > "$_ltmp_codex"
       chmod +x "$_ltmp_codex"
       _launch_in_terminal "$_ltmp_codex"
       ok "Opened Codex in a new terminal."
@@ -1108,14 +1023,14 @@ run_cli_with_prompt() {
       codex app "$root" &
       ok "Prompt copied to clipboard — paste it in the Codex app."
       ;;
-    opencode)
-      command -v opencode >/dev/null 2>&1 || { warn "opencode was not found on PATH."; return 1; }
-      local _ptmp_oc _ltmp_oc
-      _ptmp_oc="$(mktemp /tmp/spinosa-prompt.XXXXXX)"
-      printf '%s' "$prompt" > "$_ptmp_oc"
-      _ltmp_oc="$(mktemp /tmp/spinosa-launch.XXXXXX.sh)"
-      printf '#!/bin/bash\ncd %s && opencode --prompt "$(cat %s)" %s\nrm -f %s\n' \
-        "$(printf '%q' "$root")" "$(printf '%q' "$_ptmp_oc")" "$(printf '%q' "$root")" "$(printf '%q' "$_ptmp_oc")" > "$_ltmp_oc"
+	    opencode)
+	      command -v opencode >/dev/null 2>&1 || { warn "opencode was not found on PATH."; return 1; }
+	      local _ptmp_oc _ltmp_oc
+	      _ptmp_oc="$(mktemp /tmp/spinosa-prompt.XXXXXX)"
+	      printf '%s' "$prompt" > "$_ptmp_oc"
+	      _ltmp_oc="$(mktemp /tmp/spinosa-launch.XXXXXX.sh)"
+	      printf '#!/bin/bash\n_prompt=%s\ntrap '\''rm -f "$0" "$_prompt"'\'' EXIT\ncd %s && opencode --prompt "$(cat "$_prompt")" %s\n' \
+	        "$(printf '%q' "$_ptmp_oc")" "$(printf '%q' "$root")" "$(printf '%q' "$root")" > "$_ltmp_oc"
       chmod +x "$_ltmp_oc"
       _launch_in_terminal "$_ltmp_oc"
       ok "Opened OpenCode in a new terminal."
@@ -1126,14 +1041,38 @@ run_cli_with_prompt() {
       opencode "$root" &
       ok "Prompt copied to clipboard — paste it in the OpenCode TUI."
       ;;
+    gemini)
+      command -v gemini >/dev/null 2>&1 || { warn "gemini was not found on PATH."; return 1; }
+      local _ptmp_gm _ltmp_gm
+      _ptmp_gm="$(mktemp /tmp/spinosa-prompt.XXXXXX)"
+      printf '%s' "$prompt" > "$_ptmp_gm"
+      _ltmp_gm="$(mktemp /tmp/spinosa-launch.XXXXXX.sh)"
+      printf '#!/bin/bash\n_prompt=%s\ntrap '\''rm -f "$0" "$_prompt"'\'' EXIT\ncd %s && gemini -i "$(cat "$_prompt")"\n' \
+        "$(printf '%q' "$_ptmp_gm")" "$(printf '%q' "$root")" > "$_ltmp_gm"
+      chmod +x "$_ltmp_gm"
+      _launch_in_terminal "$_ltmp_gm"
+      ok "Opened Gemini in a new terminal."
+      ;;
+    qwen)
+      command -v qwen >/dev/null 2>&1 || { warn "qwen was not found on PATH."; return 1; }
+      local _ptmp_qw _ltmp_qw
+      _ptmp_qw="$(mktemp /tmp/spinosa-prompt.XXXXXX)"
+      printf '%s' "$prompt" > "$_ptmp_qw"
+      _ltmp_qw="$(mktemp /tmp/spinosa-launch.XXXXXX.sh)"
+      printf '#!/bin/bash\n_prompt=%s\ntrap '\''rm -f "$0" "$_prompt"'\'' EXIT\ncd %s && qwen -i "$(cat "$_prompt")"\n' \
+        "$(printf '%q' "$_ptmp_qw")" "$(printf '%q' "$root")" > "$_ltmp_qw"
+      chmod +x "$_ltmp_qw"
+      _launch_in_terminal "$_ltmp_qw"
+      ok "Opened Qwen in a new terminal."
+      ;;
     claude_code)
       command -v claude >/dev/null 2>&1 || { warn "claude was not found on PATH."; return 1; }
       local _ptmp_cc _ltmp_cc
       _ptmp_cc="$(mktemp /tmp/spinosa-prompt.XXXXXX)"
       printf '%s' "$prompt" > "$_ptmp_cc"
-      _ltmp_cc="$(mktemp /tmp/spinosa-launch.XXXXXX.sh)"
-      printf '#!/bin/bash\ncd %s && claude "$(cat %s)"\nrm -f %s\n' \
-        "$(printf '%q' "$root")" "$(printf '%q' "$_ptmp_cc")" "$(printf '%q' "$_ptmp_cc")" > "$_ltmp_cc"
+	      _ltmp_cc="$(mktemp /tmp/spinosa-launch.XXXXXX.sh)"
+	      printf '#!/bin/bash\n_prompt=%s\ntrap '\''rm -f "$0" "$_prompt"'\'' EXIT\ncd %s && claude "$(cat "$_prompt")"\n' \
+	        "$(printf '%q' "$_ptmp_cc")" "$(printf '%q' "$root")" > "$_ltmp_cc"
       chmod +x "$_ltmp_cc"
       _launch_in_terminal "$_ltmp_cc"
       ok "Opened Claude Code in a new terminal."
@@ -1149,14 +1088,14 @@ run_cli_with_prompt() {
         ok "Prompt copied to clipboard — open Claude Code Desktop and paste it."
       fi
       ;;
-    kilo)
-      command -v kilo >/dev/null 2>&1 || { warn "kilo was not found on PATH."; return 1; }
-      local _ptmp_kl _ltmp_kl
-      _ptmp_kl="$(mktemp /tmp/spinosa-prompt.XXXXXX)"
-      printf '%s' "$prompt" > "$_ptmp_kl"
-      _ltmp_kl="$(mktemp /tmp/spinosa-launch.XXXXXX.sh)"
-      printf '#!/bin/bash\ncd %s && kilo "$(cat %s)"\nrm -f %s\n' \
-        "$(printf '%q' "$root")" "$(printf '%q' "$_ptmp_kl")" "$(printf '%q' "$_ptmp_kl")" > "$_ltmp_kl"
+	    kilo)
+	      command -v kilo >/dev/null 2>&1 || { warn "kilo was not found on PATH."; return 1; }
+	      local _ptmp_kl _ltmp_kl
+	      _ptmp_kl="$(mktemp /tmp/spinosa-prompt.XXXXXX)"
+	      printf '%s' "$prompt" > "$_ptmp_kl"
+	      _ltmp_kl="$(mktemp /tmp/spinosa-launch.XXXXXX.sh)"
+	      printf '#!/bin/bash\n_prompt=%s\ntrap '\''rm -f "$0" "$_prompt"'\'' EXIT\ncd %s && kilo "$(cat "$_prompt")"\n' \
+	        "$(printf '%q' "$_ptmp_kl")" "$(printf '%q' "$root")" > "$_ltmp_kl"
       chmod +x "$_ltmp_kl"
       _launch_in_terminal "$_ltmp_kl"
       ok "Opened Kilo in a new terminal."
@@ -1166,6 +1105,24 @@ run_cli_with_prompt() {
       return 1
       ;;
   esac
+}
+
+handoff_selected_cli() {
+  local root="$1" cli="$2" cli_label="$3" prompt="$4" launch_command="$5"
+  if [[ "$cli" == "other" ]]; then
+    copy_to_clipboard "$launch_command" && ok "Launch command copied to your clipboard." || print_box "Terminal Launch Command — full text" <<< "$launch_command"
+    handoff_result="launch_command_copied"
+    return 0
+  fi
+
+  if run_cli_with_prompt "$root" "$cli" "$prompt"; then
+    handoff_result="selected_cli_opened"
+    return 0
+  fi
+
+  warn "Could not open ${cli_label}. Copying the launch command instead."
+  copy_to_clipboard "$launch_command" && ok "Launch command copied to your clipboard." || print_box "Terminal Launch Command — full text" <<< "$launch_command"
+  handoff_result="run_failed_command_copied"
 }
 
 should_skip_source_file() {
@@ -1611,13 +1568,37 @@ render_ocr_progress() {
   printf '\r\033[2K  %s%s%s %s[%s]%s %d/%d %s%s (%d converted, %d skipped)' "${M}" "$(spinner_frame "${7:-$processed}")" "${RESET}" "${M}" "$bar" "${RESET}" "$processed" "$total" "$current_file" "$page_label" "$converted" "$skipped" >&2
 }
 
+# ── Cloud-aware file copy ─────────────────────────────────────────
+# Retries on transient errors (cloud timeout, network mount glitch)
+safe_copy() {
+  local src="$1" dst="$2"
+  local retries="${3:-3}" delay=2 i
+  for ((i = 1; i <= retries; i++)); do
+    if cp "$src" "$dst" 2>/dev/null; then
+      return 0
+    fi
+    [[ "$i" -lt "$retries" ]] || break
+    sleep "$delay"
+    delay=$((delay * 2))
+  done
+  return 1
+}
+
+is_cloud_storage_path() {
+  local path="$1"
+  case "$path" in
+    */Library/CloudStorage/*|*.dropbox*|*Dropbox*|*OneDrive*) return 0 ;;
+  esac
+  return 1
+}
+
 copy_source() {
   local source_path="$1" dest_dir="$2"
   local total_files
   total_files="$(selected_copy_count)"
   [[ "$total_files" -gt 0 ]] || { warn "No copyable files found in source location."; return 1; }
 
-  local copied=0 skipped=0 processed=0 converted=0 ocr_converted=0 ocr_skipped=0 md_converted=0 md_skipped=0 src_file rel_path raw_rel_path dest_file dest_parent
+  local copied=0 skipped=0 failed=0 processed=0 converted=0 ocr_converted=0 ocr_skipped=0 md_converted=0 md_skipped=0 src_file rel_path raw_rel_path dest_file dest_parent
   local md_name md_dest
   COPY_TOTAL_COUNT="$total_files"
   COPY_COPIED_COUNT=0
@@ -1636,8 +1617,11 @@ copy_source() {
     if [[ -f "$dest_file" ]]; then
       skipped=$((skipped + 1))
     else
-      cp "$src_file" "$dest_file"
-      copied=$((copied + 1))
+      if safe_copy "$src_file" "$dest_file"; then
+        copied=$((copied + 1))
+      else
+        failed=$((failed + 1))
+      fi
     fi
     processed=$((processed + 1))
     render_copy_progress "$processed" "$total_files" "$copied" "$skipped" "$rel_path"
@@ -1654,8 +1638,11 @@ copy_source() {
     if [[ -f "$dest_file" ]]; then
       skipped=$((skipped + 1))
     else
-      cp "$src_file" "$dest_file"
-      copied=$((copied + 1))
+      if safe_copy "$src_file" "$dest_file"; then
+        copied=$((copied + 1))
+      else
+        failed=$((failed + 1))
+      fi
     fi
     processed=$((processed + 1))
     render_copy_progress "$processed" "$total_files" "$copied" "$skipped" "$rel_path"
@@ -1735,14 +1722,15 @@ copy_source() {
 
         if [[ ${#_md_process_src[@]} -gt 0 ]]; then
           local _md_page="" _md_current_rel=""
-          local _md_fifo
-          _md_fifo="$(mktemp -u)"
+	          local _md_fifo _md_fifo_dir
+	          _md_fifo_dir="$(mktemp -d)"
+	          _md_fifo="${_md_fifo_dir}/fifo"
           spinosa_debug_md "MarkItDown batch starting — ${#_md_process_src[@]} files, fifo=$_md_fifo"
 
           _markitdown_cleanup() {
             spinner_stop >&2 2>/dev/null || true
             [[ -z "${_md_pid:-}" ]] || kill "$_md_pid" 2>/dev/null || true
-            [[ -z "${_md_fifo:-}" ]] || rm -f "$_md_fifo" 2>/dev/null || true
+	            [[ -z "${_md_fifo_dir:-}" ]] || rm -rf "$_md_fifo_dir" 2>/dev/null || true
             printf '\n' >&2
             exit 1
           }
@@ -1943,14 +1931,15 @@ copy_source() {
         if [[ ${#_ocr_process_src[@]} -gt 0 ]]; then
           local _ocr_page="" _ocr_page_counter=0
           local _current_rel=""
-          local _ocr_fifo
-          _ocr_fifo="$(mktemp -u)"
+	          local _ocr_fifo _ocr_fifo_dir
+	          _ocr_fifo_dir="$(mktemp -d)"
+	          _ocr_fifo="${_ocr_fifo_dir}/fifo"
           spinosa_debug "Batch starting — ${#_ocr_process_src[@]} files, fifo=$_ocr_fifo"
 
           _ocr_cleanup() {
             spinner_stop >&2 2>/dev/null || true
             [[ -z "${_ocr_pid:-}" ]] || kill "$_ocr_pid" 2>/dev/null || true
-            [[ -z "${_ocr_fifo:-}" ]] || rm -f "$_ocr_fifo" 2>/dev/null || true
+	            [[ -z "${_ocr_fifo_dir:-}" ]] || rm -rf "$_ocr_fifo_dir" 2>/dev/null || true
             printf '\n' >&2
             exit 1
           }
@@ -2081,14 +2070,18 @@ copy_source() {
     if [[ -f "$dest_file" ]]; then
       skipped=$((skipped + 1))
     else
-      cp "$src_file" "$dest_file"
-      copied=$((copied + 1))
+      if safe_copy "$src_file" "$dest_file"; then
+        copied=$((copied + 1))
+      else
+        failed=$((failed + 1))
+      fi
     fi
     processed=$((processed + 1))
     render_copy_progress "$processed" "$total_files" "$copied" "$skipped" "$rel_path"
   done < <(find "$source_path" -type f -print0 2>/dev/null)
 
   COPY_COPIED_COUNT="$copied"
+  COPY_FAILED_COUNT="$failed"
   COPY_SKIPPED_COUNT="$skipped"
   COPY_MARKITDOWN_CONVERTED_COUNT="${md_converted:-0}"
   COPY_MARKITDOWN_SKIPPED_COUNT="${md_skipped:-0}"
@@ -2096,6 +2089,9 @@ copy_source() {
   COPY_OCR_SKIPPED_COUNT="${ocr_skipped:-0}"
 
   printf '\n'
+  if [[ "$failed" -gt 0 ]]; then
+    warn "$failed files could not be copied (cloud storage timeout or I/O error). These files are skipped. Run the copy again when all files are synced locally."
+  fi
   ok "Workspace source copy prepared in ${BOLD}$(dirname "$dest_dir")${RESET}"
 }
 
@@ -2103,6 +2099,8 @@ choose_preferred_cli() {
   local options=(
     "$(option_spec "opencode" "OpenCode" "run the OpenCode CLI with the startup prompt")"
     "$(option_spec "opencode_desktop" "OpenCode Desktop" "open OpenCode and paste the copied prompt")"
+    "$(option_spec "gemini" "Gemini" "run the Gemini CLI in this workspace")"
+    "$(option_spec "qwen" "Qwen" "run the Qwen CLI in this workspace")"
     "$(option_spec "claude_code" "Claude Code" "run the terminal CLI in this workspace")"
     "$(option_spec "claude_code_desktop" "Claude Code Desktop" "open the desktop app with the prompt ready")"
     "$(option_spec "codex" "Codex" "run the Codex terminal CLI in this workspace")"
@@ -2116,6 +2114,7 @@ choose_preferred_cli() {
 choose_import_batches() {
   [[ ${#IMPORT_BATCH_EXTENSIONS[@]} -gt 0 ]] || return 0
 
+  local -a MULTI_CHOOSE_RESULTS=()
   local options=() i count ext
   options+=("$(option_spec "__all__" "All supported files" "toggle every supported file type on or off")")
   for i in "${!IMPORT_BATCH_EXTENSIONS[@]}"; do
@@ -2145,20 +2144,16 @@ choose_import_batches() {
   while true; do
     note "Choose which file types to import into the workspace copy."
     prompt_multi_choose "Selectable file-type batches" "${options[@]}" || return 1
-    SELECTED_IMPORT_EXTENSIONS=("${MULTI_CHOOSE_RESULTS[@]}")
-    if [[ ${#SELECTED_IMPORT_EXTENSIONS[@]} -gt 0 ]]; then
+    local -a selected_import_extensions=()
+    if [[ ${MULTI_CHOOSE_RESULTS+x} ]]; then
+      selected_import_extensions=("${MULTI_CHOOSE_RESULTS[@]}")
+    fi
+    if [[ ${#selected_import_extensions[@]} -gt 0 ]]; then
+      SELECTED_IMPORT_EXTENSIONS=("${selected_import_extensions[@]}")
       return 0
     fi
     warn "Select at least one file type to enable import."
   done
-}
-
-choose_launch_method() {
-  local options=(
-    "$(option_spec "copy_command" "Copy launch command" "keep the command in your clipboard and run it yourself")"
-    "$(option_spec "run_now" "Run launch command now" "open the selected CLI immediately when supported")"
-  )
-  prompt_choose "How to launch" "${options[@]}"
 }
 
 confirm_action() {
@@ -2421,24 +2416,17 @@ PROMPT_EOF
 
 # ── OCR User Prompt ────────────────────────────────────────────────────────────
 
-# ── RapidOCR Functions ────────────────────────────────────────────────────────
+# ── OCR Functions ──
 
 SPINOSA_VENDOR_DIR="${SPINOSA_HOME:-$HOME/.spinosa}/vendor/spinosa"
-RAPIDOCR_VENDOR_DIR="${SPINOSA_HOME:-$HOME/.spinosa}/vendor/rapidocr"
 PLATFORM="${OS:-$(uname -s | tr '[:upper:]' '[:lower:]')}-$(uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/' | sed 's/i[3-9]86/i386/')"
-RAPIDOCR_PLATFORM="$PLATFORM"
+
+# ── MarkItDown Functions ────────────────────────────────────────────────────
 
 rapidocr_ocr_available() {
-  # Unified vendor path (post-merger)
   local unified_bin="${SPINOSA_VENDOR_DIR}-${PLATFORM}/rapidocr-cli"
   [[ -x "$unified_bin" ]] && return 0
-  # Legacy vendor path (pre-merger)
-  local bin="${RAPIDOCR_VENDOR_DIR}/${RAPIDOCR_PLATFORM}/rapidocr-cli"
-  [[ -x "$bin" ]] && return 0
-  # Framework .bin/lib/vendor/ directory
-  local framework_unified="${FRAMEWORK_ROOT:-.}/.bin/lib/vendor/spinosa-${PLATFORM}/rapidocr-cli"
-  [[ -x "$framework_unified" ]] && return 0
-  local framework_bin="${FRAMEWORK_ROOT:-.}/.bin/lib/vendor/rapidocr-${RAPIDOCR_PLATFORM}/rapidocr-cli"
+  local framework_bin="${FRAMEWORK_ROOT:-.}/.bin/lib/vendor/spinosa-${PLATFORM}/rapidocr-cli"
   [[ -x "$framework_bin" ]] && return 0
   return 1
 }
@@ -2446,16 +2434,10 @@ rapidocr_ocr_available() {
 rapidocr_ocr_bin() {
   local unified_bin="${SPINOSA_VENDOR_DIR}-${PLATFORM}/rapidocr-cli"
   if [[ -x "$unified_bin" ]]; then echo "$unified_bin"; return; fi
-  local bin="${RAPIDOCR_VENDOR_DIR}/${RAPIDOCR_PLATFORM}/rapidocr-cli"
-  if [[ -x "$bin" ]]; then echo "$bin"; return; fi
-  local framework_unified="${FRAMEWORK_ROOT:-.}/.bin/lib/vendor/spinosa-${PLATFORM}/rapidocr-cli"
-  if [[ -x "$framework_unified" ]]; then echo "$framework_unified"; return; fi
-  local framework_bin="${FRAMEWORK_ROOT:-.}/.bin/lib/vendor/rapidocr-${RAPIDOCR_PLATFORM}/rapidocr-cli"
+  local framework_bin="${FRAMEWORK_ROOT:-.}/.bin/lib/vendor/spinosa-${PLATFORM}/rapidocr-cli"
   if [[ -x "$framework_bin" ]]; then echo "$framework_bin"; return; fi
   return 1
 }
-
-# ── MarkItDown Functions ────────────────────────────────────────────────────
 
 markitdown_available() {
   local unified_bin="${SPINOSA_VENDOR_DIR}-${PLATFORM}/markitdown-cli"
@@ -2477,7 +2459,6 @@ repair_vendor_tools() {
   [[ "${SPINOSA_NO_REPAIR:-0}" != "1" ]] || return 0
   [[ -t 0 ]] || return 0
   local needs_repair=0 pkgs=() vendor_dir="${SPINOSA_VENDOR_DIR}-${PLATFORM}"
-  if ! rapidocr_ocr_available; then needs_repair=1; pkgs+=("rapidocr"); fi
   if ! markitdown_available; then needs_repair=1; pkgs+=("markitdown"); fi
   [[ "$needs_repair" -eq 1 ]] || return 0
 
@@ -2503,11 +2484,7 @@ repair_vendor_tools() {
       info "Installing MarkItDown..."
       "$python_bin" -m pip install "markitdown[docx,pptx,xlsx,xls,outlook,pdf]==0.1.6" --quiet 2>&1 || true
     fi
-    if [[ " ${pkgs[*]} " == *" rapidocr "* ]]; then
-      info "Installing RapidOCR..."
-      "$python_bin" -m pip install "rapidocr==3.8.1" "onnxruntime==1.26.0" "pypdfium2==5.9.0" --quiet 2>&1 || true
-    fi
-    if rapidocr_ocr_available && markitdown_available; then
+    if markitdown_available; then
       ok "Document processing packages ready"
     else
       note_wilted "Package install failed — check network or run: spinosa upgrade"
@@ -2638,6 +2615,9 @@ run_integrated_onboarding() {
     break
   done
 
+  if is_cloud_storage_path "$source_path"; then
+    note "Source is on cloud storage (Google Drive / iCloud / Dropbox). Files that are not fully synced locally may time out during copy and will be skipped."
+  fi
   copy_source "$source_path" "$root/raw"
 
   print_step 3 3 "Startup prompt"
@@ -2669,11 +2649,16 @@ run_integrated_onboarding() {
       *)    die "Invalid --launch value: $flag_launch (valid: copy, run)" ;;
     esac
   else
-    handoff_action="$(choose_launch_method)" || return 1
+    handoff_action="selected_cli"
   fi
   handoff_action_text="$(handoff_action_label "$handoff_action")"
+  if [[ "$handoff_action" == "selected_cli" && "$preferred_cli" == "other" ]]; then
+    handoff_action_text="$(handoff_action_label "copy_command")"
+  fi
   handoff_result="launch_command_copied"
-  if [[ "$handoff_action" == "run_now" ]]; then
+  if [[ "$handoff_action" == "selected_cli" ]]; then
+    handoff_selected_cli "$root" "$preferred_cli" "$preferred_cli_label" "$startup_prompt" "$launch_command"
+  elif [[ "$handoff_action" == "run_now" ]]; then
     run_cli_with_prompt "$root" "$preferred_cli" "$startup_prompt" || {
       handoff_result="run_failed_command_copied"
       warn "Could not run ${preferred_cli_label}. Copying the launch command instead."
@@ -2695,7 +2680,9 @@ detect_llm_clis() {
   clis=()
   command -v claude >/dev/null 2>&1 && clis+=("Claude Code")
   command -v codex >/dev/null 2>&1 && clis+=("Codex")
+  command -v gemini >/dev/null 2>&1 && clis+=("Gemini")
   command -v opencode >/dev/null 2>&1 && clis+=("OpenCode")
+  command -v qwen >/dev/null 2>&1 && clis+=("Qwen")
   command -v kilo >/dev/null 2>&1 && clis+=("Kilo")
   if [[ ${#clis[@]} -eq 0 ]]; then
     clis+=("Other (manual)")
@@ -2809,20 +2796,17 @@ cmd_onboard() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --no-color) R="" G="" B="" Y="" C="" M="" PG="" DIM="" BOLD="" RESET=""; shift ;;
-      --gum)     USE_GUM="1"; shift ;;
-      --no-gum)  USE_GUM="0"; shift ;;
+      --gum|--no-gum) shift ;;
       --source-dir) source_dir="$2"; shift 2 ;;
       --help|-h)
         echo "Usage: spinosa onboard [workspace-directory] [options]" >&2
         echo "  --source-dir PATH  Pre-select source folder (skip prompt)" >&2
         echo "  --no-color         Disable colored output" >&2
-        echo "  --gum              Use interactive Gum prompts" >&2
-        echo "  --no-gum           Use plain shell prompts" >&2
         echo "Example:" >&2
         echo "  spinosa onboard --source-dir /Users/me/Documents/archive" >&2
         return 0
         ;;
-      -*) die "Unknown option: $1. Valid: --source-dir, --no-color, --gum, --no-gum, --help" ;; 
+      -*) die "Unknown option: $1. Valid: --source-dir, --no-color, --help" ;;
       *) onboard_args+=("$1"); shift ;;
     esac
   done
@@ -2892,18 +2876,15 @@ cmd_new() {
       --launch)       flag_launch="$2"; shift 2 ;;
       --numbered) NUMBERED="1"; shift ;;
       --no-color) R="" G="" B="" Y="" C="" M="" PG="" DIM="" BOLD="" RESET=""; shift ;;
-      --gum)     USE_GUM="1"; shift ;;
-      --no-gum)  USE_GUM="0"; shift ;;
+      --gum|--no-gum) shift ;;
       --help|-h)
         printf '  %s\n' "Usage: spinosa new [corpus-directory] [options]"
         printf '    %s\n' "  --project-name NAME"
         printf '    %s\n' "  --extensions   Comma-separated file types to import (e.g. txt,pdf)"
-        printf '    %s\n' "  --cli          Preferred LLM CLI (opencode, claude_code, codex, kilo, other)"
+        printf '    %s\n' "  --cli          Preferred LLM CLI (opencode, gemini, qwen, claude_code, codex, kilo, other)"
         printf '    %s\n' "  --launch       Launch method (copy, run)"
         printf '    %s\n' "  --numbered     Force numbered menus instead of arrow-key menus"
         printf '    %s\n' "  --no-color     Disable colored output"
-        printf '    %s\n' "  --gum          Use interactive Gum prompts"
-        printf '    %s\n' "  --no-gum       Use plain shell prompts"
         return 0
         ;;
       *)
@@ -2988,15 +2969,14 @@ cmd_new() {
 
   # Copy all framework-owned files
   while IFS=$'\t' read -r path role policy; do
-    [[ "$path" == "path" ]] && continue
-    is_release_managed_role "$role" || continue
+    is_framework_manifest_entry "$path" "$role" || continue
 
     local src="${FRAMEWORK_ROOT}/${path}"
     local dst="${workspace_path}/${path}"
 
     if [[ -d "$src" ]]; then
       mkdir -p "$dst"
-      cp -a "$src"/. "$dst"/ 2>/dev/null || true
+	      copy_dir_contents "$src" "$dst"
     elif [[ -f "$src" ]]; then
       mkdir -p "$(dirname "$dst")"
       cp -a "$src" "$dst"
@@ -3031,8 +3011,7 @@ EOF
   # Generate manifest with checksums
   printf 'path\tsha256\n' > "$workspace_path/.spinosa/manifest.tsv"
   while IFS=$'\t' read -r path role policy; do
-    [[ "$path" == "path" ]] && continue
-    is_release_managed_role "$role" || continue
+    is_framework_manifest_entry "$path" "$role" || continue
 
     local full_path="${workspace_path}/${path}"
     if [[ -f "$full_path" ]]; then
@@ -3078,8 +3057,7 @@ cmd_update() {
       --dry-run) dry_run=1; shift ;;
       --yes|-y) auto_yes=1; shift ;;
       --no-color) R="" G="" B="" Y="" C="" M="" PG="" DIM="" BOLD="" RESET=""; shift ;;
-      --gum)     USE_GUM="1"; shift ;;
-      --no-gum)  USE_GUM="0"; shift ;;
+      --gum|--no-gum) shift ;;
       --help|-h)
         printf '  %s\n' "Usage: spinosa update [workspace] [options]"
         printf '    %s\n' "  --version X.Y.Z   Target framework version"
@@ -3087,12 +3065,10 @@ cmd_update() {
         printf '    %s\n' "  --dry-run         Show what would change without writing"
         printf '    %s\n' "  --yes             Apply the shown plan without confirmation prompts"
         printf '    %s\n' "  --no-color        Disable colored output"
-        printf '    %s\n' "  --gum             Use interactive Gum prompts"
-        printf '    %s\n' "  --no-gum          Use plain shell confirmations"
         return 0
         ;;
       --*)
-        die "Unknown update option: $1. Valid: --version, --release-dir, --dry-run, --yes, --no-color, --gum, --no-gum, --help"
+        die "Unknown update option: $1. Valid: --version, --release-dir, --dry-run, --yes, --no-color, --help"
         ;;
       *)
         if [[ -z "$workspace_path" ]]; then
@@ -3165,8 +3141,7 @@ cmd_update() {
   retired_keep_paths=()
 
   while IFS=$'\t' read -r path role policy; do
-    [[ "$path" == "path" ]] && continue
-    is_release_managed_role "$role" || continue
+    is_framework_manifest_entry "$path" "$role" || continue
 
     local current_hash stored_hash
     local file_path="${workspace_path}/${path}"
@@ -3300,8 +3275,7 @@ cmd_update() {
   printf '\n  %sApplying update...%s\n\n' "${BOLD}" "${RESET}"
 
   while IFS=$'\t' read -r path role policy; do
-    [[ "$path" == "path" ]] && continue
-    is_release_managed_role "$role" || continue
+    is_framework_manifest_entry "$path" "$role" || continue
 
     local src="${release_root}/${path}"
     local dst="${workspace_path}/${path}"
@@ -3339,7 +3313,7 @@ cmd_update() {
       fi
     elif [[ -d "$src" ]]; then
       mkdir -p "$dst"
-      cp -a "$src"/. "$dst"/ 2>/dev/null || true
+	      copy_dir_contents "$src" "$dst"
       directory_updates=$((directory_updates + 1))
       ok "Updated: $path/"
     fi
@@ -3372,8 +3346,7 @@ cmd_update() {
   cp "$workspace_path/.spinosa/manifest.tsv" "$workspace_path/.spinosa/manifest.tsv.bak"
   printf 'path\tsha256\n' > "$workspace_path/.spinosa/manifest.tsv"
   while IFS=$'\t' read -r path role policy; do
-    [[ "$path" == "path" ]] && continue
-    is_release_managed_role "$role" || continue
+    is_framework_manifest_entry "$path" "$role" || continue
 
     local release_path="${release_root}/${path}"
     local full_path="${workspace_path}/${path}"
@@ -3758,20 +3731,30 @@ CODEX_EOF
   done
 
   # ── sync skills ────────────────────────────────────────────────────
-  for platform in .opencode .claude .codex; do
-    local dest="$repo_root/$platform/skills"
-    rm -rf "$dest"
-    mkdir -p "$dest"
-    for skill_dir in "$skills_src"/*/; do
-      [[ -d "$skill_dir" ]] || continue
-      local skill_name="$(basename "$skill_dir")"
-      mkdir -p "$dest/$skill_name"
-      cp "$skill_dir"*.md "$dest/$skill_name/" 2>/dev/null || true
-      if [[ -d "$skill_dir/references" ]]; then
-        mkdir -p "$dest/$skill_name/references"
-        cp "$skill_dir/references/"*.md "$dest/$skill_name/references/" 2>/dev/null || true
-      fi
-    done
+	  for platform in .opencode .claude .codex; do
+	    local dest="$repo_root/$platform/skills"
+	    rm -rf "$dest"
+	    mkdir -p "$dest"
+	    for skill_dir in "$skills_src"/*/; do
+	      [[ -d "$skill_dir" ]] || continue
+	      local skill_name="$(basename "$skill_dir")"
+	      mkdir -p "$dest/$skill_name"
+	      local skill_docs=()
+	      shopt -s nullglob
+	      skill_docs=("$skill_dir"*.md)
+	      shopt -u nullglob
+	      [[ ${#skill_docs[@]} -gt 0 ]] || die "No markdown skill files found in $skill_dir"
+	      cp "${skill_docs[@]}" "$dest/$skill_name/"
+	      [[ -f "$dest/$skill_name/SKILL.md" ]] || die "Missing mirrored SKILL.md for $skill_name"
+	      if [[ -d "$skill_dir/references" ]]; then
+	        mkdir -p "$dest/$skill_name/references"
+	        local ref_docs=()
+	        shopt -s nullglob
+	        ref_docs=("$skill_dir/references/"*.md)
+	        shopt -u nullglob
+	        [[ ${#ref_docs[@]} -eq 0 ]] || cp "${ref_docs[@]}" "$dest/$skill_name/references/"
+	      fi
+	    done
     local skill_count
     skill_count="$(find "$dest" -name "SKILL.md" | wc -l | tr -d ' ')"
     ok "Synced $skill_count skills to $platform/skills/"
@@ -3821,8 +3804,8 @@ load_config() {
       SCAN_PERMISSION="${line#scan_permission: }"
       SCAN_PERMISSION="${SCAN_PERMISSION//\"/}"
     elif [[ "$line" == scan_roots:* ]]; then
-      # Next lines will be the roots
-      :
+      # Configured roots replace defaults; fallback below restores defaults if empty.
+      SCAN_ROOTS=()
     elif [[ "$line" == "  - "* ]]; then
       if [[ -z "$SCAN_PERMISSION" ]]; then
         continue
@@ -3947,15 +3930,31 @@ discover_workspaces_with_permission() {
   fi
 }
 
+registry_escape() {
+  local value="$1"
+  value="${value//%/%25}"
+  value="${value//|/%7C}"
+  printf '%s' "$value"
+}
+
+registry_unescape() {
+  local value="$1"
+  value="${value//%7C/|}"
+  value="${value//%25/%}"
+  printf '%s' "$value"
+}
+
 # Load workspaces from persistent registry
 load_registry() {
   local registry="${SPINOSA_HOME}/workspaces.txt"
   [[ -f "$registry" ]] || return 1
   
   local found=0
-  while IFS='|' read -r path project created; do
-    [[ -d "$path/.spinosa" ]] || continue  # Validate still exists
-    printf '%s|%s\n' "$path" "$project"
+	  while IFS='|' read -r path project created; do
+	    path="$(registry_unescape "$path")"
+	    project="$(registry_unescape "${project:-}")"
+	    [[ -d "$path/.spinosa" ]] || continue  # Validate still exists
+	    printf '%s|%s\n' "$path" "$project"
     found=1
   done < "$registry"
   
@@ -3964,20 +3963,23 @@ load_registry() {
 
 # Register a workspace in the persistent registry
 register_workspace() {
-  local path="$1"
-  local project="${2:-}"
-  local registry="${SPINOSA_HOME}/workspaces.txt"
+	  local path="$1"
+	  local project="${2:-}"
+	  local registry="${SPINOSA_HOME}/workspaces.txt"
+	  local encoded_path encoded_project
+	  encoded_path="$(registry_escape "$path")"
+	  encoded_project="$(registry_escape "$project")"
   
   mkdir -p "$SPINOSA_HOME"
   
-  # Remove if already exists
-  if [[ -f "$registry" ]]; then
-    grep -v "^${path}|" "$registry" > "${registry}.tmp" 2>/dev/null || true
-    mv "${registry}.tmp" "$registry"
-  fi
-  
-  # Add new entry
-  echo "${path}|${project}|$(date +%Y-%m-%d)" >> "$registry"
+	  # Remove if already exists
+	  if [[ -f "$registry" ]]; then
+	    awk -F '|' -v p="$encoded_path" '$1 != p' "$registry" > "${registry}.tmp"
+	    mv "${registry}.tmp" "$registry"
+	  fi
+
+	  # Add new entry
+	  echo "${encoded_path}|${encoded_project}|$(date +%Y-%m-%d)" >> "$registry"
 }
 
 # Update registry with discovered workspaces
@@ -3987,14 +3989,17 @@ update_registry() {
   
   mkdir -p "$SPINOSA_HOME"
   
-  for ws in "${workspaces[@]}"; do
-    local project
-    project="$(grep 'project_name:' "$ws/.spinosa/workspace" 2>/dev/null | sed 's/project_name: *//' | head -1)"
-    # Only add if not already in registry
-    if ! grep -q "^${ws}|" "$registry" 2>/dev/null; then
-      echo "${ws}|${project}|$(date +%Y-%m-%d)" >> "$registry"
-    fi
-  done
+	for ws in "${workspaces[@]}"; do
+	    local project
+	    project="$(grep 'project_name:' "$ws/.spinosa/workspace" 2>/dev/null | sed 's/project_name: *//' | head -1)"
+	    local encoded_ws encoded_project
+	    encoded_ws="$(registry_escape "$ws")"
+	    encoded_project="$(registry_escape "$project")"
+	    # Only add if not already in registry
+	    if ! awk -F '|' -v p="$encoded_ws" '$1 == p { found=1 } END { exit found ? 0 : 1 }' "$registry" 2>/dev/null; then
+	      echo "${encoded_ws}|${encoded_project}|$(date +%Y-%m-%d)" >> "$registry"
+	    fi
+	  done
 }
 
 
@@ -4156,12 +4161,6 @@ cmd_health() {
   else
     warn "Framework not found — is Spinosa installed?"
     issues=$((issues + 1))
-  fi
-
-  if gum_available; then
-    ok "Gum available"
-  else
-    note_cactus "Gum not available — plain prompts will be used"
   fi
 
   repair_vendor_tools
@@ -4360,17 +4359,10 @@ cmd_upgrade() {
   local installer="${tmpdir}/install-spinosa.sh"
 
   spinner_start "Downloading installer v${resolved_version}"
-  if curl -fsSL "https://github.com/TommasoPrinetti/spinosa/releases/download/v${resolved_version}/install.sh" -o "$installer" 2>/dev/null; then
-    spinner_stop
-    ok "Installer downloaded"
-  else
-    spinner_stop
-    warn "Could not download release installer. Falling back to raw main branch..."
-    spinner_start "Downloading from main branch"
-    curl -fsSL "https://raw.githubusercontent.com/TommasoPrinetti/spinosa/main/install.sh" -o "$installer" || die "Could not download installer"
-    spinner_stop
-    ok "Installer downloaded"
-  fi
+	  curl -fsSL "https://github.com/TommasoPrinetti/spinosa/releases/download/v${resolved_version}/install.sh" -o "$installer" 2>/dev/null \
+	    || { spinner_stop; die "Could not download release installer for v${resolved_version}. Aborting rather than falling back to an unpinned branch."; }
+	  spinner_stop
+	  ok "Installer downloaded"
 
   local upgrade_args=("--upgrade" "--version" "$resolved_version")
   if [[ "$auto_yes" -eq 1 ]]; then
@@ -4627,5 +4619,3 @@ case "${1:-}" in
     exit 1
     ;;
 esac
-
-

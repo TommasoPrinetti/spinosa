@@ -21,12 +21,12 @@ Spinosa runs a chain of sub-agents (searcher, analyst, writer, verifier) to prod
 - **Source-grounded reports** — every claim links back to a source file
 - **Offline-first** — all conversion and OCR runs locally
 - **Cross-platform** — macOS and Linux, bash 3.2+
-- **No lock-in** — works with OpenCode, Claude Code, or Codex CLI
+- **No lock-in** — works with OpenCode, Gemini CLI, Qwen Code, Claude Code, Codex CLI, or Kilo
 
 ## Prerequisites
 
 - macOS or Linux
-- An LLM CLI tool ([OpenCode](https://opencode.ai) recommended; [Claude Code](https://docs.anthropic.com) and [Codex CLI](https://github.com/openai/codex) also work)
+- An LLM CLI tool ([OpenCode](https://opencode.ai) recommended; [Gemini CLI](https://github.com/google-gemini/gemini-cli), [Qwen Code](https://github.com/QwenLM/qwen-code), [Claude Code](https://docs.anthropic.com), and [Codex CLI](https://github.com/openai/codex) also work)
 
 ## Quick start
 

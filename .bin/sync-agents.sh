@@ -10,6 +10,7 @@
 #   - .opencode/agents/   — mode: subagent, permission: (singular)
 #   - .claude/agents/     — tools: (comma-separated)
 #   - .codex/agents/      — Codex-native TOML generated from canonical body
+#   - .hermes/skills/     — Hermes SKILL.md mirror (Hermes reads AGENTS.md directly)
 #   - .claude/skills/
 #   - .codex/skills/
 #   - CLAUDE.md
@@ -64,12 +65,8 @@ for canonical in "$REPO_ROOT/.agents/agents/"*.md; do
     name=$(echo "$frontmatter" | sed -n 's/^name: *//p' | head -1)
 
     # Parse multiline description (description: | through next top-level key)
-    description=$(sed -n '/^description: |/,/^[a-z]/p' "$canonical" | sed '/^description:/d;/^[a-z]/d' | sed 's/^  //' | tr -s ' ')
+    description=$(sed -n '/^description: |/,/^[a-z]/p' "$canonical" | sed '/^description:/d;/^[a-z]/d' | sed 's/^  //' | tr '\n' ' ' | tr -s ' ')
     [ -z "$description" ] && description="$agent"
-
-    toml_escape() {
-        printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
-    }
 
     # Parse permissions (skip list items starting with dashes)
     in_permissions=false
@@ -100,48 +97,52 @@ for canonical in "$REPO_ROOT/.agents/agents/"*.md; do
     done < "$canonical"
     permissions="${permissions%, }"
 
-    # ── Emit OpenCode agent ──────────────────────────────────────────
-    opencode_perms=""
-    IFS=',' read -ra perm_parts <<< "$permissions"
-    for part in "${perm_parts[@]}"; do
-        part="${part## }"  # trim leading space
-        part="${part%% }"  # trim trailing space
-        [ -z "$part" ] && continue
-        key="${part%%:*}"
-        val="${part#*: }"
-        case "$key" in
-            read|grep|glob) opencode_perms="$opencode_perms  $key: $val"$'\n' ;;
-            write)          opencode_perms="$opencode_perms  edit: $val"$'\n' ;;
-            move)           opencode_perms="$opencode_perms  bash: $val"$'\n' ;;
-        esac
-    done
+    # ── Emit platform-specific agent files ──────────────────────────
+    emit_agent_file() {
+        local platform="$1" agent="$2" agent_file="$3" name="$4" description="$5" permissions="$6"
+        local dest_dir="$REPO_ROOT/$platform/agents"
+        mkdir -p "$dest_dir"
 
-    cat > "$REPO_ROOT/.opencode/agents/$agent_file" << OPENCODE_EOF
+        case "$platform" in
+            .opencode)
+                local oc_perms=""
+                IFS=',' read -ra perm_parts <<< "$permissions"
+                for part in "${perm_parts[@]}"; do
+                    part="${part## }"; part="${part%% }"
+                    [ -z "$part" ] && continue
+                    key="${part%%:*}"
+                    val="${part#*: }"
+                    case "$key" in
+                        read|grep|glob) oc_perms="$oc_perms  $key: $val"$'\n' ;;
+                        write)          oc_perms="$oc_perms  edit: $val"$'\n' ;;
+                        move)           oc_perms="$oc_perms  bash: $val"$'\n' ;;
+                    esac
+                done
+                cat > "$dest_dir/$agent_file" << OPENCODE_EOF
 ---
 name: $name
 description: |
 $(echo "$description" | sed 's/^/  /')
 mode: subagent
 permission:
-$(echo "$opencode_perms" | sed '$d')
+$(echo "$oc_perms" | sed '$d')
 ---
 
 $(awk 'BEGIN{fm=0} /^---$/ && fm < 2 {fm++; next} fm == 2' "$canonical")
 OPENCODE_EOF
-
-    # ── Emit Claude agent ────────────────────────────────────────────
-    claude_tools=""
-    case "$agent" in
-        spinosa-searcher)    claude_tools="Read, Grep, Glob" ;;
-        spinosa-analyst)     claude_tools="Read" ;;
-        spinosa-writer)      claude_tools="Read, Write" ;;
-        spinosa-verifier)    claude_tools="Read, Grep, Glob, Write" ;;
-        spinosa-janitor)     claude_tools="Read, Grep, Glob, Write" ;;
-        spinosa-mapper)      claude_tools="Read, Write" ;;
-        spinosa-serendippo)  claude_tools="Read, Grep, Glob, Write" ;;
-    esac
-
-    cat > "$REPO_ROOT/.claude/agents/$agent_file" << CLAUDE_EOF
+                ;;
+            .claude)
+                local claude_tools=""
+                case "$agent" in
+                    spinosa-searcher)    claude_tools="Read, Grep, Glob" ;;
+                    spinosa-analyst)     claude_tools="Read" ;;
+                    spinosa-writer)      claude_tools="Read, Write" ;;
+                    spinosa-verifier)    claude_tools="Read, Grep, Glob, Write" ;;
+                    spinosa-janitor)     claude_tools="Read, Grep, Glob, Write" ;;
+                    spinosa-mapper)      claude_tools="Read, Write" ;;
+                    spinosa-serendippo)  claude_tools="Read, Grep, Glob, Write" ;;
+                esac
+                cat > "$dest_dir/$agent_file" << CLAUDE_EOF
 ---
 name: $name
 description: |
@@ -151,41 +152,57 @@ tools: $claude_tools
 
 $(awk 'BEGIN{fm=0} /^---$/ && fm < 2 {fm++; next} fm == 2' "$canonical")
 CLAUDE_EOF
-
-    # ── Emit Codex agent ─────────────────────────────────────────────
-    body_content="$(awk 'BEGIN{fm=0} /^---$/ && fm < 2 {fm++; next} fm == 2' "$canonical")"
-
-    cat > "$REPO_ROOT/.codex/agents/${agent}.toml" << CODEX_EOF
-name = "$(toml_escape "$name")"
-description = "$(toml_escape "$description")"
+                ;;
+            .codex)
+                local body_content="$(awk 'BEGIN{fm=0} /^---$/ && fm < 2 {fm++; next} fm == 2' "$canonical")"
+                local esc_name esc_desc
+                esc_name="$(printf '%s' "$name" | sed 's/\\/\\\\/g; s/"/\\"/g')"
+                esc_desc="$(printf '%s' "$description" | sed 's/\\/\\\\/g; s/"/\\"/g')"
+                cat > "$dest_dir/${agent}.toml" << CODEX_EOF
+name = "$esc_name"
+description = "$esc_desc"
 developer_instructions = '''
 $body_content
 '''
 CODEX_EOF
+                ;;
+        esac
+    }
 
+    emit_agent_file .opencode "$agent" "$agent_file" "$name" "$description" "$permissions"
+    emit_agent_file .claude  "$agent" "$agent_file" "$name" "$description" "$permissions"
+    emit_agent_file .codex   "$agent" "$agent_file" "$name" "$description" "$permissions"
     echo "  $agent → .opencode/agents/ + .claude/agents/ + .codex/agents/"
 done
 
 # ── Sync skills ──────────────────────────────────────────────────────
 echo ""
 echo "--- Syncing skills ---"
-for platform in .opencode .claude .codex; do
+for platform in .opencode .claude .codex .hermes; do
     dest="$REPO_ROOT/$platform/skills"
     rm -rf "$dest"
     mkdir -p "$dest"
-    # Copy each skill directory
-    for skill_dir in "$REPO_ROOT/.agents/skills"/*/; do
-        [ -d "$skill_dir" ] || continue
-        skill_name=$(basename "$skill_dir")
-        mkdir -p "$dest/$skill_name"
-        # Copy SKILL.md and any other .md files from skill root
-        cp "$skill_dir"*.md "$dest/$skill_name/" 2>/dev/null || true
-        # Copy references/ subdirectory if it exists
-        if [[ -d "$skill_dir/references" ]]; then
-            mkdir -p "$dest/$skill_name/references"
-            cp "$skill_dir/references/"*.md "$dest/$skill_name/references/" 2>/dev/null || true
-        fi
-    done
+	    # Copy each skill directory
+	    for skill_dir in "$REPO_ROOT/.agents/skills"/*/; do
+	        [ -d "$skill_dir" ] || continue
+	        skill_name=$(basename "$skill_dir")
+	        mkdir -p "$dest/$skill_name"
+	        # Copy SKILL.md and any other .md files from skill root
+	        shopt -s nullglob
+	        skill_docs=("$skill_dir"*.md)
+	        shopt -u nullglob
+	        [[ ${#skill_docs[@]} -gt 0 ]] || { echo "ERROR: no markdown skill files in $skill_dir" >&2; exit 1; }
+	        cp "${skill_docs[@]}" "$dest/$skill_name/"
+	        [[ -f "$dest/$skill_name/SKILL.md" ]] || { echo "ERROR: missing mirrored SKILL.md for $skill_name" >&2; exit 1; }
+	        # Copy references/ subdirectory if it exists
+	        if [[ -d "$skill_dir/references" ]]; then
+	            mkdir -p "$dest/$skill_name/references"
+	            shopt -s nullglob
+	            ref_docs=("$skill_dir/references/"*.md)
+	            shopt -u nullglob
+	            [[ ${#ref_docs[@]} -eq 0 ]] || cp "${ref_docs[@]}" "$dest/$skill_name/references/"
+	        fi
+	    done
     count=$(find "$dest" -name "SKILL.md" | wc -l | tr -d ' ')
     echo "  $platform/skills/ → $count skills"
 done

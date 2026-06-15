@@ -7,12 +7,13 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 SPINOSA_BIN="$REPO_ROOT/.bin/spinosa"
-TEST_HOME="$HOME/.spinosa-interactive-test-$$"
+TEST_HOME="${SPINOSA_TEST_HOME:-${TMPDIR:-/tmp}/.spinosa-interactive-test-$$}"
 export SPINOSA_HOME="$TEST_HOME"
+export HOME="$TEST_HOME/home"
 
 # Colors
 if [[ -t 1 ]]; then
-  R=$'\033[31m' G=$'\033[32m' Y=$'\033[33m' C=$'\033[36m' DIM=$'\033[2m' BOLD=$'\033[1m' RESET=$'\033[0m'
+  R=$'\033[31m' G=$'\033[32m' Y=$'\033[92m' C=$'\033[92m' DIM=$'\033[2m' BOLD=$'\033[1m' RESET=$'\033[0m'
 else
   R="" G="" Y="" C="" DIM="" BOLD="" RESET=""
 fi
@@ -20,6 +21,8 @@ fi
 TESTS_RUN=0
 TESTS_PASSED=0
 TESTS_FAILED=0
+PIDS_TO_CLEAN=()
+CI_MODE=0
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -44,43 +47,75 @@ test_fail() {
 run_interactive() {
   local input="$1"
   local timeout_secs="${2:-5}"
+  local timeout_ticks=$((timeout_secs * 10))
   local output_file="$TEST_HOME/output_$$.txt"
-  
-  # Create a temporary expect-like script
-  cat > "$TEST_HOME/interact.sh" <<INTERACT_EOF
-#!/usr/bin/env bash
-export SPINOSA_HOME="$TEST_HOME"
-export SPINOSA_BIN="$SPINOSA_BIN"
 
-# Feed input with delays to simulate real typing
-{
-  IFS='|' read -ra INPUTS <<< "$input"
-  for inp in "\${INPUTS[@]}"; do
-    echo "\$inp"
-    sleep 0.3
-  done
-} | "$SPINOSA_BIN" 2>&1
-INTERACT_EOF
-  chmod +x "$TEST_HOME/interact.sh"
-  
-  # Use background process with manual timeout
-  bash "$TEST_HOME/interact.sh" > "$output_file" 2>&1 &
+  {
+    IFS='|' read -ra INPUTS <<< "$input"
+    for inp in "${INPUTS[@]}"; do
+      echo "$inp"
+      sleep 0.3
+    done
+  } | SPINOSA_HOME="$TEST_HOME" SPINOSA_BIN="$SPINOSA_BIN" "$SPINOSA_BIN" > "$output_file" 2>&1 &
   local pid=$!
-  
+  PIDS_TO_CLEAN+=("$pid")
+
   # Wait with timeout
   local elapsed=0
-  while kill -0 "$pid" 2>/dev/null && [[ $elapsed -lt $timeout_secs ]]; do
+  while kill -0 "$pid" 2>/dev/null && [[ $elapsed -lt $timeout_ticks ]]; do
     sleep 0.1
     elapsed=$((elapsed + 1))
   done
-  
+
   # Kill if still running
   if kill -0 "$pid" 2>/dev/null; then
-    kill "$pid" 2>/dev/null || true
+    terminate_pid "$pid"
     wait "$pid" 2>/dev/null || true
   fi
-  
+
   cat "$output_file"
+}
+
+terminate_pid() {
+  local pid="$1"
+  kill -TERM "$pid" 2>/dev/null || true
+  sleep 0.2
+  if kill -0 "$pid" 2>/dev/null; then
+    kill -KILL "$pid" 2>/dev/null || true
+  fi
+}
+
+wait_for_exit_or_kill() {
+  local pid="$1" timeout_ticks="${2:-20}" elapsed=0
+  while kill -0 "$pid" 2>/dev/null && [[ $elapsed -lt $timeout_ticks ]]; do
+    if ps -p "$pid" -o stat= 2>/dev/null | grep -q 'Z'; then
+      wait "$pid" 2>/dev/null || true
+      return 0
+    fi
+    sleep 0.1
+    elapsed=$((elapsed + 1))
+  done
+  if ! kill -0 "$pid" 2>/dev/null; then
+    wait "$pid" 2>/dev/null || true
+    return 0
+  fi
+  if kill -0 "$pid" 2>/dev/null; then
+    terminate_pid "$pid"
+    wait "$pid" 2>/dev/null || true
+    return 1
+  fi
+  wait "$pid" 2>/dev/null || true
+  return 0
+}
+
+cleanup_test_processes() {
+  local pid
+  for pid in "${PIDS_TO_CLEAN[@]-}"; do
+    if kill -0 "$pid" 2>/dev/null; then
+      terminate_pid "$pid"
+      wait "$pid" 2>/dev/null || true
+    fi
+  done
 }
 
 # Check if output contains expected string
@@ -95,6 +130,7 @@ output_contains() {
 setup() {
   printf '%s\n' "${BOLD}Setting up interactive test environment...${RESET}"
   mkdir -p "$TEST_HOME"
+  mkdir -p "$HOME"
   
   # Create test workspaces
   for i in 1 2 3; do
@@ -131,6 +167,7 @@ EOF
 
 teardown() {
   printf '\n%s\n' "${BOLD}Cleaning up...${RESET}"
+  cleanup_test_processes
   rm -rf "$TEST_HOME"
   printf '  %s✓%s Test environment removed\n' "${G}" "${RESET}"
 }
@@ -213,50 +250,42 @@ test_menu_selection_health() {
 }
 
 test_ctrl_c_during_menu() {
-  test_start "Ctrl-C during menu selection"
-  
-  # Send Ctrl-C (ASCII 3) immediately
-  local output
-  output=$(printf '\x03' | "$SPINOSA_BIN" 2>&1 &
-    local pid=$!
-    sleep 2
-    if kill -0 "$pid" 2>/dev/null; then
-      kill "$pid" 2>/dev/null || true
-    fi
-    wait "$pid" 2>/dev/null || true
-  )
-  
+  test_start "Termination during menu selection"
+
+  local output_file="$TEST_HOME/ctrl_c_menu.txt"
+  SPINOSA_HOME="$TEST_HOME" "$SPINOSA_BIN" > "$output_file" 2>&1 &
+  local pid=$!
+  PIDS_TO_CLEAN+=("$pid")
+  sleep 0.5
+  kill -TERM "$pid" 2>/dev/null || true
+  local exited=0
+  if ! wait_for_exit_or_kill "$pid" 20; then
+    exited=1
+  fi
+
   # Should exit cleanly, not crash
-  if [[ $? -le 130 ]]; then
-    test_pass "Ctrl-C handled cleanly"
+  if [[ $exited -eq 0 ]]; then
+    test_pass "Termination handled cleanly"
   else
-    test_fail "Ctrl-C caused crash" "Exit code: $?"
+    test_fail "Termination did not stop process"
   fi
 }
 
 test_ctrl_c_during_spinner() {
-  test_start "Ctrl-C during spinner operation"
-  
-  # Start a command that uses spinner, then Ctrl-C
-  local output
-  output=$( (
-    sleep 0.5
-    printf '\x03'
-  ) | "$SPINOSA_BIN" health 2>&1 &
-    local pid=$!
-    sleep 3
-    if kill -0 "$pid" 2>/dev/null; then
-      kill "$pid" 2>/dev/null || true
-    fi
-    wait "$pid" 2>/dev/null || true
-  )
-  
-  # Should not leave orphan processes
-  if ! pgrep -f "spinosa.*health" > /dev/null 2>&1; then
-    test_pass "No orphan processes after Ctrl-C"
+  test_start "Termination during spinner operation"
+
+  SPINOSA_HOME="$TEST_HOME" "$SPINOSA_BIN" health > "$TEST_HOME/ctrl_c_spinner.txt" 2>&1 &
+  local pid=$!
+  PIDS_TO_CLEAN+=("$pid")
+  sleep 0.5
+  kill -TERM "$pid" 2>/dev/null || true
+  wait_for_exit_or_kill "$pid" 20 || true
+
+  if ! kill -0 "$pid" 2>/dev/null; then
+    test_pass "No test-owned health process after termination"
   else
-    test_fail "Orphan process left behind"
-    pkill -f "spinosa.*health" 2>/dev/null || true
+    test_fail "Test-owned health process left behind"
+    terminate_pid "$pid"
   fi
 }
 
@@ -336,20 +365,33 @@ test_permission_granted_flow() {
   fi
   
   # Verify config was saved
-  if [[ -f "$TEST_HOME/config.yaml" ]] && \
-     grep -q "granted" "$TEST_HOME/config.yaml"; then
-    test_pass "Permission saved to config"
-  else
+  if [[ ! -f "$TEST_HOME/config.yaml" ]] || \
+     ! grep -q "granted" "$TEST_HOME/config.yaml"; then
     test_fail "Permission not saved"
   fi
 }
 
 test_upgrade_shows_release_notes() {
   test_start "Upgrade shows release notes before confirmation"
-  
-  # Send 'n' to cancel upgrade after seeing notes
+
+  local fake_bin="$TEST_HOME/fake-bin"
+  mkdir -p "$fake_bin"
+  cat > "$fake_bin/curl" <<'EOF'
+#!/bin/sh
+case "$*" in
+  *api.github.com*)
+    printf '{"tag_name":"v0.5.6","published_at":"2026-06-01T00:00:00Z","body":"Spinosa Framework test release notes"}\n'
+    ;;
+  *)
+    printf 'https://github.com/TommasoPrinetti/spinosa/releases/tag/v0.5.6\n'
+    ;;
+esac
+EOF
+  chmod +x "$fake_bin/curl"
+
+  # Select Upgrade, then send 'n' to cancel after seeing notes/prompt.
   local output
-  output=$(run_interactive "n" 10)
+  output=$(PATH="$fake_bin:$PATH" run_interactive "6|n" 10)
   
   if output_contains "$output" "Release Notes" || \
      output_contains "$output" "Spinosa Framework" || \
@@ -377,18 +419,10 @@ test_rapid_menu_navigation() {
 
 test_empty_input_handling() {
   test_start "Empty input handling"
-  
-  # Send just newlines
+
   local output
-  output=$(printf '\n\n\n' | "$SPINOSA_BIN" 2>&1 &
-    local pid=$!
-    sleep 3
-    if kill -0 "$pid" 2>/dev/null; then
-      kill "$pid" 2>/dev/null || true
-    fi
-    wait "$pid" 2>/dev/null || true
-  )
-  
+  output=$(run_interactive "||" 3)
+
   # Should not crash
   if [[ $? -le 130 ]]; then
     test_pass "Empty input handled"
@@ -464,11 +498,26 @@ print_summary() {
 # ── Main ────────────────────────────────────────────────────────────────────
 
 main() {
+  if [[ "${1:-}" == "--ci" ]]; then
+    CI_MODE=1
+  fi
+
   printf '%s\n' "${BOLD}═══════════════════════════════════════════════════════════════${RESET}"
   printf '%s\n' "${BOLD}Spinosa CLI Interactive Test Suite${RESET}"
   printf '%s\n' "═══════════════════════════════════════════════════════════════"
   
   setup
+
+  if [[ "$CI_MODE" -eq 1 ]]; then
+    test_dashboard_shows_menu
+    test_menu_selection_help
+    test_ctrl_c_during_menu
+    test_ctrl_c_during_spinner
+    test_invalid_menu_selection
+    teardown
+    print_summary
+    return
+  fi
   
   # Dashboard display tests
   test_dashboard_shows_menu

@@ -19,6 +19,10 @@ if [[ -z "${1:-}" ]]; then
 fi
 
 VERSION="$1"
+if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  echo "Error: invalid version: $VERSION (use X.Y.Z)"
+  exit 1
+fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 DIST="${REPO_ROOT}/dist/v${VERSION}"
@@ -45,7 +49,21 @@ if [[ ! -f "${REPO_ROOT}/install.sh" ]]; then
   exit 1
 fi
 
-# ── Create output directory ─────────────────────────────────────────────────
+sha256_artifact() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$1" | awk '{print $1}'
+  else
+    echo "Error: no SHA-256 tool found" >&2
+    return 1
+  fi
+}
+# ── Create clean output directory ────────────────────────────────────────────
+case "$DIST" in
+  "$REPO_ROOT"/dist/v*) rm -rf "$DIST" ;;
+  *) echo "Error: unsafe dist path: $DIST"; exit 1 ;;
+esac
 mkdir -p "$DIST"
 
 # ── Copy framework-owned files ──────────────────────────────────────────────
@@ -70,7 +88,7 @@ while IFS=$'\t' read -r path role policy; do
   if [[ -d "$src" ]]; then
     mkdir -p "${FRAMEWORK_DIR}/${path}"
     # Copy directory contents
-    cp -a "$src"/. "${FRAMEWORK_DIR}/${path}/" 2>/dev/null || true
+    cp -a "$src"/. "${FRAMEWORK_DIR}/${path}/"
     copied_count=$((copied_count + 1))
   elif [[ -f "$src" ]]; then
     mkdir -p "$(dirname "${FRAMEWORK_DIR}/${path}")"
@@ -173,114 +191,6 @@ fi
 
 echo "  All exclusions OK"
 
-# ── Bundle vendor binaries (Gum) ─────────────────────────────────────
-echo "Bundling vendor binaries..."
-
-GUM_VERSION="0.14.0"
-VENDOR_DIR="${FRAMEWORK_DIR}/.bin/lib/vendor"
-mkdir -p "$VENDOR_DIR"
-
-bundle_platform_binary() {
-  local name="$1" version="$2" url="$3" suffix="$4"
-  local tmpdir
-  tmpdir="$(mktemp -d)" || return 1
-  echo "  Downloading ${name} ${suffix}..."
-  if curl -fsSL "$url" -o "${tmpdir}/archive.tar.gz" 2>/dev/null; then
-    local upstream_checksums_url="https://github.com/charmbracelet/${name}/releases/download/v${version}/checksums.txt"
-    local upstream_checksums="${tmpdir}/upstream-checksums.txt"
-    if ! curl -fsSL "$upstream_checksums_url" -o "$upstream_checksums" 2>/dev/null; then
-      echo "    ERROR: Could not download upstream checksums for ${name} v${version}"
-      rm -rf "$tmpdir"
-      return 1
-    fi
-
-    local actual_hash
-    actual_hash="$(sha256sum "${tmpdir}/archive.tar.gz" 2>/dev/null | awk '{print $1}' || shasum -a 256 "${tmpdir}/archive.tar.gz" 2>/dev/null | awk '{print $1}')"
-    local archive_basename
-    archive_basename="$(basename "$url")"
-    local expected_entry
-    expected_entry="$(grep "${archive_basename}" "$upstream_checksums" 2>/dev/null | head -1 || true)"
-
-    if [[ -z "$expected_entry" ]]; then
-      echo "    ERROR: ${archive_basename} not found in upstream checksums"
-      rm -rf "$tmpdir"
-      return 1
-    fi
-
-    local expected_hash
-    expected_hash="$(printf '%s' "$expected_entry" | awk '{print $1}')"
-    if [[ "$actual_hash" != "$expected_hash" ]]; then
-      echo "    ERROR: Checksum mismatch for ${name} ${suffix}"
-      echo "      Expected: ${expected_hash}"
-      echo "      Got:      ${actual_hash}"
-      rm -rf "$tmpdir"
-      return 1
-    fi
-    echo "    Upstream checksum verified for ${name} ${suffix}"
-
-    tar -xzf "${tmpdir}/archive.tar.gz" -C "$tmpdir" 2>/dev/null
-    # Find the binary inside the extracted contents
-    local bin_path
-    bin_path="$(find "$tmpdir" -name "$name" -type f 2>/dev/null | head -1)"
-    if [[ -n "$bin_path" ]]; then
-      cp "$bin_path" "${VENDOR_DIR}/${name}-${suffix}"
-      chmod +x "${VENDOR_DIR}/${name}-${suffix}"
-      echo "    Bundled ${name}-${suffix}"
-    else
-      echo "    WARNING: ${name} binary not found in downloaded archive"
-    fi
-  else
-    echo "    WARNING: Could not download ${name} ${suffix}"
-  fi
-  rm -rf "$tmpdir"
-}
-
-# Gum — all platforms
-bundle_platform_binary "gum" "$GUM_VERSION" \
-  "https://github.com/charmbracelet/gum/releases/download/v${GUM_VERSION}/gum_${GUM_VERSION}_Darwin_arm64.tar.gz" \
-  "darwin-arm64"
-
-bundle_platform_binary "gum" "$GUM_VERSION" \
-  "https://github.com/charmbracelet/gum/releases/download/v${GUM_VERSION}/gum_${GUM_VERSION}_Darwin_x86_64.tar.gz" \
-  "darwin-amd64"
-
-bundle_platform_binary "gum" "$GUM_VERSION" \
-  "https://github.com/charmbracelet/gum/releases/download/v${GUM_VERSION}/gum_${GUM_VERSION}_Linux_arm64.tar.gz" \
-  "linux-arm64"
-
-bundle_platform_binary "gum" "$GUM_VERSION" \
-  "https://github.com/charmbracelet/gum/releases/download/v${GUM_VERSION}/gum_${GUM_VERSION}_Linux_x86_64.tar.gz" \
-  "linux-amd64"
-
-bundle_platform_binary "gum" "$GUM_VERSION" \
-  "https://github.com/charmbracelet/gum/releases/download/v${GUM_VERSION}/gum_${GUM_VERSION}_Linux_i386.tar.gz" \
-  "linux-i386"
-
-# ── Vendor binary checksums ─────────────────────────────────────────────────
-echo "Computing vendor binary checksums..."
-
-CHECKSUMS_FILE="${FRAMEWORK_DIR}/metadata/vendor-checksums.txt"
-printf '# Spinosa vendor binary checksums (SHA-256)\n' > "$CHECKSUMS_FILE"
-printf '# Generated by package-release.sh\n' >> "$CHECKSUMS_FILE"
-
-for vendor_bin in "$VENDOR_DIR"/*; do
-  [[ -f "$vendor_bin" ]] || continue
-  bin_file="$(basename "$vendor_bin")"
-  # Parse "gum-darwin-arm64" → name="gum" suffix="darwin-arm64"
-  # Parse "spinosa-vendor-darwin-arm64.tar.gz" → name="spinosa" suffix="vendor-darwin-arm64"
-  if [[ "$bin_file" == *.tar.gz ]]; then
-    bin_name="${bin_file%%-*}"
-    bin_suffix="${bin_file#*-}"
-    bin_suffix="${bin_suffix%.tar.gz}"
-  else
-    bin_name="${bin_file%%-*}"
-    bin_suffix="${bin_file#*-}"
-  fi
-  hash="$(sha256sum "$vendor_bin" 2>/dev/null | awk '{print $1}' || shasum -a 256 "$vendor_bin" 2>/dev/null | awk '{print $1}')"
-  printf '%s  %s  %s\n' "$hash" "$bin_name" "$bin_suffix" >> "$CHECKSUMS_FILE"
-  echo "  ${bin_file}: ${hash:0:16}..."
-done
-
 # ── Release date ────────────────────────────────────────────────────────────
 TODAY="$(date +%Y-%m-%d)"
 echo "$TODAY" > "${FRAMEWORK_DIR}/metadata/release-date"
@@ -288,11 +198,8 @@ echo "  Release date: ${TODAY}"
 
 # ── Vendor versions ──────────────────────────────────────────────────────────
 VERSIONS_FILE="${FRAMEWORK_DIR}/metadata/vendor-versions.txt"
-printf 'gum %s\n' "$GUM_VERSION" > "$VERSIONS_FILE"
-printf 'python 3.11.15\n' >> "$VERSIONS_FILE"
+printf 'python 3.11.15\n' > "$VERSIONS_FILE"
 echo "  Vendor versions recorded"
-
-echo "  Vendor binaries bundled"
 echo ""
 
 # ── Create tarball ──────────────────────────────────────────────────────────
@@ -305,10 +212,28 @@ echo "Staging install.sh..."
 
 cp "${REPO_ROOT}/install.sh" "${DIST}/install.sh"
 
+# ── Stage vendor tarballs ───────────────────────────────────────────────────
+echo "Staging vendor tarballs..."
+
+checksum_assets=("${DIST}/${FRAMEWORK_ARCHIVE}" "${DIST}/install.sh")
+shopt -s nullglob
+vendor_tarballs=("${REPO_ROOT}/.bin/lib/vendor"/spinosa-vendor-*.tar.gz)
+shopt -u nullglob
+[[ ${#vendor_tarballs[@]} -gt 0 ]] || { echo "Error: no spinosa-vendor tarballs found in .bin/lib/vendor"; exit 1; }
+for tarball in "${vendor_tarballs[@]}"; do
+  cp "$tarball" "${DIST}/$(basename "$tarball")"
+  checksum_assets+=("${DIST}/$(basename "$tarball")")
+done
+
 # ── Generate checksums ─────────────────────────────────────────────────────
 echo "Generating checksums..."
 
-(cd "$DIST" && shasum -a 256 * > checksums.txt 2>/dev/null || sha256sum * > checksums.txt)
+checksums_tmp="${DIST}/checksums.txt.tmp"
+: > "$checksums_tmp"
+for asset in "${checksum_assets[@]}"; do
+  printf '%s  %s\n' "$(sha256_artifact "$asset")" "$(basename "$asset")" >> "$checksums_tmp"
+done
+mv "$checksums_tmp" "${DIST}/checksums.txt"
 
 # ── Summary ─────────────────────────────────────────────────────────────────
 echo ""
