@@ -35,11 +35,12 @@ PINNED_VERSION="0.5.6"
 VERSION="${VERSION:-$PINNED_VERSION}"
 DRY_RUN=0
 VERIFY_ONLY=0
-NO_GUM=0
+SKIP_BUNDLED_TOOLS=0
 UPGRADE=0
 REINSTALL=0
 MIN_DAYS=""
 YES=0
+LAUNCH_DASHBOARD="auto"
 SPINOSA_HOME="${SPINOSA_HOME:-$HOME/.spinosa}"
 SPINOSA_BIN_DIR="${SPINOSA_BIN_DIR:-$HOME/.local/bin}"
 REPO="TommasoPrinetti/spinosa"
@@ -47,8 +48,8 @@ REPO="TommasoPrinetti/spinosa"
 # ── colors (only if terminal) ──────────────────────────────────────────────
 if [ -t 2 ] && [ "${NO_COLOR:-}" != "1" ]; then
   R='' G='' B='' Y='' C='' DIM='' BOLD='' U='' RESET=''
-  R=$'\033[31m' G=$'\033[32m' Y=$'\033[33m'
-  C=$'\033[36m' DIM=$'\033[2m' BOLD=$'\033[1m' U=$'\033[4m' RESET=$'\033[0m'
+  R=$'\033[31m' G=$'\033[32m' Y=$'\033[92m'
+  C=$'\033[92m' DIM=$'\033[2m' BOLD=$'\033[1m' U=$'\033[4m' RESET=$'\033[0m'
 else
   R='' G='' B='' Y='' C='' DIM='' BOLD='' U='' RESET=''
 fi
@@ -93,30 +94,6 @@ spinner_stop() {
   wait "$SPINNER_PID" 2>/dev/null || true
   SPINNER_PID=""
   printf '\r\033[2K' >&2
-}
-
-progress_start() {
-  local msg="$1"
-  PROGRESS_PID=""
-  [ -t 1 ] || return 0
-  (
-    local frames=("▁" "▃" "▄" "▅" "▆" "▇" "█" "▇" "▆" "▅" "▄" "▃")
-    local i=0
-    while true; do
-      printf '\r\033[2K  %s%s%s %s' "${C}" "${frames[$((i % 12))]}" "${RESET}" "$msg" >&2
-      i=$((i + 1))
-      sleep 0.1
-    done
-  ) &
-  PROGRESS_PID=$!
-}
-
-progress_stop() {
-  [ -n "${PROGRESS_PID:-}" ] || return 0
-  kill "$PROGRESS_PID" 2>/dev/null || true
-  wait "$PROGRESS_PID" 2>/dev/null || true
-  PROGRESS_PID=""
-  printf '\r\033[2K' >&2
   if [[ -n "${1:-}" ]]; then
     printf '  %s %s\n' "${G}✦${RESET}" "$1"
   fi
@@ -136,8 +113,11 @@ while [ $# -gt 0 ]; do
     --verify-only) VERIFY_ONLY=1; shift ;;
     --upgrade)    UPGRADE=1; shift ;;
     --reinstall)  REINSTALL=1; shift ;;
-    --no-gum)     NO_GUM=1; shift ;;
-    --no-modify-path) NO_MODIFY_PATH=true; shift ;;
+	    --no-bundled-tools) SKIP_BUNDLED_TOOLS=1; shift ;;
+	    --no-gum)     SKIP_BUNDLED_TOOLS=1; shift ;;
+	    --no-modify-path) NO_MODIFY_PATH=true; shift ;;
+	    --launch)     LAUNCH_DASHBOARD=1; shift ;;
+	    --no-launch)  LAUNCH_DASHBOARD=0; shift ;;
     --min-days)   MIN_DAYS="$2"; shift 2 ;;
     --prefix)     SPINOSA_HOME="$2"; shift 2 ;;
     --bin-dir)
@@ -157,13 +137,15 @@ while [ $# -gt 0 ]; do
       echo "  --reinstall       Reinstall even if same version"
       echo "  --dry-run         Show what would happen without doing it"
       echo "  --verify-only     Verify installed binaries, do not install"
-      echo "  --yes             Skip all confirmation prompts (for automation)"
+	      echo "  --yes             Skip all confirmation prompts (for automation)"
+	      echo "  --launch          Launch the dashboard after install"
+	      echo "  --no-launch       Do not launch the dashboard after install"
       echo ""
       echo "Security:"
       echo "  --min-days N      Reject releases newer than N days old"
       echo ""
       echo "Paths:"
-      echo "  --no-gum          Skip bundled binary installation (Gum)"
+      echo "  --no-bundled-tools Skip bundled document-processing tools"
       echo "  --no-modify-path  Don't modify shell config files (~/.zshrc, etc.)"
       echo "  --prefix PATH     Install root (default: ~/.spinosa)"
       echo "  --bin-dir PATH    Shim directory (default: ~/.local/bin)"
@@ -234,20 +216,21 @@ safe_untar() {
     die "Archive contains path traversal entries — aborting for safety"
   fi
 
-  # Reject absolute or escaping symlinks
-  if printf '%s\n' "$listing" | grep -qE ' -> '; then
-    while IFS= read -r _entry; do
-      _target="${_entry#* -> }"
-      _target="${_target% }"
-      if [[ "$_target" == /* ]]; then
-        die "Archive contains absolute symlinks — aborting for safety"
-      fi
-      _resolved="$(_realpath "${dest}/${_target}" 2>/dev/null || echo "")"
-      if [[ -n "$_resolved" && "$_resolved" != "${dest}"* ]]; then
-        die "Archive contains symlinks escaping destination — aborting for safety"
-      fi
-    done < <(printf '%s\n' "$listing" | grep ' -> ')
-  fi
+	  # Reject absolute paths and unsafe symlink targets. Plain tar -tzf does not
+	  # expose symlink targets, so inspect the verbose listing for `name -> target`.
+	  if printf '%s\n' "$listing" | grep -qE '^/'; then
+	    die "Archive contains absolute paths — aborting for safety"
+	  fi
+
+	  local verbose_listing _entry _target
+	  verbose_listing="$(tar -tzvf "$archive" 2>/dev/null)" || die "Cannot inspect archive: $archive"
+	  while IFS= read -r _entry; do
+	    [[ "$_entry" == l* && "$_entry" == *" -> "* ]] || continue
+	    _target="${_entry##* -> }"
+	    if [[ "$_target" == /* ]] || [[ "$_target" =~ (^|/)\.\.(/|$) ]]; then
+	      die "Archive contains unsafe symlinks — aborting for safety"
+	    fi
+	  done <<< "$verbose_listing"
 
   tar -xzf "$archive" -C "$dest" --no-same-owner "$@"
 }
@@ -294,12 +277,18 @@ check_release_age() {
     return 0
   fi
 
-  local release_ts current_ts
-  release_ts="$(date -d "$published_at" +%s 2>/dev/null || date -j -f "%Y-%m-%dT%H:%M:%SZ" "$published_at" +%s 2>/dev/null)"
-  if [ -z "$release_ts" ]; then
-    warn "Could not parse release date '$published_at' — skipping age check"
-    return 0
-  fi
+	  local release_ts current_ts
+	  release_ts=""
+	  if release_ts="$(date -d "$published_at" +%s 2>/dev/null)"; then
+	    :
+	  elif release_ts="$(date -j -f "%Y-%m-%dT%H:%M:%SZ" "$published_at" +%s 2>/dev/null)"; then
+	    :
+	  else
+	    release_ts=""
+	  fi
+	  if [ -z "$release_ts" ]; then
+	    die "Could not parse release date '$published_at'. Cannot enforce --min-days."
+	  fi
 
   current_ts="$(date +%s)"
   local days_old=$(( (current_ts - release_ts) / 86400 ))
@@ -369,7 +358,7 @@ verify_vendor_binaries() {
   done < "$checksums_file"
 
   if [ "$failed" -gt 0 ]; then
-    die "${failed} vendor binary checksum(s) failed. Remove ${SPINOSA_HOME} and re-install, or use --no-gum."
+    die "${failed} vendor binary checksum(s) failed. Remove ${SPINOSA_HOME} and re-install, or use --no-bundled-tools."
   fi
 
   if [ "$verified" -gt 0 ]; then
@@ -618,7 +607,7 @@ main() {
   # ── download framework ──────────────────────────────────────────────────
   local tmpdir
   tmpdir="$(mktemp -d)"
-  trap 'spinner_stop; progress_stop; rm -rf "$tmpdir"' EXIT INT TERM
+  trap 'spinner_stop; rm -rf "$tmpdir"' EXIT INT TERM
   printf '\n' >&2
   spinner_start "Downloading framework v${VERSION}"
   if ! download "${base_url}/${archive_name}" "${tmpdir}/${archive_name}"; then
@@ -664,10 +653,8 @@ main() {
     die "spinosa CLI not found in archive"
   fi
 
-  # ── install bundled binaries ───────────────────────────────────────────
-  if [ "$NO_GUM" -eq 0 ]; then
-    local vendor_src="${SPINOSA_HOME}/versions/${VERSION}/spinosa-framework-${VERSION}/.bin/lib/vendor"
-
+  # ── install bundled document-processing tools ──────────────────────────
+  if [ "$SKIP_BUNDLED_TOOLS" -eq 0 ]; then
     # Detect platform suffix (e.g. darwin-arm64, linux-amd64)
     local os arch suffix
     case "$(uname -s)" in
@@ -682,20 +669,6 @@ main() {
       *)             arch="" ;;
     esac
     suffix="${os}-${arch}"
-
-    if [[ -d "$vendor_src" ]]; then
-
-      for bin_name in gum; do
-        local src_bin="${vendor_src}/${bin_name}-${suffix}"
-        if [[ -f "$src_bin" ]]; then
-          cp "$src_bin" "${SPINOSA_HOME}/bin/${bin_name}"
-          chmod +x "${SPINOSA_HOME}/bin/${bin_name}"
-          ok "Installed ${bin_name}"
-        else
-          warn "No ${bin_name} binary for ${suffix}"
-        fi
-      done
-    fi
 
     # ── install Spinosa vendor (RapidOCR + MarkItDown) ────────────────────
     local spinosa_vendor_dest="${SPINOSA_HOME}/vendor/spinosa-${suffix}"
@@ -719,8 +692,16 @@ main() {
       fi
     done
 
-    if $download_ok; then
-      spinner_start "Installing Spinosa vendor (Python + wrappers)"
+	    if $download_ok; then
+	      local vendor_expected_hash
+	      vendor_expected_hash="$(awk -v f="$(basename "$vendor_tmp")" '$2 == f { print $1; exit }' "${tmpdir}/checksums.txt")"
+	      [[ -n "$vendor_expected_hash" ]] || die "$(basename "$vendor_tmp") not found in checksums.txt — aborting for safety"
+	      if verify_checksum "$vendor_tmp" "$vendor_expected_hash"; then
+	        ok "Spinosa vendor checksum verified"
+	      else
+	        die "Spinosa vendor checksum mismatch — aborting for safety"
+	      fi
+	      spinner_start "Installing Spinosa vendor (Python + wrappers)"
       mkdir -p "$spinosa_vendor_dest"
       safe_untar "$vendor_tmp" "$spinosa_vendor_dest" --strip-components=1
       # Clean macOS metadata files from vendor extraction
@@ -736,7 +717,7 @@ main() {
         spinosa_python="${spinosa_vendor_dest}/Python.framework/Versions/Current/bin/python3"
       fi
       if [[ -x "$spinosa_python" ]]; then
-        progress_start "Installing Python packages (MarkItDown + RapidOCR)"
+        spinner_start "Installing Python packages (MarkItDown + RapidOCR)"
         local pip_ok=0
         "$spinosa_python" -m pip install --upgrade pip --quiet 2>/dev/null || true
         if "$spinosa_python" -m pip install \
@@ -747,14 +728,14 @@ main() {
           --quiet 2>&1; then
           pip_ok=1
         fi
-        progress_stop "MarkItDown + RapidOCR installed"
+        spinner_stop "MarkItDown + RapidOCR installed"
 
         if [[ $pip_ok -eq 1 ]]; then
           # Verify rapidocr imports before model operations
           if "$spinosa_python" -c "from rapidocr import RapidOCR" 2>/dev/null; then
             ok "RapidOCR import verified"
             # Remove Chinese OCR models (English only, saves ~100 MB)
-            progress_start "Cleaning up unused models"
+            spinner_start "Cleaning up unused models"
             "$spinosa_python" -c "
 import rapidocr, os
 models_dir = os.path.join(os.path.dirname(rapidocr.__file__), 'models')
@@ -765,10 +746,10 @@ for f in ['ppocr_keys_v1.txt', 'ppocrv5_dict.txt']:
     path = os.path.join(models_dir, f)
     if os.path.exists(path): os.remove(path)
 " 2>/dev/null || true
-            progress_stop "Models cleaned"
+            spinner_stop "Models cleaned"
 
             # Pre-download English OCR models
-            progress_start "Downloading OCR models"
+            spinner_start "Downloading OCR models"
             local ocr_log="${SPINOSA_HOME}/logs/ocr-model-download.log"
             mkdir -p "$(dirname "$ocr_log")"
             if "$spinosa_python" -c "
@@ -787,9 +768,9 @@ RapidOCR(params={
     'Rec.ocr_version': OCRVersion.PPOCRV4,
 })
 " >"$ocr_log" 2>&1; then
-              progress_stop "Models ready"
+              spinner_stop "Models ready"
             else
-              progress_stop "Models not downloaded"
+              spinner_stop "Models not downloaded"
               fail "OCR models could not be pre-downloaded — will download on first use"
               note "Check internet access if this persists"
             fi
@@ -906,14 +887,13 @@ PILOSA_SHIM
   divider
   printf '\n  %s%sSpinosa installed successfully!%s\n\n' "${BOLD}" "${G}" "${RESET}"
 
-  # Source the right profile so PATH is live for the dashboard launch
-  if [[ "${NO_MODIFY_PATH:-false}" != "true" ]] && [[ -n "${config_file:-}" ]] && [[ -f "${config_file:-}" ]]; then
-    source "${config_file}" 2>/dev/null || true
-  fi
+	  if [[ "$LAUNCH_DASHBOARD" == "1" ]] || { [[ "$LAUNCH_DASHBOARD" == "auto" ]] && [[ -t 0 && -r /dev/tty ]]; }; then
+	    info "Launching Spinosa dashboard..."
+	    sleep 1
+	    exec "${SPINOSA_BIN_DIR}/spinosa" </dev/tty
+	  fi
 
-  info "Launching Spinosa dashboard..."
-  sleep 1
-  exec "${SPINOSA_BIN_DIR}/spinosa" </dev/tty
+	  info "Run Spinosa with: ${SPINOSA_BIN_DIR}/spinosa"
 }
 
 # ── helpers ─────────────────────────────────────────────────────────────────

@@ -13,12 +13,12 @@ TEST_START_TIME=0
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 SPINOSA_BIN="$REPO_ROOT/.bin/spinosa"
-TEST_HOME="$HOME/.spinosa-test-$$"
+TEST_HOME="${SPINOSA_TEST_HOME:-${TMPDIR:-/tmp}/.spinosa-test-$$}"
 export SPINOSA_HOME="$TEST_HOME"
 
 # Colors
 if [[ -t 1 ]]; then
-  R=$'\033[31m' G=$'\033[32m' Y=$'\033[33m' C=$'\033[36m' DIM=$'\033[2m' BOLD=$'\033[1m' RESET=$'\033[0m'
+  R=$'\033[31m' G=$'\033[32m' Y=$'\033[92m' C=$'\033[92m' DIM=$'\033[2m' BOLD=$'\033[1m' RESET=$'\033[0m'
 else
   R="" G="" Y="" C="" DIM="" BOLD="" RESET=""
 fi
@@ -129,12 +129,101 @@ test_help_command() {
   fi
 }
 
+test_confirm_noninteractive_eof_fails_closed() {
+  test_start "Confirm fails closed on noninteractive EOF"
+  local output
+  if output=$(run_test "
+    if NUMBERED=1 confirm 'Dangerous action?' 'y' </dev/null; then
+      echo 'CONFIRM=accepted'
+    else
+      echo 'CONFIRM=rejected'
+    fi
+  "); then
+    if [[ "$output" == *"CONFIRM=rejected"* ]] && [[ "$output" == *"Cannot read from terminal"* ]]; then
+      test_pass "Noninteractive EOF rejects default yes"
+    else
+      test_fail "Noninteractive EOF did not reject" "$output"
+    fi
+  else
+    test_fail "Confirm EOF test crashed" "$output"
+  fi
+}
+
+test_select_menu_noninteractive_eof_fails_closed() {
+  test_start "Select menu fails closed on noninteractive EOF"
+  local output
+  output=$(run_test "
+    if NUMBERED=1 select_menu 'Choose an action' 'new::New workspace' </dev/null; then
+      echo 'MENU=accepted'
+    else
+      echo 'MENU=rejected'
+    fi
+  " 2>&1) || true
+  if [[ "$output" == *"MENU=rejected"* ]] && [[ "$output" == *"Cannot read from terminal"* ]] && [[ "$output" != *"MENU=accepted"* ]]; then
+    test_pass "Noninteractive EOF rejects menu selection"
+  else
+    test_fail "Noninteractive EOF did not reject menu selection" "$output"
+  fi
+}
+
+test_arrow_selector_is_interactive() {
+  test_start "Arrow selector implementation is present"
+  local output
+  if output=$(run_test "
+    declare -f arrow_select
+  "); then
+    if [[ "$output" == *"↑/↓ to move"* ]] && [[ "$output" == *"stty raw -echo"* ]]; then
+      test_pass "Arrow selector has interactive terminal path"
+    else
+      test_fail "Arrow selector collapsed to numbered menu" "$output"
+    fi
+  else
+    test_fail "Could not inspect arrow selector" "$output"
+  fi
+}
+
+test_multi_arrow_selector_is_interactive() {
+  test_start "Multi-select arrow selector implementation is present"
+  local output
+  if output=$(run_test "
+    declare -f multi_arrow_select
+  "); then
+    if [[ "$output" == *"Space to select"* ]] && [[ "$output" == *"toggle_multi_option"* ]] && [[ "$output" == *"stty raw -echo"* ]]; then
+      test_pass "Multi-select uses arrows and Space toggles"
+    else
+      test_fail "Multi-select arrow selector collapsed to numbered menu" "$output"
+    fi
+  else
+    test_fail "Could not inspect multi-select arrow selector" "$output"
+  fi
+}
+
+test_multi_select_can_deselect_last_item() {
+  test_start "Multi-select can deselect the last selected item"
+  local output
+  if output=$(run_test "
+    MULTI_CHOOSE_OPTIONS=('txt::Text')
+    MULTI_CHOOSE_SELECTED=('txt')
+    toggle_multi_option 'txt'
+    echo \"SELECTED_COUNT=\${#MULTI_CHOOSE_SELECTED[@]}\"
+  "); then
+    if [[ "$output" == *"SELECTED_COUNT=0"* ]]; then
+      test_pass "Last selected item can be deselected"
+    else
+      test_fail "Last selected item was not deselected" "$output"
+    fi
+  else
+    test_fail "Deselecting last item crashed" "$output"
+  fi
+}
+
 test_ctrl_c_handling() {
   test_start "Ctrl-C handling (SIGINT trap)"
-  if grep -q "trap cleanup_on_exit EXIT INT TERM" "$SPINOSA_BIN" 2>&1; then
-    test_pass "Global trap is defined"
+  if grep -q "trap cleanup_on_exit EXIT" "$SPINOSA_BIN" 2>&1 && \
+     grep -q "trap cleanup_on_signal INT TERM" "$SPINOSA_BIN" 2>&1; then
+    test_pass "Cleanup and signal traps are defined"
   else
-    test_fail "Global trap not found in script"
+    test_fail "Cleanup/signal traps not found in script"
   fi
 }
 
@@ -191,8 +280,9 @@ EOF
     load_config
     echo \"PERMISSION=\$SCAN_PERMISSION\"
     echo \"ROOTS=\${SCAN_ROOTS[*]}\"
+    echo \"ROOT_COUNT=\${#SCAN_ROOTS[@]}\"
   "); then
-    if [[ "$output" == *"PERMISSION=granted"* ]] && [[ "$output" == *"/tmp/test1"* ]]; then
+    if [[ "$output" == *"PERMISSION=granted"* ]] && [[ "$output" == *"/tmp/test1"* ]] && [[ "$output" == *"ROOT_COUNT=2"* ]]; then
       test_pass "Config loaded correctly"
     else
       test_fail "Config not loaded correctly" "$output"
@@ -220,6 +310,31 @@ test_workspace_registry_write() {
   fi
 }
 
+test_workspace_registry_special_characters() {
+  test_start "Workspace registry handles regex and delimiter characters"
+  local ws_path="$TEST_HOME/ws.[special]|pipe"
+  mkdir -p "$ws_path/.spinosa"
+  rm -f "$TEST_HOME/workspaces.txt"
+  local output stored rows
+  if output=$(run_test "
+    register_workspace '$ws_path' 'Pipe | Project'
+    register_workspace '$ws_path' 'Updated | Project'
+    load_registry
+  "); then
+    stored="$(cat "$TEST_HOME/workspaces.txt")"
+    rows="$(grep -c '^' "$TEST_HOME/workspaces.txt")"
+    if [[ "$output" == *"$ws_path|Updated | Project"* ]] && \
+       [[ "$stored" == *"%7C"* ]] && \
+       [[ "$rows" -eq 1 ]]; then
+      test_pass "Registry escapes delimiters and replaces exact path"
+    else
+      test_fail "Registry special character handling failed" "output=$output stored=$stored"
+    fi
+  else
+    test_fail "Registry special character test crashed" "$output"
+  fi
+}
+
 test_workspace_registry_read() {
   test_start "Workspace registry read"
   cat > "$TEST_HOME/workspaces.txt" <<EOF
@@ -240,6 +355,61 @@ EOF
     test_fail "Registry read crashed" "$output"
   fi
   rm -rf /tmp/ws1 /tmp/ws2
+}
+
+test_framework_manifest_skips_blank_entries() {
+  test_start "Framework manifest skips blank entries"
+  local output
+  if output=$(run_test "
+    if is_framework_manifest_entry '' ''; then
+      echo 'BLANK=accepted'
+    else
+      echo 'BLANK=skipped'
+    fi
+    if is_framework_manifest_entry '.agents/' 'framework'; then
+      echo 'AGENTS=accepted'
+    else
+      echo 'AGENTS=rejected'
+    fi
+  "); then
+    if [[ "$output" == *"BLANK=skipped"* ]] && [[ "$output" == *"AGENTS=accepted"* ]]; then
+      test_pass "Blank manifest entries are ignored"
+    else
+      test_fail "Manifest entry filtering failed" "$output"
+    fi
+  else
+    test_fail "Manifest entry filtering crashed" "$output"
+  fi
+}
+
+test_copy_dir_contents_refuses_framework_root() {
+  test_start "Directory copy refuses framework root"
+  mkdir -p "$TEST_HOME/framework/.git" "$TEST_HOME/dest"
+  local output
+  output=$(run_test "
+    FRAMEWORK_ROOT='$TEST_HOME/framework'
+    copy_dir_contents '$TEST_HOME/framework' '$TEST_HOME/dest'
+  " 2>&1) && {
+    test_fail "Framework root copy was allowed" "$output"
+    return
+  }
+  if [[ "$output" == *"Refusing to copy framework root"* ]]; then
+    test_pass "Framework root copy is blocked"
+  else
+    test_fail "Framework root copy failed for wrong reason" "$output"
+  fi
+}
+
+test_ocr_helpers_are_defined() {
+  test_start "OCR helper functions are defined"
+  if run_test "
+    type rapidocr_ocr_available >/dev/null
+    type rapidocr_ocr_bin >/dev/null
+  " >/dev/null; then
+    test_pass "OCR helper functions are callable"
+  else
+    test_fail "OCR helper functions are missing"
+  fi
 }
 
 test_workspace_registry_update() {
@@ -624,6 +794,11 @@ main() {
   # Core functionality tests
   test_syntax_check
   test_help_command
+  test_confirm_noninteractive_eof_fails_closed
+  test_select_menu_noninteractive_eof_fails_closed
+  test_arrow_selector_is_interactive
+  test_multi_arrow_selector_is_interactive
+  test_multi_select_can_deselect_last_item
   test_ctrl_c_handling
   test_empty_array_handling
   
@@ -633,7 +808,11 @@ main() {
   
   # Registry tests
   test_workspace_registry_write
+  test_workspace_registry_special_characters
   test_workspace_registry_read
+  test_framework_manifest_skips_blank_entries
+  test_copy_dir_contents_refuses_framework_root
+  test_ocr_helpers_are_defined
   test_workspace_registry_update
   
   # Spinner tests

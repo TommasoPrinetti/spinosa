@@ -17,6 +17,8 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TMPDIR="$(mktemp -d)"
+export HOME="$TMPDIR/home"
+export SPINOSA_HOME="$HOME/.spinosa"
 PASSED=0
 FAILED=0
 
@@ -30,10 +32,12 @@ trap cleanup EXIT
 echo "Test 1: Syntax checks"
 for script in \
   "$REPO_ROOT/.bin/spinosa" \
-  "$REPO_ROOT/install.sh" \
-  "$REPO_ROOT/.bin/package-release.sh" \
-  "$REPO_ROOT/.bin/check-startup.sh" \
-  "$REPO_ROOT/.bin/sync-agents.sh"; do
+	  "$REPO_ROOT/install.sh" \
+	  "$REPO_ROOT/.bin/package-release.sh" \
+	  "$REPO_ROOT/.bin/check-startup.sh" \
+	  "$REPO_ROOT/.bin/sync-agents.sh" \
+	  "$REPO_ROOT/tests/operativity_regression.sh" \
+	  "$REPO_ROOT/tests/security_regression.sh"; do
   if [[ -f "$script" ]]; then
     if bash -n "$script" 2>/dev/null; then
       pass "$(basename "$script") syntax OK"
@@ -55,10 +59,15 @@ for cmd in new prepare update upgrade check sync uninstall; do
   fi
 done
 NEW_HELP_OUTPUT="$($REPO_ROOT/.bin/spinosa new --help 2>/dev/null || true)"
-if echo "$NEW_HELP_OUTPUT" | grep -q -- "--gum" && ! echo "$NEW_HELP_OUTPUT" | grep -qi "default, if installed"; then
-  pass "new help documents Gum as opt-in"
+if ! echo "$NEW_HELP_OUTPUT" | grep -q -- "--gum"; then
+  pass "new help no longer exposes Gum options"
 else
-  fail "new help still suggests Gum is default"
+  fail "new help still exposes Gum options"
+fi
+if echo "$NEW_HELP_OUTPUT" | grep -q "gemini" && echo "$NEW_HELP_OUTPUT" | grep -q "qwen"; then
+  pass "new help lists Gemini and Qwen CLI choices"
+else
+  fail "new help missing Gemini or Qwen CLI choices"
 fi
 
 # ── Test 3: spinosa check on minimal workspace ───────────────────────────────
@@ -175,17 +184,20 @@ fi
 echo ""
 echo "Test 4: spinosa sync (dev mode)"
 # spinosa sync requires FRAMEWORK_ROOT to resolve; in dev mode it looks for .spinosa/framework-files.tsv
-SYNC_OUTPUT="$($REPO_ROOT/.bin/spinosa sync 2>/dev/null || true)"
-if echo "$SYNC_OUTPUT" | grep -q "Sync complete"; then
-  pass "spinosa sync completed in dev mode"
+SYNC_OUTPUT="$($REPO_ROOT/.bin/spinosa sync --dry-run 2>&1 || true)"
+if echo "$SYNC_OUTPUT" | grep -q "Dry run"; then
+  pass "spinosa sync dry-run completed in dev mode"
 else
-  # sync may fail for other reasons (missing tools), but let's see
-  if echo "$SYNC_OUTPUT" | grep -q "spinosa sync"; then
-    pass "spinosa sync ran in dev mode"
-  else
-    fail "spinosa sync failed in dev mode"
-    echo "    Output: $SYNC_OUTPUT" | head -5
-  fi
+  fail "spinosa sync dry-run failed in dev mode"
+  echo "    Output: $SYNC_OUTPUT" | head -5
+fi
+
+SYNC_EOF_OUTPUT="$($REPO_ROOT/.bin/spinosa sync </dev/null 2>&1 || true)"
+if echo "$SYNC_EOF_OUTPUT" | grep -q "Sync cancelled" && ! echo "$SYNC_EOF_OUTPUT" | grep -q "Cleaning stale mirrors"; then
+  pass "spinosa sync fails closed without terminal input"
+else
+  fail "spinosa sync did not fail closed without terminal input"
+  echo "    Output: $SYNC_EOF_OUTPUT" | head -8
 fi
 
 # ── Test 5: spinosa uninstall --yes on temp install ──────────────────────────
@@ -326,6 +338,68 @@ else
   fail "spinosa new OpenCode selection not recorded"
 fi
 
+# ── Test 11a: spinosa new records Gemini and Qwen ────────────────────────
+echo ""
+echo "Test 11a: spinosa new Gemini and Qwen CLI selections"
+T11A_GEMINI_CORPUS="$TMPDIR/t11a-gemini-corpus"
+mkdir -p "$T11A_GEMINI_CORPUS"
+cat > "$T11A_GEMINI_CORPUS/note.txt" << 'EOF'
+gemini cli selection test
+EOF
+
+T11A_GEMINI_OUTPUT="$("$REPO_ROOT/.bin/spinosa" new "$T11A_GEMINI_CORPUS" --numbered --no-color \
+  --project-name Test --extensions txt --cli gemini --launch copy 2>&1 || true)"
+T11A_GEMINI_WS="$TMPDIR/t11a-gemini-corpus-spinosa"
+
+if echo "$T11A_GEMINI_OUTPUT" | grep -q "CLI: .*Gemini" || \
+   grep -q "Preferred LLM CLI: Gemini" "$T11A_GEMINI_WS/.spinosa/onboarding-summary.md" 2>/dev/null; then
+  pass "spinosa new records Gemini as preferred CLI"
+else
+  fail "spinosa new Gemini selection not recorded"
+  echo "    Output: $T11A_GEMINI_OUTPUT" | head -10
+fi
+
+T11A_QWEN_CORPUS="$TMPDIR/t11a-qwen-corpus"
+mkdir -p "$T11A_QWEN_CORPUS"
+cat > "$T11A_QWEN_CORPUS/note.txt" << 'EOF'
+qwen cli selection test
+EOF
+
+T11A_QWEN_OUTPUT="$("$REPO_ROOT/.bin/spinosa" new "$T11A_QWEN_CORPUS" --numbered --no-color \
+  --project-name Test --extensions txt --cli qwen --launch copy 2>&1 || true)"
+T11A_QWEN_WS="$TMPDIR/t11a-qwen-corpus-spinosa"
+
+if echo "$T11A_QWEN_OUTPUT" | grep -q "CLI: .*Qwen" || \
+   grep -q "Preferred LLM CLI: Qwen" "$T11A_QWEN_WS/.spinosa/onboarding-summary.md" 2>/dev/null; then
+  pass "spinosa new records Qwen as preferred CLI"
+else
+  fail "spinosa new Qwen selection not recorded"
+  echo "    Output: $T11A_QWEN_OUTPUT" | head -10
+fi
+
+# ── Test 11b: selected CLI skips launch-method prompt ─────────────────────
+echo ""
+echo "Test 11b: spinosa new skips launch-method prompt"
+T11B_CORPUS="$TMPDIR/t11b-corpus"
+mkdir -p "$T11B_CORPUS"
+cat > "$T11B_CORPUS/note.txt" << 'EOF'
+launch prompt test
+EOF
+
+T11B_OUTPUT="$("$REPO_ROOT/.bin/spinosa" new "$T11B_CORPUS" --numbered --no-color \
+  --project-name Test --extensions txt --cli other 2>&1 || true)"
+T11B_WS="$TMPDIR/t11b-corpus-spinosa"
+
+if [[ -f "$T11B_WS/.spinosa/onboarding-summary.md" ]] && \
+   ! echo "$T11B_OUTPUT" | grep -q "How to launch" && \
+   echo "$T11B_OUTPUT" | grep -q "Terminal Launch Command" && \
+   grep -q "Handoff action: Copy launch command" "$T11B_WS/.spinosa/onboarding-summary.md"; then
+  pass "spinosa new launches/copies directly after CLI selection"
+else
+  fail "spinosa new still asks for launch method"
+  echo "    Output: $T11B_OUTPUT" | head -15
+fi
+
 # ── Test 12: spinosa new filtered import excludes unrequested types ───────
 echo ""
 echo "Test 12: spinosa new filtered import (only txt, not csv or json)"
@@ -379,6 +453,11 @@ if echo "$HELP_OUTPUT" | grep -q "\-\-reinstall"; then
 else
   fail "install.sh missing --reinstall flag"
 fi
+if echo "$HELP_OUTPUT" | grep -q "\-\-no-launch"; then
+  pass "install.sh has --no-launch flag"
+else
+  fail "install.sh missing --no-launch flag"
+fi
 
 # ── Test 15: install.sh --min-days on old release ─────────────────────────
 echo ""
@@ -400,6 +479,24 @@ else
   echo "    Output: $MIN_DAYS_OUTPUT" | head -3
 fi
 
+echo ""
+echo "Test 15b: install.sh --min-days rejects malformed release dates"
+BAD_MIN_DAYS_BIN="$TMPDIR/bad-min-days-bin"
+mkdir -p "$BAD_MIN_DAYS_BIN"
+cat > "$BAD_MIN_DAYS_BIN/curl" << 'EOF'
+#!/bin/sh
+printf '{"published_at": "not-a-date"}\n'
+EOF
+chmod +x "$BAD_MIN_DAYS_BIN/curl"
+
+BAD_MIN_DAYS_OUTPUT="$(PATH="$BAD_MIN_DAYS_BIN:$PATH" bash "$REPO_ROOT/install.sh" --version 0.1.0 --min-days 1 --dry-run 2>&1 || true)"
+if echo "$BAD_MIN_DAYS_OUTPUT" | grep -q "Cannot enforce --min-days"; then
+  pass "--min-days aborts when release date cannot be parsed"
+else
+  fail "--min-days did not abort on malformed release date"
+  echo "    Output: $BAD_MIN_DAYS_OUTPUT" | head -3
+fi
+
 # ── Test 16: install.sh --verify-only ───────────────────────────────────────
 echo ""
 echo "Test 16: install.sh --verify-only"
@@ -407,21 +504,7 @@ FAKE_INSTALL="$TMPDIR/fake-verify"
 mkdir -p "$FAKE_INSTALL/.spinosa/versions/0.1.0/spinosa-framework-0.1.0/metadata"
 mkdir -p "$FAKE_INSTALL/.spinosa/versions/0.1.0/spinosa-framework-0.1.0/.bin/lib/vendor"
 
-# Create a fake binary and its checksum
-FAKE_GUM="$FAKE_INSTALL/.spinosa/versions/0.1.0/spinosa-framework-0.1.0/.bin/lib/vendor/gum-darwin-arm64"
-cat > "$FAKE_GUM" << 'EOF'
-#!/bin/sh
-echo "fake gum"
-EOF
-chmod +x "$FAKE_GUM"
-
-# Compute checksum and write manifest (3-field format: hash name suffix)
-GUM_HASH="$(sha256sum "$FAKE_GUM" 2>/dev/null | awk '{print $1}' || shasum -a 256 "$FAKE_GUM" 2>/dev/null | awk '{print $1}')"
-printf '%s  %s  %s\n' "$GUM_HASH" "gum" "darwin-arm64" > "$FAKE_INSTALL/.spinosa/versions/0.1.0/spinosa-framework-0.1.0/metadata/vendor-checksums.txt"
-
-# Also install the binary in the expected location (renamed to base name)
-mkdir -p "$FAKE_INSTALL/.spinosa/bin"
-cp "$FAKE_GUM" "$FAKE_INSTALL/.spinosa/bin/gum"
+printf '# no platform binaries in this fixture\n' > "$FAKE_INSTALL/.spinosa/versions/0.1.0/spinosa-framework-0.1.0/metadata/vendor-checksums.txt"
 
 VERIFY_OUTPUT="$(HOME="$FAKE_INSTALL" SPINOSA_HOME="$FAKE_INSTALL/.spinosa" bash "$REPO_ROOT/install.sh" --verify-only 2>/dev/null || true)"
 if echo "$VERIFY_OUTPUT" | grep -q "Verification complete"; then

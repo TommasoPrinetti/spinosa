@@ -16,11 +16,8 @@ LICENSE	framework	replace_if_unmodified
 .spinosa/retired-framework-files.tsv	framework	replace_if_unmodified
 .bin/pilosa	framework	replace_if_unmodified
 .agents/	framework	replace_if_unmodified
-.claude/	framework	replace_if_unmodified
-.codex/	framework	replace_if_unmodified
-.opencode/agents/	generated_state	exclude_from_update
-.opencode/skills/	generated_state	exclude_from_update
 .opencode/package.json	framework	replace_if_unmodified
+docs/	framework	replace_if_unmodified
 system/startup.md	framework	replace_if_unmodified
 system/yaml_header_template.md	framework	replace_if_unmodified
 system/AGENTS.md	framework	replace_if_unmodified

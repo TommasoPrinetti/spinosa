@@ -1,1 +1,6 @@
 date	session_id	agent	route	operation	query_label	dirs_seen	maps_read	raw_matches	raw_files_read	reports_written	output_path
+2026-06-13	20260613-095202-synthesis_report	codex-orchestrator	synthesis_report	audit	ralph-loop-repo-bug-audit	tests/;.bin/;.github/;system/;dist/;agent_reports/	0	0	0	1	agent_reports/00_ralph-loop-bug-audit.md
+2026-06-13	20260613-101600-fast_path	codex-orchestrator	fast_path	implementation	ralph-loop-fixes	tests/;.bin/;.github/;system/;dist/	0	0	0	0	0	local fixes and regression tests
+2026-06-13	20260613-102800-fast_path	codex-orchestrator	fast_path	audit	architect-code-audit	.bin/;install.sh;.github/;tests/	0	0	0	1	agent_reports/01_architect-code-audit.md
+2026-06-13	20260613-104700-fast_path	codex-orchestrator	fast_path	implementation	architect-audit-fixes	.bin/;install.sh;.github/;tests/;agent_reports/	0	0	0	1	agent_reports/02_architect-fixes-validation.md
+2026-06-15	20260615-094914-cleanup	codex-orchestrator	cleanup	audit	ponytail-audit	.bin/;install.sh;.spinosa/;.agents/;.claude/;.codex/;.opencode/;.hermes/;dist/;.build/	0	0	0	1	agent_reports/03_ponytail-audit.md

@@ -3,7 +3,7 @@
 #
 # Creates a self-contained vendor directory with:
 #   - Standalone Python 3.11 (no system Python needed, includes pip + SSL)
-#   - rapidocr-cli.py wrapper (batch protocol)
+#   - CLI wrappers (batch protocol)
 #   - markitdown-cli.py wrapper (batch protocol)
 #
 # Packages (markitdown, rapidocr, onnxruntime, pypdfium2) and OCR models
@@ -24,7 +24,6 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FRAMEWORK_ROOT="$(dirname "$SCRIPT_DIR")"
 VENDOR_BASE="${FRAMEWORK_ROOT}/.bin/lib/vendor"
-RAPIDOCR_CLI="${FRAMEWORK_ROOT}/.bin/lib/rapidocr-cli.py"
 MARKITDOWN_CLI="${FRAMEWORK_ROOT}/.bin/lib/markitdown-cli.py"
 
 PYTHON_VERSION="3.11.15"
@@ -32,7 +31,7 @@ PYTHON_BUILD_VERSION="20260602"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
+YELLOW='\033[0;92m'
 NC='\033[0m'
 
 log() { echo -e "${GREEN}✓${NC} $*"; }
@@ -123,7 +122,21 @@ build_platform() {
 
     log "Extracting Python..."
     mkdir -p "${python_dir}"
-    tar -xzf "${python_tar}" -C "${python_dir}" --strip-components=1
+    local _listing _verbose_listing
+    _listing="$(tar -tzf "${python_tar}" 2>/dev/null)" || err "Cannot read Python archive"
+    _verbose_listing="$(tar -tzvf "${python_tar}" 2>/dev/null)" || err "Cannot inspect Python archive"
+    if printf '%s\n' "$_listing" | grep -qE '(^|/)\.\.(/|$)|^/'; then
+        err "Unsafe paths in Python archive"
+    fi
+    local _line _target
+    while IFS= read -r _line; do
+        [[ "$_line" == l* && "$_line" == *" -> "* ]] || continue
+        _target="${_line##* -> }"
+        if [[ "$_target" == /* ]] || [[ "$_target" =~ (^|/)\.\.(/|$) ]]; then
+            err "Unsafe symlink in Python archive"
+        fi
+    done <<< "$_verbose_listing"
+    tar -xzf "${python_tar}" -C "${python_dir}" --no-same-owner --strip-components=1 || err "Failed to extract Python archive"
     rm "${python_tar}"
 
     # Clean macOS metadata files from extraction
@@ -136,28 +149,9 @@ build_platform() {
     fi
     log "Python binary: ${python_bin}"
 
-    # Copy both CLI wrappers
+    # Copy CLI wrapper
     log "Copying CLI wrappers..."
-    cp "${RAPIDOCR_CLI}" "${vendor_dir}/rapidocr-cli.py"
     cp "${MARKITDOWN_CLI}" "${vendor_dir}/markitdown-cli.py"
-
-    # Create rapidocr-cli bash launcher
-    cat > "${vendor_dir}/rapidocr-cli" << 'WRAPPER_EOF'
-#!/usr/bin/env bash
-# RapidOCR CLI wrapper for Spinosa
-# Uses bundled standalone Python — no system Python required
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PYTHON_BIN="${SCRIPT_DIR}/python/bin/python3"
-if [[ ! -x "${PYTHON_BIN}" ]]; then
-    PYTHON_BIN="${SCRIPT_DIR}/Python.framework/Versions/Current/bin/python3"
-fi
-if [[ ! -x "${PYTHON_BIN}" ]]; then
-    echo "ERROR: Bundled Python not found in ${SCRIPT_DIR}/python/" >&2
-    exit 1
-fi
-exec "${PYTHON_BIN}" "${SCRIPT_DIR}/rapidocr-cli.py" "$@"
-WRAPPER_EOF
-    chmod +x "${vendor_dir}/rapidocr-cli"
 
     # Create markitdown-cli bash launcher
     cat > "${vendor_dir}/markitdown-cli" << 'MDWRAP_EOF'

@@ -1,6 +1,5 @@
 name = "pilosa-searcher"
-description = "Searches raw corpus, maps, and dictionary for evidence.
-Writes evidence packets to files; returns file paths to orchestrator."
+description = "Searches raw corpus, maps, and dictionary for evidence. Writes evidence packets to files; returns file paths to orchestrator. "
 developer_instructions = '''
 
 You are Pilosa's search agent. Your job is to find relevant evidence in the raw corpus.

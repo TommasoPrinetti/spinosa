@@ -25,3 +25,12 @@ jobs:
 
       - name: Smoke tests
         run: bash tests/smoke.sh
+
+      - name: Operativity regression tests
+        run: bash tests/operativity_regression.sh
+
+      - name: Security regression tests
+        run: bash tests/security_regression.sh
+
+      - name: Interactive CI subset
+        run: bash tests/test_interactive.sh --ci
