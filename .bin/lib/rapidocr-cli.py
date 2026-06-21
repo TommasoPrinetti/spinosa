@@ -160,7 +160,7 @@ def single_main(input_path: str, output_path: str):
                 all_text = []
                 total_pages = len(images)
                 for page_num, image in images:
-                    print(f"PROGRESS {page_num}/{total_pages}", file=sys.stderr, flush=True)
+                    print(f"PROGRESS\t{page_num}/{total_pages}", file=sys.stderr, flush=True)
                     text = ocr_pil_image(engine, image)
                     if text.strip():
                         all_text.append(f"## Page {page_num}\n\n{text}")
@@ -222,7 +222,9 @@ def batch_main():
 
         if cmd == 'SOURCE':
             source_prefix = parts[1]
-        elif cmd == 'FILE' and len(parts) >= 3:
+        elif cmd == 'FILE':
+            if len(parts) < 3:
+                continue
             src_path = parts[1]
             dest_path = parts[2]
 
@@ -238,6 +240,7 @@ def batch_main():
                 try:
                     engine = create_engine()
                 except Exception as e:
+                    print(f"BEGIN\t{rel_path}", file=sys.stderr, flush=True)
                     print(f"END\tfail\t{rel_path}\t0", file=sys.stderr, flush=True)
                     sys.exit(1)
 

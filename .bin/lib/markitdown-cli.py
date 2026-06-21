@@ -111,7 +111,9 @@ def batch_main():
 
         if cmd == "SOURCE":
             source_prefix = parts[1]
-        elif cmd == "FILE" and len(parts) >= 3:
+        elif cmd == "FILE":
+            if len(parts) < 3:
+                continue
             src_path = parts[1]
             dest_path = parts[2]
 
@@ -128,6 +130,7 @@ def batch_main():
                     from markitdown import MarkItDown
                     md = MarkItDown(enable_plugins=False)
                 except Exception:
+                    print(f"BEGIN\t{rel_path}", file=sys.stderr, flush=True)
                     print(f"END\tfail\t{rel_path}\t0", file=sys.stderr, flush=True)
                     sys.exit(1)
 

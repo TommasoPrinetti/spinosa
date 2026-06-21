@@ -23,9 +23,8 @@ ORIGINAL_ARGS=("$@")
 if [[ "${NO_COLOR:-}" == "1" ]] || [[ ! -t 1 ]]; then
   R="" G="" B="" Y="" C="" M="" PG="" DIM="" BOLD="" RESET=""
 else
-  R=$'\033[31m' G=$'\033[32m' B=$'\033[92m' Y=$'\033[92m'
-  C=$'\033[92m' M=$'\033[92m' DIM=$'\033[2m' BOLD=$'\033[1m' RESET=$'\033[0m'
-  PG=$'\033[92m'
+  R=$'\033[32m' G=$'\033[32m' B=$'\033[32m' Y=$'\033[32m'
+  C=$'\033[32m' M=$'\033[32m' PG=$'\033[32m' DIM=$'\033[2m' BOLD=$'\033[1m' RESET=$'\033[0m'
 fi
 
 # ── terminal width ─────────────────────────────────────────────────────────
@@ -46,6 +45,7 @@ cleanup_on_exit() {
   fi
   # Reset terminal
   stty sane 2>/dev/null || true
+  printf '\033[?25h' >&2
 }
 
 cleanup_on_signal() {
@@ -153,7 +153,7 @@ read_from_tty() {
 spinner_start() {
   local msg="$1"
   SPINNER_PID=""
-  [[ -t 1 ]] || return 0
+  [[ -t 2 ]] || return 0
   (
     local frames=("▁" "▃" "▄" "▅" "▆" "▇" "█" "▇" "▆" "▅" "▄" "▃")
     local i=0
@@ -171,7 +171,7 @@ spinner_stop() {
   kill "$SPINNER_PID" 2>/dev/null || true
   wait "$SPINNER_PID" 2>/dev/null || true
   SPINNER_PID=""
-  printf '\r\033[2K' >&2
+  printf '\r\033[2K\n' >&2
 }
 
 prompt_input() {
@@ -1827,7 +1827,7 @@ copy_source() {
             spinner_stop >&2 2>/dev/null || true
             [[ -z "${_md_pid:-}" ]] || kill "$_md_pid" 2>/dev/null || true
 	            [[ -z "${_md_fifo_dir:-}" ]] || rm -rf "$_md_fifo_dir" 2>/dev/null || true
-            printf '\n' >&2
+            printf '\n  Cancelled.\n' >&2
             exit 1
           }
           trap _markitdown_cleanup INT TERM
@@ -1922,6 +1922,7 @@ copy_source() {
             if [[ $_md_read_exit -eq 142 ]]; then
               warn "MarkItDown batch timed out — partial results may be available"
               kill "$_md_pid" 2>/dev/null || true
+              [[ -z "${_md_fifo_dir:-}" ]] || rm -rf "$_md_fifo_dir" 2>/dev/null || true
             fi
             spinosa_debug_md "FIFO read complete — waiting for batch process (pid=$_md_pid)..."
             wait "$_md_pid" 2>/dev/null
@@ -2036,7 +2037,7 @@ copy_source() {
             spinner_stop >&2 2>/dev/null || true
             [[ -z "${_ocr_pid:-}" ]] || kill "$_ocr_pid" 2>/dev/null || true
 	            [[ -z "${_ocr_fifo_dir:-}" ]] || rm -rf "$_ocr_fifo_dir" 2>/dev/null || true
-            printf '\n' >&2
+            printf '\n  Cancelled.\n' >&2
             exit 1
           }
           trap _ocr_cleanup INT TERM
@@ -2120,6 +2121,7 @@ copy_source() {
             if [[ $_ocr_read_exit -eq 142 ]]; then
               warn "OCR batch timed out — partial results may be available"
               kill "$_ocr_pid" 2>/dev/null || true
+              [[ -z "${_ocr_fifo_dir:-}" ]] || rm -rf "$_ocr_fifo_dir" 2>/dev/null || true
             fi
             spinosa_debug "FIFO read complete — waiting for batch process (pid=$_ocr_pid)..."
             wait "$_ocr_pid" 2>/dev/null
@@ -2981,8 +2983,12 @@ cmd_onboard() {
     [[ -n "$source_dir" ]] && info "Stored source folder: ${source_dir}"
   fi
   FLAG_NO_COMPRESS="$flag_no_compress"
-  run_integrated_onboarding "$workspace_path" "$project_name" "$source_dir"
-  exit 0
+  if run_integrated_onboarding "$workspace_path" "$project_name" "$source_dir"; then
+    exit 0
+  else
+    warn "Onboarding was cancelled or failed."
+    exit 1
+  fi
 }
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -3166,12 +3172,16 @@ EOF
 
   # ── Step 6: Onboarding (continuous flow) ────────────────────────────────
   FLAG_NO_COMPRESS="$flag_no_compress"
-  run_integrated_onboarding "$workspace_path" "$project_name" "$corpus_path" \
-    "$flag_extensions" "$flag_cli" "$flag_launch"
-
-  ok "Workspace ready: ${BOLD}${workspace_path}${RESET}"
-  printf '\n'
-  exit 0
+  if run_integrated_onboarding "$workspace_path" "$project_name" "$corpus_path" \
+    "$flag_extensions" "$flag_cli" "$flag_launch"; then
+    ok "Workspace ready: ${BOLD}${workspace_path}${RESET}"
+    printf '\n'
+    exit 0
+  else
+    warn "Onboarding was cancelled or failed — workspace is partially set up."
+    printf '\n'
+    exit 1
+  fi
 }
 
 # ═══════════════════════════════════════════════════════════════════════════
