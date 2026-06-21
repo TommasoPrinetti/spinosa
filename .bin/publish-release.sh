@@ -59,8 +59,13 @@ fi
 CURRENT_BRANCH="$(git branch --show-current)"
 CURRENT_SHA="$(git rev-parse HEAD)"
 
+if [[ -z "$CURRENT_BRANCH" ]]; then
+  echo "Error: not on a branch (detached HEAD). Switch to a branch before publishing."
+  exit 1
+fi
+
 echo "Publishing Spinosa Framework ${TAG}"
-echo "  Branch: ${CURRENT_BRANCH:-detached}"
+echo "  Branch: ${CURRENT_BRANCH}"
 echo "  Commit: ${CURRENT_SHA}"
 echo ""
 
@@ -135,7 +140,7 @@ if gh release view "$TAG" >/dev/null 2>&1; then
   gh release upload "$TAG" "${UPLOAD_ASSETS[@]}" --clobber
 else
 	  gh release create "$TAG" "${UPLOAD_ASSETS[@]}" \
-	    --target "$CURRENT_SHA" \
+	    --target "$CURRENT_BRANCH" \
     --title "Spinosa Framework ${TAG}" \
     --notes-file "$BODY"
 fi
