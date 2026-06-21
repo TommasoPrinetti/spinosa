@@ -104,7 +104,25 @@ FRAMEWORK_ROOT="$(resolve_framework_root)"
 
 # ── helpers ─────────────────────────────────────────────────────────────────
 divider()   { local w=$((COLS > 4 ? COLS - 2 : 10)); printf '%s\n' "${DIM}$(printf '%.0s─' $(seq 1 "$w"))${RESET}"; }
-header()    { printf '\n%s\n\n' "${BOLD}${C}$1${RESET}"; }
+print_spinosa_banner() {
+  local version="${1:-}"
+  if [[ -z "$version" ]]; then
+    version="$(framework_version "$FRAMEWORK_ROOT")"
+  fi
+  [[ -z "$version" || "$version" == "dev" ]] && version="dev"
+
+  printf '\n  %s%s%s\n' "${PG}" "███████╗██████╗ ██╗███╗   ██╗ ██████╗ ███████╗ █████╗ " "${RESET}"
+  printf '  %s%s%s\n' "${PG}" "██╔════╝██╔══██╗██║████╗  ██║██╔═══██╗██╔════╝██╔══██╗" "${RESET}"
+  printf '  %s%s%s\n' "${PG}" "███████╗██████╔╝██║██╔██╗ ██║██║   ██║███████╗███████║" "${RESET}"
+  printf '  %s%s%s\n' "${PG}" "╚════██║██╔═══╝ ██║██║╚██╗██║██║   ██║╚════██║██╔══██║" "${RESET}"
+  printf '  %s%s%s\n' "${PG}" "███████║██║     ██║██║ ╚████║╚██████╔╝███████║██║  ██║" "${RESET}"
+  printf '  %s%s%s\n' "${PG}" "╚══════╝╚═╝     ╚═╝╚═╝  ╚═══╝ ╚═════╝ ╚══════╝╚═╝  ╚═╝" "${RESET}"
+  printf '\n  %s v%s%s\n' "${BOLD}" "$version" "${RESET}"
+}
+header()    {
+  print_spinosa_banner
+  printf '\n%s\n\n' "${BOLD}${C}$1${RESET}"
+}
 info()      { printf '  %s %s\n' "${DIM}→${RESET}" "$1"; }
 ok()        { printf '  %s %s\n' "${G}✦${RESET}" "$1"; }
 warn()      { printf '  %s %s\n' "${Y}⚠${RESET}" "$1" >&2; }
@@ -2898,6 +2916,8 @@ cmd_help() {
 # COMMAND: onboard
 # ═══════════════════════════════════════════════════════════════════════════
 cmd_onboard() {
+  header "Spinosa — Prepare Workspace"
+
   local workspace_path=""
   local source_dir=""
   local flag_no_compress=0
@@ -4295,7 +4315,7 @@ cmd_health() {
   local ws_count
   spinner_start "Discovering workspaces"
   local workspace_data
-  workspace_data="$(discover_workspaces_with_permission 2>/dev/null)"
+  workspace_data="$(discover_workspaces_with_permission 2>/dev/null || true)"
   if [[ -n "$workspace_data" ]]; then
     ws_count="$(echo "$workspace_data" | wc -l | tr -d ' ')"
   else
@@ -4512,13 +4532,8 @@ cmd_dashboard() {
   local discovered_workspaces=()
   local cli_labels=()
 
-  printf '\n  %s%s%s\n' "${PG}" "███████╗██████╗ ██╗███╗   ██╗ ██████╗ ███████╗ █████╗ " "${RESET}"
-  printf '  %s%s%s\n' "${PG}" "██╔════╝██╔══██╗██║████╗  ██║██╔═══██╗██╔════╝██╔══██╗" "${RESET}"
-  printf '  %s%s%s\n' "${PG}" "███████╗██████╔╝██║██╔██╗ ██║██║   ██║███████╗███████║" "${RESET}"
-  printf '  %s%s%s\n' "${PG}" "╚════██║██╔═══╝ ██║██║╚██╗██║██║   ██║╚════██║██╔══██║" "${RESET}"
-  printf '  %s%s%s\n' "${PG}" "███████║██║     ██║██║ ╚████║╚██████╔╝███████║██║  ██║" "${RESET}"
-  printf '  %s%s%s\n' "${PG}" "╚══════╝╚═╝     ╚═╝╚═╝  ╚═══╝ ╚═════╝ ╚══════╝╚═╝  ╚═╝" "${RESET}"
-  printf '\n  %s v%s%s\n\n' "${BOLD}" "$version" "${RESET}"
+  print_spinosa_banner "$version"
+  printf '\n'
 
   # ── Workspace context ─────────────────────────────────────────────────
   if [[ -f ".spinosa/workspace" ]]; then
@@ -4683,13 +4698,8 @@ auto_upgrade_check() {
 
   [[ "$latest" != "$installed_version" ]] || return 0
 
-  printf '\n'
-  print_box "Spinosa v${installed_version} → v${latest}"
-  printf '  %s\n' "${DIM}This update is non-destructive:${RESET}"
-  printf '  %s\n' "${DIM}• Updates the CLI and framework files${RESET}"
-  printf '  %s\n' "${DIM}• Your workspaces and data are NOT affected${RESET}"
-  printf '\n'
-  if confirm "Update now?" "y"; then
+  printf '\n  %sSpinosa v%s is installed. v%s is available.%s\n\n' "${BOLD}" "$installed_version" "$latest" "${RESET}"
+  if confirm "Upgrade now?" "y"; then
     info "Running upgrade..."
     cmd_upgrade --version "$latest" --yes
   else
@@ -4708,8 +4718,8 @@ while true; do
   esac
 done
 
-# ── Call auto-upgrade check (skip for upgrade command itself) ──
-if [[ "${1:-}" != "upgrade" ]] && [[ "${1:-}" != "" ]] && [[ "${1:-}" != "--version" ]] && [[ "${1:-}" != "-v" ]] && [[ "${1:-}" != "help" ]] && [[ "${1:-}" != "-h" ]] && [[ "${1:-}" != "--help" ]]; then
+# ── Call auto-upgrade check before command screens render ──
+if [[ "${1:-}" != "upgrade" ]] && [[ "${1:-}" != "--version" ]] && [[ "${1:-}" != "-v" ]]; then
   auto_upgrade_check
 fi
 
