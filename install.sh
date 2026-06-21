@@ -31,7 +31,7 @@ set -euo pipefail
 
 # ── defaults ────────────────────────────────────────────────────────────────
 # Pinned stable version. Update this when cutting a new release.
-PINNED_VERSION="0.5.9"
+PINNED_VERSION="0.5.10"
 VERSION="${VERSION:-$PINNED_VERSION}"
 DRY_RUN=0
 VERIFY_ONLY=0
@@ -48,8 +48,8 @@ REPO="TommasoPrinetti/spinosa"
 # ── colors (only if terminal) ──────────────────────────────────────────────
 if [ -t 2 ] && [ "${NO_COLOR:-}" != "1" ]; then
   R='' G='' B='' Y='' C='' DIM='' BOLD='' U='' RESET=''
-  R=$'\033[31m' G=$'\033[32m' Y=$'\033[92m'
-  C=$'\033[92m' DIM=$'\033[2m' BOLD=$'\033[1m' U=$'\033[4m' RESET=$'\033[0m'
+  R=$'\033[32m' G=$'\033[32m' Y=$'\033[32m'
+  C=$'\033[32m' DIM=$'\033[2m' BOLD=$'\033[1m' U=$'\033[4m' RESET=$'\033[0m'
 else
   R='' G='' B='' Y='' C='' DIM='' BOLD='' U='' RESET=''
 fi
@@ -75,7 +75,7 @@ read_from_tty() {
 spinner_start() {
   local msg="$1"
   SPINNER_PID=""
-  [ -t 1 ] || return 0
+  [ -t 2 ] || return 0
   (
     local frames=("▁" "▃" "▄" "▅" "▆" "▇" "█" "▇" "▆" "▅" "▄" "▃")
     local i=0
