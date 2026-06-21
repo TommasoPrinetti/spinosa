@@ -260,6 +260,10 @@ prompt_multi_choose() {
   for option in "${options[@]}"; do
     value="$(option_value "$option")"
     [[ "$value" == "__all__" ]] && continue
+    # Skip extensions in the exclude list (pipe-separated, e.g. "mp4|mov|mp3")
+    if [[ -n "${MULTI_CHOOSE_EXCLUDE:-}" ]]; then
+      ext_in_list "$value" "$MULTI_CHOOSE_EXCLUDE" && continue
+    fi
     MULTI_CHOOSE_SELECTED+=("$value")
   done
 
@@ -1465,8 +1469,18 @@ scan_source() {
         ext="$(file_ext "$f")"
         [[ -n "$ext" ]] && record_import_batch "$ext" "$size"
         ;;
-      video) SCAN_VIDEO_COUNT=$((SCAN_VIDEO_COUNT + 1)); SCAN_VIDEO_BYTES=$((SCAN_VIDEO_BYTES + size)) ;;
-      audio) SCAN_AUDIO_COUNT=$((SCAN_AUDIO_COUNT + 1)); SCAN_AUDIO_BYTES=$((SCAN_AUDIO_BYTES + size)) ;;
+      video)
+        SCAN_VIDEO_COUNT=$((SCAN_VIDEO_COUNT + 1))
+        SCAN_VIDEO_BYTES=$((SCAN_VIDEO_BYTES + size))
+        ext="$(file_ext "$f")"
+        [[ -n "$ext" ]] && record_import_batch "$ext" "$size"
+        ;;
+      audio)
+        SCAN_AUDIO_COUNT=$((SCAN_AUDIO_COUNT + 1))
+        SCAN_AUDIO_BYTES=$((SCAN_AUDIO_BYTES + size))
+        ext="$(file_ext "$f")"
+        [[ -n "$ext" ]] && record_import_batch "$ext" "$size"
+        ;;
       unknown) SCAN_UNKNOWN_COUNT=$((SCAN_UNKNOWN_COUNT + 1)); SCAN_UNKNOWN_BYTES=$((SCAN_UNKNOWN_BYTES + size)) ;;
       ignored) SCAN_IGNORED_COUNT=$((SCAN_IGNORED_COUNT + 1)) ;;
     esac
@@ -1495,8 +1509,8 @@ print_scan_summary() {
     fi
   fi
   [[ "$SCAN_BINARY_COPYABLE_COUNT" -gt 0 ]] && printf '  %s├─%s %s to copy as-is (%s)\n' "${DIM}" "${RESET}" "$(file_type_label pdf "$(plural_count "$SCAN_BINARY_COPYABLE_COUNT" "PDF")")" "$(format_bytes "$SCAN_BINARY_COPYABLE_BYTES")"
-  [[ "$SCAN_VIDEO_COUNT" -gt 0 ]] && printf '  %s├─🥀%s %s skipped (%s)\n' "${DIM}" "${RESET}" "$(file_type_label video "$(plural_count "$SCAN_VIDEO_COUNT" "video")")" "$(format_bytes "$SCAN_VIDEO_BYTES")"
-  [[ "$SCAN_AUDIO_COUNT" -gt 0 ]] && printf '  %s├─🥀%s %s skipped (%s)\n' "${DIM}" "${RESET}" "$(file_type_label audio "$(plural_count "$SCAN_AUDIO_COUNT" "audio file")")" "$(format_bytes "$SCAN_AUDIO_BYTES")"
+  [[ "$SCAN_VIDEO_COUNT" -gt 0 ]] && printf '  %s├─%s %s available (not selected by default) (%s)\n' "${DIM}" "${RESET}" "$(file_type_label video "$(plural_count "$SCAN_VIDEO_COUNT" "video")")" "$(format_bytes "$SCAN_VIDEO_BYTES")"
+  [[ "$SCAN_AUDIO_COUNT" -gt 0 ]] && printf '  %s├─%s %s available (not selected by default) (%s)\n' "${DIM}" "${RESET}" "$(file_type_label audio "$(plural_count "$SCAN_AUDIO_COUNT" "audio file")")" "$(format_bytes "$SCAN_AUDIO_BYTES")"
   [[ "$SCAN_UNKNOWN_COUNT" -gt 0 ]] && printf '  %s├─🌵%s %s unsupported or unknown (%s)\n' "${DIM}" "${RESET}" "$(file_type_label unknown "$(plural_count "$SCAN_UNKNOWN_COUNT" "file")")" "$(format_bytes "$SCAN_UNKNOWN_BYTES")"
   printf '  %s└─%s %s ignored\n' "${DIM}" "${RESET}" "$(file_type_label ignored "$(plural_count "$SCAN_IGNORED_COUNT" "file")")"
   note "MarkItDown handles Office docs, EPUB, HTML, and text-based PDFs."
@@ -1528,6 +1542,13 @@ print_onboarding_preflight() {
     ok "${G}MarkItDown${RESET} available for Office docs, EPUB, HTML, and text-based PDFs"
   else
     note_wilted "MarkItDown not available — Office docs, EPUB, HTML, and text-based PDFs will be skipped."
+  fi
+  if [[ "${FLAG_NO_COMPRESS:-0}" -eq 1 ]]; then
+    note "Audio/video compression disabled (--no-compress)"
+  elif ffmpeg_available; then
+    ok "${G}ffmpeg${RESET} available for audio/video compression"
+  else
+    note_wilted "ffmpeg not available — audio/video will be copied uncompressed."
   fi
 
   free_bytes="$(available_disk_bytes "$root")"
@@ -1603,6 +1624,7 @@ copy_source() {
   COPY_TOTAL_COUNT="$total_files"
   COPY_COPIED_COUNT=0
   COPY_SKIPPED_COUNT=0
+  COPY_COMPRESSED_COUNT=0
   render_copy_progress 0 "$total_files" 0 0 ""
 
   while IFS= read -r -d '' src_file; do
@@ -1640,6 +1662,62 @@ copy_source() {
     else
       if safe_copy "$src_file" "$dest_file"; then
         copied=$((copied + 1))
+      else
+        failed=$((failed + 1))
+      fi
+    fi
+    processed=$((processed + 1))
+    render_copy_progress "$processed" "$total_files" "$copied" "$skipped" "$rel_path"
+  done < <(find "$source_path" -type f -print0 2>/dev/null)
+
+  # ── Audio/Video copy/compress pass — compress with ffmpeg when available ──
+  local AUDIO_VIDEO_EXTENSIONS="mp4|mov|m4v|avi|mkv|webm|wmv|mp3|wav|m4a|aac|flac|ogg|opus|aiff"
+  local use_ffmpeg=0
+  if [[ "${FLAG_NO_COMPRESS:-0}" -eq 0 ]] && ffmpeg_available; then
+    use_ffmpeg=1
+  fi
+  COPY_FFMPEG_USED="$use_ffmpeg"
+  while IFS= read -r -d '' src_file; do
+    should_skip_source_file "$src_file" && continue
+    local src_ext
+    src_ext="$(file_ext "$src_file")"
+    ext_in_list "$src_ext" "$AUDIO_VIDEO_EXTENSIONS" || continue
+    import_extension_selected "$src_ext" || continue
+    rel_path="${src_file#"$source_path"/}"
+    dest_file="$dest_dir/$rel_path"
+    dest_parent="$(dirname "$dest_file")"
+    mkdir -p "$dest_parent"
+    if [[ -f "$dest_file" ]]; then
+      skipped=$((skipped + 1))
+    else
+      local did_compress=0
+      if [[ "$use_ffmpeg" -eq 1 ]]; then
+        local _ff_bin
+        _ff_bin="$(ffmpeg_bin)"
+        case "$src_ext" in
+          mp4|mov|m4v|avi|mkv|webm|wmv)
+            if "$_ff_bin" -y -i "$src_file" \
+              -vf "scale=-2:720" -c:v libx264 -crf 28 \
+              -c:a aac -b:a 128k \
+              "$dest_file" 2>/dev/null; then
+              did_compress=1
+            fi
+            ;;
+          mp3|wav|m4a|aac|flac|ogg|opus|aiff)
+            if "$_ff_bin" -y -i "$src_file" \
+              -codec:a libmp3lame -b:a 128k \
+              "$dest_file" 2>/dev/null; then
+              did_compress=1
+            fi
+            ;;
+        esac
+      fi
+      if [[ "$did_compress" -eq 0 ]]; then
+        safe_copy "$src_file" "$dest_file"
+      fi
+      if [[ -f "$dest_file" ]]; then
+        copied=$((copied + 1))
+        [[ "$did_compress" -eq 1 ]] && converted=$((converted + 1))
       else
         failed=$((failed + 1))
       fi
@@ -2087,6 +2165,7 @@ copy_source() {
   COPY_MARKITDOWN_SKIPPED_COUNT="${md_skipped:-0}"
   COPY_OCR_CONVERTED_COUNT="${ocr_converted:-0}"
   COPY_OCR_SKIPPED_COUNT="${ocr_skipped:-0}"
+  COPY_COMPRESSED_COUNT="${converted:-0}"
 
   printf '\n'
   if [[ "$failed" -gt 0 ]]; then
@@ -2140,6 +2219,9 @@ choose_import_batches() {
     fi
     options+=("$(option_spec "$ext" ".${ext}" "$(plural_count "$count" "file")${tag}")")
   done
+
+  # Audio/video are listed but not selected by default — user must opt in
+  MULTI_CHOOSE_EXCLUDE="mp4|mov|m4v|avi|mkv|webm|wmv|mp3|wav|m4a|aac|flac|ogg|opus|aiff"
 
   while true; do
     note "Choose which file types to import into the workspace copy."
@@ -2352,8 +2434,8 @@ updated: $TODAY
 - Office docs/HTML/EPUB/text PDFs via MarkItDown: ${SCAN_MARKITDOWN_COUNT:-0} ($(format_bytes "${SCAN_MARKITDOWN_BYTES:-0}"))
 - Native-readable files to copy unchanged: ${SCAN_NATIVE_COUNT} ($(format_bytes "$SCAN_NATIVE_BYTES"))
 - Scanned PDFs and images available for OCR: ${SCAN_OCR_CONVERTIBLE_COUNT:-0} ($(format_bytes "${SCAN_OCR_CONVERTIBLE_BYTES:-0}"))
-- Videos skipped: ${SCAN_VIDEO_COUNT} ($(format_bytes "$SCAN_VIDEO_BYTES"))
-- Audio skipped: ${SCAN_AUDIO_COUNT} ($(format_bytes "$SCAN_AUDIO_BYTES"))
+- Videos (optional): ${SCAN_VIDEO_COUNT} ($(format_bytes "$SCAN_VIDEO_BYTES"))
+- Audio (optional): ${SCAN_AUDIO_COUNT} ($(format_bytes "$SCAN_AUDIO_BYTES"))
 - Unsupported or unknown files: ${SCAN_UNKNOWN_COUNT} ($(format_bytes "$SCAN_UNKNOWN_BYTES"))
 - Ignored files: ${SCAN_IGNORED_COUNT}
 
@@ -2368,6 +2450,8 @@ updated: $TODAY
 - OCR (RapidOCR) converted: ${COPY_OCR_CONVERTED_COUNT:-0}
 - OCR (RapidOCR) skipped: ${COPY_OCR_SKIPPED_COUNT:-0}
 - OCR mode: ${ocr_mode}
+- ffmpeg compression: ${COPY_FFMPEG_USED:-0}
+- Media files compressed: ${COPY_COMPRESSED_COUNT:-0}
 
 ## Handoff
 - Preferred CLI: ${preferred_cli}
@@ -2465,6 +2549,19 @@ markitdown_bin() {
   local framework_bin="${FRAMEWORK_ROOT:-.}/.bin/lib/vendor/spinosa-${PLATFORM}/markitdown-cli"
   if [[ -x "$framework_bin" ]]; then echo "$framework_bin"; return; fi
   return 1
+}
+
+ffmpeg_available() {
+  local _bin
+  _bin="$(ffmpeg_bin)" || return 1
+  [[ -n "$_bin" && -x "$_bin" ]]
+}
+
+ffmpeg_bin() {
+  local python_bin="${SPINOSA_VENDOR_DIR}-${PLATFORM}/python/bin/python3"
+  [[ -x "$python_bin" ]] || python_bin="${SPINOSA_VENDOR_DIR}-${PLATFORM}/Python.framework/Versions/Current/bin/python3"
+  [[ -x "$python_bin" ]] || return 1
+  "$python_bin" -c "import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())" 2>/dev/null || return 1
 }
 
 repair_vendor_tools() {
@@ -2803,6 +2900,7 @@ cmd_help() {
 cmd_onboard() {
   local workspace_path=""
   local source_dir=""
+  local flag_no_compress=0
   local onboard_args
   onboard_args=()
   while [[ $# -gt 0 ]]; do
@@ -2810,15 +2908,17 @@ cmd_onboard() {
       --no-color) R="" G="" B="" Y="" C="" M="" PG="" DIM="" BOLD="" RESET=""; shift ;;
       --gum|--no-gum) shift ;;
       --source-dir) source_dir="$2"; shift 2 ;;
+      --no-compress) flag_no_compress=1; shift ;;
       --help|-h)
         echo "Usage: spinosa onboard [workspace-directory] [options]" >&2
         echo "  --source-dir PATH  Pre-select source folder (skip prompt)" >&2
+        echo "  --no-compress      Skip ffmpeg compression for audio/video files" >&2
         echo "  --no-color         Disable colored output" >&2
         echo "Example:" >&2
         echo "  spinosa onboard --source-dir /Users/me/Documents/archive" >&2
         return 0
         ;;
-      -*) die "Unknown option: $1. Valid: --source-dir, --no-color, --help" ;;
+      -*) die "Unknown option: $1. Valid: --source-dir, --no-compress, --no-color, --help" ;;
       *) onboard_args+=("$1"); shift ;;
     esac
   done
@@ -2860,6 +2960,7 @@ cmd_onboard() {
     source_dir="$(grep 'source_location:' "$workspace_path/.spinosa/workspace" 2>/dev/null | sed 's/source_location: *//' | head -1 || echo "")"
     [[ -n "$source_dir" ]] && info "Stored source folder: ${source_dir}"
   fi
+  FLAG_NO_COMPRESS="$flag_no_compress"
   run_integrated_onboarding "$workspace_path" "$project_name" "$source_dir"
   exit 0
 }
@@ -2877,6 +2978,7 @@ cmd_new() {
   local flag_extensions=""
   local flag_cli=""
   local flag_launch=""
+  local flag_no_compress=0
   local new_args
   new_args=()
   while [[ $# -gt 0 ]]; do
@@ -2886,6 +2988,7 @@ cmd_new() {
       --extensions)   flag_extensions="$2"; shift 2 ;;
       --cli)          flag_cli="$2"; shift 2 ;;
       --launch)       flag_launch="$2"; shift 2 ;;
+      --no-compress)  flag_no_compress=1; shift ;;
       --numbered) NUMBERED="1"; shift ;;
       --no-color) R="" G="" B="" Y="" C="" M="" PG="" DIM="" BOLD="" RESET=""; shift ;;
       --gum|--no-gum) shift ;;
@@ -2895,6 +2998,7 @@ cmd_new() {
         printf '    %s\n' "  --extensions   Comma-separated file types to import (e.g. txt,pdf)"
         printf '    %s\n' "  --cli          Preferred LLM CLI (opencode, gemini, qwen, claude_code, codex, kilo, other)"
         printf '    %s\n' "  --launch       Launch method (copy, run)"
+        printf '    %s\n' "  --no-compress  Skip ffmpeg compression for audio/video files"
         printf '    %s\n' "  --numbered     Force numbered menus instead of arrow-key menus"
         printf '    %s\n' "  --no-color     Disable colored output"
         return 0
@@ -3041,6 +3145,7 @@ EOF
   register_workspace "$workspace_path" "$project_name"
 
   # ── Step 6: Onboarding (continuous flow) ────────────────────────────────
+  FLAG_NO_COMPRESS="$flag_no_compress"
   run_integrated_onboarding "$workspace_path" "$project_name" "$corpus_path" \
     "$flag_extensions" "$flag_cli" "$flag_launch"
 

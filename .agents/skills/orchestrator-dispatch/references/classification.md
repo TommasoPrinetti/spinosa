@@ -1,14 +1,8 @@
-# Prompt Classification
+# Prompt Routing Split
 
-Map the prompt to one class. If two apply, choose the stricter.
+Map the prompt to one route.
 
-| Class | When |
+| Route | When |
 |---|---|
-| `fast_path` | Operational answer, no source search |
-| `clarify_search` | Translate terms before searching |
-| `find_material` | User asks what exists or where to look |
-| `evidence_answer` | Answer grounded in sources |
-| `synthesis_report` | Structured report / comparison / narrative |
-| `verification` | Check a quote, claim, citation, path, or report |
-| `index_maintenance` | Fix, deepen, clean, or update the workspace index |
-| `cleanup` | Tidy or audit the workspace |
+| `fast_path` | Operational answer, no source search or orchestrated artifact chain |
+| `non-fast-path` | Any source-grounded, verification, maintenance, cleanup, indexing, or synthesis request that needs an orchestrated artifact chain |

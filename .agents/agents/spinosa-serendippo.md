@@ -172,7 +172,7 @@ Look for these types of connections:
 
 Run this agent when:
 
-- **Default route** — After Searcher + Analyst for `evidence_answer` and `synthesis_report` routes (automatic).
+- The frozen goal artifact explicitly includes Serendippo in the Phase A chain.
 - Post-startup connection discovery after dictionary, maps, and cross-exercise synthesis exist.
 - Map enrichment when existing maps are sparse, isolated, or missing cross-references.
 - User-requested hidden-pattern exploration across raw files and maps.

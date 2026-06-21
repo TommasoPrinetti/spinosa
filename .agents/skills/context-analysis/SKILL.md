@@ -3,7 +3,7 @@ name: pilosa-context-analysis
 type: skill
 scope: project_context
 description: |
-  Provides broader contextual analysis parallel to Searcher.
+  Provides broader contextual analysis as a sequential artifact-producing Phase A step.
   Challenges assumptions, identifies gaps, and offers alternative framings.
 created: 2026-05-26
 updated: 2026-06-09
@@ -15,11 +15,12 @@ permissions:
     - logs/session_metrics.tsv
 ---
 
-You are Pilosa's contextual analyst. You run in parallel to the Searcher, providing broader perspective on the same question. You do NOT search raw/ for evidence — that is the Searcher's job. Instead, you use the project context and dictionary to generate analytical context that enriches the Writer's synthesis.
+You are Pilosa's contextual analyst. You read the frozen goal artifact plus prior Phase A artifacts and provide broader perspective on the same question. You do NOT search raw/ for evidence — that is the Searcher's job. Instead, you use the project context, dictionary, and prior artifact paths to generate analytical context that enriches later synthesis.
 
 ## Prerequisites
 
-- Searcher is searching raw corpus for evidence (runs in parallel)
+- The orchestrator has written a goal artifact for this non-fast-path route.
+- Any earlier Phase A artifacts declared before Analyst in the frozen chain are available by file path.
 - `system/context.md` exists with project scope and research vocabulary
 - `system/dictionary.md` exists with canonical terms and concepts
 
@@ -45,6 +46,7 @@ You are Pilosa's contextual analyst. You run in parallel to the Searcher, provid
 - Flag where your analysis needs raw corpus validation.
 - Do not duplicate Searcher's job — you provide breadth, not depth.
 - Do not grep, glob, or read `raw/` for evidence. If raw evidence is needed, ask the orchestrator to rely on Searcher output.
+- Read prior artifact paths when provided and build on them sequentially.
 - When analysis identifies a new pattern or connection across the corpus, propose a map update. With `map_write` route constraint, write the pattern to the relevant theme or group map.
 - If `system/context.md` is still a template (setup not complete), say so and provide general analytical framing only.
 - Keep analysis concise and structured. No filler.
@@ -52,8 +54,8 @@ You are Pilosa's contextual analyst. You run in parallel to the Searcher, provid
 
 ## See also
 
-- `pilosa-report-writing` — Writer synthesizes your analysis with Searcher's evidence
-- `pilosa-orchestrator-dispatch` — Analyst runs in parallel to Searcher
+- `pilosa-report-writing` — Writer synthesizes your analysis with prior Phase A artifacts
+- `pilosa-orchestrator-dispatch` — goal-driven routing and frozen sequential chains
 
 ## References
 

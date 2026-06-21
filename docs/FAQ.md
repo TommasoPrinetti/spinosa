@@ -20,7 +20,7 @@ You can edit YAML headers (the metadata block at the top of each file), but don'
 Only with explicit researcher authorization. By default, Spinosa works exclusively with files you've provided. If you need external sources, set `external_sources_allowed: yes` in `system/configuration.md` first.
 
 **How do I ask a question?**
-In plain language, directly to your LLM tool. "Find all mentions of X in the Y interviews." "Compare what group A said about Z vs group B." "Summarize the key findings about W." The orchestrator classifies your prompt and dispatches the right agents.
+In plain language, directly to your LLM tool. "Find all mentions of X in the Y interviews." "Compare what group A said about Z vs group B." "Summarize the key findings about W." The orchestrator either answers directly on `fast_path` or writes a goal artifact and dispatches a frozen non-fast-path chain.
 
 **My question got a fast-path answer instead of a full report. Why?**
 Some questions are operational — "what's in my corpus?", "how do I add files?" — and get answered directly without the full sub-agent pipeline. If you want a full evidence-grounded report, be explicit: "Find evidence for X in my sources."

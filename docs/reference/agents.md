@@ -1,35 +1,47 @@
 # Agents & Pipeline
 
-Spinosa uses 7 specialized sub-agents. When you ask a question, the orchestrator selects a sequence of agents to handle it. This page shows who does what and in what order.
+Spinosa routes every prompt through one of two paths:
+- `fast_path` for direct operational answers
+- `non-fast-path` for orchestrated artifact-based work
+
+For every `non-fast-path` request, the orchestrator writes a goal artifact first, freezes the chain, and then dispatches agents sequentially file-to-file. This page shows the current user-facing model.
 
 ## The agents at a glance
 
 | Agent | Job | When it runs |
 |---|---|---|
 | **Mapper** | Builds navigation maps during initial setup | Startup only |
-| **Searcher** | Finds relevant passages in your documents | Every question |
-| **Analyst** | Provides broader context and alternative angles | Alongside Searcher |
-| **Serendippo** | Finds hidden connections across documents | After Searcher + Analyst |
-| **Writer** | Composes a structured report from the evidence | After search is complete |
-| **Verifier** | Checks every claim against the original files | After writing |
-| **Janitor** | Audits workspace health and cleans stale files | On request |
+| **Searcher** | Finds relevant passages in your documents | In non-fast-path chains that need evidence |
+| **Analyst** | Adds broader context and alternative angles | When the frozen chain explicitly includes it |
+| **Serendippo** | Finds hidden connections across documents | When the frozen chain explicitly includes it |
+| **Writer** | Composes a user-facing answer report | Only when the chain needs a report |
+| **Verifier** | Checks substantive claims against original files | When claims, citations, or quotes need truth-checking |
+| **Janitor** | Audits workspace health and cleans stale files | On cleanup routes |
+| **Evaluator** | Audits the completed non-fast-path route | After the Phase A terminal artifact reaches its checking state |
+| **Evolver** | Applies tightly scoped framework follow-up edits | Only when the Evaluator recommends an edit |
 
-## Pipeline: the sequence by question type
+## Routing model
 
-Not every question uses every agent. The orchestrator picks the right sequence:
+Not every question uses agents. The orchestrator now uses a two-way split:
 
-| Type of question | Agents used |
+| Route | What happens |
 |---|---|
-| "What exists in my corpus?" or "How do I..." (fast path) | None — answered directly |
-| "Find documents about X" | Searcher → Verifier |
-| "What does the corpus say about X?" (evidence answer) | Searcher + Analyst → Serendippo → Writer → Verifier |
-| "Give me a structured comparison of A vs B" | Searcher × multiple + Analyst → Serendippo → Writer → Verifier |
-| "Check this quote: is it accurate?" | Verifier only |
-| "Clean up my workspace" | Janitor only (requires your confirmation) |
-| "Re-index the corpus" | Mapper → Verifier |
-| "Find hidden connections" | Serendippo only |
+| `fast_path` | The question is answered directly without a goal artifact or Phase A chain |
+| `non-fast-path` | The orchestrator writes a goal artifact, freezes the chain, then dispatches agents sequentially |
 
-Searcher and Analyst run at the same time (parallel). Writer waits for both to finish.
+## Typical non-fast-path shapes
+
+The chain is chosen per request and frozen once the goal artifact is written.
+
+| Request shape | Typical chain |
+|---|---|
+| Evidence-grounded answer | Goal Artifact → Searcher → Writer → Verifier |
+| Evidence-grounded answer with broader context | Goal Artifact → Searcher → Analyst → Writer → Verifier |
+| Hidden-connection exploration | Goal Artifact → Searcher → Serendippo → Writer → Verifier |
+| Re-indexing or extraction maintenance | Goal Artifact → Mapper → Searcher → Writer → Verifier |
+| Cleanup audit | Goal Artifact → Janitor |
+
+Repeated agents are allowed when the goal artifact declares them up front. The orchestrator does not append, skip, or parallelize Phase A steps after freezing the chain.
 
 ## What each agent does
 
@@ -45,12 +57,13 @@ The Searcher is the evidence hunter. It:
 
 ### Analyst
 
-The Analyst runs alongside the Searcher but doesn't search files directly. It:
+The Analyst does not search files directly. It:
 1. Reads your project context and the dictionary
-2. Suggests broader themes, missing angles, and alternative framings
-3. Flags what a search-only approach might miss
+2. Reads any earlier artifacts the frozen chain produced
+3. Suggests broader themes, missing angles, and alternative framings
+4. Flags what a search-only approach might miss
 
-**What it produces:** A contextual analysis note that the Writer incorporates into the report.
+**What it produces:** A contextual analysis packet that later steps read by file path.
 
 ### Serendippo
 
@@ -64,9 +77,9 @@ The Serendippo agent roams freely through your documents looking for unexpected 
 
 ### Writer
 
-The Writer takes the evidence and context and composes a structured report. It:
-1. Reads the evidence packet from the Searcher
-2. Incorporates the Analyst's broader context
+The Writer creates a user-facing answer report when the frozen chain calls for one. It:
+1. Reads the prior artifacts named in the goal file
+2. Incorporates evidence and any broader context
 3. Numbers the report sequentially (`00_first-report.md`, `01_followup.md`)
 4. Adds a navigation dashboard showing how the answer was built
 
@@ -75,12 +88,13 @@ The Writer takes the evidence and context and composes a structured report. It:
 ### Verifier
 
 The Verifier is the quality gate. It:
-1. For each claim in the report, finds the original source file
-2. Compares the quote against the original text
-3. Marks each claim: verified, corrected, unsupported, contradicted, or unresolved
-4. Updates the report status
+1. Reads the substantive artifact that needs checking
+2. For each claim, finds the original source file when source grounding is required
+3. Compares the quote or claim against the original text
+4. Marks each claim: verified, corrected, unsupported, contradicted, or unresolved
+5. Updates the artifact status when a status block exists
 
-**What it produces:** The same report with updated status — `✓ verified`, `⚠ corrections`, or `✗ failed`.
+**What it produces:** The same artifact with updated verification state — usually `✓ verified`, `⚠ corrections`, or `✗ failed`.
 
 ### Mapper
 
@@ -96,26 +110,56 @@ The Mapper runs during initial setup (startup). It:
 The Janitor audits workspace health:
 1. Scans for stale files and broken links
 2. Proposes cleanup moves to `.trash/`
-3. Presents a report you must confirm before any file is moved
+3. Writes a cleanup artifact
+4. Presents a report you must confirm before any file is moved
 
 **What it produces:** A hygiene report with a health score gauge and proposed moves.
 
+### Evaluator
+
+The Evaluator runs after every non-fast-path route finishes Phase A. It:
+1. Reads the original prompt, goal artifact, frozen chain, and produced files
+2. Audits the route as a process
+3. Decides whether the framework needs a tightly scoped follow-up edit
+
+**What it produces:** A route audit report with either `no_edit` or `edit_recommended`.
+
+### Evolver
+
+The Evolver runs only when the Evaluator recommends an edit. It:
+1. Reads the audit report
+2. Applies the smallest safe control-file or behavior-doc change
+3. Leaves the current answer unchanged and affects only future requests
+
+**What it produces:** A narrowly scoped evolution report and any justified framework edits.
+
 ## How agents hand off work
 
-Agents don't pass content to each other directly — they write files and pass file paths:
+Agents don't pass content to each other directly. On non-fast-path routes, the orchestrator writes the goal artifact first, then agents write files and pass file paths:
 
 ```
-Searcher writes evidence_packet.md  ──┐
-                                      ├──► Writer reads both ──► writes report
-Analyst writes context note ──────────┘                            │
-                                                                   ▼
-                                                            Verifier checks report
-                                                                   │
-                                                                   ▼
-                                                            Final verified report
+Orchestrator writes goal artifact
+          │
+          ▼
+Phase A agent writes artifact A
+          │
+          ▼
+Phase A agent writes artifact B
+          │
+          ▼
+Writer writes report when needed
+          │
+          ▼
+Verifier checks substantive artifact when needed
+          │
+          ▼
+Evaluator audits the route
+          │
+          ▼
+Evolver runs only if an edit is recommended
 ```
 
-Process files (evidence packets, extraction batches) are moved to `.trash/` after the report is verified. Only final reports stay in `agent_reports/`.
+Process files such as evidence packets and extraction batches are moved to `.trash/` after the route completes. Final reports and Phase B audit artifacts stay in `agent_reports/`.
 
 ## Session metrics
 

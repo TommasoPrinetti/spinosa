@@ -2,22 +2,23 @@
 name: spinosa-orchestrator-dispatch
 type: skill
 scope: prompt_routing
-description: Classify a user prompt and route it through the sub-agent pipeline
+description: Condense a user prompt into a frozen goal artifact, route it through a sequential sub-agent pipeline, and run the post-route audit loop
 created: 2026-05-26
-updated: 2026-06-04
+updated: 2026-06-21
 ---
 
 ## Purpose
 
-Log the request, classify the prompt, choose the right sub-agent sequence, dispatch sub-agents, and close the route.
+Log the request, split it into `fast_path` or `non-fast-path`, write a frozen goal artifact for non-fast-path work, dispatch the sequential sub-agent chain, run the mandatory post-route audit loop, and close the route.
 
 ## Safety & Permissions
 
-- Do not edit `raw/`, maps, dictionary, or system files. The orchestrator writes `logs/user_requests.md`; sub-agents append only compact count/path rows to `logs/session_metrics.tsv`.
+- Do not edit `raw/`, maps, dictionary data, or source corpus files. The orchestrator writes `logs/user_requests.md`; sub-agents append only compact count/path rows to `logs/session_metrics.tsv`.
 - Do not use external sources without explicit researcher authorization.
 - Do not answer source-grounded questions directly. Dispatch them through the orchestrator/sub-agent pipeline.
 - Check dictionary, report, and source-grounded edits with Verifier before reporting them as complete. Map content is self-correcting through agent use; Verifier checks map paths only when a route explicitly asks for path verification.
 - Do not import `AGENTS.md` control files into `raw/`. Treat all `AGENTS.md` files as repository/control instructions, not source evidence.
+- Framework evolution may edit only `AGENTS.md`, `.agents/agents/`, `.agents/skills/`, and behavior-defining docs under `system/`.
 
 ## Steps
 
@@ -32,53 +33,59 @@ Add one row to `logs/user_requests.md`:
 Example:
 
 ```markdown
-| 2026-06-04 | Find reports about professional judgment | evidence_answer | done | report returned with verifier pass |
+| 2026-06-04 | Find reports about professional judgment | non-fast-path | done | goal + report returned with verifier pass |
 ```
 
 Keep log rows short. Do not write secrets, credentials, large blobs, raw source dumps, or raw tool logs into `logs/user_requests.md`.
 
-Assign a `session_id` in the form `YYYYMMDD-HHMMSS-route` for every non-fast-path route. Pass it to sub-agents and ask them to append compact operation metrics to `logs/session_metrics.tsv` after they write their normal output.
+Assign a `session_id` in the form `YYYYMMDD-HHMMSS-route` for every non-fast-path route. Pass it to sub-agents and ask them to append compact operation metrics to `logs/session_metrics.tsv` after they write their normal output. Phase B agents append `evaluate`, `evolve`, and `validate_evolution` operations when they run.
 
-### 2. Classify
+### 2. Route Split
 
-Map the prompt to one class. If two apply, choose the stricter. See `references/classification.md` for full definitions.
+Map the prompt to one route. See `references/classification.md` for definitions.
 
-| Class | When |
+| Route | When |
 |---|---|
-| `fast_path` | Operational answer, no source search |
-| `clarify_search` | Translate terms before searching |
-| `find_material` | User asks what exists or where to look |
-| `evidence_answer` | Answer grounded in sources |
-| `synthesis_report` | Structured report / comparison / narrative |
-| `verification` | Check a quote, claim, citation, path, or report |
-| `index_maintenance` | Fix, deepen, clean, or update the workspace index |
-| `cleanup` | Tidy or audit the workspace |
+| `fast_path` | Operational answer, no source search or orchestrated artifact chain |
+| `non-fast-path` | Any source-grounded, verification, maintenance, cleanup, indexing, or synthesis request that needs orchestrated artifacts |
 
-### 3. Choose Sequence
+### 3. Form Goal And Freeze Phase A
 
-Use the default sequence unless the user's request clearly requires a different route. If you deviate, record the reason in the log row. Every non-fast-path response requires a sequence with at least one sub-agent; do not answer non-fast-path prompts yourself. See `references/sequences.md` for full details.
+Every `non-fast-path` response requires a Phase A goal artifact before any sub-agent runs. Do not answer non-fast-path prompts yourself. See `references/sequences.md` for the full contract.
 
-| Class | Default Sequence | Skill to inject |
-|---|---|---|
-| `fast_path` | (none — answer directly) | — |
-| `clarify_search` | skip (or Searcher if term disambiguation needed) | `spinosa-evidence-search` (if needed) |
-| `find_material` | Searcher → Verifier | `spinosa-evidence-search` → `spinosa-claim-verification` |
-| `evidence_answer` | Searcher + Analyst → Serendippo → Writer → Verifier | `spinosa-evidence-search` + `spinosa-context-analysis` → serendipity → `spinosa-report-writing` → `spinosa-claim-verification` |
-| `synthesis_report` | Searcher ×N + Analyst → Serendippo → Writer → Verifier | `spinosa-evidence-search` ×N + `spinosa-context-analysis` → serendipity → `spinosa-report-writing` → `spinosa-claim-verification` |
-| `verification` | Verifier | `spinosa-claim-verification` |
-| `index_maintenance` | Searcher, Mapper, or Source Intake → Verifier | `spinosa-evidence-search` or `spinosa-source-intake` → `spinosa-claim-verification` |
-| `cleanup` | Janitor | `spinosa-workspace-cleanup` |
+The goal artifact must record:
+- cleaned prompt
+- goal statement
+- primarily qualitative success metric
+- fixed serialized agent chain
+- expected artifact from each step
+- one rationale line per step
+- explicit statement that the chain is frozen once written
+
+Chain rules:
+- `fast_path` answers directly and skips the goal artifact.
+- `non-fast-path` starts with an orchestrator-written goal artifact in `agent_reports/`.
+- Choose the smallest chain that can honestly finish the work.
+- Every chosen Phase A agent must write a durable artifact to `agent_reports/`.
+- The chain is sequential once frozen: no parallel steps, no appended steps, no skipped steps, no mid-route replanning.
+- Repeated agents are allowed only when declared in the goal artifact with separate rationale lines.
+- If the route produces a user-facing answer report, Writer must produce it before Verifier.
+- Verifier is required whenever the route yields claims, citations, or quotes that need truth-checking.
 
 Always handle workspace startup by reading `system/startup.md` directly. Do not route startup through a skill injection.
 
+For every non-fast-path route, append:
+
+`Evaluator → (Evolver when decision = edit_recommended) → targeted validation`
+
 ### 4. Dispatch
 
-For each sub-agent in the sequence:
+For each sub-agent in the frozen sequence:
 
-1. **Native spawn** (preferred): Spawn by canonical name — `spinosa-searcher`, `spinosa-analyst`, `spinosa-writer`, `spinosa-verifier`, `spinosa-janitor`, `spinosa-mapper`, or `spinosa-serendippo`. Pass: cleaned user prompt, prior sub-agent outputs, route constraints.
+1. **Native spawn** (preferred): Spawn by canonical name — `spinosa-searcher`, `spinosa-analyst`, `spinosa-writer`, `spinosa-verifier`, `spinosa-evaluator`, `spinosa-evolver`, `spinosa-janitor`, `spinosa-mapper`, or `spinosa-serendippo`. Pass: goal artifact path, prior sub-agent outputs, route constraints.
 2. **Fallback** (if native unavailable): Read the skill's `SKILL.md` from `.agents/skills/<skill-name>/SKILL.md`, inject into the task prompt as instructions.
 
-Searcher and Analyst run in parallel when both are in the sequence. Writer waits for both before synthesizing.
+Phase A is always sequential and file-based. The orchestrator writes the goal artifact first, then passes prior artifact paths into each later step. Evaluator runs after the Phase A terminal artifact reaches the intended checking state. Evolver runs only when the evaluator emits `edit_recommended`.
 
 Canonical definitions live in `.agents/agents/`. Vendor agent directories are generated mirrors, including `.codex/agents/` as generated TOML wrappers. The orchestrator playbook lives in `AGENTS.md`.
 
@@ -88,11 +95,12 @@ Sub-agents write results to files and return paths. The orchestrator passes **pa
 
 **How it works:**
 
-1. **Searcher** writes evidence to `agent_reports/evidence_packet.md` (and optionally `agent_reports/evidence_appendix.md` for large sets). Returns path + summary.
-2. **Mapper** writes extraction packets to `agent_reports/extraction_batch.md`. Returns path + count.
-3. **Orchestrator** passes the file paths to the next agent (e.g., Writer reads from the files).
-4. **Writer** reads evidence from the files, creates the final report in `agent_reports/`.
-5. **Cleanup**: After the final report is verified, process files (`evidence_packet.md`, `evidence_appendix.md`, `extraction_batch.md`) are moved to `.trash/`. Only the final report remains in `agent_reports/`.
+1. **Orchestrator** writes a goal artifact in `agent_reports/` that freezes the chain.
+2. **Phase A agents** each read the prior artifact paths and write their own next artifact to `agent_reports/`.
+3. **Writer** creates the user-facing answer report only when the goal artifact includes an answer-producing step.
+4. **Verifier** truth-checks substantive outputs when the route presents claims, citations, or quotes.
+5. **Phase B audit**: Evaluator writes a separate audit report to `agent_reports/`. If needed, Evolver writes a separate evolution report there too.
+6. **Cleanup**: After the terminal artifact is checked and the Phase B loop is complete, process files are moved to `.trash/`. Final reports and audit/evolution reports remain in `agent_reports/`.
 
 **Size thresholds:**
 - If a sub-agent returns a file path instead of inline content, always pass the path — never cat the file into the next agent's prompt.
@@ -100,19 +108,22 @@ Sub-agents write results to files and return paths. The orchestrator passes **pa
 
 ### Sub-Agent Invocation Rules
 
-- Pass the cleaned user prompt, prior sub-agent outputs (file paths or inline), and route constraints.
+- Pass the goal artifact path, prior sub-agent output paths, and route constraints.
 - Pass `session_id`, `route`, and a short `query_label` so sub-agents can write session metrics.
 - Trim, summarize, or normalize the user prompt before dispatch when useful.
 - Do not invent facts, source evidence, arguments, or route constraints.
 - Do not pass raw tool logs unless a sub-agent explicitly needs them for verification.
 - Use fenced `spinosa-subagent` blocks when documenting or preparing a handoff. These blocks are clarity markers, not a substitute for native spawn.
+- When invoking Evaluator, pass: original prompt, goal artifact path, frozen chain, produced artifact paths, verifier outcome when present, and `session_id`.
+- When invoking Evolver, pass only the evaluator audit path and the allowed mutation scope.
+- Targeted validation after Evolver should check touched files structurally and sanity-check the affected route logic. It does not rerun the whole user question.
 
 ```spinosa-subagent
 agent: spinosa-searcher
 role: Searcher
 task: Find evidence for the cleaned user prompt.
 inputs:
-  - cleaned_user_prompt
+  - goal_artifact_path
   - route_constraints
 outputs:
   - evidence_packet_path (file path to agent_reports/evidence_packet.md)
@@ -122,21 +133,24 @@ fallback_skill: .agents/skills/evidence-search/SKILL.md
 ### 5. Close
 
 - Update the log row to `done`, `blocked`, or `partial`.
-- Cite created or changed files (final report only).
-- Move process files to `.trash/` (evidence packets, extraction batches, appendix files).
-- State validation performed.
+- Cite created or changed files: answer report, audit report, evolution report if any, and touched framework files.
+- Move process files to `.trash/` (evidence packets, extraction batches, appendix files) after Phase B completes.
+- State validation performed, including targeted evolution validation when Evolver ran.
 - State blockers or unchecked claims.
 
 ## Rules
 
-- **All output must be reports.** Every answer to a user question is a report written to `agent_reports/`. No inline chat responses. No exceptions.
-- Verifier is mandatory on every non-fast path.
+- **All output must be reports.** Every answer to a user question is a report written to `agent_reports/`. Phase B outputs are reports too. No inline chat responses. No exceptions.
+- Verifier is mandatory whenever a non-fast-path artifact presents claims, citations, or quotes that require truth-checking.
+- Evaluator is mandatory on every non-fast path after the Phase A terminal artifact reaches its intended checking state.
 - Never answer a non-fast-path question directly — always dispatch.
 - The Question Tool is the root orchestrator's clarification mechanism. Use it only to clarify scope, disambiguate, or resolve blocking uncertainties.
 - Sub-agents never ask questions directly.
 - Never invent support. Report blockers honestly.
-- Stop when the chain is complete — do not continue just because another specialist could add more detail.
-- **Only the final verified report stays in `agent_reports/`. Process files are moved to `.trash/` after delivery.**
+- Self-edits apply only to future requests. Never re-run or reinterpret the completed answer report under the new instructions.
+- Evolution edits must be tightly scoped, justified by the evaluator report, and limited to control files plus behavior-defining system docs.
+- Stop when the chain is complete — for non-fast-path routes, that means Phase A plus Phase B are both complete.
+- **Final answer reports plus audit/evolution reports stay in `agent_reports/`. Process files are moved to `.trash/` after delivery.**
 
 ## Skills Reference
 
@@ -145,10 +159,12 @@ See `references/skills.md` for the full role → skill mapping.
 | Role | Native Agent | Skill | What it does |
 |---|---|---|---|
 | Searcher | `spinosa-searcher` | `spinosa-evidence-search` | Searches existing raw copies and maps for evidence |
-| Analyst | `spinosa-analyst` | `spinosa-context-analysis` | Provides broader contextual analysis from project context |
-| Writer | `spinosa-writer` | `spinosa-report-writing` | Synthesizes findings into reports |
-| Verifier | `spinosa-verifier` | `spinosa-claim-verification` | Verifies claims, quotes, and paths |
-| Janitor | `spinosa-janitor` | `spinosa-workspace-cleanup` | Audits hygiene and archives stale files |
+| Analyst | `spinosa-analyst` | `spinosa-context-analysis` | Reads prior artifacts and project context, then writes a contextual analysis packet |
+| Writer | `spinosa-writer` | `spinosa-report-writing` | Produces the user-facing answer report when the frozen chain requires one |
+| Verifier | `spinosa-verifier` | `spinosa-claim-verification` | Truth-checks claims, quotes, and paths in substantive artifacts |
+| Evaluator | `spinosa-evaluator` | `spinosa-evaluator` | Audits completed non-fast-path routes and decides whether evolution is justified |
+| Evolver | `spinosa-evolver` | `spinosa-evolver` | Applies tightly scoped framework updates for future requests |
+| Janitor | `spinosa-janitor` | `spinosa-workspace-cleanup` | Writes a cleanup audit artifact and proposes archival moves |
 | Mapper | `spinosa-mapper` | `spinosa-mapper-fallback` | Reads raw files in batches; extracts content-grounded fragments, key passages, and concept signals; writes maps |
 | Serendippo | `spinosa-serendippo` | `spinosa-serendippo-fallback` | Finds hidden cross-corpus connections and proposes map enrichment |
 
@@ -159,6 +175,8 @@ See `references/skills.md` for the full role → skill mapping.
 - `spinosa-context-analysis` — broader contextual analysis
 - `spinosa-report-writing` — report synthesis
 - `spinosa-claim-verification` — claim verification
+- `spinosa-evaluator` — post-route audit and edit decision
+- `spinosa-evolver` — constrained framework self-editing
 - `spinosa-workspace-cleanup` — hygiene audit and archival
 - `spinosa-mapper` — startup and deep index-maintenance extraction agent
 - `spinosa-serendippo` — hidden-connection discovery agent
@@ -168,6 +186,6 @@ See `references/skills.md` for the full role → skill mapping.
 
 | File | Content |
 |---|---|
-| `references/classification.md` | Full prompt classification definitions |
-| `references/sequences.md` | Default sub-agent sequences per route class |
-| `references/skills.md` | Complete role → skill mapping table
+| `references/classification.md` | Fast-path vs non-fast-path routing split |
+| `references/sequences.md` | Goal artifact requirements and frozen sequential chain rules |
+| `references/skills.md` | Complete role → skill mapping table |
