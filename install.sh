@@ -31,7 +31,7 @@ set -euo pipefail
 
 # ── defaults ────────────────────────────────────────────────────────────────
 # Pinned stable version. Update this when cutting a new release.
-PINNED_VERSION="0.5.7"
+PINNED_VERSION="0.5.8"
 VERSION="${VERSION:-$PINNED_VERSION}"
 DRY_RUN=0
 VERIFY_ONLY=0
@@ -717,7 +717,7 @@ main() {
         spinosa_python="${spinosa_vendor_dest}/Python.framework/Versions/Current/bin/python3"
       fi
       if [[ -x "$spinosa_python" ]]; then
-        spinner_start "Installing Python packages (MarkItDown + RapidOCR)"
+        spinner_start "Installing Python packages (MarkItDown + RapidOCR + ffmpeg)"
         local pip_ok=0
         "$spinosa_python" -m pip install --upgrade pip --quiet 2>/dev/null || true
         if "$spinosa_python" -m pip install \
@@ -725,10 +725,11 @@ main() {
           "rapidocr==3.8.1" \
           "onnxruntime==1.26.0" \
           "pypdfium2==5.9.0" \
+          "imageio-ffmpeg" \
           --quiet 2>&1; then
           pip_ok=1
         fi
-        spinner_stop "MarkItDown + RapidOCR installed"
+        spinner_stop "MarkItDown + RapidOCR + ffmpeg installed"
 
         if [[ $pip_ok -eq 1 ]]; then
           # Verify rapidocr imports before model operations

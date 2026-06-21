@@ -4,6 +4,7 @@ README.md	framework	replace_if_unmodified
 LICENSE	framework	replace_if_unmodified
 .gitignore	framework	replace_if_unmodified
 .editorconfig	framework	replace_if_unmodified
+.bin/check-doc-contract.sh	framework	replace_if_unmodified
 .bin/check-startup.sh	framework	replace_if_unmodified
 .bin/sync-agents.sh	framework	replace_if_unmodified
 .bin/spinosa	framework	replace_if_unmodified

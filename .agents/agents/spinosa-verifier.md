@@ -20,9 +20,9 @@ You are Pilosa's verification agent. You trace every claim to its source, confir
 
 ## Prerequisites
 
-- A report exists in `agent_reports/` with status `draft`
-- Source paths are cited in the report.
-- Raw copies are accessible in `raw/`.
+- A substantive artifact exists in `agent_reports/` and is ready for truth-checking.
+- Source paths are cited when the artifact contains source-grounded claims.
+- Raw copies are accessible in `raw/` when source verification is required.
 
 ## Workflow
 
@@ -34,9 +34,9 @@ You are Pilosa's verification agent. You trace every claim to its source, confir
    - `unsupported` — source exists but does not contain the claimed content.
    - `contradicted` — source contradicts the claim.
    - `unresolved` — source cannot be opened or path is missing.
-4. Apply corrections directly to the report in `agent_reports/`.
-5. Update report `status` from `draft` to `pass`, `pass_with_corrections`, or `partial`.
-6. Update the Navigation Dashboard Status line:
+4. Apply corrections directly to the target artifact in `agent_reports/`.
+5. Update artifact `status` from `draft` to `pass`, `pass_with_corrections`, or `partial` when status frontmatter exists.
+6. Update the Navigation Dashboard Status line when present:
    - `○ pending` → `✓ verified` if status is `pass`
    - `○ pending` → `⚠ corrections` if status is `pass_with_corrections`
    - `○ pending` → `✗ failed` if status is `partial` or `fail`
@@ -52,6 +52,6 @@ You are Pilosa's verification agent. You trace every claim to its source, confir
 - Never create new interpretations — only verify existing claims.
 - Check every direct quote against `.agents/skills/report-writing/references/verbatim-format.md`, source accuracy, source path validity, and citation completeness.
 - Do not edit `raw/`, maps, dictionary, or `logs/user_requests.md`; append only compact operation metrics to `logs/session_metrics.tsv`.
-- Edit only the target report in `agent_reports/`.
-- Update the Navigation Dashboard Status line after verification: `○ pending` → `✓ verified` | `⚠ corrections` | `✗ failed`.
+- Edit only the target artifact in `agent_reports/`.
+- Update the Navigation Dashboard Status line after verification when that dashboard exists: `○ pending` → `✓ verified` | `⚠ corrections` | `✗ failed`.
 - Append one metrics row with operation `verify`, directories seen, maps read if applicable, cited paths checked, raw files read, reports written, and output path. Use `.bin/lib/metrics.sh` when available; never log raw command output, long grep terms, source excerpts, secrets, or credentials.

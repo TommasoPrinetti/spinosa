@@ -4,3 +4,6 @@ date	session_id	agent	route	operation	query_label	dirs_seen	maps_read	raw_matche
 2026-06-13	20260613-102800-fast_path	codex-orchestrator	fast_path	audit	architect-code-audit	.bin/;install.sh;.github/;tests/	0	0	0	1	agent_reports/01_architect-code-audit.md
 2026-06-13	20260613-104700-fast_path	codex-orchestrator	fast_path	implementation	architect-audit-fixes	.bin/;install.sh;.github/;tests/;agent_reports/	0	0	0	1	agent_reports/02_architect-fixes-validation.md
 2026-06-15	20260615-094914-cleanup	codex-orchestrator	cleanup	audit	ponytail-audit	.bin/;install.sh;.spinosa/;.agents/;.claude/;.codex/;.opencode/;.hermes/;dist/;.build/	0	0	0	1	agent_reports/03_ponytail-audit.md
+2026-06-17	20260617-091500-cli-tree	spinosa-searcher	cli-tree-research	search	cli-command-tree	docs/reference/;.bin/;system/;README.md	4	9	5	1	agent_reports/04_cli-command-tree-research.md
+2026-06-17	20260617-183000-diagrams	synthesis_report	synthesis	diagrams-design	architecture-diagrams	system/;docs/;.agents/;.bin/	12	18	7	1	docs/diagrams.md
+2026-06-21	20260621-080909-non-fast-path	codex-orchestrator	non-fast-path	audit	orchestrator-rewrite-audit	.agents/;docs/;logs/;agent_reports/	0	0	0	2	agent_reports/06_orchestrator-rewrite-audit.md

@@ -12,12 +12,23 @@
 
 Spinosa is a **local research framework** for AI coding agents. You give it a folder of PDFs, notes, transcripts, images, CSVs. It builds a workspace where agents can search, analyse, synthesise, and verify evidence from those sources. Every claim in a report traces back to a file you provided.
 
-Spinosa runs a chain of sub-agents (searcher, analyst, writer, verifier) to produce reports from your corpus. **No cloud, no uploads.** All document processing happens on your machine. (The LLM tool you open the workspace with may use its own API key.)
+Spinosa routes questions through a goal-driven agent system. Operational questions can stay on `fast_path`; source-grounded work goes through a frozen non-fast-path chain of artifacts and specialist agents. **No cloud, no uploads.** All document processing happens on your machine. (The LLM tool you open the workspace with may use its own API key.)
+
+## Welcome
+
+You have a folder of interviews, PDFs, field notes, reports. You need to find patterns, compare perspectives, and write evidence-backed answers. Spinosa turns those documents into a searchable workspace where AI agents find evidence, write reports, and verify every claim against your original files.
+
+| You have... | Spinosa gives you... |
+|---|---|
+| 200 PDFs from field research | A searchable workspace where agents know every file |
+| A question like "what did participants say about X?" | A report with direct quotes, source links, and confidence levels |
+| Concerns about accuracy | Every claim checked against the original file by a dedicated verifier |
+| New files later | Add them with one command and update the workspace |
 
 ## Features
 
 - **Multi-format import** — PDFs, Word docs, images (OCR), CSVs, Markdown — all converted to `.md`
-- **Sub-agent pipeline** — dedicated agents for search, analysis, writing, and verification
+- **Goal-driven orchestration** — non-fast-path work starts with a frozen goal artifact, then runs through sequential specialist agents
 - **Source-grounded reports** — every claim links back to a source file
 - **Offline-first** — all conversion and OCR runs locally
 - **Cross-platform** — macOS and Linux, bash 3.2+
@@ -28,7 +39,7 @@ Spinosa runs a chain of sub-agents (searcher, analyst, writer, verifier) to prod
 - macOS or Linux
 - An LLM CLI tool ([OpenCode](https://opencode.ai) recommended; [Gemini CLI](https://github.com/google-gemini/gemini-cli), [Qwen Code](https://github.com/QwenLM/qwen-code), [Claude Code](https://docs.anthropic.com), and [Codex CLI](https://github.com/openai/codex) also work)
 
-## Quick start
+## Quick Start
 
 ### 1. Prepare your corpus
 
@@ -53,6 +64,91 @@ spinosa new
 When onboarding finishes, the CLI prints a startup prompt.
 Copy and run it to open your workspace with your LLM tool. Then ask your questions.
 
+## Tour
+
+This is the full first-run flow from install to your first verified report.
+
+### 1. Install and point at your documents
+
+Spinosa needs the software itself and a folder with your documents.
+
+```bash
+curl -fsSL https://github.com/TommasoPrinetti/spinosa/releases/latest/download/install.sh | bash
+spinosa new
+```
+
+What you'll see:
+
+- The CLI asks you to pick your document folder
+- It asks what to call the project
+- It scans your folder and shows a summary of what it found
+
+What just happened:
+
+- Spinosa copied your files into `raw/`
+- PDFs and Office docs were converted to `.md`
+- Images went through OCR to extract text
+- A workspace configuration was created with your project name and source location
+
+When onboarding finishes, the CLI prints a startup prompt that begins with your LLM tool's command. Run it to open the workspace and start indexing.
+
+### 2. Startup and indexing
+
+Running the startup prompt kicks off the automatic setup:
+
+```text
+Phase 1: Verify onboarding completed correctly
+Phase 2: Read raw/ and build:
+         - a dictionary of names, places, and key terms
+         - navigation maps showing where topics live
+         - a workspace index of processed files
+Phase 3: Validate quotes and map coverage
+```
+
+Typical startup takes 5-30 minutes depending on corpus size. When it completes, your workspace is ready for questions.
+
+### 3. Ask a question
+
+Ask in plain language, for example:
+
+> What did the Normandy interviews say about coastal erosion?
+
+Behind the scenes, Spinosa routes the request through the right agent chain:
+
+```text
+question -> fast_path
+         or
+question -> non-fast-path -> goal artifact -> frozen sequential chain
+         -> report and audit artifacts in agent_reports/
+```
+
+Most grounded questions finish in a few minutes. Larger synthesis requests take longer.
+
+### 4. Read your report
+
+Every answer comes back as a markdown report in `agent_reports/`.
+
+Reports typically include:
+
+- A short direct answer
+- Evidence quotes with file paths and confidence levels
+- Analysis that stays separate from the raw evidence
+- Limitations and coverage gaps
+- A source list
+- A verification status such as `✓ verified`, `⚠ corrections`, or `✗ failed`
+
+## How It Works
+
+In plain English:
+
+1. Spinosa copies your documents into `raw/`, converting them to text where needed.
+2. It builds a dictionary and navigation maps so future searches know where to look.
+3. You ask a question and the orchestrator dispatches specialized agents.
+4. On non-fast-path work, it writes a goal artifact and freezes the chain before dispatch.
+5. A writer composes a report when the chain needs one.
+6. A verifier checks substantive claims back against the source files when needed.
+7. An evaluator audits the route and may trigger a tightly scoped future-facing framework edit.
+
 ## Architecture
 
 Spinosa is a two-layer system:
@@ -61,16 +157,25 @@ Spinosa is a two-layer system:
 Your corpus  ──►  raw/ (converted to .md)  ──►  maps/ (navigation index)
                                                       │
                                                       ▼
-  You  ◄──  agent_reports/  ◄──  writer  ◄──  searcher + analyst
-                                        └──  verifier
+  You  ◄──  agent_reports/
+                  ▲
+                  │
+      evaluator ◄─ verifier ◄─ writer
+                  ▲
+                  │
+         searcher / analyst / serendippo / mapper / janitor
+                  ▲
+                  │
+            goal artifact
 ```
 
 | Agent | Role |
 |---|---|
 | **Searcher** | Finds evidence in raw files and maps |
-| **Analyst** | Provides broader context and alternative framings |
-| **Writer** | Synthesises findings into reports |
-| **Verifier** | Checks claims and quotes against source files |
+| **Analyst** | Adds broader context from prior artifacts and project context |
+| **Writer** | Produces a user-facing report when the chain needs one |
+| **Verifier** | Checks substantive claims and quotes against source files |
+| **Evaluator** | Audits each non-fast-path route after Phase A |
 
 See [`system/system_architecture_map.md`](system/system_architecture_map.md) for detailed diagrams.
 
@@ -108,11 +213,17 @@ System documentation: [`system/startup.md`](system/startup.md), [`system/configu
 spinosa upgrade
 ```
 
-See [CHANGELOG.md](CHANGELOG.md) for release history.
+See the release history in GitHub Releases.
+
+## Next Steps
+
+- Read the plain-English docs in [`docs/FAQ.md`](docs/FAQ.md) and [`docs/GLOSSARY.md`](docs/GLOSSARY.md)
+- Dive into the technical reference in [`docs/reference/`](docs/reference/)
+- Explore the system diagrams in [`system/system_architecture_map.md`](system/system_architecture_map.md)
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+See the repository contribution guide if present in your branch.
 
 ## License
 

@@ -25,6 +25,9 @@ status: active
 
 # System Architecture Map
 
+> **📐 Full Mermaid diagrams now live in [`docs/diagrams.md`](../docs/diagrams.md) — 6 diagrams with GitHub-native rendering.**
+> This file remains the ASCII/agent reference. See `docs/diagrams.md` for the external-facing versions.
+
 ## Core Architecture
 
 Spinosa is a two-layer research system.

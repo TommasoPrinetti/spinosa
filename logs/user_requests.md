@@ -36,3 +36,9 @@ Short routing log for user prompts. Log the request before deciding whether to a
 | 2026-06-15 | Confirm Claude Code launch behavior with web docs | fast_path | done | official Claude Code docs confirm terminal, desktop app, and browser surfaces |
 | 2026-06-15 | Confirm Kilo Gemini Qwen launch behavior with web docs | fast_path | done | Gemini CLI and Qwen Code confirmed as terminal CLIs; Kilo not confirmed from official web results |
 | 2026-06-15 | Add Gemini and Qwen launch support to startup prompt flow | fast_path | done | launcher, docs, and smoke tests updated for gemini and qwen |
+| 2026-06-17 | Research CLI command tree — diagram type, placement, and entry-point role | evidence_answer | done | agent_reports/04_cli-command-tree-research.md |
+| 2026-06-17 | Design 6 architecture diagrams for external storytelling (system, agents, routing, topology, evidence, startup) | synthesis_report | done | docs/diagrams.md |
+| 2026-06-21 | Unify welcome, tour, and README into one canonical README | fast_path | done | README expanded; docs/WELCOME.md and docs/TOUR.md redirected |
+| 2026-06-21 | Remove welcome and tour redirect pages | fast_path | done | docs/WELCOME.md and docs/TOUR.md deleted |
+| 2026-06-21 | Add mandatory Phase B route audit and framework evolution loop | fast_path | done | orchestrator, agents, and fallback skills updated |
+| 2026-06-21 | Audit goal-driven orchestrator rewrite for crossroads and validation risks | non-fast-path | done | agent_reports/05_orchestrator-rewrite-audit-goal.md; agent_reports/06_orchestrator-rewrite-audit.md |
