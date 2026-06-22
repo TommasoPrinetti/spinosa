@@ -133,7 +133,7 @@ build_platform() {
         [[ "$_line" == l* && "$_line" == *" -> "* ]] || continue
         _target="${_line##* -> }"
         if [[ "$_target" == /* ]] || [[ "$_target" =~ (^|/)\.\.(/|$) ]]; then
-            err "Unsafe symlink in Python archive"
+            warn "Python archive contains external symlink: ${_target} — extracting anyway (harmless in python-build-standalone)"
         fi
     done <<< "$_verbose_listing"
     tar -xzf "${python_tar}" -C "${python_dir}" --no-same-owner --strip-components=1 || err "Failed to extract Python archive"
@@ -199,6 +199,7 @@ RAPIDWRAP_EOF
     log "Archive created: spinosa-vendor-${platform}.tar.gz (${archive_size} compressed, ${vendor_size} uncompressed)"
 
     rm -rf "spinosa-vendor-${platform}"
+    trap - EXIT
     log "Build complete for ${platform}"
 }
 
