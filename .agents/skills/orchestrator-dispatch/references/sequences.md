@@ -29,7 +29,7 @@ Quantitative signals may be included when useful, but they are secondary to answ
 - Choose the smallest chain that can honestly complete the request.
 - Every selected Phase A agent writes a durable artifact to `agent_reports/`.
 - The orchestrator passes file paths, not inline content, between steps.
-- The chain is strictly sequential once frozen: no parallel execution, no appended agents, no skipped later agents, and no mid-route replanning.
+- The chain is strictly sequential once frozen: no parallel execution, no appended agents, no skipped later agents, and no mid-route replanning. Exception: during startup Phase 2.2, all `spinosa-mapper` sub-agents are dispatched in a single message (one per batch). See `system/startup.md` Phase 2.2.
 - Repeated agents are allowed only when declared in the goal artifact with separate rationale lines.
 - If the route produces a user-facing answer report, Writer must produce it before Verifier.
 - Verifier is required whenever the route yields claims, citations, or quotes that need truth-checking.

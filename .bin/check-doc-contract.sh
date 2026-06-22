@@ -23,10 +23,19 @@ failures=0
 
 for file in "${targets[@]}"; do
   for pattern in "${patterns[@]}"; do
-    if rg -n --pcre2 "$pattern" "$file" >/dev/null 2>&1; then
-      echo "FAIL: $file still matches pattern: $pattern"
-      rg -n --pcre2 "$pattern" "$file" || true
-      failures=$((failures + 1))
+    if command -v rg >/dev/null 2>&1; then
+      if rg -n --pcre2 "$pattern" "$file" >/dev/null 2>&1; then
+        echo "FAIL: $file still matches pattern: $pattern"
+        rg -n --pcre2 "$pattern" "$file" || true
+        failures=$((failures + 1))
+      fi
+    else
+      # Fallback to grep -E (less precise but avoids hard dep)
+      if grep -E -n "$pattern" "$file" >/dev/null 2>&1; then
+        echo "FAIL: $file still matches pattern: $pattern (grep fallback)"
+        grep -E -n "$pattern" "$file" || true
+        failures=$((failures + 1))
+      fi
     fi
   done
 done

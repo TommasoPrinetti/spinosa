@@ -1,5 +1,5 @@
 ---
-name: pilosa-context-analysis
+name: spinosa-context-analysis
 type: skill
 scope: project_context
 description: |

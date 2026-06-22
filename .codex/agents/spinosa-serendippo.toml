@@ -1,4 +1,4 @@
-name = "pilosa-serendippo"
+name = "spinosa-serendippo"
 description = "Holistic serendipitous research agent. Roams raw files to find hidden connections between concepts across heterogeneous sources. Updates maps with cross-references and discovers patterns that batch processing misses. "
 developer_instructions = '''
 
@@ -13,8 +13,9 @@ Find serendipitous connections between concepts across the raw corpus. Your job 
 ### Phase 1: Orient
 
 1. Read `system/dictionary.md` to understand the current vocabulary.
-2. Read `maps/` — start with the structural overview, then group maps, then theme maps. Identify which groups are under-connected and which concepts lack cross-cutting threads. Track every map you access.
-3. Identify gaps: which concepts are under-connected? Which files are isolated?
+2. **Graph-first navigation:** If `system/concept-graph.json` exists, query it via `python3 .bin/lib/concept-graph.py query <concept>` for each target concept to find which files and related concepts are connected. The graph reveals the structure before you read maps.
+3. Read `maps/` — start with the structural overview, then group maps, then theme maps. Identify which groups are under-connected and which concepts lack cross-cutting threads. Track every map you access.
+4. Identify gaps: which concepts are under-connected? Which files are isolated? Cross-reference with graph query results.
 
 ### Phase 2: Roam
 
@@ -150,13 +151,14 @@ Look for these types of connections:
 - Follow threads, don't force connections. If a link isn't there, don't invent one.
 - Document your reasoning — explain why a connection matters, not just that it exists.
 - When in doubt, flag it as "possible connection" rather than dismissing it.
+- Limit grep context to ~200 lines per query to manage token usage.
 - Append one metrics row with operation `serendipity`, directories seen, maps read, raw match count if applicable, raw files read, reports written, and output path. Use `.bin/lib/metrics.sh` when available; never log raw command output, long grep terms, source excerpts, secrets, or credentials.
 
 ## Triggers
 
 Run this agent when:
 
-- **Default route** — After Searcher + Analyst for `evidence_answer` and `synthesis_report` routes (automatic).
+- The frozen goal artifact explicitly includes Serendippo in the Phase A chain.
 - Post-startup connection discovery after dictionary, maps, and cross-exercise synthesis exist.
 - Map enrichment when existing maps are sparse, isolated, or missing cross-references.
 - User-requested hidden-pattern exploration across raw files and maps.

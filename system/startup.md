@@ -16,7 +16,7 @@ updated: 2026-06-04
 
 This is the **protocol document** that defines what to do and how to do it. The **orchestrator** reads this file and executes the steps.
 Use this file when the user asks to **start the workspace** or when setup files still contain placeholders.
-Startup.md is the only authority that can mark setup complete. `.bin/check-startup.sh` is a developer-facing validation helper, not a separate user-facing setup path.
+Startup.md is the only authority that can mark setup complete. `.bin/check-startup.sh` is the canonical startup validation checker, not a separate user-facing setup path.
 
 ## What Onboarding Already Did
 
@@ -106,7 +106,7 @@ Survey [[raw/]] as the active working corpus. For each raw directory:
 1. List all files and subdirectories (skip `.DS_Store`, `AGENTS.md`, system files, empty dirs)
 2. Note file types (`.md`, `.txt`, `.csv`, `.json`, etc.), count per type, approximate date range
 3. Read a sample of raw copies to characterize the folder's content accurately
-4. Record: source types, modality, names, dates, topics, keywords, gaps, `converter_engine` (which engine produced each file), `original_format` (source file extension before conversion).
+4. Record: source types, modality, names, dates, topics, gaps, `converter_engine` (which engine produced each file), `original_format` (source file extension before conversion).
 
 Count **all** files in raw/ (not just `.md`):
 
@@ -122,11 +122,31 @@ Separately account for skipped media only from onboarding/import summaries avail
 
 **This is the core step.** One pass over the corpus that builds both the dictionary and extraction packets for navigation maps. No duplicate reading.
 
-### Step 1: Spawn batches until all files are read
+### Step 1: List and batch all files
 
-Split raw copies into batches and spawn `spinosa-mapper` sub-agents aggressively — as many as you can in parallel. Do not throttle. Spam sub-agents until every file is covered.
+Survey all files in `raw/` (skip `.DS_Store`, `AGENTS.md`, system files, empty dirs). Record the total as `TOTAL_FILES` in `workspace_index.md`. Split files into batches of 20–25, grouping by parent directory so related files stay together. Assign each batch a unique `batch_id` (`batch_001`, `batch_002`, ...). Write the batch list to `agent_reports/extraction_batch_list.md`.
 
-Each batch reads files and extracts:
+Batch size constraint: keep each batch under a token budget that fits the sub-agent's context window (roughly 30K–60K tokens per batch). Reduce batch size for dense files (PDFs, long transcripts) on a per-directory basis.
+
+### Step 2: Spawn all mapper sub-agents in parallel
+
+Spawn **all** `spinosa-mapper` sub-agents in a **single message** — one sub-agent per batch. Do not spawn sequentially. Do not wait for one batch to finish before spawning the next.
+
+```spinosa-subagent
+agent: spinosa-mapper
+batch_id: batch_001
+input: agent_reports/extraction_batch_list.md
+output: agent_reports/extraction_batch_001.md
+```
+
+```spinosa-subagent
+agent: spinosa-mapper
+batch_id: batch_002
+input: agent_reports/extraction_batch_list.md
+output: agent_reports/extraction_batch_002.md
+```
+
+Each mapper reads its assigned files and extracts:
 
 **For the dictionary:**
 
@@ -145,32 +165,54 @@ Each batch reads files and extracts:
 11. **Concept signals** (2-5): which recurring concepts appear in this file. Use dictionary canonical terms.
 12. **Connections**: which other files relate to the same concepts, as wikilinks: `[[raw/path/related_file]]`.
 
-**Multilingual rule:** Keywords must appear in the language they were found in. If a source is in French, French keywords are recorded. If in English, English keywords. If a concept appears in multiple languages, list all language variants as aliases.
+**Language rule:** Summaries must be written in the source document's language. If a source is in French, the summary is in French. If in English, the summary is in English. If a source is multilingual, choose the dominant language and note the mix in the summary.
 
-### Step 2: Accumulate results
+Each mapper writes to its own file `agent_reports/extraction_batch_{batch_id}.md` — no shared state, no locks. Results are self-contained and mergeable.
 
-After each batch completes:
-1. Merge dictionary terms into the master dictionary
-2. Append extraction packets to `agent_reports/extraction_checkpoint.md`
-3. Update `workspace_index.md` "Extraction Progress" section
-4. Track: `files_read / TOTAL_FILES`
-5. Note which natural groups are emerging from the summaries
+Metrics checkpoint: every mapper must append one compact row to `logs/session_metrics.tsv` after writing its extraction batch. After all mappers return, verify that each expected `batch_id` has a corresponding metrics row. Missing rows are process warnings and must be named in the startup report, but they do not invalidate completed extraction content by themselves.
 
-**Note**: sub-agents are preferred to write directly into .md files to keep their knowledge anchored.
+### Step 3: Collect and merge
 
-**Arrival metric:** `files_read == TOTAL_FILES`. Continue spawning batches until every file has been read by at least one sub-agent.
+After all sub-agents return, read every `agent_reports/extraction_batch_*.md` file:
 
-### Step 3: Finalize dictionary
+1. Merge all dictionary terms into the master dictionary (dedup by canonical form, union source files)
+2. Append all extraction packets to `agent_reports/extraction_checkpoint.md`
+3. Update `workspace_index.md` "Extraction Progress" section: `files_read == TOTAL_FILES`
+
+No per-batch accumulation loop. One merge pass after all parallel batches complete.
+
+**Arrival metric:** All sub-agents returned with results and `files_read == TOTAL_FILES` in the checkpoint.
+
+Extraction-batch validation:
+- Every extraction batch has valid `type: extraction_batch` frontmatter, its assigned `batch_id`, `files_processed`, and `created`.
+- Every processed file has path, source type, language, summary, key passages with line references, concept signals, and connections.
+- Key passages that quote or closely paraphrase a raw source use `[[raw/path/file]]` followed by `L<n>` or `L<n>-L<n>`.
+
+### Step 4: Write per-file summaries into YAML headers
+
+After all extraction batches complete, write a short `summary` into each raw file's YAML frontmatter (see [[yaml_header_template]]). The summary must be 4 lines max and capture the key areas and concepts of the document.
+
+Spawn a **summarizer sub-agent** for this batch work, using a smaller/cheaper model when available (e.g., a quantized or lightweight variant configured in the LLM CLI). The summarizer reads each file, condenses the extraction summary into 4 lines, and writes the `summary` field directly into the file's YAML header.
+
+This replaces the old automated keyword/concept extraction — summaries are written by an LLM, not by a keyword algorithm.
+
+### Step 5: Finalize dictionary
 
 Write [[dictionary]] with accumulated canonical forms, aliases, explicit source terms, inferred concepts, uncertain terms, machine artifacts, languages, and source file references.
 
-### Step 4: Enrich context
+### Step 6: Build concept graph
+
+After the dictionary is finalized, run `python3 .bin/lib/concept-graph.py build` to construct a concept graph from the dictionary terms and extraction batch files. Output goes to `system/concept-graph.json`. The graph enables the searcher agent to jump from a concept to all related files in one hop instead of grepping.
+
+### Step 7: Enrich context
 
 Use accumulated evidence to enrich [[context]]:
 
 - **Methods**: Observe what the raw copies actually contain. Infer the research methods.
 - **Source universe**: List the actual source types found, their languages, and approximate date ranges.
 - **Research vocabulary**: Extract key actors, institutions, places, and concepts that appear repeatedly.
+
+Optional transcript guidance: when diarization or ASR artifacts exist, preserve machine speaker labels in `machine_artifacts` until a reliable speaker map exists. If speaker mapping is verified, record the mapping status in source metadata or the relevant map. If it is not verified, keep the labels quarantined and list the uncertainty in the startup report.
 
 ## 2.4 Write Navigation Maps
 
@@ -202,6 +244,8 @@ For each natural group:
 - 2-4 sentence description of what the group contains (synthesized from per-file summaries)
 - File count
 - Key file pointers as wikilinks (3-5 files that best represent the group)
+
+Participant multi-page guidance: when one participant, worksheet, or transcript spans multiple files or pages, link the most specific page/file when a passage depends on that page. If the point refers to the whole participant folder or dossier, use a directory/folder-level description plus the most representative file links available.
 
 ### Step 3: Write Group Maps
 
@@ -314,16 +358,18 @@ Coverage counts must be exact.
 
 ## 2.9 Validate
 
-Before reporting startup complete, run validation.
+Before reporting startup complete, run validation. Run `.bin/check-startup.sh` during this phase and treat it as the canonical automated checker for startup structure, YAML shape, wikilink resolution, and key-passage line references.
 
 Map validation:
 - Structural overview exists at maps/ root (excluding AGENTS.md, map_template.md)
 - At least one group map exists (may be the overview itself for flat/small corpora)
 - Each group map has "What this group is about" section
 - Each group map has "Recurring concepts" section with key passages
-- Key passages include file paths and line references
+- Key passages include file paths and line references. Quoted or close-paraphrase raw wikilinks must be followed by `L<n>` or `L<n>-L<n>`; omission is a validation failure.
 - Theme maps exist for concepts spanning multiple groups (skip check if single group)
-- All wikilinks resolve to existing files
+- All wikilinks resolve to existing files. Use `.bin/check-startup.sh` as the exhaustive wikilink-resolution checker.
+- Transcript speaker mappings are verified when diarization/ASR artifacts exist, or otherwise reported as an explicit warning.
+- Optional exercise inventory is present when participant worksheets/exercises need cross-page navigation, or otherwise reported as a warning.
 
 Retrieval tests:
 
@@ -337,6 +383,8 @@ Retrieval tests:
 Startup is complete **only if** all applicable retrieval tests pass.
 
 After validation passes, replace `setup_status: cli_started` with `setup_status: workspace_started` in [[context]] and [[configuration]].
+
+After the startup report has recorded validation results, move process-only extraction batch files (`agent_reports/extraction_batch_*.md`, extraction appendices, and intermediate checkpoints that are no longer needed for active recovery) to `.trash/`. Keep final startup reports, dictionary, workspace index, concept graph, and maps in place.
 
 ## 2.10 Idempotency And Recovery
 
@@ -388,37 +436,51 @@ last_updated: YYYY-MM-DD
 
 ### Progress Display
 
-After each batch, update `workspace_index.md` "Extraction Progress" section:
+After all batches return, update `workspace_index.md` "Extraction Progress" section:
 
 ```markdown
 ## Extraction Progress
 
 - Total files: 925
-- Files read: 150
-- Remaining: 775
-- Last batch: Ex0/COHORT2 (15 files)
-- Status: in_progress
+- Files read: 925
+- Batches dispatched: 37
+- Status: complete
 ```
 
 ### Resume On Restart
 
 If startup is interrupted:
-1. Read `agent_reports/extraction_checkpoint.md`
-2. Count `files_read` vs `total_files`
-3. Resume spawning batches from where we stopped
-4. Skip files already in the "Processed Files" table
+1. Read `agent_reports/extraction_batch_list.md`
+2. List `agent_reports/extraction_batch_*.md` to find completed batches
+3. Re-spawn only missing batches (same batch_id, same file list)
+4. Skip batches whose output file already exists
 
 ### Arrival Metrics Summary
 
 | Phase | Arrival Metric | How to Check |
 |---|---|---|
-| Dictionary + extraction (2.2) | `files_read == total_files` | checkpoint file |
+| Dictionary + extraction (2.2) | All sub-agents returned; `files_read == total_files` | extraction batch list + batch files |
+| YAML summary field (2.2 Step 4) | Every raw file has 4-line max `summary` in YAML header | `head -20 raw/** | grep "^summary:"` |
+| Concept graph (2.2 Step 6) | `system/concept-graph.json` exists with > 0 nodes | `python3 -c "import json; d=json.load(open('system/concept-graph.json')); print(len(d['nodes']))"` |
 | Structure identification (2.4 Step 1) | Natural groups identified from extraction (or single group for flat/small corpora) | extraction batches |
 | Structural overview (2.4 Step 2) | One overview map at maps/ root | `ls maps/*.md` excluding AGENTS.md, map_template.md |
 | Group maps (2.4 Step 3) | One .md per natural group (may equal overview for flat/small corpora) | `ls maps/<subdirectory>/*.md` or `maps/corpus_overview.md` |
 | Theme maps (2.4 Step 4) | Theme .md for each cross-group concept (skip if no cross-cutting themes) | `ls maps/<subdirectory>/*.md` |
 | Coverage (2.4 Step 5) | Every file in checkpoint appears in >=1 map | grep file paths in maps/ |
 | Accuracy (2.4 Step 6) | >=4/5 spot-checked passages accurate | startup report |
+| Startup validation (2.9) | `.bin/check-startup.sh` passes or reports only documented warnings | `.bin/check-startup.sh` |
+
+### Metrics Checkpoints
+
+Use `logs/session_metrics.tsv` for compact process accountability during startup:
+
+- After mapper completion, confirm one `map_extract` row per extraction batch.
+- After map writing, confirm a `map_write` row for the map output.
+- After verifier completion, confirm a `verify` row for the checked startup report or validation artifact.
+- After evaluator completion, confirm an `evaluate` row for the post-route audit.
+- After targeted validation, confirm a validation row or record the manual validation command in the startup report.
+
+Missing metrics rows are process warnings. They must be listed in the startup report and post-route audit, but they do not by themselves invalidate otherwise verified source extraction.
 
 ---
 

@@ -26,13 +26,12 @@ FRAMEWORK_ROOT="$(dirname "$SCRIPT_DIR")"
 VENDOR_BASE="${FRAMEWORK_ROOT}/.bin/lib/vendor"
 MARKITDOWN_CLI="${FRAMEWORK_ROOT}/.bin/lib/markitdown-cli.py"
 RAPIDOCR_CLI="${FRAMEWORK_ROOT}/.bin/lib/rapidocr-cli.py"
-YAKE_CLI="${FRAMEWORK_ROOT}/.bin/lib/yake-cli.py"
 
 PYTHON_VERSION="3.11.15"
 PYTHON_BUILD_VERSION="20260602"
 
 R=$'\033[31m' G=$'\033[32m' Y=$'\033[33m'
-BOLD=$'\033[1m' DIM=$'\033[2m' RESET=$'\033[0m'
+RESET=$'\033[0m'
 
 log() { printf '  %s %s\n' "${G}✓${RESET}" "$*"; }
 warn() { printf '  %s %s\n' "${Y}⚠${RESET}" "$*"; }
@@ -90,9 +89,13 @@ build_platform() {
     rm -rf "${vendor_dir}"
     mkdir -p "${vendor_dir}"
 
-    local python_url python_tar
+    local python_url python_tar python_checksums
     python_url="$(get_python_url "$platform")"
-    python_tar="$(mktemp /tmp/python-standalone-${platform}-XXXXXX.tar.gz)"
+    python_tar="$(mktemp "${TMPDIR:-/tmp}/python-standalone-${platform}-XXXXXX.tar.gz")"
+    python_checksums="$(mktemp "${TMPDIR:-/tmp}/python-checksums-${platform}-XXXXXX.txt")"
+
+    # Ensure temps are removed on exit from this build
+    trap 'rm -f "$python_tar" "$python_checksums" 2>/dev/null || true' EXIT
 
     log "Downloading standalone Python..."
     curl -L --retry 3 --retry-delay 5 -o "${python_tar}" "${python_url}" || err "Failed to download Python"
@@ -100,8 +103,6 @@ build_platform() {
     # Verify Python standalone checksum
     local python_checksums_url
     python_checksums_url="https://github.com/astral-sh/python-build-standalone/releases/download/${PYTHON_BUILD_VERSION}/SHA256SUMS"
-    local python_checksums
-    python_checksums="$(mktemp /tmp/python-checksums-${platform}-XXXXXX.txt)"
     if curl -fsSL "$python_checksums_url" -o "$python_checksums" 2>/dev/null; then
       local _expected_hash
       _expected_hash="$(grep "$(basename "$python_url" | sed 's/%2B/+/')" "$python_checksums" 2>/dev/null | awk '{print $1}')"
@@ -115,7 +116,6 @@ build_platform() {
       else
         warn "Python standalone not found in checksums — skipping verification"
       fi
-      rm -f "$python_checksums"
     else
       warn "Could not download Python checksums — skipping verification"
     fi
@@ -137,7 +137,7 @@ build_platform() {
         fi
     done <<< "$_verbose_listing"
     tar -xzf "${python_tar}" -C "${python_dir}" --no-same-owner --strip-components=1 || err "Failed to extract Python archive"
-    rm "${python_tar}"
+    # temp tar cleaned by trap on EXIT
 
     # Clean macOS metadata files from extraction
     find "$vendor_dir" -name ".DS_Store" -delete 2>/dev/null || true
@@ -153,7 +153,6 @@ build_platform() {
     log "Copying CLI wrappers..."
     cp "${MARKITDOWN_CLI}" "${vendor_dir}/markitdown-cli.py"
     cp "${RAPIDOCR_CLI}" "${vendor_dir}/rapidocr-cli.py"
-    cp "${YAKE_CLI}" "${vendor_dir}/yake-cli.py"
 
     # Create markitdown-cli bash launcher
     cat > "${vendor_dir}/markitdown-cli" << 'MDWRAP_EOF'
@@ -188,23 +187,6 @@ fi
 exec "${PYTHON_BIN}" "${SCRIPT_DIR}/rapidocr-cli.py" "$@"
 RAPIDWRAP_EOF
     chmod +x "${vendor_dir}/rapidocr-cli"
-
-    # Create yake-cli bash launcher
-    cat > "${vendor_dir}/yake-cli" << 'YKWRAP_EOF'
-#!/usr/bin/env bash
-# YAKE CLI wrapper for Spinosa
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PYTHON_BIN="${SCRIPT_DIR}/python/bin/python3"
-if [[ ! -x "${PYTHON_BIN}" ]]; then
-    PYTHON_BIN="${SCRIPT_DIR}/Python.framework/Versions/Current/bin/python3"
-fi
-if [[ ! -x "${PYTHON_BIN}" ]]; then
-    echo "ERROR: Bundled Python not found in ${SCRIPT_DIR}/python/" >&2
-    exit 1
-fi
-exec "${PYTHON_BIN}" "${SCRIPT_DIR}/yake-cli.py" "$@"
-YKWRAP_EOF
-    chmod +x "${vendor_dir}/yake-cli"
 
     # Package
     log "Creating archive..."

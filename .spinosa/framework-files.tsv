@@ -10,9 +10,9 @@ LICENSE	framework	replace_if_unmodified
 .bin/spinosa	framework	replace_if_unmodified
 .bin/AGENTS.md	framework	replace_if_unmodified
 .bin/lib/metrics.sh	framework	replace_if_unmodified
+.bin/lib/concept-graph.py	framework	replace_if_unmodified
 .bin/lib/rapidocr-cli.py	framework	replace_if_unmodified
 .bin/lib/markitdown-cli.py	framework	replace_if_unmodified
-.bin/lib/yake-cli.py	framework	replace_if_unmodified
 .bin/lib/CONVERTER_PROTOCOL.md	framework	replace_if_unmodified
 .bin/build-spinosa-vendor.sh	framework	replace_if_unmodified
 .spinosa/retired-framework-files.tsv	framework	replace_if_unmodified

@@ -87,7 +87,7 @@ for canonical in "$REPO_ROOT/.agents/agents/"*.md; do
             # Skip list items (lines starting with spaces + dash)
             [[ "$line" =~ ^[[:space:]]*-[[:space:]] ]] && continue
             # Extract key: value pairs
-            if [[ "$line" =~ ^[[:space:]]*([a-z]+):[[:space:]]*(.*) ]]; then
+            if [[ "$line" =~ ^[[:space:]]*([a-z_]+):[[:space:]]*(.*) ]]; then
                 key="${BASH_REMATCH[1]}"
                 value="${BASH_REMATCH[2]}"
                 [ -z "$value" ] && value="allow"
@@ -116,6 +116,7 @@ for canonical in "$REPO_ROOT/.agents/agents/"*.md; do
                         read|grep|glob) oc_perms="$oc_perms  $key: $val"$'\n' ;;
                         write)          oc_perms="$oc_perms  edit: $val"$'\n' ;;
                         move)           oc_perms="$oc_perms  bash: $val"$'\n' ;;
+                        grep_context)   ;;
                     esac
                 done
                 cat > "$dest_dir/$agent_file" << OPENCODE_EOF
@@ -138,6 +139,8 @@ OPENCODE_EOF
                     spinosa-analyst)     claude_tools="Read" ;;
                     spinosa-writer)      claude_tools="Read, Write" ;;
                     spinosa-verifier)    claude_tools="Read, Grep, Glob, Write" ;;
+                    spinosa-evaluator)   claude_tools="Read, Grep, Glob, Write" ;;
+                    spinosa-evolver)     claude_tools="Read, Grep, Glob, Write" ;;
                     spinosa-janitor)     claude_tools="Read, Grep, Glob, Write" ;;
                     spinosa-mapper)      claude_tools="Read, Write" ;;
                     spinosa-serendippo)  claude_tools="Read, Grep, Glob, Write" ;;
@@ -154,7 +157,8 @@ $(awk 'BEGIN{fm=0} /^---$/ && fm < 2 {fm++; next} fm == 2' "$canonical")
 CLAUDE_EOF
                 ;;
             .codex)
-                local body_content="$(awk 'BEGIN{fm=0} /^---$/ && fm < 2 {fm++; next} fm == 2' "$canonical")"
+                local body_content
+                body_content="$(awk 'BEGIN{fm=0} /^---$/ && fm < 2 {fm++; next} fm == 2' "$canonical")"
                 local esc_name esc_desc
                 esc_name="$(printf '%s' "$name" | sed 's/\\/\\\\/g; s/"/\\"/g')"
                 esc_desc="$(printf '%s' "$description" | sed 's/\\/\\\\/g; s/"/\\"/g')"

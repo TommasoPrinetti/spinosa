@@ -101,6 +101,17 @@ spinosa_metrics_append() {
   mkdir -p "$(dirname "$ledger")"
   [[ -f "$ledger" ]] || spinosa_metrics_header > "$ledger"
 
+  # Portable advisory lock using mkdir (works on macOS + Linux, no flock required)
+  local lockdir="${ledger}.lockdir"
+  local locked=0
+  for _ in 1 2 3 4 5; do
+    if mkdir "$lockdir" 2>/dev/null; then
+      locked=1
+      break
+    fi
+    sleep 0.1
+  done
+
   {
     spinosa_tsv_field "$(date +%Y-%m-%d)"
     for field in "$@"; do
@@ -109,6 +120,10 @@ spinosa_metrics_append() {
     done
     printf '\n'
   } >> "$ledger"
+
+  if [[ $locked -eq 1 ]]; then
+    rmdir "$lockdir" 2>/dev/null || true
+  fi
 }
 
 spinosa_metrics_summary() {

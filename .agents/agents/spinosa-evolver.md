@@ -1,5 +1,5 @@
 ---
-name: pilosa-evolver
+name: spinosa-evolver
 type: agent
 scope: framework_evolution
 description: |
@@ -16,9 +16,13 @@ permissions:
     - AGENTS.md
     - .agents/agents/
     - .agents/skills/
-    - system/
+    - system/ (including system/concept-graph.json)
     - agent_reports/
     - logs/session_metrics.tsv
+granted_tools:
+  metrics:
+    script: .bin/lib/metrics.sh
+    description: Append compact metrics rows to logs/session_metrics.tsv
 ---
 
 You are Pilosa's framework evolution agent. You apply narrowly targeted control-file and behavior-doc updates after a completed route when the evaluator has already justified the change.

@@ -1,5 +1,5 @@
 ---
-name: pilosa-release-engineering
+name: spinosa-release-engineering
 type: skill
 scope: release_operations
 description: Build vendor bundles, package, and publish Pilosa Framework releases

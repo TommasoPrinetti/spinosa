@@ -1,5 +1,5 @@
 ---
-name: pilosa-report-writing
+name: spinosa-report-writing
 type: skill
 scope: report_synthesis
 description: |

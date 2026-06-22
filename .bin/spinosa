@@ -8,14 +8,11 @@ set -euo pipefail
 ORIGINAL_ARGS=("$@")
 
 # ── spinosa — CLI entry point ────────────────────────────────────────────────
-# Usage: spinosa [new|prepare|update|check|sync|uninstall|help]
+# Usage: spinosa [new|upgrade|uninstall|help]
 #
 # Commands:
 #   new       Create a new Spinosa workspace and run setup
-#   prepare   Set up an existing workspace
-#   update    Update workspace files from a release
-#   check     Check workspace structure and settings
-#   sync      Sync helpers from original sources
+#   upgrade   Upgrade Spinosa CLI to latest release
 #   uninstall Remove Spinosa from this system
 #   help      Show this help
 
@@ -62,6 +59,8 @@ NATIVE_EXTENSIONS="md"
 BINARY_COPYABLE_EXTENSIONS=""
 # Engine: markitdown — convert Office docs, EPUB, HTML, ZIP, and text-based PDFs to .md
 MARKITDOWN_EXTENSIONS="docx|pptx|xlsx|xls|epub|html|htm|msg|zip|json|csv|xml"
+IMAGE_EXTENSIONS="jpg|jpeg|png|gif|webp|heic|heif|tif|tiff|bmp|svg"
+AUDIO_VIDEO_EXTENSIONS="mp4|mov|m4v|avi|mkv|webm|wmv|mp3|wav|m4a|aac|flac|ogg|opus|aiff"
 OPTION_SEP=$'\t'
 
 # Resolve framework root:
@@ -309,8 +308,12 @@ join_by() {
 
 ask() {
   local prompt="$1" default="${2:-}" hint="${3:-}"
-  local fb=""
-  [[ -n "$default" ]] && fb=" ${DIM}(${default})${RESET}"
+  local fb="" default_display=""
+  if [[ -n "$default" ]]; then
+    default_display="$default"
+    [[ "$default" == */* ]] && default_display="$(display_path "$default")"
+    fb=" ${DIM}(${default_display})${RESET}"
+  fi
   [[ -n "$hint" ]] && printf '  %s %s\n' "${DIM}↳${RESET}" "$hint" >&2
   printf '%s' "${BOLD}${prompt}${RESET}${fb}${DIM}: ${RESET}" >&2
   local reply
@@ -319,6 +322,7 @@ ask() {
     IFS= read -r reply || reply=""
   fi
   reply="${reply:-$default}"
+  redraw_long_path_reply "$prompt" "$fb" "$reply"
   echo "$reply"
 }
 
@@ -430,7 +434,7 @@ arrow_select() {
   }
 
   printf '\n  %s\n' "${BOLD}${prompt}${RESET}" >&2
-  printf '  %s\n' "${DIM}↑/↓ to move, Enter to confirm, q to cancel${RESET}" >&2
+  printf '  %s\n' "${DIM}↑/↓ to move, Enter to confirm, Esc/q to cancel${RESET}" >&2
   render_arrow_options
 
   if ! stty raw -echo 2>/dev/null; then
@@ -450,6 +454,12 @@ arrow_select() {
           seq+="$part"
           [[ ${#seq} -ge 2 ]] && break
         done
+        if [[ -z "$seq" ]]; then
+          # bare Esc → cancel
+          cleanup_arrow
+          printf '\n  Cancelled.\n' >&2
+          return 1
+        fi
         case "$seq" in
           '[A'|'OA') current=$(( (current + count - 1) % count )) ;;
           '[B'|'OB') current=$(( (current + 1) % count )) ;;
@@ -531,7 +541,7 @@ multi_select_menu() {
 
   while true; do
     printf '%s\n' "${BOLD}${prompt}${RESET}" >&2
-    printf '  %s\n' "${DIM}Toggle file types, then continue with the selected batches.${RESET}" >&2
+    printf '  %s\n' "${DIM}Toggle file types, then continue with the selected batches. (Esc to cancel)${RESET}" >&2
     local i option value
     for i in "${!options[@]}"; do
       option="${options[$i]}"
@@ -644,7 +654,7 @@ multi_arrow_select() {
   }
 
   printf '\n  %s\n' "${BOLD}${prompt}${RESET}" >&2
-  printf '  %s\n' "${DIM}↑/↓ to move, Space to select, Enter to continue, q to cancel${RESET}" >&2
+  printf '  %s\n' "${DIM}↑/↓ to move, Space to toggle, Enter to proceed (continue), Esc/q to cancel${RESET}" >&2
   render_multi_arrow_rows
 
   if ! stty raw -echo 2>/dev/null; then
@@ -664,6 +674,12 @@ multi_arrow_select() {
           seq+="$part"
           [[ ${#seq} -ge 2 ]] && break
         done
+        if [[ -z "$seq" ]]; then
+          # bare Esc → cancel
+          cleanup_multi_arrow
+          printf '\n  Cancelled.\n' >&2
+          return 1
+        fi
         case "$seq" in
           '[A'|'OA') current=$(( (current + total_rows - 1) % total_rows )) ;;
           '[B'|'OB') current=$(( (current + 1) % total_rows )) ;;
@@ -852,45 +868,6 @@ release_dir_version() {
     return
   fi
   basename "$release_dir" | sed 's/^v//'
-}
-
-prepare_release_framework() {
-  local requested_version="$1" release_dir="$2" tmpdir="$3"
-  local version archive_name archive_path checksums_path expected framework_dir
-
-  if [[ -n "$release_dir" ]]; then
-    version="$(release_dir_version "$release_dir" "$requested_version")"
-  elif [[ "$requested_version" == "latest" ]]; then
-    version="$(resolve_latest_release_version)"
-  else
-    version="$requested_version"
-  fi
-
-  archive_name="spinosa-framework-${version}.tar.gz"
-  archive_path="${tmpdir}/${archive_name}"
-  checksums_path="${tmpdir}/checksums.txt"
-
-  if [[ -n "$release_dir" ]]; then
-    [[ -f "${release_dir}/${archive_name}" ]] || die "Release archive not found: ${release_dir}/${archive_name}"
-    [[ -f "${release_dir}/checksums.txt" ]] || die "Release checksums not found: ${release_dir}/checksums.txt"
-    cp "${release_dir}/${archive_name}" "$archive_path"
-    cp "${release_dir}/checksums.txt" "$checksums_path"
-  else
-    local base_url="${SPINOSA_RELEASE_BASE_URL:-https://github.com/${SPINOSA_REPO}/releases/download/v${version}}"
-    printf '\n' >&2
-    info "Downloading framework v${version}..."
-    download_file "${base_url}/${archive_name}" "$archive_path"
-    download_file "${base_url}/checksums.txt" "$checksums_path"
-  fi
-
-  expected="$(awk -v f="$archive_name" '$2 == f { print $1; exit }' "$checksums_path")"
-  [[ -n "$expected" ]] || die "${archive_name} not found in checksums.txt"
-  verify_checksum "$archive_path" "$expected"
-
-	  safe_untar "$archive_path" "$tmpdir"
-  framework_dir="${tmpdir}/spinosa-framework-${version}"
-  [[ -f "${framework_dir}/.spinosa/framework-files.tsv" ]] || die "Release manifest missing from archive"
-  printf '%s\t%s\n' "$version" "$framework_dir"
 }
 
 copy_to_clipboard() {
@@ -1228,11 +1205,62 @@ markdown_raw_rel_path() {
 
 truncate_display_path() {
   local value="$1" max_len="$2"
+  local name stripped first prefix candidate available
   if (( ${#value} <= max_len )); then
-    echo "$value"
-  else
-    echo "...${value:$((${#value} - max_len + 3))}"
+    printf '%s\n' "$value"
+    return
   fi
+
+  if [[ "$value" != */* ]]; then
+    if (( max_len <= 3 )); then
+      printf '%.*s\n' "$max_len" "$value"
+    else
+      printf '...%s\n' "${value:$((${#value} - max_len + 3))}"
+    fi
+    return
+  fi
+
+  name="$(basename "$value")"
+  if [[ "$value" == /* ]]; then
+    stripped="${value#/}"
+    first="${stripped%%/*}"
+    prefix="/$first"
+  else
+    first="${value%%/*}"
+    prefix="$first"
+  fi
+
+  candidate="${prefix}/.../${name}"
+  if (( ${#candidate} <= max_len )); then
+    printf '%s\n' "$candidate"
+    return
+  fi
+
+  available=$((max_len - ${#prefix} - 5))
+  if (( available >= 6 )); then
+    printf '%s/.../%s\n' "$prefix" "${name:$((${#name} - available))}"
+  elif (( max_len <= 3 )); then
+    printf '%.*s\n' "$max_len" "$value"
+  else
+    printf '...%s\n' "${value:$((${#value} - max_len + 3))}"
+  fi
+}
+
+display_path() {
+  local value="$1" max_len="${2:-}"
+  if [[ -z "$max_len" ]]; then
+    max_len=$((COLS > 110 ? 92 : (COLS > 72 ? COLS - 24 : 48)))
+  fi
+  truncate_display_path "$value" "$max_len"
+}
+
+redraw_long_path_reply() {
+  local prompt="$1" fb="$2" reply="$3" display
+  [[ -t 0 && -t 2 ]] || return 0
+  [[ "$reply" == */* ]] || return 0
+  display="$(display_path "$reply")"
+  [[ "$display" != "$reply" ]] || return 0
+  printf '\033[1A\r\033[2K%s%s\n' "${BOLD}${prompt}${RESET}${fb}${DIM}: ${RESET}" "$display" >&2
 }
 
 plural_count() {
@@ -1377,7 +1405,7 @@ selected_copy_count() {
   for i in "${!IMPORT_BATCH_EXTENSIONS[@]}"; do
     ext="${IMPORT_BATCH_EXTENSIONS[$i]}"
     if import_extension_selected "$ext"; then
-      if ! ext_in_list "$ext" "$IMAGE_EXTENSIONS" && ! ext_in_list "$ext" "$MARKITDOWN_EXTENSIONS"; then
+      if [[ "$ext" != "pdf" ]] && ! ext_in_list "$ext" "$IMAGE_EXTENSIONS" && ! ext_in_list "$ext" "$MARKITDOWN_EXTENSIONS"; then
         total=$((total + IMPORT_BATCH_COUNTS[$i]))
       fi
     fi
@@ -1549,7 +1577,7 @@ print_onboarding_preflight() {
   [[ -w "$raw_dir" ]] || die "Workspace raw/ directory is not writable: $raw_dir"
 
   info "Environment preflight"
-  ok "Workspace writable: ${BOLD}${root}${RESET}"
+  ok "Workspace writable: ${BOLD}$(display_path "$root")${RESET}"
   repair_vendor_tools
   if rapidocr_ocr_available; then
     ok "${M}OCR${RESET} RapidOCR available for scanned PDFs and images"
@@ -1561,18 +1589,7 @@ print_onboarding_preflight() {
   else
     note_wilted "MarkItDown not available — Office docs, EPUB, HTML, and text-based PDFs will be skipped."
   fi
-  if yake_available; then
-    ok "${C}YAKE${RESET} available for keyword extraction"
-  else
-    note_wilted "YAKE not available — keyword extraction will be skipped."
-  fi
-  if [[ "${FLAG_NO_COMPRESS:-0}" -eq 1 ]]; then
-    note "Audio/video compression disabled (--no-compress)"
-  elif ffmpeg_available; then
-    ok "${G}ffmpeg${RESET} available for audio/video compression"
-  else
-    note_wilted "ffmpeg not available — audio/video will be copied uncompressed."
-  fi
+  note "Audio and video files are copied unchanged when selected."
 
   free_bytes="$(available_disk_bytes "$root")"
   if [[ "$free_bytes" -gt 0 ]]; then
@@ -1600,16 +1617,16 @@ render_copy_progress() {
 }
 
 render_ocr_progress() {
-  local processed="$1" total="$2" converted="$3" skipped="$4" current_file="${5:-}" page_info="${6:-}"
+  local processed="$1" total="$2" converted="$3" skipped="$4" current_file="${5:-}" page_info="${6:-}" ext_tag="${8:-}"
   local width=$((COLS > 60 ? 28 : (COLS-36 > 10 ? COLS-36 : 10))) filled=0 bar="" i
   [[ "$total" -gt 0 ]] && filled=$((processed * width / total))
   for ((i = 0; i < width; i++)); do
     if (( i < filled )); then bar+="█"; else bar+="░"; fi
   done
-  current_file="$(truncate_display_path "$current_file" 44)"
+  current_file="$(truncate_display_path "$current_file" 40)"
   local page_label=""
   [[ -n "$page_info" ]] && page_label=" (page ${page_info})"
-  printf '\r\033[2K  %s%s%s %s[%s]%s %d/%d %s%s (%d converted, %d skipped)' "${M}" "$(spinner_frame "${7:-$processed}")" "${RESET}" "${M}" "$bar" "${RESET}" "$processed" "$total" "$current_file" "$page_label" "$converted" "$skipped" >&2
+  printf '\r\033[2K  %s%s%s %s[%s]%s %d/%d %s%s%s (%d converted, %d skipped)' "${M}" "$(spinner_frame "${7:-$processed}")" "${RESET}" "${M}" "$bar" "${RESET}" "$processed" "$total" "$current_file" "$ext_tag" "$page_label" "$converted" "$skipped" >&2
 }
 
 # ── Cloud-aware file copy ─────────────────────────────────────────
@@ -1638,16 +1655,15 @@ is_cloud_storage_path() {
 
 copy_source() {
   local source_path="$1" dest_dir="$2"
-  local total_files
+  local total_files copy_processed=0
   total_files="$(selected_copy_count)"
   [[ "$total_files" -gt 0 ]] || { warn "No copyable files found in source location."; return 1; }
 
-  local copied=0 skipped=0 failed=0 processed=0 converted=0 ocr_converted=0 ocr_skipped=0 md_converted=0 md_skipped=0 src_file rel_path raw_rel_path dest_file dest_parent
+  local copied=0 skipped=0 failed=0 processed=0 ocr_converted=0 ocr_skipped=0 md_converted=0 md_skipped=0 src_file rel_path raw_rel_path dest_file dest_parent
   local md_name md_dest
   COPY_TOTAL_COUNT="$total_files"
   COPY_COPIED_COUNT=0
   COPY_SKIPPED_COUNT=0
-  COPY_COMPRESSED_COUNT=0
   render_copy_progress 0 "$total_files" 0 0 ""
 
   while IFS= read -r -d '' src_file; do
@@ -1669,7 +1685,8 @@ copy_source() {
       fi
     fi
     processed=$((processed + 1))
-    render_copy_progress "$processed" "$total_files" "$copied" "$skipped" "$rel_path"
+    copy_processed=$((copy_processed + 1))
+    render_copy_progress "$copy_processed" "$total_files" "$copied" "$skipped" "$rel_path"
   done < <(find "$source_path" -type f -print0 2>/dev/null)
 
   while IFS= read -r -d '' src_file; do
@@ -1690,16 +1707,10 @@ copy_source() {
       fi
     fi
     processed=$((processed + 1))
-    render_copy_progress "$processed" "$total_files" "$copied" "$skipped" "$rel_path"
+    copy_processed=$((copy_processed + 1))
+    render_copy_progress "$copy_processed" "$total_files" "$copied" "$skipped" "$rel_path"
   done < <(find "$source_path" -type f -print0 2>/dev/null)
 
-  # ── Audio/Video copy/compress pass — compress with ffmpeg when available ──
-  local AUDIO_VIDEO_EXTENSIONS="mp4|mov|m4v|avi|mkv|webm|wmv|mp3|wav|m4a|aac|flac|ogg|opus|aiff"
-  local use_ffmpeg=0
-  if [[ "${FLAG_NO_COMPRESS:-0}" -eq 0 ]] && ffmpeg_available; then
-    use_ffmpeg=1
-  fi
-  COPY_FFMPEG_USED="$use_ffmpeg"
   while IFS= read -r -d '' src_file; do
     should_skip_source_file "$src_file" && continue
     local src_ext
@@ -1713,40 +1724,15 @@ copy_source() {
     if [[ -f "$dest_file" ]]; then
       skipped=$((skipped + 1))
     else
-      local did_compress=0
-      if [[ "$use_ffmpeg" -eq 1 ]]; then
-        local _ff_bin
-        _ff_bin="$(ffmpeg_bin)"
-        case "$src_ext" in
-          mp4|mov|m4v|avi|mkv|webm|wmv)
-            if "$_ff_bin" -y -i "$src_file" \
-              -vf "scale=-2:720" -c:v libx264 -crf 28 \
-              -c:a aac -b:a 128k \
-              "$dest_file" 2>/dev/null; then
-              did_compress=1
-            fi
-            ;;
-          mp3|wav|m4a|aac|flac|ogg|opus|aiff)
-            if "$_ff_bin" -y -i "$src_file" \
-              -codec:a libmp3lame -b:a 128k \
-              "$dest_file" 2>/dev/null; then
-              did_compress=1
-            fi
-            ;;
-        esac
-      fi
-      if [[ "$did_compress" -eq 0 ]]; then
-        safe_copy "$src_file" "$dest_file"
-      fi
-      if [[ -f "$dest_file" ]]; then
+      if safe_copy "$src_file" "$dest_file"; then
         copied=$((copied + 1))
-        [[ "$did_compress" -eq 1 ]] && converted=$((converted + 1))
       else
         failed=$((failed + 1))
       fi
     fi
     processed=$((processed + 1))
-    render_copy_progress "$processed" "$total_files" "$copied" "$skipped" "$rel_path"
+    copy_processed=$((copy_processed + 1))
+    render_copy_progress "$copy_processed" "$total_files" "$copied" "$skipped" "$rel_path"
   done < <(find "$source_path" -type f -print0 2>/dev/null)
 
   # ── MarkItDown conversion pass — Office docs, EPUB, HTML, text-based PDFs → .md ──
@@ -1839,7 +1825,7 @@ copy_source() {
 
           if [[ -n "$_md_bin" ]] && mkfifo "$_md_fifo" 2>/dev/null; then
             spinosa_debug_md "FIFO created — starting batch process"
-            info "Loading MarkItDown engine" >&2
+            spinner_start "Loading MarkItDown engine" >&2
             (
               printf '%s\t%s\n' SOURCE "$source_path"
               local _k
@@ -1859,28 +1845,52 @@ copy_source() {
             local _md_pid=$!
             spinosa_debug_md "MarkItDown batch spawned — pid=$_md_pid, reading fifo..."
 
-            local _md_read_exit=0
-            while IFS= read -r -t 60 _line; do
+            local _md_read_exit=0 _md_wait_status=0 _md_idle_ticks=0
+            exec 3<"$_md_fifo"
+            while true; do
+              if IFS= read -r -t 5 -u 3 _line; then
+                _md_idle_ticks=0
+              else
+                _md_read_exit=$?
+                if kill -0 "$_md_pid" 2>/dev/null; then
+                  if [[ -n "$_md_current_rel" ]]; then
+                    local _md_active_idx=$((md_idx < md_total ? md_idx + 1 : md_total))
+                    _md_idle_ticks=$((_md_idle_ticks + 1))
+                    render_ocr_progress "$_md_active_idx" "$md_total" "$md_converted" "$md_skipped" "$_md_current_rel" "${_md_page:-}" "$((md_idx + _md_idle_ticks))" "$_md_current_ext"
+                  fi
+                  continue
+                fi
+                break
+              fi
               [[ -n "${_line//$'\t'/}" ]] || { spinosa_debug_md "EMPTY fifo line, skipping"; continue; }
               local _type="${_line%%$'\t'*}"
               case "$_type" in
                 BEGIN)
                   _md_current_rel="${_line#BEGIN$'\t'}"
+                  _md_current_ext="$(file_ext "$_md_current_rel")"
+                  [[ -n "$_md_current_ext" ]] && _md_current_ext=" [.${_md_current_ext}]" || _md_current_ext=""
+                  spinner_stop >&2 2>/dev/null || true
                   _md_page=""
+                  _md_idle_ticks=0
                   spinosa_debug_md "BEGIN $_md_current_rel"
+                  local _md_active_idx=$((md_idx < md_total ? md_idx + 1 : md_total))
+                  render_ocr_progress "$_md_active_idx" "$md_total" "$md_converted" "$md_skipped" "$_md_current_rel" "" "$md_idx" "$_md_current_ext"
                   ;;
                 PROGRESS)
                   _md_page="${_line#PROGRESS$'\t'}"
-                  render_ocr_progress "$md_idx" "$md_total" "$md_converted" "$md_skipped" "$_md_current_rel" "$_md_page" "$md_idx"
+                  _md_idle_ticks=0
+                  local _md_active_idx=$((md_idx < md_total ? md_idx + 1 : md_total))
+                  render_ocr_progress "$_md_active_idx" "$md_total" "$md_converted" "$md_skipped" "$_md_current_rel" "$_md_page" "$md_idx" "$_md_current_ext"
                   ;;
                 END)
                   md_idx=$((md_idx + 1))
+                  _md_idle_ticks=0
                   local _md_rest="${_line#END$'\t'}"
                   local _md_end_status="${_md_rest%%$'\t'*}"
-                  _md_rest="${_md_rest#$_md_end_status$'\t'}"
+                  _md_rest="${_md_rest#"$_md_end_status"$'\t'}"
                   _md_current_rel="${_md_rest%%$'\t'*}"
                   local _md_end_dur _md_out_log
-                  _md_end_dur="${_md_rest#$_md_current_rel$'\t'}"
+                  _md_end_dur="${_md_rest#"$_md_current_rel"$'\t'}"
                   local _md_out_log_dir
                   _md_out_log_dir="$(dirname "$_md_current_rel")"
                   local _md_out_log_name
@@ -1916,37 +1926,37 @@ copy_source() {
                       "${_md_page:-}" \
                       "$_md_end_dur" >> "$_md_log"
                   fi
-                  render_ocr_progress "$md_idx" "$md_total" "$md_converted" "$md_skipped" "$_md_current_rel" "$_md_page" "$md_idx"
+                  render_ocr_progress "$md_idx" "$md_total" "$md_converted" "$md_skipped" "$_md_current_rel" "$_md_page" "$md_idx" "$_md_current_ext"
                   _md_page=""
                   ;;
                 *)
                   spinosa_debug_md "UNEXPECTED fifo line: $_line"
                   ;;
               esac
-            done < "$_md_fifo" || _md_read_exit=$?
-            if [[ $_md_read_exit -eq 142 ]]; then
-              warn "MarkItDown batch timed out — partial results may be available"
-              kill "$_md_pid" 2>/dev/null || true
-              [[ -z "${_md_fifo_dir:-}" ]] || rm -rf "$_md_fifo_dir" 2>/dev/null || true
-            fi
+            done
+            exec 3<&-
             spinosa_debug_md "FIFO read complete — waiting for batch process (pid=$_md_pid)..."
-            wait "$_md_pid" 2>/dev/null
-            spinosa_debug_md "Batch process finished — exit=$?"
+            wait "$_md_pid" 2>/dev/null || _md_wait_status=$?
+            spinosa_debug_md "Batch process finished — exit=${_md_wait_status}"
+            if [[ "$_md_wait_status" -ne 0 ]]; then
+              warn "MarkItDown exited with status ${_md_wait_status} — partial results may be available"
+            fi
             rm -f "$_md_fifo"
           elif [[ -n "$_md_bin" ]]; then
+            spinner_stop >&2 2>/dev/null || true
             warn "Could not create MarkItDown FIFO — skipped"
             for _r in "${_md_process_rel[@]}"; do
               md_idx=$((md_idx + 1))
               skipped=$((skipped + 1))
               md_skipped=$((md_skipped + 1))
-              render_ocr_progress "$md_idx" "$md_total" "$md_converted" "$md_skipped" "$_r" "" ""
+              render_ocr_progress "$md_idx" "$md_total" "$md_converted" "$md_skipped" "$_r" "" "" ""
             done
           else
             for _r in "${_md_process_rel[@]}"; do
               md_idx=$((md_idx + 1))
               skipped=$((skipped + 1))
               md_skipped=$((md_skipped + 1))
-              render_ocr_progress "$md_idx" "$md_total" "$md_converted" "$md_skipped" "$_r" "" ""
+              render_ocr_progress "$md_idx" "$md_total" "$md_converted" "$md_skipped" "$_r" "" "" ""
             done
           fi
           # Restore outer INT/TERM traps
@@ -2032,7 +2042,7 @@ copy_source() {
 
         if [[ ${#_ocr_process_src[@]} -gt 0 ]]; then
           local _ocr_page="" _ocr_page_counter=0
-          local _current_rel=""
+          local _current_rel="" _ocr_current_ext=""
 	          local _ocr_fifo _ocr_fifo_dir
 	          _ocr_fifo_dir="$(mktemp -d)"
 	          _ocr_fifo="${_ocr_fifo_dir}/fifo"
@@ -2049,7 +2059,7 @@ copy_source() {
 
           if [[ -n "$_ocr_bin" ]] && mkfifo "$_ocr_fifo" 2>/dev/null; then
             spinosa_debug "FIFO created — starting batch process"
-            info "Loading OCR engine (one-time model init)" >&2
+            spinner_start "Loading OCR engine (one-time model init)" >&2
             (
               printf '%s\t%s\n' SOURCE "$source_path"
               local _i
@@ -2065,35 +2075,58 @@ copy_source() {
             local _ocr_pid=$!
             spinosa_debug "Batch process spawned — pid=$_ocr_pid, reading fifo..."
 
-            local _ocr_read_exit=0
-            while IFS= read -r -t 120 _line; do
+            local _ocr_read_exit=0 _ocr_wait_status=0 _ocr_idle_ticks=0
+            exec 4<"$_ocr_fifo"
+            while true; do
+              if IFS= read -r -t 5 -u 4 _line; then
+                _ocr_idle_ticks=0
+              else
+                _ocr_read_exit=$?
+                if kill -0 "$_ocr_pid" 2>/dev/null; then
+                  if [[ -n "$_current_rel" ]]; then
+                    local _ocr_active_idx=$((ocr_idx < ocr_total ? ocr_idx + 1 : ocr_total))
+                    _ocr_idle_ticks=$((_ocr_idle_ticks + 1))
+                    render_ocr_progress "$_ocr_active_idx" "$ocr_total" "$ocr_converted" "$ocr_skipped" "$_current_rel" "${_ocr_page:-}" "$((ocr_idx + _ocr_idle_ticks))" "$_ocr_current_ext"
+                  fi
+                  continue
+                fi
+                break
+              fi
               [[ -n "${_line//$'\t'/}" ]] || { spinosa_debug "EMPTY fifo line, skipping"; continue; }
               local _type="${_line%%$'\t'*}"
               case "$_type" in
                 BEGIN)
                   _current_rel="${_line#BEGIN$'\t'}"
+                  _ocr_current_ext="$(file_ext "$_current_rel")"
+                  [[ -n "$_ocr_current_ext" ]] && _ocr_current_ext=" [.${_ocr_current_ext}]" || _ocr_current_ext=""
+                  spinner_stop >&2 2>/dev/null || true
                   _ocr_page=""
                   _ocr_page_counter=0
+                  _ocr_idle_ticks=0
                   spinosa_debug "BEGIN $_current_rel"
+                  local _ocr_active_idx=$((ocr_idx < ocr_total ? ocr_idx + 1 : ocr_total))
+                  render_ocr_progress "$_ocr_active_idx" "$ocr_total" "$ocr_converted" "$ocr_skipped" "$_current_rel" "" "$ocr_idx" "$_ocr_current_ext"
                   ;;
                 PROGRESS)
                   _ocr_page="${_line#PROGRESS$'\t'}"
                   _ocr_page_counter=$((_ocr_page_counter + 1))
-                  render_ocr_progress "$ocr_idx" "$ocr_total" "$ocr_converted" "$ocr_skipped" "$_current_rel" "$_ocr_page" "$_ocr_page_counter"
+                  _ocr_idle_ticks=0
+                  local _ocr_active_idx=$((ocr_idx < ocr_total ? ocr_idx + 1 : ocr_total))
+                  render_ocr_progress "$_ocr_active_idx" "$ocr_total" "$ocr_converted" "$ocr_skipped" "$_current_rel" "$_ocr_page" "$_ocr_page_counter" "$_ocr_current_ext"
                   ;;
                 END)
                   ocr_idx=$((ocr_idx + 1))
+                  _ocr_idle_ticks=0
                   local _rest="${_line#END$'\t'}"
                   local _end_status="${_rest%%$'\t'*}"
-                  _rest="${_rest#$_end_status$'\t'}"
+                  _rest="${_rest#"$_end_status"$'\t'}"
                   _current_rel="${_rest%%$'\t'*}"
                   local _end_dur _md_out
-                  _end_dur="${_rest#$_current_rel$'\t'}"
+                  _end_dur="${_rest#"$_current_rel"$'\t'}"
                   _md_out="$(dirname "$_current_rel")/$(basename "${_current_rel%.*}").md"
                   spinosa_debug "END $_end_status $_current_rel dur=${_end_dur}s pages=${_ocr_page:-none}"
 
                   if [[ "$_end_status" == "ok" ]]; then
-                    converted=$((converted + 1))
                     ocr_converted=$((ocr_converted + 1))
                     copied=$((copied + 1))
                     printf '{"ts":"%s","status":"ok","source":"%s","output":"%s","pages":"%s","duration_s":%s}\n' \
@@ -2115,22 +2148,22 @@ copy_source() {
                       "${_ocr_page:-}" \
                       "$_end_dur" >> "$_ocr_log"
                   fi
-                  render_ocr_progress "$ocr_idx" "$ocr_total" "$ocr_converted" "$ocr_skipped" "$_current_rel" "$_ocr_page" "$_ocr_page_counter"
+                  render_ocr_progress "$ocr_idx" "$ocr_total" "$ocr_converted" "$ocr_skipped" "$_current_rel" "$_ocr_page" "$_ocr_page_counter" "$_ocr_current_ext"
                   _ocr_page=""
+                  _ocr_current_ext=""
                   ;;
                 *)
                   spinosa_debug "UNEXPECTED fifo line: $_line"
                   ;;
               esac
-            done < "$_ocr_fifo" || _ocr_read_exit=$?
-            if [[ $_ocr_read_exit -eq 142 ]]; then
-              warn "OCR batch timed out — partial results may be available"
-              kill "$_ocr_pid" 2>/dev/null || true
-              [[ -z "${_ocr_fifo_dir:-}" ]] || rm -rf "$_ocr_fifo_dir" 2>/dev/null || true
-            fi
+            done
+            exec 4<&-
             spinosa_debug "FIFO read complete — waiting for batch process (pid=$_ocr_pid)..."
-            wait "$_ocr_pid" 2>/dev/null
-            spinosa_debug "Batch process finished — exit=$?"
+            wait "$_ocr_pid" 2>/dev/null || _ocr_wait_status=$?
+            spinosa_debug "Batch process finished — exit=${_ocr_wait_status}"
+            if [[ "$_ocr_wait_status" -ne 0 ]]; then
+              warn "OCR exited with status ${_ocr_wait_status} — partial results may be available"
+            fi
             rm -f "$_ocr_fifo"
           elif [[ -n "$_ocr_bin" ]]; then
             warn "Could not create FIFO — OCR skipped"
@@ -2180,7 +2213,8 @@ copy_source() {
       fi
     fi
     processed=$((processed + 1))
-    render_copy_progress "$processed" "$total_files" "$copied" "$skipped" "$rel_path"
+    copy_processed=$((copy_processed + 1))
+    render_copy_progress "$copy_processed" "$total_files" "$copied" "$skipped" "$rel_path"
   done < <(find "$source_path" -type f -print0 2>/dev/null)
 
   COPY_COPIED_COUNT="$copied"
@@ -2190,37 +2224,12 @@ copy_source() {
   COPY_MARKITDOWN_SKIPPED_COUNT="${md_skipped:-0}"
   COPY_OCR_CONVERTED_COUNT="${ocr_converted:-0}"
   COPY_OCR_SKIPPED_COUNT="${ocr_skipped:-0}"
-  COPY_COMPRESSED_COUNT="${converted:-0}"
 
   printf '\n'
   if [[ "$failed" -gt 0 ]]; then
     warn "$failed files could not be copied (cloud storage timeout or I/O error). These files are skipped. Run the copy again when all files are synced locally."
   fi
   ok "Workspace source copy prepared in ${BOLD}$(dirname "$dest_dir")${RESET}"
-}
-
-run_yake_index() {
-  local raw_root="$1" total=0 failed=0
-  local yb
-  yb="$(yake_bin)" || { warn "YAKE binary not found — skipping keyword extraction"; return 1; }
-  while IFS= read -r -d '' f; do
-    total=$((total + 1))
-    if "$yb" --inplace "$f"; then
-      :
-    else
-      failed=$((failed + 1))
-      warn "YAKE failed on: ${f#${raw_root}/}"
-    fi
-  done < <(find "$raw_root" -name '*.md' -type f -print0 2>/dev/null)
-  if [[ "$total" -gt 0 ]]; then
-    if [[ "$failed" -eq 0 ]]; then
-      ok "YAKE: ${total} files indexed"
-    else
-      warn "YAKE: ${total} files, ${failed} failed, $((total - failed)) indexed"
-    fi
-  else
-    note "No markdown files to index"
-  fi
 }
 
 choose_preferred_cli() {
@@ -2270,7 +2279,7 @@ choose_import_batches() {
   done
 
   # Audio/video are listed but not selected by default — user must opt in
-  MULTI_CHOOSE_EXCLUDE="mp4|mov|m4v|avi|mkv|webm|wmv|mp3|wav|m4a|aac|flac|ogg|opus|aiff"
+  MULTI_CHOOSE_EXCLUDE="$AUDIO_VIDEO_EXTENSIONS"
 
   while true; do
     note "Choose which file types to import into the workspace copy."
@@ -2413,7 +2422,7 @@ preferred_llm_cli: "$preferred_cli"
 
 ## Notes
 - This file was initialized by \`spinosa new\`.
-- The CLI collected: project name and preferred LLM CLI. It imported accepted files into raw/. Office documents and text-based PDFs were converted via MarkItDown. Scanned PDFs and images were processed via RapidOCR OCR. Videos, audio, and AGENTS.md control files were skipped.
+- The CLI collected: source folder and preferred LLM CLI. It seeded the initial workspace label from the source folder name, but the final vault/project naming can be refined during startup. It imported accepted files into raw/. Office documents and text-based PDFs were converted via MarkItDown. Scanned PDFs and images were processed via RapidOCR OCR. Selected audio and video files were copied unchanged. AGENTS.md control files were skipped.
 - After onboarding, normal source-grounded work starts from raw/.
 - During startup, project description and helpful artifact URLs are optional. If absent, the LLM CLI agent records them as not provided, keeps external_sources_allowed at its default \`no\`, and infers working scope from the raw corpus.
 - When setup_status reaches workspace_started, the startup workflow has built the master dictionary, generated YAML headers, created multi-level navigation maps in maps/, and passed validation.
@@ -2474,7 +2483,7 @@ updated: $TODAY
 # Onboarding Summary
 
 ## Workspace
-- Project: ${project_title}
+- Initial workspace label: ${project_title}
 - Workspace: ${root}
 - Active corpus: raw/
 
@@ -2489,18 +2498,16 @@ updated: $TODAY
 - Ignored files: ${SCAN_IGNORED_COUNT}
 
 ## Workspace Import Result
-- Candidate files: ${COPY_TOTAL_COUNT:-0}
+- Direct-copy candidates: ${COPY_TOTAL_COUNT:-0}
 - Selected extension batches: $(selected_import_extensions_label)
-- Files imported into workspace: ${COPY_COPIED_COUNT:-0}
-- Files skipped during import: ${COPY_SKIPPED_COUNT:-0}
+- Files copied directly into workspace: ${COPY_COPIED_COUNT:-0}
+- Files skipped during direct copy: ${COPY_SKIPPED_COUNT:-0}
 - MarkItDown converted: ${COPY_MARKITDOWN_CONVERTED_COUNT:-0}
 - MarkItDown skipped: ${COPY_MARKITDOWN_SKIPPED_COUNT:-0}
 - MarkItDown mode: ${markitdown_mode}
 - OCR (RapidOCR) converted: ${COPY_OCR_CONVERTED_COUNT:-0}
 - OCR (RapidOCR) skipped: ${COPY_OCR_SKIPPED_COUNT:-0}
 - OCR mode: ${ocr_mode}
-- ffmpeg compression: ${COPY_FFMPEG_USED:-0}
-- Media files compressed: ${COPY_COMPRESSED_COUNT:-0}
 
 ## Handoff
 - Preferred CLI: ${preferred_cli}
@@ -2528,7 +2535,7 @@ Read these files first, in this order:
 6. .spinosa/onboarding-summary.md
 
 The setup draft already contains:
-- Project name: ${project_title}
+- Initial workspace label: ${project_title} (derived from the source folder name)
 - Active corpus: raw/
 - Preferred LLM CLI: ${preferred_cli}
 - The CLI already imported supported files into raw/.
@@ -2600,41 +2607,11 @@ markitdown_bin() {
   return 1
 }
 
-yake_available() {
-  local unified_bin="${SPINOSA_VENDOR_DIR}-${PLATFORM}/yake-cli"
-  [[ -x "$unified_bin" ]] && return 0
-  local framework_bin="${FRAMEWORK_ROOT:-.}/.bin/lib/vendor/spinosa-${PLATFORM}/yake-cli"
-  [[ -x "$framework_bin" ]] && return 0
-  return 1
-}
-
-yake_bin() {
-  local unified_bin="${SPINOSA_VENDOR_DIR}-${PLATFORM}/yake-cli"
-  if [[ -x "$unified_bin" ]]; then echo "$unified_bin"; return; fi
-  local framework_bin="${FRAMEWORK_ROOT:-.}/.bin/lib/vendor/spinosa-${PLATFORM}/yake-cli"
-  if [[ -x "$framework_bin" ]]; then echo "$framework_bin"; return; fi
-  return 1
-}
-
-ffmpeg_available() {
-  local _bin
-  _bin="$(ffmpeg_bin)" || return 1
-  [[ -n "$_bin" && -x "$_bin" ]]
-}
-
-ffmpeg_bin() {
-  local python_bin="${SPINOSA_VENDOR_DIR}-${PLATFORM}/python/bin/python3"
-  [[ -x "$python_bin" ]] || python_bin="${SPINOSA_VENDOR_DIR}-${PLATFORM}/Python.framework/Versions/Current/bin/python3"
-  [[ -x "$python_bin" ]] || return 1
-  "$python_bin" -c "import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())" 2>/dev/null || return 1
-}
-
 repair_vendor_tools() {
   [[ "${SPINOSA_NO_REPAIR:-0}" != "1" ]] || return 0
   [[ -t 0 ]] || return 0
   local needs_repair=0 pkgs=() vendor_dir="${SPINOSA_VENDOR_DIR}-${PLATFORM}"
   if ! markitdown_available; then needs_repair=1; pkgs+=("markitdown"); fi
-  if ! yake_available; then needs_repair=1; pkgs+=("yake"); fi
   [[ "$needs_repair" -eq 1 ]] || return 0
 
   if [[ ! -d "$vendor_dir" ]]; then
@@ -2656,17 +2633,11 @@ repair_vendor_tools() {
   note_cactus "$(join_by " and " "${pkgs[@]}") not available — Python packages may be missing"
   if confirm "Repair Python packages for document processing?" "y"; then
     if [[ " ${pkgs[*]} " == *" markitdown "* ]]; then
-      info "Installing MarkItDown..."
-      "$python_bin" -m pip install "markitdown[docx,pptx,xlsx,xls,outlook,pdf]==0.1.6" --quiet 2>&1 || true
-    fi
-    if [[ " ${pkgs[*]} " == *" yake "* ]]; then
-      info "Installing YAKE + langdetect..."
-      "$python_bin" -m pip install "yake==0.7.3" "langdetect==1.0.9" --quiet 2>&1 || true
-    fi
-    if markitdown_available; then
-      ok "Document processing packages ready"
-    else
-      note_wilted "Package install failed — check network or run: spinosa upgrade"
+      if markitdown_available; then
+        ok "Document processing packages ready"
+      else
+        note_wilted "Package install failed — check network or run: spinosa upgrade"
+      fi
     fi
   fi
 }
@@ -2686,12 +2657,6 @@ is_rapidocr_pdf() {
 
 # ── Image File Detection ──────────────────────────────────────────────────────
 
-IMAGE_EXTENSIONS="jpg|jpeg|png|gif|webp|heic|heif|tif|tiff|bmp|svg"
-
-
-
-IMAGE_EXTENSIONS="jpg|jpeg|png|gif|webp|heic|heif|tif|tiff|bmp|svg"
-
 run_integrated_onboarding() {
   local root="$1" project_title="$2" preselected_source="${3:-}"
   local flag_extensions="${4:-}" flag_cli="${5:-}" flag_launch="${6:-}"
@@ -2701,7 +2666,7 @@ run_integrated_onboarding() {
   # ── Step 1: Source folder ─────────────────────────────────────────────
   if [[ -n "$preselected_source" ]]; then
     source_path="$preselected_source"
-    info "Source: ${BOLD}${source_path}${RESET}"
+    info "Source: ${BOLD}$(display_path "$source_path")${RESET}"
   fi
 
   while true; do
@@ -2723,12 +2688,12 @@ run_integrated_onboarding() {
         if [[ -z "$source_path" ]]; then
           printf '  %s\n' "${R}Source folder is required.${RESET}" >&2
         elif [[ ! -d "$source_path" ]]; then
-          printf '  %s\n' "${R}Source folder does not exist: $source_path${RESET}" >&2
+          printf '  %s\n' "${R}Source folder does not exist: $(display_path "$source_path")${RESET}" >&2
         else
           break
         fi
       done
-      ok "Source: ${BOLD}${source_path}${RESET}"
+      ok "Source: ${BOLD}$(display_path "$source_path")${RESET}"
     fi
 
     print_step 2 3 "Corpus scan and consent"
@@ -2754,7 +2719,7 @@ run_integrated_onboarding() {
       done
     fi
 
-    # Auto-detect OCR from selected extensions (images, and PDFs only if MarkItDown unavailable)
+    # Auto-detect OCR from selected extensions (images and scanned PDFs)
     SCAN_OCR_CHOICE="no"
     if rapidocr_ocr_available; then
       local _ext
@@ -2763,7 +2728,7 @@ run_integrated_onboarding() {
           SCAN_OCR_CHOICE="yes"
           break
         fi
-        if [[ "$_ext" == "pdf" ]] && ! markitdown_available; then
+        if [[ "$_ext" == "pdf" ]]; then
           SCAN_OCR_CHOICE="yes"
           break
         fi
@@ -2798,8 +2763,6 @@ run_integrated_onboarding() {
     note "Source is on cloud storage (Google Drive / iCloud / Dropbox). Files that are not fully synced locally may time out during copy and will be skipped."
   fi
   copy_source "$source_path" "$root/raw"
-
-  run_yake_index "$root/raw" || true
 
   print_step 3 3 "Startup prompt"
   reset_terminal
@@ -2929,14 +2892,8 @@ cmd_help() {
 
   printf '  %s\n' "${BOLD}Usage:${RESET}"
   printf '    %s\n' "spinosa new [directory]    Create a new workspace and run setup"
-  printf '    %s\n' "spinosa prepare [dir]     Set up an existing workspace"
-  printf '    %s\n' "spinosa update [dir]      Update workspace files"
   printf '    %s\n' "spinosa upgrade           Upgrade Spinosa CLI to latest release"
-  printf '    %s\n' "spinosa check [directory] Check workspace structure"
-  printf '    %s\n' "spinosa health            Show system status"
-  printf '    %s\n' "spinosa sync              Sync helpers from original sources"
   printf '    %s\n' "spinosa uninstall         Remove Spinosa from this system"
-  printf '    %s\n' "spinosa dashboard         Open interactive dashboard"
   printf '    %s\n' "spinosa help              Show this help"
   printf '\n'
 
@@ -2966,82 +2923,7 @@ cmd_help() {
   fi
 }
 
-# ═══════════════════════════════════════════════════════════════════════════
-# COMMAND: onboard
-# ═══════════════════════════════════════════════════════════════════════════
-cmd_onboard() {
-  header "Spinosa — Prepare Workspace"
 
-  local workspace_path=""
-  local source_dir=""
-  local flag_no_compress=0
-  local onboard_args
-  onboard_args=()
-  while [[ $# -gt 0 ]]; do
-    case "$1" in
-      --no-color) R="" G="" B="" Y="" C="" M="" PG="" DIM="" BOLD="" RESET=""; shift ;;
-      --gum|--no-gum) shift ;;
-      --source-dir) source_dir="$2"; shift 2 ;;
-      --no-compress) flag_no_compress=1; shift ;;
-      --help|-h)
-        echo "Usage: spinosa onboard [workspace-directory] [options]" >&2
-        echo "  --source-dir PATH  Pre-select source folder (skip prompt)" >&2
-        echo "  --no-compress      Skip ffmpeg compression for audio/video files" >&2
-        echo "  --no-color         Disable colored output" >&2
-        echo "Example:" >&2
-        echo "  spinosa onboard --source-dir /Users/me/Documents/archive" >&2
-        return 0
-        ;;
-      -*) die "Unknown option: $1. Valid: --source-dir, --no-compress, --no-color, --help" ;;
-      *) onboard_args+=("$1"); shift ;;
-    esac
-  done
-
-  # Use first positional arg as workspace path if provided
-  if [[ ${#onboard_args[@]} -gt 0 ]]; then
-    workspace_path="${onboard_args[0]}"
-  fi
-
-  # Resolve workspace path
-  if [[ -n "$workspace_path" ]]; then
-    workspace_path="$(require_workspace "$workspace_path")" || return $?
-  else
-    workspace_path="$(require_workspace)" || return $?
-  fi
-  cd "$workspace_path" || die "Cannot change to workspace: $workspace_path"
-
-  # Extract existing project name from workspace metadata, or prompt
-  local project_name
-  local _pn_re='^[a-zA-Z0-9_ -]+$'
-  project_name="$(grep 'project_name:' "$workspace_path/.spinosa/workspace" 2>/dev/null | sed 's/project_name: *//' | head -1 || echo "")"
-  if [[ -z "$project_name" ]]; then
-    local default_name
-    default_name="$(basename "$workspace_path")"
-    while [[ -z "$project_name" ]] || [[ ! "$project_name" =~ $_pn_re ]]; do
-      project_name="$(prompt_input "Project name" "$default_name")"
-      if [[ ! "$project_name" =~ $_pn_re ]]; then
-        warn "Project name can only contain letters, numbers, spaces, hyphens, and underscores."
-        project_name=""
-      fi
-    done
-    sed -i.bak "s/project_name:.*/project_name: ${project_name}/" "$workspace_path/.spinosa/workspace" 2>/dev/null || \
-    sed -i '' "s/project_name:.*/project_name: ${project_name}/" "$workspace_path/.spinosa/workspace" 2>/dev/null || true
-    rm -f "$workspace_path/.spinosa/workspace.bak"
-  fi
-
-  # Read stored source from workspace metadata as default
-  if [[ -z "$source_dir" ]]; then
-    source_dir="$(grep 'source_location:' "$workspace_path/.spinosa/workspace" 2>/dev/null | sed 's/source_location: *//' | head -1 || echo "")"
-    [[ -n "$source_dir" ]] && info "Stored source folder: ${source_dir}"
-  fi
-  FLAG_NO_COMPRESS="$flag_no_compress"
-  if run_integrated_onboarding "$workspace_path" "$project_name" "$source_dir"; then
-    exit 0
-  else
-    warn "Onboarding was cancelled or failed."
-    exit 1
-  fi
-}
 
 # ═══════════════════════════════════════════════════════════════════════════
 # COMMAND: new
@@ -3052,31 +2934,25 @@ cmd_new() {
 
   local corpus_path=""
   local workspace_path=""
-  local flag_project_name=""
   local flag_extensions=""
   local flag_cli=""
   local flag_launch=""
-  local flag_no_compress=0
   local new_args
   new_args=()
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --force) die "--force is not supported for spinosa new." ;;
-      --project-name) flag_project_name="$2"; shift 2 ;;
       --extensions)   flag_extensions="$2"; shift 2 ;;
       --cli)          flag_cli="$2"; shift 2 ;;
       --launch)       flag_launch="$2"; shift 2 ;;
-      --no-compress)  flag_no_compress=1; shift ;;
       --numbered) NUMBERED="1"; shift ;;
       --no-color) R="" G="" B="" Y="" C="" M="" PG="" DIM="" BOLD="" RESET=""; shift ;;
       --gum|--no-gum) shift ;;
       --help|-h)
         printf '  %s\n' "Usage: spinosa new [corpus-directory] [options]"
-        printf '    %s\n' "  --project-name NAME"
         printf '    %s\n' "  --extensions   Comma-separated file types to import (e.g. txt,pdf)"
         printf '    %s\n' "  --cli          Preferred LLM CLI (opencode, gemini, qwen, claude_code, codex, kilo, other)"
         printf '    %s\n' "  --launch       Launch method (copy, run)"
-        printf '    %s\n' "  --no-compress  Skip ffmpeg compression for audio/video files"
         printf '    %s\n' "  --numbered     Force numbered menus instead of arrow-key menus"
         printf '    %s\n' "  --no-color     Disable colored output"
         return 0
@@ -3102,7 +2978,7 @@ cmd_new() {
       if [[ -z "$corpus_path" ]]; then
         printf '  %s\n' "${R}Corpus folder is required.${RESET}" >&2
       elif [[ ! -d "$corpus_path" ]]; then
-        printf '  %s\n' "${R}Not a directory: $corpus_path${RESET}" >&2
+        printf '  %s\n' "${R}Not a directory: $(display_path "$corpus_path")${RESET}" >&2
       else
         break
       fi
@@ -3111,7 +2987,7 @@ cmd_new() {
 
   # Validate corpus
   corpus_path="$(cd "$corpus_path" 2>/dev/null && pwd)"
-  ok "Corpus: ${BOLD}${corpus_path}${RESET}"
+  ok "Corpus: ${BOLD}$(display_path "$corpus_path")${RESET}"
 
   # ── Step 2: Auto-generate workspace path ────────────────────────────────
   local corpus_name
@@ -3126,27 +3002,11 @@ cmd_new() {
     candidate="${parent_dir}/${corpus_name}${suffix}-${n}"
   done
   workspace_path="$candidate"
-  ok "Workspace: ${BOLD}${workspace_path}${RESET}"
+  ok "Workspace: ${BOLD}$(display_path "$workspace_path")${RESET}"
 
-  # ── Step 3: Project name ────────────────────────────────────────────────
-  local project_name="$flag_project_name"
-  local default_name
-  default_name="$corpus_name"
-  local _pn_re='^[a-zA-Z0-9_ -]+$'
-
-  if [[ -z "$project_name" ]]; then
-    while [[ -z "$project_name" ]] || [[ ! "$project_name" =~ $_pn_re ]]; do
-      project_name="$(prompt_input "Project name" "$default_name")"
-      if [[ -z "$project_name" ]]; then
-        :
-      elif [[ ! "$project_name" =~ $_pn_re ]]; then
-        warn "Project name can only contain letters, numbers, spaces, hyphens, and underscores."
-        project_name=""
-      fi
-    done
-  fi
-  project_name="${project_name:-$default_name}"
-  ok "Project:   ${BOLD}${project_name}${RESET}"
+  # ── Step 3: Initial workspace label ─────────────────────────────────────
+  local project_name="$corpus_name"
+  note "Initial workspace label: ${BOLD}${project_name}${RESET} (from the source folder; startup can refine it)"
 
   # ── Step 4: Create workspace and copy framework ──────────────────────────
   if [[ -z "$FRAMEWORK_ROOT" ]]; then
@@ -3223,7 +3083,6 @@ EOF
   register_workspace "$workspace_path" "$project_name"
 
   # ── Step 6: Onboarding (continuous flow) ────────────────────────────────
-  FLAG_NO_COMPRESS="$flag_no_compress"
   if run_integrated_onboarding "$workspace_path" "$project_name" "$corpus_path" \
     "$flag_extensions" "$flag_cli" "$flag_launch"; then
     ok "Workspace ready: ${BOLD}${workspace_path}${RESET}"
@@ -3236,750 +3095,11 @@ EOF
   fi
 }
 
-# ═══════════════════════════════════════════════════════════════════════════
-# COMMAND: update
-# ═══════════════════════════════════════════════════════════════════════════
-cmd_update() {
-  header "Spinosa — Update Workspace"
 
-  local workspace_path=""
-  local target_version="latest"
-  local release_dir=""
-  local dry_run=0
-  local auto_yes=0
 
-  # Parse arguments
-  while [[ $# -gt 0 ]]; do
-    case "$1" in
-      --version) target_version="$2"; shift 2 ;;
-      --release-dir) release_dir="$(expand_home "$2")"; shift 2 ;;
-      --dry-run) dry_run=1; shift ;;
-      --yes|-y) auto_yes=1; shift ;;
-      --no-color) R="" G="" B="" Y="" C="" M="" PG="" DIM="" BOLD="" RESET=""; shift ;;
-      --gum|--no-gum) shift ;;
-      --help|-h)
-        printf '  %s\n' "Usage: spinosa update [workspace] [options]"
-        printf '    %s\n' "  --version X.Y.Z   Target framework version"
-        printf '    %s\n' "  --release-dir DIR Use a local dist/vX.Y.Z directory"
-        printf '    %s\n' "  --dry-run         Show what would change without writing"
-        printf '    %s\n' "  --yes             Apply the shown plan without confirmation prompts"
-        printf '    %s\n' "  --no-color        Disable colored output"
-        return 0
-        ;;
-      --*)
-        die "Unknown update option: $1. Valid: --version, --release-dir, --dry-run, --yes, --no-color, --help"
-        ;;
-      *)
-        if [[ -z "$workspace_path" ]]; then
-          workspace_path="$(expand_home "$1")"
-        else
-          die "Unexpected extra workspace argument: $1"
-        fi
-        shift
-        ;;
-    esac
-  done
 
-  # Resolve workspace path
-  if [[ -n "$workspace_path" ]]; then
-    workspace_path="$(require_workspace "$workspace_path")" || return $?
-  else
-    workspace_path="$(require_workspace)" || return $?
-  fi
-  cd "$workspace_path" || die "Cannot change to workspace: $workspace_path"
 
-  local fw_version project_name
-  fw_version="$(grep 'framework_version:' "$workspace_path/.spinosa/workspace" | awk '{print $2}')"
-  project_name="$(grep 'project_name:' "$workspace_path/.spinosa/workspace" | sed 's/project_name: *//')"
 
-  ok "Workspace: ${BOLD}${project_name:-unknown}${RESET}"
-  info "Current framework version: ${fw_version:-unknown}"
-
-  # Validate manifest exists
-  if [[ ! -f "$workspace_path/.spinosa/manifest.tsv" ]]; then
-    die "Manifest not found: $workspace_path/.spinosa/manifest.tsv"
-  fi
-
-  # ── Load release framework ─────────────────────────────────────────────
-  local tmpdir release_info resolved_version release_root release_manifest
-  tmpdir="$(mktemp -d)"
-  release_info="$(prepare_release_framework "$target_version" "$release_dir" "$tmpdir")"
-  resolved_version="${release_info%%$'\t'*}"
-  release_root="${release_info#*$'\t'}"
-  release_manifest="${release_root}/.spinosa/framework-files.tsv"
-
-  info "Target version: ${resolved_version}"
-
-  # ── Compare checksums ──────────────────────────────────────────────────
-  divider
-  printf '\n  %sComparing framework files...%s\n\n' "${BOLD}" "${RESET}"
-
-  local modified=0
-  local unchanged=0
-  local missing=0
-  local replaced=0
-  local added=0
-  local sidecars=0
-  local directory_updates=0
-  local retired_removed=0
-  local retired_kept=0
-  local skip_retired_cleanup=0
-  local clean_replace_paths
-  clean_replace_paths=()
-  local forced_replace_paths
-  forced_replace_paths=()
-  local sidecar_paths
-  sidecar_paths=()
-  local add_paths
-  add_paths=()
-  local directory_paths
-  directory_paths=()
-  local retired_remove_paths
-  retired_remove_paths=()
-  local retired_keep_paths
-  retired_keep_paths=()
-
-  while IFS=$'\t' read -r path role policy; do
-    is_framework_manifest_entry "$path" "$role" || continue
-
-    local current_hash stored_hash
-    local file_path="${workspace_path}/${path}"
-    local src="${release_root}/${path}"
-    [[ -e "$src" ]] || continue
-
-    if [[ -d "$src" ]]; then
-      directory_paths+=("$path")
-      if [[ -d "$file_path" ]]; then
-        unchanged=$((unchanged + 1))
-      else
-        missing=$((missing + 1))
-      fi
-    elif [[ "$policy" == "always_replace" ]]; then
-      if [[ -e "$file_path" ]]; then
-        forced_replace_paths+=("$path")
-        unchanged=$((unchanged + 1))
-      else
-        missing=$((missing + 1))
-        add_paths+=("$path")
-      fi
-    elif [[ -f "$file_path" ]]; then
-      current_hash="$(sha256_file "$file_path" 2>/dev/null || echo "none")"
-      stored_hash="$(manifest_hash "$workspace_path/.spinosa/manifest.tsv" "$path")"
-
-      if [[ "$current_hash" == "$stored_hash" ]]; then
-        clean_replace_paths+=("$path")
-        unchanged=$((unchanged + 1))
-      elif [[ "$current_hash" == "none" ]]; then
-        warn "Cannot compute checksum: $path"
-      else
-        sidecar_paths+=("$path")
-        modified=$((modified + 1))
-      fi
-    else
-      missing=$((missing + 1))
-      add_paths+=("$path")
-    fi
-  done < "$release_manifest"
-
-  local retired_manifest="${release_root}/.spinosa/retired-framework-files.tsv"
-  if [[ -f "$retired_manifest" ]]; then
-    while IFS=$'\t' read -r path reason; do
-      [[ "$path" == "path" ]] && continue
-
-      local dst="${workspace_path}/${path}"
-      [[ -f "$dst" ]] || continue
-
-      local current_hash stored_hash
-      current_hash="$(sha256_file "$dst" 2>/dev/null || echo "none")"
-      stored_hash="$(manifest_hash "$workspace_path/.spinosa/manifest.tsv" "$path")"
-
-      if [[ -n "$stored_hash" && "$current_hash" == "$stored_hash" ]]; then
-        retired_remove_paths+=("$path")
-      else
-        retired_keep_paths+=("$path")
-      fi
-    done < "$retired_manifest"
-  fi
-
-  printf '\n'
-  info "Workspace user data is not touched: raw corpus files, logs/user_requests.md, context, configuration, dictionary, and workspace index stay in place."
-  [[ ${#clean_replace_paths[@]} -gt 0 ]] && print_path_list "Clean framework files to replace" "${clean_replace_paths[@]}"
-  [[ ${#forced_replace_paths[@]} -gt 0 ]] && print_path_list "Forced framework files to replace" "${forced_replace_paths[@]}"
-  [[ ${#sidecar_paths[@]} -gt 0 ]] && print_path_list "Locally modified framework files to keep with .spinosa-new sidecars" "${sidecar_paths[@]}"
-  [[ ${#add_paths[@]} -gt 0 ]] && print_path_list "New framework files to add" "${add_paths[@]}"
-  [[ ${#directory_paths[@]} -gt 0 ]] && print_path_list "Framework directories to refresh recursively" "${directory_paths[@]}"
-  [[ ${#retired_remove_paths[@]} -gt 0 ]] && print_path_list "Retired clean framework files to remove" "${retired_remove_paths[@]}"
-  [[ ${#retired_keep_paths[@]} -gt 0 ]] && print_path_list "Retired modified framework files to leave in place" "${retired_keep_paths[@]}"
-
-  if [[ $modified -gt 0 ]]; then
-    warn "Your modified framework files stay unchanged. The release copy is written beside each one as .spinosa-new."
-  fi
-  if [[ ${#forced_replace_paths[@]} -gt 0 ]]; then
-    warn "Forced replacements can overwrite local edits. Keep this policy only for files that must track the framework."
-  fi
-  if [[ ${#directory_paths[@]} -gt 0 ]]; then
-    warn "Directory refreshes copy release contents recursively into existing framework directories."
-  fi
-
-  if [[ "$dry_run" -eq 1 ]]; then
-    printf '\n  %sDry run — no files changed.%s\n\n' "${DIM}" "${RESET}"
-    rm -rf "$tmpdir"
-    return 0
-  fi
-
-  # ── Confirm ─────────────────────────────────────────────────────────────
-  if [[ "$auto_yes" -ne 1 ]]; then
-    if [[ ${#sidecar_paths[@]} -gt 0 ]]; then
-      if ! confirm_action "Keep local framework edits and write release copies as .spinosa-new sidecars?" "y"; then
-        printf '\n  %sUpdate cancelled.%s\n\n' "${DIM}" "${RESET}"
-        rm -rf "$tmpdir"
-        return 0
-      fi
-    fi
-
-    if [[ ${#forced_replace_paths[@]} -gt 0 ]]; then
-      if ! confirm_action "Replace forced framework files listed above?" "y"; then
-        printf '\n  %sUpdate cancelled.%s\n\n' "${DIM}" "${RESET}"
-        rm -rf "$tmpdir"
-        return 0
-      fi
-    fi
-
-    if [[ ${#directory_paths[@]} -gt 0 ]]; then
-      if ! confirm_action "Refresh framework directories recursively?" "y"; then
-        printf '\n  %sUpdate cancelled.%s\n\n' "${DIM}" "${RESET}"
-        rm -rf "$tmpdir"
-        return 0
-      fi
-    fi
-
-    if [[ ${#retired_remove_paths[@]} -gt 0 ]]; then
-      if ! confirm_action "Remove retired clean framework files listed above?" "y"; then
-        skip_retired_cleanup=1
-        warn "Retired clean framework files will be left in place."
-      fi
-    fi
-
-    if ! confirm_action "Apply this Spinosa framework update now?" "y"; then
-      printf '\n  %sUpdate cancelled.%s\n\n' "${DIM}" "${RESET}"
-      rm -rf "$tmpdir"
-      return 0
-    fi
-  else
-    note "--yes supplied: applying the plan without interactive confirmations."
-  fi
-
-  # ── Execute update ──────────────────────────────────────────────────────
-  divider
-  printf '\n  %sApplying update...%s\n\n' "${BOLD}" "${RESET}"
-
-  while IFS=$'\t' read -r path role policy; do
-    is_framework_manifest_entry "$path" "$role" || continue
-
-    local src="${release_root}/${path}"
-    local dst="${workspace_path}/${path}"
-
-    if [[ -f "$src" ]]; then
-      local current_hash stored_hash
-      if [[ "$policy" == "always_replace" ]]; then
-        mkdir -p "$(dirname "$dst")"
-        cp -a "$src" "$dst"
-        replaced=$((replaced + 1))
-        ok "Replaced: $path"
-      elif [[ -f "$dst" ]]; then
-        current_hash="$(sha256_file "$dst" 2>/dev/null || echo "none")"
-        stored_hash="$(manifest_hash "$workspace_path/.spinosa/manifest.tsv" "$path")"
-
-        if [[ "$current_hash" == "$stored_hash" ]]; then
-          # Safe to replace
-          cp -a "$src" "$dst"
-          replaced=$((replaced + 1))
-          ok "Replaced: $path"
-        else
-          # Conflict — user modified it
-          local sidecar
-          sidecar="$(next_sidecar_path "$dst")"
-          cp -a "$src" "$sidecar"
-          sidecars=$((sidecars + 1))
-          warn "Conflict: $path → wrote ${sidecar#$workspace_path/}"
-        fi
-      else
-        # New file
-        mkdir -p "$(dirname "$dst")"
-        cp -a "$src" "$dst"
-        added=$((added + 1))
-        ok "Added: $path"
-      fi
-    elif [[ -d "$src" ]]; then
-      mkdir -p "$dst"
-	      copy_dir_contents "$src" "$dst"
-      directory_updates=$((directory_updates + 1))
-      ok "Updated: $path/"
-    fi
-  done < "$release_manifest"
-
-  # ── Remove explicitly retired framework files ───────────────────────────
-  if [[ "$skip_retired_cleanup" -eq 0 && -f "$retired_manifest" ]]; then
-    while IFS=$'\t' read -r path reason; do
-      [[ "$path" == "path" ]] && continue
-
-      local dst="${workspace_path}/${path}"
-      [[ -f "$dst" ]] || continue
-
-      local current_hash stored_hash
-      current_hash="$(sha256_file "$dst" 2>/dev/null || echo "none")"
-      stored_hash="$(manifest_hash "$workspace_path/.spinosa/manifest.tsv" "$path")"
-
-      if [[ -n "$stored_hash" && "$current_hash" == "$stored_hash" ]]; then
-        rm -f "$dst"
-        retired_removed=$((retired_removed + 1))
-        ok "Removed retired: $path"
-      else
-        retired_kept=$((retired_kept + 1))
-        warn "Retired file modified locally, left in place: $path"
-      fi
-    done < "$retired_manifest"
-  fi
-
-  # ── Update manifest ─────────────────────────────────────────────────────
-  cp "$workspace_path/.spinosa/manifest.tsv" "$workspace_path/.spinosa/manifest.tsv.bak"
-  printf 'path\tsha256\n' > "$workspace_path/.spinosa/manifest.tsv"
-  while IFS=$'\t' read -r path role policy; do
-    is_framework_manifest_entry "$path" "$role" || continue
-
-    local release_path="${release_root}/${path}"
-    local full_path="${workspace_path}/${path}"
-    if [[ -f "$release_path" ]]; then
-      local current_hash stored_hash release_hash
-      release_hash="$(sha256_file "$release_path" 2>/dev/null || echo "none")"
-      stored_hash="$(manifest_hash "$workspace_path/.spinosa/manifest.tsv.bak" "$path" 2>/dev/null || true)"
-      if [[ "$policy" == "always_replace" || ! -f "$full_path" ]]; then
-        printf '%s\t%s\n' "$path" "$release_hash" >> "$workspace_path/.spinosa/manifest.tsv"
-      else
-        current_hash="$(sha256_file "$full_path" 2>/dev/null || echo "none")"
-        if [[ "$current_hash" == "$release_hash" ]]; then
-          printf '%s\t%s\n' "$path" "$release_hash" >> "$workspace_path/.spinosa/manifest.tsv"
-        else
-          # Preserve the old clean hash so unresolved conflicts stay protected.
-          printf '%s\t%s\n' "$path" "${stored_hash:-$release_hash}" >> "$workspace_path/.spinosa/manifest.tsv"
-        fi
-      fi
-    elif [[ -d "$release_path" && -d "$full_path" ]]; then
-      printf '%s\tdir\n' "$path" >> "$workspace_path/.spinosa/manifest.tsv"
-    fi
-  done < "$release_manifest"
-  rm -f "$workspace_path/.spinosa/manifest.tsv.bak"
-
-  # Update workspace version
-  sed -i.bak "s/framework_version: .*/framework_version: ${resolved_version}/" "$workspace_path/.spinosa/workspace" 2>/dev/null || \
-  sed -i '' "s/framework_version: .*/framework_version: ${resolved_version}/" "$workspace_path/.spinosa/workspace" 2>/dev/null || true
-  rm -f "$workspace_path/.spinosa/workspace.bak"
-  rm -rf "$tmpdir"
-
-  divider
-  ok "Update complete"
-  info "Files replaced: $replaced"
-  info "Files added: $added"
-  info "Directories updated: $directory_updates"
-  info "Old files removed: $retired_removed"
-  [[ $sidecars -gt 0 ]] && warn "Backup copies written: $sidecars"
-  [[ $retired_kept -gt 0 ]] && warn "Old files left in place because they were modified: $retired_kept"
-  printf '\n'
-}
-
-# ═══════════════════════════════════════════════════════════════════════════
-# COMMAND: check
-# ═══════════════════════════════════════════════════════════════════════════
-cmd_check() {
-  local provided_path=""
-  while [[ $# -gt 0 ]]; do
-    case "$1" in
-      --help|-h)
-        printf '  %s\n' "Usage: spinosa check [workspace-directory]"
-        printf '    %s\n' "  Validates workspace integrity: required files, placeholders,"
-        printf '    %s\n' "  setup status, active raw corpus, maps, and retrieval coverage."
-        return 0
-        ;;
-      -*) die "Unknown option: $1. Valid: --help" ;;
-      *)
-        if [[ -n "$provided_path" ]]; then
-          die "Unexpected extra argument: $1"
-        fi
-        provided_path="$1"
-        shift
-        ;;
-    esac
-  done
-  
-  # Resolve workspace path
-  local workspace_path
-  if [[ -n "$provided_path" ]]; then
-    workspace_path="$(require_workspace "$provided_path")" || return $?
-  else
-    workspace_path="$(require_workspace)" || return $?
-  fi
-  cd "$workspace_path" || die "Cannot change to workspace: $workspace_path"
-
-  header "Spinosa — Workspace Check"
-
-  local failures
-  failures=()
-  local warnings
-  warnings=()
-
-  # ── required files ────────────────────────────────────────────────
-  local required_files
-  required_files=(
-    "AGENTS.md"
-    "system/configuration.md"
-    "system/startup.md"
-    "system/context.md"
-    "system/yaml_header_template.md"
-    ".spinosa/framework-files.tsv"
-  )
-  for file in "${required_files[@]}"; do
-    [[ -f "$workspace_path/$file" ]] || failures+=("Missing $file")
-  done
-
-  local config startup_text
-  config="$(< "$workspace_path/system/configuration.md")"
-  local blueprint
-  blueprint="$(< "$workspace_path/system/context.md")"
-  startup_text="${config}${blueprint}"
-
-  # ── placeholder checks ────────────────────────────────────────────
-  for marker in "[path]" "[project name]" "[filled by CLI onboarding]" "[inferred during startup]" "[identified during startup]" "[filled by startup]"; do
-    if [[ "$startup_text" == *"$marker"* ]]; then
-      failures+=("Required placeholder remains: $marker")
-    fi
-  done
-
-  # ── setup_status ──────────────────────────────────────────────────
-  if [[ "$startup_text" == *"setup_status: cli_started"* ]]; then
-    failures+=("setup_status is still cli_started; run the workspace startup agent.")
-  fi
-  if [[ "$startup_text" != *"setup_status: workspace_started"* ]]; then
-    warnings+=("setup_status: workspace_started was not found.")
-  fi
-
-  # ── active raw corpus ─────────────────────────────────────────────
-  local active_corpus_path
-  active_corpus_path="$(echo "$config" | sed -n 's/.*active_corpus_path: *["'"'"']*\([^"'"'"']*\)["'"'"']*.*/\1/p' | head -1)"
-  [[ -z "$active_corpus_path" ]] && active_corpus_path="raw/"
-  if [[ "$active_corpus_path" != "raw/" && "$active_corpus_path" != "raw" ]]; then
-    failures+=("active_corpus_path must be raw/: $active_corpus_path")
-  fi
-  [[ -d "$workspace_path/raw" ]] || failures+=("Active corpus directory does not exist: raw/")
-
-  # ── external policy ───────────────────────────────────────────────
-  if ! echo "$config" | grep -qE "external_sources_allowed: *(yes|no)"; then
-    failures+=("external_sources_allowed is missing or invalid.")
-  fi
-
-  # ── workspace index and dictionary ────────────────────────────────
-  if [[ "$startup_text" == *"setup_status: workspace_started"* ]]; then
-    for required_file in "system/workspace_index.md" "system/dictionary.md"; do
-      if [[ ! -f "$workspace_path/$required_file" ]]; then
-        failures+=("Missing required file: $required_file")
-      elif [[ ! -s "$workspace_path/$required_file" ]]; then
-        failures+=("Empty required file: $required_file")
-      fi
-    done
-  fi
-
-  # ── obsidian files ────────────────────────────────────────────────
-  if [[ ! -f "$workspace_path/.obsidian/appearance.json" ]]; then
-    warnings+=("Missing .obsidian/appearance.json")
-  fi
-  if [[ ! -d "$workspace_path/.obsidian/snippets" ]]; then
-    warnings+=("Missing .obsidian/snippets/")
-  fi
-
-  # ── maps validation ────────────────────────────────────────────────
-  local maps_dir="$workspace_path/maps"
-  if [[ "$startup_text" == *"setup_status: workspace_started"* ]]; then
-    if [[ ! -d "$maps_dir" ]]; then
-      failures+=("Missing maps directory: maps")
-    else
-      local has_overview=false
-      shopt -s nullglob
-      for map_file in "$maps_dir"/*.md; do
-        local map_basename="$(basename "$map_file")"
-        [[ "$map_basename" == "AGENTS.md" || "$map_basename" == "map_template.md" || "$map_basename" == ".gitkeep" ]] && continue
-        has_overview=true
-        break
-      done
-      shopt -u nullglob
-      [[ "$has_overview" == "false" ]] && failures+=("No structural overview map found at maps/ root")
-
-      local has_groups=false
-      shopt -s nullglob
-      for dir in "$maps_dir"/*/; do
-        local dir_name="$(basename "$dir")"
-        [[ "$dir_name" == ".gitkeep" ]] && continue
-        has_groups=true
-        break
-      done
-      shopt -u nullglob
-      [[ "$has_groups" == "false" ]] && failures+=("No group map subdirectories found under maps/")
-    fi
-  fi
-
-  # ── output ─────────────────────────────────────────────────────────
-  if [[ ${#failures[@]} -gt 0 ]]; then
-    divider
-    printf '%s\n' "${BOLD}${R}Check failed:${RESET}"
-    for f in "${failures[@]}"; do
-      printf '  %s %s\n' "${R}✗${RESET}" "$f"
-    done
-    if [[ ${#warnings[@]} -gt 0 ]]; then
-      printf '\n%s\n' "${BOLD}${Y}Warnings:${RESET}"
-      for w in "${warnings[@]}"; do
-        printf '  %s %s\n' "${Y}⚠${RESET}" "$w"
-      done
-    fi
-    printf '\n'
-    return 1
-  fi
-
-  divider
-  ok "Check passed"
-  if [[ ${#warnings[@]} -gt 0 ]]; then
-    printf '\n%s\n' "${BOLD}${Y}Warnings:${RESET}"
-    for w in "${warnings[@]}"; do
-      printf '  %s %s\n' "${Y}⚠${RESET}" "$w"
-    done
-  fi
-  printf '\n'
-}
-
-# ═══════════════════════════════════════════════════════════════════════════
-# COMMAND: sync
-# ═══════════════════════════════════════════════════════════════════════════
-cmd_sync() {
-  local dry_run=0 auto_yes=0
-  while [[ $# -gt 0 ]]; do
-    case "$1" in
-      --dry-run) dry_run=1; shift ;;
-      --yes|-y)  auto_yes=1; shift ;;
-      --help|-h)
-        echo "Usage: spinosa sync [options]" >&2
-        echo "  --dry-run   Show what would change without writing" >&2
-        echo "  --yes       Skip confirmation prompt" >&2
-        return 0
-        ;;
-      -*) die "Unknown sync option: $1. Valid: --dry-run, --yes, --help" ;;
-      *) shift ;;
-    esac
-  done
-
-  # Use FRAMEWORK_ROOT (resolves dev + installed mode correctly)
-  local repo_root="$FRAMEWORK_ROOT"
-  if [[ -z "$repo_root" || ! -d "$repo_root/.agents/agents" ]]; then
-    die "Framework root not found. Cannot sync without framework."
-  fi
-
-  header "Spinosa — Sync Agents & Skills"
-
-  local agents_src="$repo_root/.agents/agents"
-  local skills_src="$repo_root/.agents/skills"
-
-  if [[ ! -d "$agents_src" ]]; then
-    die "Canonical agents directory not found: $agents_src"
-  fi
-
-  # Count what will change
-  local agent_count=0
-  for canonical in "$agents_src"/*.md; do
-    [[ -f "$canonical" ]] && agent_count=$((agent_count + 1))
-  done
-  local skill_count=0
-  for skill_dir in "$skills_src"/*/; do
-    [[ -d "$skill_dir" ]] && skill_count=$((skill_count + 1))
-  done
-
-  info "Will sync ${agent_count} agents and ${skill_count} skills"
-  info "Targets: .opencode/agents/, .claude/agents/, .codex/agents/"
-  info "Skills:  .opencode/skills/, .claude/skills/, .codex/skills/"
-
-  if [[ "$dry_run" -eq 1 ]]; then
-    warn "Dry run — no changes made"
-    return 0
-  fi
-
-  if [[ "$auto_yes" -ne 1 ]]; then
-    printf '\n'
-    if ! confirm "Apply sync? (deletes and regenerates vendor agent files)" "y"; then
-      info "Sync cancelled."
-      return 0
-    fi
-  fi
-
-  # ── clean stale mirrors ────────────────────────────────────────────
-  info "Cleaning stale mirrors..."
-  rm -rf "$repo_root/.opencode/skills" 2>/dev/null || true
-
-  # ── ensure destination directories ─────────────────────────────────
-  mkdir -p "$repo_root/.opencode/agents"
-  mkdir -p "$repo_root/.claude/agents"
-  mkdir -p "$repo_root/.codex/agents"
-
-  # ── clean existing vendor agent files ──────────────────────────────
-  rm -f "$repo_root/.opencode/agents/"*.md
-  rm -f "$repo_root/.claude/agents/"*.md
-  rm -f "$repo_root/.codex/agents/"*.toml
-
-  # ── sync agent definitions ─────────────────────────────────────────
-  local agent agent_file name description permissions opencode_perms frontmatter
-  local claude_tools canonical perm_part key val count=0 body_content
-
-  toml_escape() {
-    printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
-  }
-
-  for canonical in "$agents_src"/*.md; do
-    [[ -f "$canonical" ]] || continue
-    agent_file="$(basename "$canonical")"
-    agent="${agent_file%.md}"
-
-    frontmatter="$(sed -n '/^---$/,/^---$/p' "$canonical" | sed '1d;$d')"
-    name="$(echo "$frontmatter" | sed -n 's/^name: *//p' | head -1)"
-    description="$(sed -n '/^description: |/,/^[a-z]/p' "$canonical" | sed '/^description:/d;/^[a-z]/d' | sed 's/^  //' | tr -s ' ')"
-    [[ -z "$description" ]] && description="$agent"
-
-    permissions=""
-    local in_perm=false
-    while IFS= read -r line; do
-      if $in_perm && [[ "$line" == "---" ]]; then break; fi
-      if [[ "$line" =~ ^permissions: ]]; then in_perm=true; continue; fi
-      if $in_perm; then
-        if [[ "$line" =~ ^[a-z] ]] && ! [[ "$line" =~ ^[[:space:]] ]]; then break; fi
-        [[ "$line" =~ ^[[:space:]]*-[[:space:]] ]] && continue
-        if [[ "$line" =~ ^[[:space:]]*([a-z]+):[[:space:]]*(.*) ]]; then
-          key="${BASH_REMATCH[1]}"; value="${BASH_REMATCH[2]}"
-          [[ -z "$value" ]] && value="allow"
-          permissions="$permissions$key: $value, "
-        fi
-      fi
-    done < "$canonical"
-    permissions="${permissions%, }"
-
-    # ── OpenCode agent ──────────────────────────────────────────────
-    opencode_perms=""
-    IFS=',' read -ra perm_parts <<< "$permissions"
-    for part in "${perm_parts[@]}"; do
-      part="${part## }"; part="${part%% }"
-      [[ -z "$part" ]] && continue
-      key="${part%%:*}"; val="${part#*: }"
-      case "$key" in
-        read|grep|glob) opencode_perms="$opencode_perms  $key: $val"$'\n' ;;
-        write) opencode_perms="$opencode_perms  edit: $val"$'\n' ;;
-        move) opencode_perms="$opencode_perms  bash: $val"$'\n' ;;
-      esac
-    done
-
-    body_content="$(awk 'BEGIN{fm=0} /^---$/ && fm < 2 {fm++; next} fm == 2' "$canonical")"
-
-    cat > "$repo_root/.opencode/agents/$agent_file" << OPENCODE_EOF
----
-name: $name
-description: |
-$(echo "$description" | sed 's/^/  /')
-mode: subagent
-permission:
-$(echo "$opencode_perms" | sed '$d')
----
-
-$body_content
-OPENCODE_EOF
-
-    # ── Claude agent ─────────────────────────────────────────────────
-    case "$agent" in
-      spinosa-searcher)    claude_tools="Read, Grep, Glob" ;;
-      spinosa-analyst)     claude_tools="Read" ;;
-      spinosa-writer)      claude_tools="Read, Write" ;;
-      spinosa-verifier)    claude_tools="Read, Grep, Glob, Write" ;;
-      spinosa-janitor)     claude_tools="Read, Grep, Glob, Write" ;;
-      spinosa-mapper)      claude_tools="Read, Write" ;;
-      spinosa-serendippo)  claude_tools="Read, Grep, Glob, Write" ;;
-    esac
-
-    cat > "$repo_root/.claude/agents/$agent_file" << CLAUDE_EOF
----
-name: $name
-description: |
-$(echo "$description" | sed 's/^/  /')
-tools: $claude_tools
----
-
-$body_content
-CLAUDE_EOF
-
-    cat > "$repo_root/.codex/agents/${agent}.toml" << CODEX_EOF
-name = "$(toml_escape "$name")"
-description = "$(toml_escape "$description")"
-developer_instructions = '''
-$body_content
-'''
-CODEX_EOF
-
-    count=$((count + 1))
-    ok "Synced $agent"
-  done
-
-  # ── sync skills ────────────────────────────────────────────────────
-	  for platform in .opencode .claude .codex; do
-	    local dest="$repo_root/$platform/skills"
-	    rm -rf "$dest"
-	    mkdir -p "$dest"
-	    for skill_dir in "$skills_src"/*/; do
-	      [[ -d "$skill_dir" ]] || continue
-	      local skill_name="$(basename "$skill_dir")"
-	      mkdir -p "$dest/$skill_name"
-	      local skill_docs=()
-	      shopt -s nullglob
-	      skill_docs=("$skill_dir"*.md)
-	      shopt -u nullglob
-	      [[ ${#skill_docs[@]} -gt 0 ]] || die "No markdown skill files found in $skill_dir"
-	      cp "${skill_docs[@]}" "$dest/$skill_name/"
-	      [[ -f "$dest/$skill_name/SKILL.md" ]] || die "Missing mirrored SKILL.md for $skill_name"
-	      if [[ -d "$skill_dir/references" ]]; then
-	        mkdir -p "$dest/$skill_name/references"
-	        local ref_docs=()
-	        shopt -s nullglob
-	        ref_docs=("$skill_dir/references/"*.md)
-	        shopt -u nullglob
-	        [[ ${#ref_docs[@]} -eq 0 ]] || cp "${ref_docs[@]}" "$dest/$skill_name/references/"
-	      fi
-	    done
-    local skill_count
-    skill_count="$(find "$dest" -name "SKILL.md" | wc -l | tr -d ' ')"
-    ok "Synced $skill_count skills to $platform/skills/"
-  done
-
-  # ── sync CLAUDE.md ──────────────────────────────────────────────────
-  cp "$repo_root/AGENTS.md" "$repo_root/CLAUDE.md"
-  local today
-  today="$(date +%Y-%m-%d)"
-  # Update updated date and add provenance fields in the frontmatter block
-  sed -i.bak \
-    -e 's/^updated:.*/updated: '"$today"'/' \
-    -e '/^updated:/a\'$'\n''generated_by: sync-agents\'$'\n''generated_at: '"$today"''$'\n''processing_status: auto_generated' \
-    "$repo_root/CLAUDE.md" 2>/dev/null || \
-  sed -i '' \
-    -e 's/^updated:.*/updated: '"$today"'/' \
-    -e '/^updated:/a\
-generated_by: sync-agents\
-generated_at: '"$today"'\
-processing_status: auto_generated' \
-    "$repo_root/CLAUDE.md" 2>/dev/null || true
-  rm -f "$repo_root/CLAUDE.md.bak"
-  ok "Synced CLAUDE.md"
-
-  divider
-  ok "Sync complete — $count agents, skills mirrored to 3 platforms."
-  printf '\n'
-}
 
 # ═══════════════════════════════════════════════════════════════════════════
 # WORKSPACE DISCOVERY & CONFIGURATION
@@ -4331,85 +3451,7 @@ require_workspace() {
   fi
 }
 
-# ═══════════════════════════════════════════════════════════════════════════
-# DASHBOARD
-# ═══════════════════════════════════════════════════════════════════════════
 
-cmd_health() {
-  while [[ $# -gt 0 ]]; do
-    case "$1" in
-      --no-color) R="" G="" B="" Y="" C="" M="" PG="" DIM="" BOLD="" RESET=""; shift ;;
-      --help|-h)
-        printf '  %s\n' "Usage: spinosa health"
-        printf '    %s\n' "  Reports framework installation status, vendor engine availability,"
-        printf '    %s\n' "  workspace discovery, and detected LLM CLIs."
-        return 0
-        ;;
-      -*) die "Unknown option: $1. Valid: --no-color, --help" ;;
-      *) shift ;;
-    esac
-  done
-
-  header "Spinosa — System Health"
-  local issues=0
-
-  if [[ -n "$FRAMEWORK_ROOT" ]]; then
-    ok "Framework found: ${FRAMEWORK_ROOT}"
-  else
-    warn "Framework not found — is Spinosa installed?"
-    issues=$((issues + 1))
-  fi
-
-  repair_vendor_tools
-
-  if rapidocr_ocr_available; then
-    ok "RapidOCR OCR available for scanned PDFs and images"
-  else
-    note_wilted "RapidOCR OCR not bundled — scanned PDFs and images will be skipped"
-  fi
-
-  if markitdown_available; then
-    ok "MarkItDown available for Office docs, EPUB, HTML, and text-based PDFs"
-  else
-    note_wilted "MarkItDown not bundled — Office docs and text PDFs will be skipped"
-  fi
-
-  if yake_available; then
-    ok "YAKE available for keyword extraction"
-  else
-    note_wilted "YAKE not bundled — keyword extraction will be skipped"
-  fi
-
-  local ws_count
-  spinner_start "Discovering workspaces"
-  local workspace_data
-  workspace_data="$(discover_workspaces_with_permission 2>/dev/null || true)"
-  if [[ -n "$workspace_data" ]]; then
-    ws_count="$(echo "$workspace_data" | wc -l | tr -d ' ')"
-  else
-    ws_count=0
-  fi
-  spinner_stop
-  if [[ "$ws_count" -gt 0 ]]; then
-    ok "${ws_count} workspace(s) discovered"
-  else
-    note_empty "No workspaces discovered yet"
-  fi
-
-  local cli_count=0
-  command -v claude >/dev/null 2>&1 && cli_count=$((cli_count + 1))
-  command -v codex >/dev/null 2>&1 && cli_count=$((cli_count + 1))
-  command -v opencode >/dev/null 2>&1 && cli_count=$((cli_count + 1))
-  ok "${cli_count} LLM CLI(s) detected"
-
-  divider
-  if [[ "$issues" -gt 0 ]]; then
-    warn "${issues} issue(s) found"
-  else
-    ok "System health check passed"
-  fi
-  echo ""
-}
 
 
 
@@ -4674,12 +3716,7 @@ cmd_dashboard() {
   while true; do
     local options=()
     options+=("$(option_spec "new" "New workspace" "Create a new workspace and run onboarding")")
-    options+=("$(option_spec "prepare" "Prepare workspace" "Set up an existing workspace")")
-    options+=("$(option_spec "update" "Update workspace" "Update workspace framework files")")
-    options+=("$(option_spec "check" "Check workspace" "Validate workspace integrity")")
-    options+=("$(option_spec "sync" "Sync agents" "Sync agent and skill mirrors")")
     options+=("$(option_spec "upgrade" "Upgrade Spinosa" "Upgrade to latest release")")
-    options+=("$(option_spec "health" "System health" "Check system health and environment")")
     options+=("$(option_spec "uninstall" "Uninstall" "Remove Spinosa from this system")")
     options+=("$(option_spec "help" "Help" "Show help information")")
     options+=("$(option_spec "quit" "Quit" "Exit Spinosa")")
@@ -4691,12 +3728,7 @@ cmd_dashboard() {
 
     case "$choice" in
       new)       cmd_new "$@" ;;
-      onboard|prepare)   cmd_onboard "$@" ;;
-      update)    cmd_update "$@" ;;
-      check)     cmd_check "$@" ;;
-      sync)      cmd_sync "$@" ;;
       upgrade)   cmd_upgrade "$@" ;;
-      health)    cmd_health "$@" ;;
       uninstall) cmd_uninstall "$@" ;;
       help)      cmd_help ;;
       quit)      return 0 ;;
@@ -4706,6 +3738,8 @@ cmd_dashboard() {
     printf '\n'
   done
 }
+
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Auto-upgrade check — runs before every command except upgrade itself
@@ -4768,12 +3802,7 @@ fi
 # ═══════════════════════════════════════════════════════════════════════════
 case "${1:-}" in
   new)       shift; cmd_new "$@" ;;
-  onboard|prepare)   shift; cmd_onboard "$@" ;;
-  update)    shift; cmd_update "$@" ;;
   upgrade)   shift; cmd_upgrade "$@" ;;
-  check)     shift; cmd_check "$@" ;;
-  sync)      shift; cmd_sync "$@" ;;
-  health)    shift; cmd_health "$@" ;;
   uninstall) shift; cmd_uninstall "$@" ;;
   help|-h|--help) cmd_help ;;
   --version|-v) printf 'spinosa %s\n' "$(framework_version "$FRAMEWORK_ROOT")"; exit 0 ;;

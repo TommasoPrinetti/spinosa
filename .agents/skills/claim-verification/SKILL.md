@@ -1,5 +1,5 @@
 ---
-name: pilosa-claim-verification
+name: spinosa-claim-verification
 type: skill
 scope: claim_verification
 description: |

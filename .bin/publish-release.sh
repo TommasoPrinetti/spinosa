@@ -87,8 +87,8 @@ for tarball in "${REPO_ROOT}/.bin/lib/vendor"/spinosa-vendor-*.tar.gz; do
   fi
 done
 
-BODY="$(mktemp)"
-trap 'rm -f "$BODY"' EXIT
+BODY="$(mktemp "${TMPDIR:-/tmp}/spinosa-release-notes.XXXXXX")"
+trap 'rm -f "$BODY" 2>/dev/null || true' EXIT
 cat > "$BODY" << EOF
 Spinosa Framework ${TAG}
 
@@ -108,10 +108,10 @@ curl -fsSL https://github.com/TommasoPrinetti/spinosa/releases/download/${TAG}/i
 bash install-spinosa.sh --version ${VERSION}
 \`\`\`
 
-## Update existing workspace
+## Upgrade
 
 \`\`\`sh
-spinosa update --version ${VERSION}
+spinosa upgrade
 \`\`\`
 
 ## Update policy

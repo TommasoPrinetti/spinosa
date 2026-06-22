@@ -18,6 +18,10 @@ Short routing log for user prompts. Log the request before deciding whether to a
 
 | Date | Request summary | Route | Status | Output |
 |-----|----------------|-------|--------|--------|
+| 2026-06-22 | Make MarkItDown progress bar advance to the active file during conversion | fast_path | done | .bin/spinosa active converter index display updated; bash -n passed |
+| 2026-06-22 | Truncate long onboarding corpus/workspace/source paths in CLI display | fast_path | done | .bin/spinosa path display helper applied; bash -n passed |
+| 2026-06-22 | Replace OCR per-file newline progress with in-place converter progress bar | fast_path | done | .bin/spinosa progress rendering updated; bash -n passed |
+| 2026-06-22 | Run read-only full code audit of every .sh file (root, .bin, dist mirrors) | non-fast-path | done | agent_reports/shell-scripts-audit-2026-06-22.md (findings by severity, static checks, sub-agents used); plan captured in session |
 | 2026-06-13 | Run read-only Ralph loop bug audit across tests and repo | synthesis_report | done | agent_reports/00_ralph-loop-bug-audit.md |
 | 2026-06-13 | Fix Ralph audit bugs and add operativity regressions | fast_path | done | local fixes and tests updated |
 | 2026-06-13 | Run architect-level whole-code audit for crash/bug risks | fast_path | done | agent_reports/01_architect-code-audit.md |
@@ -42,3 +46,5 @@ Short routing log for user prompts. Log the request before deciding whether to a
 | 2026-06-21 | Remove welcome and tour redirect pages | fast_path | done | docs/WELCOME.md and docs/TOUR.md deleted |
 | 2026-06-21 | Add mandatory Phase B route audit and framework evolution loop | fast_path | done | orchestrator, agents, and fallback skills updated |
 | 2026-06-21 | Audit goal-driven orchestrator rewrite for crossroads and validation risks | non-fast-path | done | agent_reports/05_orchestrator-rewrite-audit-goal.md; agent_reports/06_orchestrator-rewrite-audit.md |
+| 2026-06-22 | Framework contract: concept-graph parser, startup validation checks, YAML schema, map template, orchestrator metrics contract | non-fast-path | done | concept-graph.py, check-startup.sh, startup.md, yaml_header_template.md, map_template.md, orchestrator-dispatch/SKILL.md updated |
+| 2026-06-22 | Add granted_tools to all 9 agent definitions, fix evaluator/evolver fallback skills, add orchestrator tool contract, add validation | non-fast-path | done | 9 agent defs, 2 fallback skills, orchestrator SKILL, check-startup.sh updated |

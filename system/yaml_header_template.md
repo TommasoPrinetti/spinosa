@@ -48,19 +48,18 @@ Required for every file in [[raw/]]. The dictionary is the source of truth for c
 ---
 type: raw_copy
 source: "raw/[relative-path]/[filename]"
-source_type: interview | fieldnote | article | report | dataset | correspondence | researcher_note
+source_type: interview | fieldnote | article | report | dataset | correspondence | researcher_note | participant_worksheet | transcript | transcript_for_worksheet | book
 original_format: pdf | docx | pptx | xlsx | xls | epub | html | txt | rtf | csv | json | yaml | md | jpg | png | ...
 converter_engine: markitdown | rapidocr | renamer | native
+ocr_confidence: high | medium | low | unknown
 language: en | fr | pt | es | ...
 date: "YYYY-MM-DD or YYYY-MM-DD"
 people: ["canonical name from dictionary"]
 places: ["canonical place from dictionary"]
 organizations: ["canonical org from dictionary"]
 topics: ["topic1", "topic2"]
-keywords: ["keyword1", "keyword2", "keyword3"]
-concepts: ["[[Concept Name]]"]
+summary: "4-line max summary capturing the key areas and concepts in this document."
 explicit_source_terms: ["surface term from source"]
-inferred_concepts: ["inferred concept label"]
 canonical_aliases: ["alias from dictionary"]
 uncertain_terms: ["term needing review"]
 machine_artifacts: ["SPEAKER_00", "ocr_noise"]
@@ -78,15 +77,14 @@ Rules:
 - `source` uses a relative path from the repo root (e.g., `raw/folder/file.md`).
 - `original_format` records the source file extension before conversion (e.g., `pdf`, `docx`, `txt`). Replaces the former `text_type` field. Used for provenance tracking and re-onboarding idempotency checks.
 - `converter_engine` records which engine produced this `.md` file: `renamer` (extension rename only), `native` (copied unchanged), `markitdown` (MarkItDown conversion), or `rapidocr` (OCR via RapidOCR). Enables engine-specific re-classification warnings on re-onboarding.
+- `ocr_confidence` is optional and applies when OCR or scan conversion produced the text. Use `unknown` when OCR quality was not measured.
 - `language` is the ISO 639-1 code of the source file's primary language (en, fr, pt, es, etc.).
 - `people`, `places`, `organizations` MUST use canonical forms from [[dictionary]].
-- `keywords` include both canonical terms and aliases in the source's language (so grep finds any variant).
-- `concepts` link to relevant concept entries in the navigation maps.
+- `summary` is a 4-line max plain-text capture of the document's key areas and concepts. Written during startup by a summarizer sub-agent; no automated extraction tools involved.
 - `explicit_source_terms` are terms visibly present in the source.
-- `inferred_concepts` are derived labels and must stay separate from explicit source terms.
 - `canonical_aliases` lists dictionary aliases included for retrieval.
 - `uncertain_terms`, `machine_artifacts`, and `metadata_uncertainty` quarantine noisy or incomplete metadata.
-- `related_sources` lists other raw copies with shared topics or concepts.
+- `related_sources` lists other raw copies with shared topics.
 - `generated_by`, `generated_at`, and `processing_status` preserve provenance for generated headers.
 - `processing_status` values are engine-specific: `copied_text_headered` (renamer/native), `markitdown_converted` (MarkItDown), `ocr_processed` (RapidOCR).
 - Omit fields that have no value — do not write `people: []`.
@@ -116,5 +114,5 @@ Validation before `setup_status: ready`:
 Use short lowercase values in `source_type`.
 
 ```yaml
-source_types: [interview, fieldnote, article, policy, report, news, web_capture, legal, dataset, image, scan, audio, video, correspondence, researcher_note, external]
+source_types: [interview, fieldnote, article, policy, report, news, web_capture, legal, dataset, image, scan, audio, video, correspondence, researcher_note, participant_worksheet, transcript, transcript_for_worksheet, book, external]
 ```

@@ -23,7 +23,7 @@ You are a search-and-find engine for large datasets and text archives. You orche
 2. Log the request in `logs/user_requests.md`.
 3. Split the prompt into `fast_path` or `non-fast-path`.
 4. For every `non-fast-path` request, write a goal artifact in `agent_reports/` that freezes Phase A.
-5. Dispatch the frozen Phase A chain sequentially, file-to-file.
+5. Dispatch the frozen Phase A chain sequentially, file-to-file. Exception: during startup Phase 2.2 (Build Dictionary And Extract Content-Grounded Fragments), all `spinosa-mapper` sub-agents are dispatched in parallel in a single message — one per batch. See `system/startup.md` Sections 2.2 Steps 1-3 for the full protocol.
 6. Run the post-route audit loop for every `non-fast-path` request.
 7. Close with files changed, validation performed, and blockers or unchecked claims.
 
@@ -98,7 +98,7 @@ Chain selection rules:
 - `non-fast-path` always starts with the orchestrator-written goal artifact.
 - Choose the smallest chain that can honestly complete the request.
 - Every selected Phase A role must produce a durable file in `agent_reports/` for the next step.
-- The chain is strictly sequential once frozen: no parallel execution, no skipped steps, no appended steps, no mid-route replanning.
+- The chain is strictly sequential once frozen: no parallel execution, no skipped steps, no appended steps, no mid-route replanning. Exception: during startup Phase 2.2, mappers are dispatched in parallel (see `system/startup.md` Sections 2.2 Steps 1-3).
 - Repeated agents are allowed only when declared up front in the goal artifact with separate rationale lines.
 - If the route produces a user-facing answer report, `spinosa-writer` must create it before `spinosa-verifier`.
 - `spinosa-verifier` is required whenever the route produces claims, citations, or quotes.
@@ -112,6 +112,8 @@ For every `non-fast-path` route, append the mandatory Phase B tail after the Pha
 Once the goal artifact freezes the Phase A pipeline, dispatch each step strictly in order.
 
 Phase A is always sequential and file-based. Each agent reads the prior artifact paths and writes the next durable artifact in `agent_reports/`. After the Phase A terminal artifact is verified or otherwise checked as planned, the orchestrator must run Phase B before the route is considered complete.
+
+**Exception — parallel mapper dispatch:** During startup Phase 2.2, all `spinosa-mapper` sub-agents are spawned in a single message (one per batch). Each writes its own output to `agent_reports/extraction_{batch_id}.md`. After all return, the orchestrator performs a single merge pass. This is the only Phase A step where parallel execution is authorized. See `system/startup.md` Phase 2.2.
 
 See the **Sub-Agent Pipeline** table below for what each agent does. See **Sub-Agent Invocation Rules** for how to call them.
 
@@ -139,8 +141,8 @@ fallback_skill: .agents/skills/evidence-search/SKILL.md
 
 | NativeAgent         | Role                                                                                  |
 | ------------------- | ------------------------------------------------------------------------------------- |
-| `spinosa-searcher`   | Searches maps first, then raw files and dictionary, and writes evidence packets       |
-| `spinosa-mapper`     | Reads raw files in batch, extracts content-grounded fragments, and writes navigation artifacts |
+| `spinosa-searcher`   | Queries concept graph first (if available), then searches maps and raw files; writes evidence packets |
+| `spinosa-mapper`     | Reads raw files in batch (identified by `batch_id`), extracts content-grounded fragments with idempotency (skips if output exists), writes extraction packets and navigation maps |
 | `spinosa-serendippo` | Reads prior artifacts and raw files to write hidden-connection reports                |
 | `spinosa-analyst`    | Reads prior artifacts and project context to write contextual analysis packets        |
 | `spinosa-writer`     | Produces the user-facing answer report when the frozen chain calls for one            |
@@ -174,6 +176,9 @@ Stop and answer when:
 
 - Never read, list, or index `.DS_Store` or `._*` files. Always skip them in glob, find, ls, and read operations.
 - Direct quotes must use the repository verbatim quote format and must be verified against the source. `spinosa-writer` applies the format; `spinosa-verifier` checks quote accuracy, source path validity, and citation completeness.
+- Raw file YAML headers use a `summary` field (4 lines max) instead of automated keyword arrays. The summary is written by a summarizer sub-agent during startup Phase 2.2. See `system/yaml_header_template.md`.
+- Extraction batches use `batch_id` identifiers for idempotency. A mapper skips a batch if `agent_reports/extraction_{batch_id}.md` already exists with valid frontmatter (`files_processed > 0`). On restart, the orchestrator re-spawns only missing batches.
+- A queryable concept graph is built at `system/concept-graph.json` during startup Phase 2.2 Step 6. Searcher and serendippo agents query it first for navigation (`python3 .bin/lib/concept-graph.py query <term>`) before falling back to map reading. This replaces blind grepping for known concepts.
 - `spinosa-verifier` is mandatory whenever a Phase A artifact presents claims, citations, or quotes that need truth-checking.
 - `spinosa-evaluator` is mandatory on every non-fast-path route after the Phase A terminal artifact reaches its planned checking state.
 - `spinosa-evolver` may edit only `AGENTS.md`, `.agents/agents/`, `.agents/skills/`, and behavior-defining docs under `system/`.
