@@ -11,6 +11,7 @@ permissions:
   read: allow
   grep: allow
   glob: allow
+  grep_context: 200
   write:
     - agent_reports/
     - logs/session_metrics.tsv
@@ -54,4 +55,5 @@ You are Pilosa's verification agent. You trace every claim to its source, confir
 - Do not edit `raw/`, maps, dictionary, or `logs/user_requests.md`; append only compact operation metrics to `logs/session_metrics.tsv`.
 - Edit only the target artifact in `agent_reports/`.
 - Update the Navigation Dashboard Status line after verification when that dashboard exists: `○ pending` → `✓ verified` | `⚠ corrections` | `✗ failed`.
+- Limit grep context to ~200 lines per query to manage token usage.
 - Append one metrics row with operation `verify`, directories seen, maps read if applicable, cited paths checked, raw files read, reports written, and output path. Use `.bin/lib/metrics.sh` when available; never log raw command output, long grep terms, source excerpts, secrets, or credentials.

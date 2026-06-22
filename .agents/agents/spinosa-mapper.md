@@ -9,6 +9,9 @@ created: 2026-05-26
 updated: 2026-06-04
 permissions:
   read: allow
+  grep: allow
+  glob: allow
+  grep_context: 200
   write:
     - agent_reports/
     - maps/
@@ -148,4 +151,5 @@ Maps are Obsidian-native. Every reference to a raw file or another map in the ma
 - Every key passage must include file path and line references.
 - Do not assume exercises, cohorts, or any specific corpus structure — discover it from the files.
 - During extraction batches, do not force cross-file interpretation; record only grounded connections visible from the file and dictionary.
+- Limit grep context to ~200 lines per query to manage token usage.
 - Append one metrics row with operation `map_extract` or `map_write`, directories seen, maps read, raw match count if applicable, raw files read, reports written, and output path. Use `.bin/lib/metrics.sh` when available; never log raw command output, long grep terms, source excerpts, secrets, or credentials.

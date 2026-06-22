@@ -25,18 +25,17 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FRAMEWORK_ROOT="$(dirname "$SCRIPT_DIR")"
 VENDOR_BASE="${FRAMEWORK_ROOT}/.bin/lib/vendor"
 MARKITDOWN_CLI="${FRAMEWORK_ROOT}/.bin/lib/markitdown-cli.py"
+YAKE_CLI="${FRAMEWORK_ROOT}/.bin/lib/yake-cli.py"
 
 PYTHON_VERSION="3.11.15"
 PYTHON_BUILD_VERSION="20260602"
 
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[0;92m'
-NC='\033[0m'
+R=$'\033[31m' G=$'\033[32m' Y=$'\033[33m'
+BOLD=$'\033[1m' DIM=$'\033[2m' RESET=$'\033[0m'
 
-log() { echo -e "${GREEN}✓${NC} $*"; }
-warn() { echo -e "${YELLOW}⚠${NC} $*"; }
-err() { echo -e "${RED}✗${NC} $*" >&2; exit 1; }
+log() { printf '  %s %s\n' "${G}✓${RESET}" "$*"; }
+warn() { printf '  %s %s\n' "${Y}⚠${RESET}" "$*"; }
+err() { printf '  %s %s\n' "${R}✗${RESET}" "$*" >&2; exit 1; }
 
 detect_platform() {
     local os arch
@@ -95,7 +94,7 @@ build_platform() {
     python_tar="$(mktemp /tmp/python-standalone-${platform}-XXXXXX.tar.gz)"
 
     log "Downloading standalone Python..."
-    curl -L -o "${python_tar}" "${python_url}" || err "Failed to download Python"
+    curl -L --retry 3 --retry-delay 5 -o "${python_tar}" "${python_url}" || err "Failed to download Python"
 
     # Verify Python standalone checksum
     local python_checksums_url
@@ -149,9 +148,10 @@ build_platform() {
     fi
     log "Python binary: ${python_bin}"
 
-    # Copy CLI wrapper
+    # Copy CLI wrappers
     log "Copying CLI wrappers..."
     cp "${MARKITDOWN_CLI}" "${vendor_dir}/markitdown-cli.py"
+    cp "${YAKE_CLI}" "${vendor_dir}/yake-cli.py"
 
     # Create markitdown-cli bash launcher
     cat > "${vendor_dir}/markitdown-cli" << 'MDWRAP_EOF'
@@ -169,6 +169,23 @@ fi
 exec "${PYTHON_BIN}" "${SCRIPT_DIR}/markitdown-cli.py" "$@"
 MDWRAP_EOF
     chmod +x "${vendor_dir}/markitdown-cli"
+
+    # Create yake-cli bash launcher
+    cat > "${vendor_dir}/yake-cli" << 'YKWRAP_EOF'
+#!/usr/bin/env bash
+# YAKE CLI wrapper for Spinosa
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PYTHON_BIN="${SCRIPT_DIR}/python/bin/python3"
+if [[ ! -x "${PYTHON_BIN}" ]]; then
+    PYTHON_BIN="${SCRIPT_DIR}/Python.framework/Versions/Current/bin/python3"
+fi
+if [[ ! -x "${PYTHON_BIN}" ]]; then
+    echo "ERROR: Bundled Python not found in ${SCRIPT_DIR}/python/" >&2
+    exit 1
+fi
+exec "${PYTHON_BIN}" "${SCRIPT_DIR}/yake-cli.py" "$@"
+YKWRAP_EOF
+    chmod +x "${vendor_dir}/yake-cli"
 
     # Package
     log "Creating archive..."

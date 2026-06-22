@@ -6,7 +6,6 @@ if [ -z "${BASH_VERSION-}" ]; then
     if [ -n "${0-}" ] && [ -f "${0-}" ]; then
       exec bash "$0" "$@"
     fi
-    # Piped mode — bash is available but we're in sh
     TMP_SCRIPT="$(mktemp /tmp/spinosa-install.XXXXXX)"
     trap 'rm -f "$TMP_SCRIPT"' EXIT
     cat > "$TMP_SCRIPT"
@@ -29,9 +28,11 @@ fi
 
 set -euo pipefail
 
-# ── defaults ────────────────────────────────────────────────────────────────
-# Pinned stable version. Update this when cutting a new release.
-PINNED_VERSION="0.5.10"
+# ══════════════════════════════════════════════════════════════════════════════
+# CONFIGURATION
+# ══════════════════════════════════════════════════════════════════════════════
+
+PINNED_VERSION="0.5.11"
 VERSION="${VERSION:-$PINNED_VERSION}"
 DRY_RUN=0
 VERIFY_ONLY=0
@@ -43,15 +44,18 @@ YES=0
 LAUNCH_DASHBOARD="auto"
 SPINOSA_HOME="${SPINOSA_HOME:-$HOME/.spinosa}"
 SPINOSA_BIN_DIR="${SPINOSA_BIN_DIR:-$HOME/.local/bin}"
+NO_MODIFY_PATH=false
 REPO="TommasoPrinetti/spinosa"
 
-# ── colors (only if terminal) ──────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+# UI HELPERS
+# ══════════════════════════════════════════════════════════════════════════════
+
 if [ -t 2 ] && [ "${NO_COLOR:-}" != "1" ]; then
-  R='' G='' B='' Y='' C='' DIM='' BOLD='' U='' RESET=''
-  R=$'\033[32m' G=$'\033[32m' Y=$'\033[32m'
-  C=$'\033[32m' DIM=$'\033[2m' BOLD=$'\033[1m' U=$'\033[4m' RESET=$'\033[0m'
+  G=$'\033[32m' Y=$'\033[33m' R=$'\033[31m'
+  DIM=$'\033[2m' BOLD=$'\033[1m' U=$'\033[4m' RESET=$'\033[0m'
 else
-  R='' G='' B='' Y='' C='' DIM='' BOLD='' U='' RESET=''
+  G='' Y='' R='' DIM='' BOLD='' U='' RESET=''
 fi
 
 info()  { printf '  %s %s\n' "${DIM}→${RESET}" "$1"; }
@@ -60,8 +64,8 @@ warn()  { printf '  %s %s\n' "${Y}⚠${RESET}" "$1" >&2; }
 note()  { printf '  %s↳%s %s\n' "${DIM}" "${RESET}" "$1"; }
 fail()  { printf '  %s%s✗%s %s%s\n' "${R}${BOLD}" "${U}" "$(printf '\033[24m')" "$1" "${RESET}" >&2; }
 die()   { printf '\n  %s %s\n\n' "${R}✗${RESET}" "$1" >&2; exit 1; }
+divider() { printf '%s\n' "${DIM}$(printf '%.0s─' {1..78})${RESET}"; }
 
-# ── read from TTY (works with piped input) ──────────────────────────────────
 read_from_tty() {
   if [ -t 0 ]; then
     IFS= read -r "$@"
@@ -69,6 +73,12 @@ read_from_tty() {
     IFS= read -r "$@" < /dev/tty
   else
     return 1
+  fi
+}
+
+read_tty_or_die() {
+  if ! read_from_tty "$1"; then
+    die "Cannot read from terminal. Use --yes to skip prompts."
   fi
 }
 
@@ -80,7 +90,7 @@ spinner_start() {
     local frames=("▁" "▃" "▄" "▅" "▆" "▇" "█" "▇" "▆" "▅" "▄" "▃")
     local i=0
     while true; do
-      printf '\r\033[2K  %s%s%s %s' "${C}" "${frames[$((i % 12))]}" "${RESET}" "$msg" >&2
+      printf '\r\033[2K  %s%s%s %s' "${G}" "${frames[$((i % 12))]}" "${RESET}" "$msg" >&2
       i=$((i + 1))
       sleep 0.1
     done
@@ -94,18 +104,22 @@ spinner_stop() {
   wait "$SPINNER_PID" 2>/dev/null || true
   SPINNER_PID=""
   printf '\r\033[2K' >&2
-  if [[ -n "${1:-}" ]]; then
+  if [ -n "${1:-}" ]; then
     printf '  %s %s\n' "${G}✦${RESET}" "$1"
   fi
 }
 
-# ── parse flags ─────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+# FLAG PARSING
+# ══════════════════════════════════════════════════════════════════════════════
+
 while [ $# -gt 0 ]; do
   case "$1" in
     --version)
+      [ $# -ge 2 ] || die "--version requires a value (use X.Y.Z or 'latest')"
       VERSION="$2"; shift 2
-      if [[ "$VERSION" != "latest" && ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-        die "Invalid version: $VERSION (use X.Y.Z or 'latest')"
+      if [[ "$VERSION" != "latest" && ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?(\+[a-zA-Z0-9.]+)?$ ]]; then
+        die "Invalid version: $VERSION (use X.Y.Z, X.Y.Z-pre, or 'latest')"
       fi
       ;;
     --latest)     VERSION="latest"; shift ;;
@@ -113,20 +127,21 @@ while [ $# -gt 0 ]; do
     --verify-only) VERIFY_ONLY=1; shift ;;
     --upgrade)    UPGRADE=1; shift ;;
     --reinstall)  REINSTALL=1; shift ;;
-	    --no-bundled-tools) SKIP_BUNDLED_TOOLS=1; shift ;;
-	    --no-gum)     SKIP_BUNDLED_TOOLS=1; shift ;;
-	    --no-modify-path) NO_MODIFY_PATH=true; shift ;;
-	    --launch)     LAUNCH_DASHBOARD=1; shift ;;
-	    --no-launch)  LAUNCH_DASHBOARD=0; shift ;;
-    --min-days)   MIN_DAYS="$2"; shift 2 ;;
-    --prefix)     SPINOSA_HOME="$2"; shift 2 ;;
+    --no-bundled-tools|--no-gum) SKIP_BUNDLED_TOOLS=1; shift ;;
+    --no-modify-path) NO_MODIFY_PATH=true; shift ;;
+    --launch)     LAUNCH_DASHBOARD=1; shift ;;
+    --no-launch)  LAUNCH_DASHBOARD=0; shift ;;
+    --min-days)
+      [ $# -ge 2 ] || die "--min-days requires a positive integer"
+      MIN_DAYS="$2"; shift 2 ;;
+    --prefix)
+      [ $# -ge 2 ] || die "--prefix requires a directory path"
+      SPINOSA_HOME="$2"; shift 2 ;;
     --bin-dir)
-      SPINOSA_BIN_DIR="$2"; shift 2
-      if [[ ! "$SPINOSA_BIN_DIR" =~ ^[a-zA-Z0-9_/.-]+$ ]]; then
-        die "Invalid bin directory path: $SPINOSA_BIN_DIR"
-      fi
-      ;;
+      [ $# -ge 2 ] || die "--bin-dir requires a directory path"
+      SPINOSA_BIN_DIR="$2"; shift 2 ;;
     --yes|-y)     YES=1; shift ;;
+    --)           shift; break ;;
     --help|-h)
       echo "Usage: bash install-spinosa.sh [options]"
       echo ""
@@ -137,9 +152,9 @@ while [ $# -gt 0 ]; do
       echo "  --reinstall       Reinstall even if same version"
       echo "  --dry-run         Show what would happen without doing it"
       echo "  --verify-only     Verify installed binaries, do not install"
-	      echo "  --yes             Skip all confirmation prompts (for automation)"
-	      echo "  --launch          Launch the dashboard after install"
-	      echo "  --no-launch       Do not launch the dashboard after install"
+      echo "  --yes             Skip all confirmation prompts (for automation)"
+      echo "  --launch          Launch the dashboard after install"
+      echo "  --no-launch       Do not launch the dashboard after install"
       echo ""
       echo "Security:"
       echo "  --min-days N      Reject releases newer than N days old"
@@ -155,8 +170,12 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-# ── detect OS and architecture ─────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+# UTILITY FUNCTIONS
+# ══════════════════════════════════════════════════════════════════════════════
+
 detect_platform() {
+  local os arch
   os="$(uname -s)"
   arch="$(uname -m)"
 
@@ -177,143 +196,8 @@ detect_platform() {
   info "Platform: ${PLATFORM}"
 }
 
-# ── download helper ─────────────────────────────────────────────────────────
-download() {
-  local url="$1" dest="$2"
-
-  if command -v curl >/dev/null 2>&1; then
-    curl -fSL --silent --show-error "$url" -o "$dest"
-  elif command -v wget >/dev/null 2>&1; then
-    wget -q --show-progress "$url" -O "$dest"
-  else
-    die "Neither curl nor wget found. Please install one."
-  fi
-}
-
-# ── safe untar ──────────────────────────────────────────────────────────────
-# Extracts a tarball after scanning for path traversal and symlink attacks.
-# Usage: safe_untar <archive> <destination> [extra tar args...]
-_realpath() {
-  local path="$1"
-  if [[ -d "$path" ]]; then
-    (cd "$path" 2>/dev/null && pwd -P) 2>/dev/null || echo "$path"
-  else
-    local dir; dir="$(dirname "$path")"
-    local base; base="$(basename "$path")"
-    (cd "$dir" 2>/dev/null && echo "$(pwd -P)/$base") 2>/dev/null || echo "$path"
-  fi
-}
-
-safe_untar() {
-  local archive="$1" dest="$2"
-  shift 2
-
-  local listing
-  listing="$(tar -tzf "$archive" 2>/dev/null)" || die "Cannot read archive: $archive"
-
-  # Reject any entry with .. component
-  if printf '%s\n' "$listing" | grep -qE '(^|/)\.\.(/|$)'; then
-    die "Archive contains path traversal entries — aborting for safety"
-  fi
-
-	  # Reject absolute paths and unsafe symlink targets. Plain tar -tzf does not
-	  # expose symlink targets, so inspect the verbose listing for `name -> target`.
-	  if printf '%s\n' "$listing" | grep -qE '^/'; then
-	    die "Archive contains absolute paths — aborting for safety"
-	  fi
-
-	  local verbose_listing _entry _target
-	  verbose_listing="$(tar -tzvf "$archive" 2>/dev/null)" || die "Cannot inspect archive: $archive"
-	  while IFS= read -r _entry; do
-	    [[ "$_entry" == l* && "$_entry" == *" -> "* ]] || continue
-	    _target="${_entry##* -> }"
-	    if [[ "$_target" == /* ]] || [[ "$_target" =~ (^|/)\.\.(/|$) ]]; then
-	      die "Archive contains unsafe symlinks — aborting for safety"
-	    fi
-	  done <<< "$verbose_listing"
-
-  tar -xzf "$archive" -C "$dest" --no-same-owner "$@"
-}
-
-# ── checksum helper ─────────────────────────────────────────────────────────
-sha256_file() {
-  if command -v sha256sum >/dev/null 2>&1; then
-    sha256sum "$1" | awk '{print $1}'
-  elif command -v shasum >/dev/null 2>&1; then
-    shasum -a 256 "$1" | awk '{print $1}'
-  else
-    die "No SHA-256 tool (sha256sum or shasum) found. Cannot verify checksums."
-  fi
-}
-
-verify_checksum() {
-  file="$1"
-  expected="$2"
-
-  actual="$(sha256_file "$file")"
-  if [ "$actual" = "$expected" ]; then
-    return 0
-  else
-    return 1
-  fi
-}
-
-# ── release age check ───────────────────────────────────────────────────────
-# Rejects releases that are too fresh. Helps avoid zero-day compromised uploads.
-check_release_age() {
-  local version="$1" min_days="$2"
-  [ -n "$min_days" ] || return 0
-  [ "$min_days" -gt 0 ] 2>/dev/null || die "--min-days must be a positive integer"
-
-  local api_url="https://api.github.com/repos/${REPO}/releases/tags/v${version}"
-  local published_at
-  published_at="$(curl -fsSL "$api_url" 2>/dev/null | grep '"published_at":' | head -1 | sed 's/.*"published_at": "\([^"]*\)".*/\1/')"
-
-  if [ -z "$published_at" ]; then
-    if [ "$VERSION" = "latest" ] || [ -n "$MIN_DAYS" ]; then
-      die "Could not verify release age. GitHub API may be rate-limited. Retry later, or omit --min-days."
-    fi
-    warn "Could not verify release age — skipping check"
-    return 0
-  fi
-
-	  local release_ts current_ts
-	  release_ts=""
-	  if release_ts="$(date -d "$published_at" +%s 2>/dev/null)"; then
-	    :
-	  elif release_ts="$(date -j -f "%Y-%m-%dT%H:%M:%SZ" "$published_at" +%s 2>/dev/null)"; then
-	    :
-	  else
-	    release_ts=""
-	  fi
-	  if [ -z "$release_ts" ]; then
-	    die "Could not parse release date '$published_at'. Cannot enforce --min-days."
-	  fi
-
-  current_ts="$(date +%s)"
-  local days_old=$(( (current_ts - release_ts) / 86400 ))
-
-  if [ "$days_old" -lt "$min_days" ]; then
-    die "Release v${version} is only ${days_old} day(s) old. Minimum required: ${min_days} day(s). Use --latest to override, or wait."
-  fi
-
-  ok "Release age verified: ${days_old} day(s) old (minimum: ${min_days})"
-}
-
-# ── vendor binary verification ────────────────────────────────────────────────
-# Verifies SHA-256 checksums of installed vendor binaries against the manifest
-# bundled in the framework release.
-verify_vendor_binaries() {
-  local framework_root="$1"
-  local checksums_file="${framework_root}/metadata/vendor-checksums.txt"
-
-  if [ ! -f "$checksums_file" ]; then
-    warn "No vendor checksums found in release — skipping binary verification"
-    return 0
-  fi
-
-  # Determine current platform suffix to match the right checksum entry
-  local os arch suffix
+detect_platform_suffix() {
+  local os arch
   case "$(uname -s)" in
     Darwin) os="darwin" ;;
     Linux)  os="linux" ;;
@@ -325,29 +209,229 @@ verify_vendor_binaries() {
     i386|i686)     arch="i386" ;;
     *)             arch="" ;;
   esac
-  suffix="${os}-${arch}"
+  printf '%s-%s' "$os" "$arch"
+}
 
+download() {
+  local url="$1" dest="$2"
+  if command -v curl >/dev/null 2>&1; then
+    curl -fSL --silent --show-error "$url" -o "$dest"
+  elif command -v wget >/dev/null 2>&1; then
+    wget -q --show-progress "$url" -O "$dest"
+  else
+    die "Neither curl nor wget found. Please install one."
+  fi
+}
+
+_realpath() {
+  local path="$1"
+  if [[ -d "$path" ]]; then
+    (cd "$path" 2>/dev/null && pwd -P) 2>/dev/null || printf '%s\n' "$path"
+  else
+    local dir base
+    dir="$(dirname "$path")"
+    base="$(basename "$path")"
+    (cd "$dir" 2>/dev/null && printf '%s/%s\n' "$(pwd -P)" "$base") 2>/dev/null || printf '%s\n' "$path"
+  fi
+}
+
+safe_untar() {
+  local archive="$1" dest="$2"
+  shift 2
+
+  [ -d "$dest" ] || mkdir -p "$dest"
+
+  local listing
+  listing="$(tar -tzf "$archive" 2>/dev/null)" || die "Cannot read archive: $archive"
+
+  # Reject path traversal entries
+  if printf '%s\n' "$listing" | grep -qE '(^|/)\.\.(/|$)'; then
+    die "Archive contains path traversal entries — aborting for safety"
+  fi
+
+  # Reject absolute paths
+  if printf '%s\n' "$listing" | grep -qE '^/'; then
+    die "Archive contains absolute paths — aborting for safety"
+  fi
+
+  # Reject unsafe symlinks and hard links
+  local verbose_listing _entry _target
+  verbose_listing="$(tar -tzvf "$archive" 2>/dev/null)" || die "Cannot inspect archive: $archive"
+  while IFS= read -r _entry; do
+    # Symlink check (l* entries with -> target)
+    if [[ "$_entry" == l* && "$_entry" == *" -> "* ]]; then
+      _target="${_entry##* -> }"
+      if [[ "$_target" == /* ]] || [[ "$_target" =~ (^|/)\.\.(/|$) ]]; then
+        die "Archive contains unsafe symlinks — aborting for safety"
+      fi
+    fi
+    # Hard link check (h* entries with "link to" target)
+    if [[ "$_entry" == h* && "$_entry" == *" link to "* ]]; then
+      _target="${_entry##* link to }"
+      if [[ "$_target" == /* ]] || [[ "$_target" =~ (^|/)\.\.(/|$) ]]; then
+        die "Archive contains unsafe hard links — aborting for safety"
+      fi
+    fi
+  done <<< "$verbose_listing"
+
+  tar -xzf "$archive" -C "$dest" --no-same-owner "$@"
+}
+
+sha256_file() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$1" | awk '{print $1}'
+  else
+    die "No SHA-256 tool (sha256sum or shasum) found. Cannot verify checksums."
+  fi
+}
+
+verify_checksum() {
+  local file="$1" expected="$2"
+  local actual
+  actual="$(sha256_file "$file")"
+  if [ "$actual" = "$expected" ]; then
+    return 0
+  else
+    return 1
+  fi
+}
+
+verify_asset_checksum() {
+  local file="$1" filename="$2" checksums_file="$3" label="$4"
+  local expected_hash
+  expected_hash="$(awk -v f="$filename" '$2 == f { print $1; exit }' "$checksums_file")"
+  [ -n "$expected_hash" ] || die "${filename} not found in checksums file — aborting for safety"
+  if verify_checksum "$file" "$expected_hash"; then
+    ok "${label} checksum verified"
+  else
+    die "${label} checksum mismatch — aborting for safety"
+  fi
+}
+
+clean_macos_metadata() {
+  local dir="$1"
+  find "$dir" -name ".DS_Store" -delete 2>/dev/null || true
+  find "$dir" -name "._*" -delete 2>/dev/null || true
+}
+
+# ══════════════════════════════════════════════════════════════════════════════
+# VERSION & SECURITY
+# ══════════════════════════════════════════════════════════════════════════════
+
+compare_versions() {
+  local a="${1%%-*}" b="${2%%-*}"
+  a="${a%%+*}" b="${b%%+*}"
+  local IFS=.
+  set -f
+  # shellcheck disable=SC2086
+  set -- $a
+  set +f
+  local av=("$@")
+  set -f
+  # shellcheck disable=SC2086
+  set -- $b
+  set +f
+  local bv=("$@")
+  local i max
+  max=${#av[@]}
+  [ "${#bv[@]}" -gt "$max" ] && max="${#bv[@]}"
+  for ((i=0; i<max; i++)); do
+    local an="${av[$i]:-0}" bn="${bv[$i]:-0}"
+    if [ "$an" -gt "$bn" ]; then
+      return 1
+    elif [ "$an" -lt "$bn" ]; then
+      return 2
+    fi
+  done
+  return 0
+}
+
+get_installed_version() {
+  if [ -d "${SPINOSA_HOME}/versions" ]; then
+    # shellcheck disable=SC2012
+    ls -1 "${SPINOSA_HOME}/versions" 2>/dev/null | sort -t. -k1,1n -k2,2n -k3,3n | tail -1 || true
+  fi
+}
+
+resolve_version() {
+  if [ "$VERSION" = "latest" ]; then
+    info "Resolving latest version..."
+    local resolved
+    resolved="$(curl -fsSL -o /dev/null -w '%{url_effective}' "https://github.com/${REPO}/releases/latest" 2>/dev/null | sed 's|.*/tag/||' | sed 's/^v//')" || true
+    if [ -z "$resolved" ]; then
+      die "Could not resolve latest version. Use --version to specify."
+    fi
+    VERSION="$resolved"
+    info "Latest version: ${VERSION}"
+  fi
+}
+
+check_release_age() {
+  local version="$1" min_days="$2"
+  [ -n "$min_days" ] || return 0
+  [ "$min_days" -gt 0 ] 2>/dev/null || die "--min-days must be a positive integer (got: $min_days)"
+
+  local api_url="https://api.github.com/repos/${REPO}/releases/tags/v${version}"
+  local published_at
+  published_at="$(curl -fsSL "$api_url" 2>/dev/null | grep '"published_at":' | head -1 | sed 's/.*"published_at": "\([^"]*\)".*/\1/')" || true
+
+  if [ -z "$published_at" ]; then
+    if [ -n "$min_days" ]; then
+      die "Could not verify release age. GitHub API may be rate-limited. Retry later, or omit --min-days."
+    fi
+    warn "Could not verify release age — skipping check"
+    return 0
+  fi
+
+  local release_ts current_ts
+  release_ts=""
+  if release_ts="$(date -d "$published_at" +%s 2>/dev/null)"; then
+    :
+  elif release_ts="$(date -j -f "%Y-%m-%dT%H:%M:%SZ" "$published_at" +%s 2>/dev/null)"; then
+    :
+  else
+    die "Could not parse release date '$published_at'. Cannot enforce --min-days."
+  fi
+
+  current_ts="$(date +%s)"
+  local days_old=$(( (current_ts - release_ts) / 86400 ))
+
+  if [ "$days_old" -lt "$min_days" ]; then
+    die "Release v${version} is only ${days_old} day(s) old. Minimum required: ${min_days} day(s). Use --latest to override, or wait."
+  fi
+
+  ok "Release age verified: ${days_old} day(s) old (minimum: ${min_days})"
+}
+
+verify_vendor_binaries() {
+  local framework_root="$1"
+  local checksums_file="${framework_root}/metadata/vendor-checksums.txt"
+
+  if [ ! -f "$checksums_file" ]; then
+    warn "No vendor checksums found in release — skipping binary verification"
+    return 0
+  fi
+
+  local suffix
+  suffix="$(detect_platform_suffix)"
   info "Verifying vendor binary checksums..."
-  local verified=0 failed=0
+  local verified=0 failed=0 line expected_hash bin_name plat_suffix installed_bin
 
   while IFS= read -r line; do
-    # Skip comments and blank lines
     case "$line" in
       ''|\#*) continue ;;
     esac
 
-    local expected_hash bin_name plat_suffix
     expected_hash="$(printf '%s' "$line" | awk '{print $1}')"
     bin_name="$(printf '%s' "$line" | awk '{print $2}')"
     plat_suffix="$(printf '%s' "$line" | awk '{print $3}')"
 
-    # Only verify binaries for this platform
     [ "$plat_suffix" = "$suffix" ] || continue
 
-    local installed_bin="${SPINOSA_HOME}/bin/${bin_name}"
-    if [ ! -f "$installed_bin" ]; then
-      continue
-    fi
+    installed_bin="${SPINOSA_HOME}/bin/${bin_name}"
+    [ -f "$installed_bin" ] || continue
 
     if verify_checksum "$installed_bin" "$expected_hash"; then
       verified=$((verified + 1))
@@ -366,64 +450,23 @@ verify_vendor_binaries() {
   fi
 }
 
-# ── resolve version ────────────────────────────────────────────────────────
-resolve_version() {
-  if [ "$VERSION" = "latest" ]; then
-    info "Resolving latest version..."
-    # GitHub redirects /latest to the tag
-    VERSION="$(curl -fsSL -o /dev/null -w '%{url_effective}' "https://github.com/${REPO}/releases/latest" 2>/dev/null | sed 's|.*/tag/||' | sed 's/^v//')"
-    if [ -z "$VERSION" ]; then
-      die "Could not resolve latest version. Use --version to specify."
-    fi
-    info "Latest version: ${VERSION}"
-  fi
-}
-
-# ── version comparison ──────────────────────────────────────────────────────
-# Compare two dot-separated version strings.
-# Returns 0 if $1 == $2, 1 if $1 > $2, 2 if $1 < $2
-compare_versions() {
-  local a="$1" b="$2"
-  local IFS=.
-  set -- $a
-  local av=($@)
-  set -- $b
-  local bv=($@)
-  local i max
-  max=${#av[@]}
-  [ ${#bv[@]} -gt $max ] && max=${#bv[@]}
-  for ((i=0; i<max; i++)); do
-    local an=${av[$i]:-0} bn=${bv[$i]:-0}
-    if [ "$an" -gt "$bn" ]; then
-      return 1
-    elif [ "$an" -lt "$bn" ]; then
-      return 2
-    fi
-  done
-  return 0
-}
-
-get_installed_version() {
-  if [ -d "${SPINOSA_HOME}/versions" ]; then
-    ls -1 "${SPINOSA_HOME}/versions" 2>/dev/null | sort -t. -k1,1n -k2,2n -k3,3n | tail -1
-  fi
-}
+# ══════════════════════════════════════════════════════════════════════════════
+# PROMPT & INSTALL FLOW
+# ══════════════════════════════════════════════════════════════════════════════
 
 prompt_upgrade() {
   local installed="$1" target="$2"
-  local action=""
 
   compare_versions "$target" "$installed"
   local cmp=$?
 
   if [ "$cmp" -eq 0 ]; then
-    # Same version
     if [ "$REINSTALL" -eq 1 ]; then
       if [ "$YES" -eq 1 ]; then
         info "Reinstalling v${target} (--yes)..."
-        return 0
+      else
+        info "Reinstalling v${target}..."
       fi
-      info "Reinstalling v${target}..."
       return 0
     fi
     if [ "$UPGRADE" -eq 1 ]; then
@@ -437,21 +480,18 @@ prompt_upgrade() {
     fi
     printf '  %sReinstall?%s [y/N]: ' "${BOLD}" "${RESET}"
     local reply
-    if ! read_from_tty reply; then
-      die "Cannot read from terminal. Use --yes to skip prompts."
-    fi
+    read_tty_or_die reply
     case "$reply" in
       y|Y|yes|YES) return 0 ;;
       *) info "Install cancelled." ; return 1 ;;
     esac
   elif [ "$cmp" -eq 1 ]; then
-    # Target is newer
     if [ "$UPGRADE" -eq 1 ]; then
       if [ "$YES" -eq 1 ]; then
         info "Upgrading v${installed} → v${target} (--yes)..."
-        return 0
+      else
+        info "Upgrading v${installed} → v${target}..."
       fi
-      info "Upgrading v${installed} → v${target}..."
       return 0
     fi
     if [ "$REINSTALL" -eq 1 ]; then
@@ -465,16 +505,13 @@ prompt_upgrade() {
     fi
     printf '  %sUpgrade?%s [Y/n]: ' "${BOLD}" "${RESET}"
     local reply
-    if ! read_from_tty reply; then
-      die "Cannot read from terminal. Use --yes to skip prompts."
-    fi
+    read_tty_or_die reply
     reply="${reply:-Y}"
     case "$reply" in
       n|N|no|NO) info "Upgrade cancelled." ; return 1 ;;
       *) return 0 ;;
     esac
   else
-    # Target is older
     if [ "$UPGRADE" -eq 1 ]; then
       warn "Installed v${installed} is newer than target v${target}. Skipping upgrade."
       return 1
@@ -482,9 +519,9 @@ prompt_upgrade() {
     if [ "$REINSTALL" -eq 1 ]; then
       if [ "$YES" -eq 1 ]; then
         info "Downgrading v${installed} → v${target} (--yes)..."
-        return 0
+      else
+        info "Downgrading v${installed} → v${target}..."
       fi
-      info "Downgrading v${installed} → v${target}..."
       return 0
     fi
     printf '  %sInstalled v%s is newer than target v%s.%s\n' "${Y}" "$installed" "$target" "${RESET}"
@@ -494,9 +531,7 @@ prompt_upgrade() {
     fi
     printf '  %sDowngrade?%s [y/N]: ' "${BOLD}" "${RESET}"
     local reply
-    if ! read_from_tty reply; then
-      die "Cannot read from terminal. Use --yes to skip prompts."
-    fi
+    read_tty_or_die reply
     case "$reply" in
       y|Y|yes|YES) return 0 ;;
       *) info "Install cancelled." ; return 1 ;;
@@ -504,240 +539,181 @@ prompt_upgrade() {
   fi
 }
 
-# ── main install flow ──────────────────────────────────────────────────────
-main() {
-  echo ""
-  printf '  %s\n' "░░                                                                        "
-  printf '  %s\n' "░                                                                         "
-  printf '  %s\n' "░░         ░░   ░░                                                        "
-  printf '  %s\n' "       ░░░░░░░░░░▒░░                                                      "
-  printf '  %s\n' "       ░▒░▒░▒░ ░░▒░░                                                      "
-  printf '  %s\n' "      ░░░░░      ░▒▒▒░                                                    "
-  printf '  %s\n' "     ░▒░░░         ░▒▒░░░                                                 "
-  printf '  %s\n' "      ░░▒░   ░░░   ░▒▒▒░                                                  "
-  printf '  %s\n' "      ░░▒░░  ░░░   ░▒▒░░                                                  "
-  printf '  %s\n' "       ░░░░▒░░░    ░▒░░░                                                  "
-  printf '  %s\n' "                   ░▒▒░▒▒░                                                "
-  printf '  %s\n' "░░              ░░░░▒░▒░                                                  "
-  printf '  %s\n' "░░░▒▒            ░▒▒▒░░      ░░▒░                                         "
-  printf '  %s\n' "░░░░░            ░░▒░░░▒▒░░░░░▒░░░                                        "
-  printf '  %s\n' "░░░░░░░    ░░   ░▒░▒░░░░▒▒▒▒▒▒▒░░░▒░░░░░                                  "
-  printf '  %s\n' "░░▒▒░░▒░░  ░▒░░░▒░░░▒▒░░░░  ░░▒░░▒░▒░▒░░                                  "
-  printf '  %s\n' "  ░▒▒░░    ░▒▒░░░░▒░▒▒▒░         ░░▒▒░░░                                  "
-  printf '  %s\n' "  ░░░░▒░   ░▒░░▒▒░░    ░         ░░░░▒▒▒░                                 "
-  printf '  %s\n' "    ░▒▒░   ░▓░▒▒▒░▒                  ░▒▒▒                                 "
-  printf '  %s\n' "    ░░    ░░░▒░▒▒░▒       ▒░░░░░    ░▒▒▒░▒░                               "
-  printf '  %s\n' "░▒░░░   ░░▒░▒▒░   ░      ░░▒░░░░   ░░▒░▒░                                 "
-  printf '  %s\n' "░░░▒░    ░░░▒░          ░▒▒░        ░░░░░                                 "
-  printf '  %s\n' "░░░▒▒░░░ ░░▒░░           ▒▒░       ░░▒▒░                                  "
-  printf '  %s\n' "  ░░▒░░░░▒░░░░░▒▒▒      ░░░░░░▒▒░░░░░░░░                                  "
-  printf '  %s\n' "   ░░░░░░▒░░░░▒░░░░░       ░░░▒▒░░░░░                                     "
-  printf '  %s\n' ""
-  printf '  %s%sSpinosa Framework Installer%s\n\n' "${BOLD}" "${C}" "${RESET}"
+confirm_install() {
+  local version="$1"
+  if [ "$YES" -eq 1 ]; then
+    return 0
+  fi
+  printf '  %sInstall Spinosa v%s?%s [Y/n]: ' "${BOLD}" "$version" "${RESET}"
+  local reply
+  read_tty_or_die reply
+  reply="${reply:-Y}"
+  case "$reply" in
+    n|N|no|NO) info "Install cancelled." ; return 1 ;;
+  esac
+  return 0
+}
 
-  detect_platform
-  resolve_version
-  check_release_age "$VERSION" "$MIN_DAYS"
-
-  local base_url="https://github.com/${REPO}/releases/download/v${VERSION}"
-  local archive_name="spinosa-framework-${VERSION}.tar.gz"
-
-  info "Version: ${VERSION}"
-  info "Install root: ${SPINOSA_HOME}"
-  info "Bin directory: ${SPINOSA_BIN_DIR}"
-  echo ""
-
-  # ── check for existing installation ────────────────────────────────────
+should_install() {
+  local version="$1"
   if [ "$DRY_RUN" -eq 0 ] && [ "$VERIFY_ONLY" -eq 0 ]; then
     local installed_version
     installed_version="$(get_installed_version)"
     if [ -n "$installed_version" ]; then
-      if ! prompt_upgrade "$installed_version" "$VERSION"; then
-        return 0
-      fi
+      prompt_upgrade "$installed_version" "$version" || return 1
     else
-      # Fresh install — confirm unless --yes
-      if [ "$YES" -eq 0 ]; then
-        printf '  %sInstall Spinosa v%s?%s [Y/n]: ' "${BOLD}" "$VERSION" "${RESET}"
-        local reply
-        if ! read_from_tty reply; then
-          die "Cannot read from terminal. Use --yes to skip prompts."
-        fi
-        reply="${reply:-Y}"
-        case "$reply" in
-          n|N|no|NO) info "Install cancelled." ; return 0 ;;
-        esac
-      fi
+      confirm_install "$version" || return 1
     fi
   fi
+  return 0
+}
 
-  # ── verify-only mode ──────────────────────────────────────────────────
-  if [ "$VERIFY_ONLY" -eq 1 ]; then
-    local existing_version
-    existing_version="$(ls -1 "${SPINOSA_HOME}/versions" 2>/dev/null | sort -t. -k1,1n -k2,2n -k3,3n | tail -1)"
-    if [ -z "$existing_version" ]; then
-      die "No Spinosa installation found at ${SPINOSA_HOME}"
-    fi
-    local fw_dir="${SPINOSA_HOME}/versions/${existing_version}"
-    local fw_subdir
-    fw_subdir="$(find "$fw_dir" -maxdepth 1 -type d -name 'spinosa-framework-*' 2>/dev/null | head -1)"
-    if [ -z "$fw_subdir" ]; then
-      die "Could not find installed framework"
-    fi
-    verify_vendor_binaries "$fw_subdir"
-    ok "Verification complete"
-    return 0
+handle_verify_only() {
+  [ "$VERIFY_ONLY" -eq 1 ] || return 1
+  local existing_version
+  existing_version="$(get_installed_version)"
+  if [ -z "$existing_version" ]; then
+    die "No Spinosa installation found at ${SPINOSA_HOME}"
   fi
-
-  if [ "$DRY_RUN" -eq 1 ]; then
-    info "Dry run — would download:"
-    info "  ${base_url}/${archive_name}"
-    info "  ${base_url}/checksums.txt"
-    info "Would install to: ${SPINOSA_HOME}/versions/${VERSION}/"
-    info "Would create shim: ${SPINOSA_BIN_DIR}/spinosa"
-    echo ""
-    return 0
+  local fw_dir="${SPINOSA_HOME}/versions/${existing_version}"
+  local fw_subdir
+  fw_subdir="$(find "$fw_dir" -maxdepth 1 -type d -name 'spinosa-framework-*' 2>/dev/null | head -1)" || true
+  if [ -z "$fw_subdir" ]; then
+    die "Could not find installed framework"
   fi
+  verify_vendor_binaries "$fw_subdir"
+  ok "Verification complete"
+  return 0
+}
 
-  # ── create directories ──────────────────────────────────────────────────
-  mkdir -p "${SPINOSA_HOME}/bin"
-  mkdir -p "${SPINOSA_HOME}/versions/${VERSION}"
-  mkdir -p "${SPINOSA_BIN_DIR}"
+handle_dry_run() {
+  [ "$DRY_RUN" -eq 1 ] || return 1
+  local base_url="$1"
+  local archive_name="$2"
+  info "Dry run — would download:"
+  info "  ${base_url}/${archive_name}"
+  info "  ${base_url}/checksums.txt"
+  info "Would install to: ${SPINOSA_HOME}/versions/${VERSION}/"
+  info "Would create shim: ${SPINOSA_BIN_DIR}/spinosa"
+  echo ""
+  return 0
+}
 
-  # ── download framework ──────────────────────────────────────────────────
-  local tmpdir
-  tmpdir="$(mktemp -d)"
-  trap 'spinner_stop; rm -rf "$tmpdir"' EXIT INT TERM
-  printf '\n' >&2
-  spinner_start "Downloading framework v${VERSION}"
-  if ! download "${base_url}/${archive_name}" "${tmpdir}/${archive_name}"; then
+download_and_verify() {
+  local url="$1" dest="$2" label="$3"
+  local checksums_file="${4:-}"
+  local archive_name="${5:-}"
+  local max_retries="${6:-1}"
+  local retry_delay="${7:-3}"
+
+  local retries=0 download_ok=false
+  while [ "$retries" -lt "$max_retries" ]; do
+    if [ "$max_retries" -gt 1 ]; then
+      spinner_start "Downloading ${label} (attempt $((retries + 1))/${max_retries})"
+    else
+      spinner_start "Downloading ${label}"
+    fi
+    if download "$url" "$dest"; then
+      spinner_stop
+      download_ok=true
+      break
+    fi
     spinner_stop
-    die "Failed to download framework from ${base_url}/${archive_name}"
+    retries=$((retries + 1))
+    if [ "$retries" -lt "$max_retries" ]; then
+      warn "Download failed — retrying (${retries}/${max_retries})"
+      sleep "$retry_delay"
+    fi
+  done
+
+  if ! $download_ok; then
+    die "Failed to download ${label}"
+  fi
+
+  if [ -n "$checksums_file" ] && [ -n "$archive_name" ]; then
+    local ck_url="${url%/*}/${checksums_file}"
+    local ck_dest
+    ck_dest="$(dirname "$dest")/${checksums_file}"
+    download "$ck_url" "$ck_dest" || die "Failed to download ${checksums_file} — cannot verify integrity"
+    verify_asset_checksum "$dest" "$archive_name" "$ck_dest" "$label"
+  fi
+}
+
+install_vendor_bundles() {
+  local base_url="$1" tmpdir="$2" version="$3"
+  local suffix
+  suffix="$(detect_platform_suffix)"
+
+  local spinosa_vendor_dest="${SPINOSA_HOME}/vendor/spinosa-${suffix}"
+  local vendor_url="${base_url}/spinosa-vendor-${suffix}.tar.gz"
+  local vendor_tmp="${tmpdir}/spinosa-vendor-${suffix}.tar.gz"
+  local checksums_file="${tmpdir}/checksums.txt"
+
+  download_and_verify "$vendor_url" "$vendor_tmp" "Spinosa vendor for ${suffix}" \
+    "checksums.txt" "spinosa-vendor-${suffix}.tar.gz" 3 3
+
+  spinner_start "Installing Spinosa vendor (Python + wrappers)"
+  local vendor_extract_tmp="${tmpdir}/vendor-extract"
+  mkdir -p "$vendor_extract_tmp"
+  safe_untar "$vendor_tmp" "$vendor_extract_tmp" --strip-components=1
+  rm -rf "$spinosa_vendor_dest" 2>/dev/null || true
+  mkdir -p "$(dirname "$spinosa_vendor_dest")"
+  mv "$vendor_extract_tmp" "$spinosa_vendor_dest"
+  clean_macos_metadata "$spinosa_vendor_dest"
+  chmod +x "${spinosa_vendor_dest}/rapidocr-cli" 2>/dev/null || true
+  chmod +x "${spinosa_vendor_dest}/markitdown-cli" 2>/dev/null || true
+  if ! chmod +x "${spinosa_vendor_dest}/yake-cli" 2>/dev/null; then
+    warn "yake-cli not found in vendor bundle — keyword extraction will be unavailable"
   fi
   spinner_stop
 
-  # ── verify checksum ─────────────────────────────────────────────────────
-  if download "${base_url}/checksums.txt" "${tmpdir}/checksums.txt"; then
-    if [ -f "${tmpdir}/checksums.txt" ]; then
-    local expected_hash
-    expected_hash="$(grep "${archive_name}" "${tmpdir}/checksums.txt" 2>/dev/null | awk '{print $1}')"
-    if [ -n "$expected_hash" ]; then
-      if verify_checksum "${tmpdir}/${archive_name}" "$expected_hash"; then
-        ok "Framework checksum verified"
+  local spinosa_python="${spinosa_vendor_dest}/python/bin/python3"
+  if [[ ! -x "$spinosa_python" ]]; then
+    spinosa_python="${spinosa_vendor_dest}/Python.framework/Versions/Current/bin/python3"
+  fi
+
+  if [[ -x "$spinosa_python" ]]; then
+    spinner_start "Installing Python packages (MarkItDown + RapidOCR + YAKE + ffmpeg)"
+    local pip_ok=0 pip_attempt=0 pip_max=3
+    "$spinosa_python" -m pip install --upgrade pip --quiet 2>/dev/null || true
+    while [[ $pip_ok -eq 0 && $pip_attempt -lt $pip_max ]]; do
+      pip_attempt=$((pip_attempt + 1))
+      if "$spinosa_python" -m pip install \
+        "markitdown[docx,pptx,xlsx,xls,outlook,pdf]==0.1.6" \
+        "rapidocr==3.8.1" \
+        "onnxruntime==1.26.0" \
+        "pypdfium2==5.9.0" \
+        "imageio-ffmpeg==0.6.0" \
+        "yake==0.7.3" \
+        "langdetect==1.0.9" \
+        --quiet 2>&1; then
+        pip_ok=1
       else
-        die "Framework checksum mismatch — aborting for safety"
-      fi
-    else
-      die "Archive not found in checksums file — aborting for safety"
-    fi
-  else
-    die "No checksums.txt available — aborting for safety"
-  fi
-  fi
-
-  # ── unpack framework ────────────────────────────────────────────────────
-  info "Unpacking framework..."
-  safe_untar "${tmpdir}/${archive_name}" "${SPINOSA_HOME}/versions/${VERSION}"
-
-  # Clean macOS metadata files that may have been in the release archive
-  find "${SPINOSA_HOME}/versions/${VERSION}" -name ".DS_Store" -delete 2>/dev/null || true
-  find "${SPINOSA_HOME}/versions/${VERSION}" -name "._*" -delete 2>/dev/null || true
-
-  # ── install spinosa CLI ──────────────────────────────────────────────────
-  local spinosa_bin="${SPINOSA_HOME}/versions/${VERSION}/spinosa-framework-${VERSION}/.bin/spinosa"
-  if [ -f "$spinosa_bin" ]; then
-    cp "$spinosa_bin" "${SPINOSA_HOME}/bin/spinosa"
-    chmod +x "${SPINOSA_HOME}/bin/spinosa"
-    ok "Installed spinosa CLI"
-  else
-    die "spinosa CLI not found in archive"
-  fi
-
-  # ── install bundled document-processing tools ──────────────────────────
-  if [ "$SKIP_BUNDLED_TOOLS" -eq 0 ]; then
-    # Detect platform suffix (e.g. darwin-arm64, linux-amd64)
-    local os arch suffix
-    case "$(uname -s)" in
-      Darwin) os="darwin" ;;
-      Linux)  os="linux" ;;
-      *)      os="" ;;
-    esac
-    case "$(uname -m)" in
-      arm64|aarch64) arch="arm64" ;;
-      x86_64|amd64)  arch="amd64" ;;
-      i386|i686)     arch="i386" ;;
-      *)             arch="" ;;
-    esac
-    suffix="${os}-${arch}"
-
-    # ── install Spinosa vendor (RapidOCR + MarkItDown) ────────────────────
-    local spinosa_vendor_dest="${SPINOSA_HOME}/vendor/spinosa-${suffix}"
-    local vendor_url="${base_url}/spinosa-vendor-${suffix}.tar.gz"
-    local vendor_tmp="${tmpdir}/spinosa-vendor-${suffix}.tar.gz"
-
-    # Retry download up to 3 times with 3-second backoff
-    local retries=0 max_retries=3 download_ok=false
-    while [[ $retries -lt $max_retries ]]; do
-      spinner_start "Downloading Spinosa vendor for ${suffix} (attempt $((retries + 1))/${max_retries})"
-      if download "$vendor_url" "$vendor_tmp"; then
-        spinner_stop
-        download_ok=true
-        break
-      fi
-      spinner_stop
-      retries=$((retries + 1))
-      if [[ $retries -lt $max_retries ]]; then
-        warn "Download failed — retrying (${retries}/${max_retries})"
-        sleep 3
+        if [[ $pip_attempt -lt $pip_max ]]; then
+          warn "pip install attempt ${pip_attempt}/${pip_max} failed — retrying in 4s"
+          sleep 4
+        else
+          fail "pip install failed after ${pip_max} attempts"
+        fi
       fi
     done
 
-	    if $download_ok; then
-	      local vendor_expected_hash
-	      vendor_expected_hash="$(awk -v f="$(basename "$vendor_tmp")" '$2 == f { print $1; exit }' "${tmpdir}/checksums.txt")"
-	      [[ -n "$vendor_expected_hash" ]] || die "$(basename "$vendor_tmp") not found in checksums.txt — aborting for safety"
-	      if verify_checksum "$vendor_tmp" "$vendor_expected_hash"; then
-	        ok "Spinosa vendor checksum verified"
-	      else
-	        die "Spinosa vendor checksum mismatch — aborting for safety"
-	      fi
-	      spinner_start "Installing Spinosa vendor (Python + wrappers)"
-      mkdir -p "$spinosa_vendor_dest"
-      safe_untar "$vendor_tmp" "$spinosa_vendor_dest" --strip-components=1
-      # Clean macOS metadata files from vendor extraction
-      find "$spinosa_vendor_dest" -name ".DS_Store" -delete 2>/dev/null || true
-      find "$spinosa_vendor_dest" -name "._*" -delete 2>/dev/null || true
-      chmod +x "${spinosa_vendor_dest}/rapidocr-cli" 2>/dev/null || true
-      chmod +x "${spinosa_vendor_dest}/markitdown-cli" 2>/dev/null || true
-      spinner_stop
-
-      # ── Install Python packages via pip ──────────────────────────
-      local spinosa_python="${spinosa_vendor_dest}/python/bin/python3"
-      if [[ ! -x "$spinosa_python" ]]; then
-        spinosa_python="${spinosa_vendor_dest}/Python.framework/Versions/Current/bin/python3"
-      fi
-      if [[ -x "$spinosa_python" ]]; then
-        spinner_start "Installing Python packages (MarkItDown + RapidOCR + ffmpeg)"
-        local pip_ok=0
-        "$spinosa_python" -m pip install --upgrade pip --quiet 2>/dev/null || true
-        if "$spinosa_python" -m pip install \
-          "markitdown[docx,pptx,xlsx,xls,outlook,pdf]==0.1.6" \
-          "rapidocr==3.8.1" \
-          "onnxruntime==1.26.0" \
-          "pypdfium2==5.9.0" \
-          "imageio-ffmpeg" \
-          --quiet 2>&1; then
-          pip_ok=1
+    if [[ $pip_ok -eq 1 ]]; then
+      spinner_stop "MarkItDown + RapidOCR + YAKE + ffmpeg installed"
+      spinner_start "Verifying RapidOCR import"
+      if "$spinosa_python" -c "from rapidocr import RapidOCR" 2>/dev/null; then
+        spinner_stop
+        ok "RapidOCR import verified"
+        spinner_start "Verifying YAKE + langdetect import"
+        if "$spinosa_python" -c "import yake; import langdetect" 2>/dev/null; then
+          spinner_stop
+          ok "YAKE + langdetect imports verified"
+        else
+          spinner_stop
+          warn "YAKE or langdetect import failed — keyword extraction may fail"
         fi
-        spinner_stop "MarkItDown + RapidOCR + ffmpeg installed"
-
-        if [[ $pip_ok -eq 1 ]]; then
-          # Verify rapidocr imports before model operations
-          if "$spinosa_python" -c "from rapidocr import RapidOCR" 2>/dev/null; then
-            ok "RapidOCR import verified"
-            # Remove Chinese OCR models (English only, saves ~100 MB)
-            spinner_start "Cleaning up unused models"
-            "$spinosa_python" -c "
+        spinner_start "Cleaning up unused models"
+        "$spinosa_python" -c "
 import rapidocr, os
 models_dir = os.path.join(os.path.dirname(rapidocr.__file__), 'models')
 for f in os.listdir(models_dir):
@@ -747,13 +723,12 @@ for f in ['ppocr_keys_v1.txt', 'ppocrv5_dict.txt']:
     path = os.path.join(models_dir, f)
     if os.path.exists(path): os.remove(path)
 " 2>/dev/null || true
-            spinner_stop "Models cleaned"
+        spinner_stop "Models cleaned"
 
-            # Pre-download English OCR models
-            spinner_start "Downloading OCR models"
-            local ocr_log="${SPINOSA_HOME}/logs/ocr-model-download.log"
-            mkdir -p "$(dirname "$ocr_log")"
-            if "$spinosa_python" -c "
+        spinner_start "Downloading OCR models"
+        local ocr_log="${SPINOSA_HOME}/logs/ocr-model-download.log"
+        mkdir -p "$(dirname "$ocr_log")"
+        if "$spinosa_python" -c "
 import logging
 logging.getLogger('RapidOCR').setLevel(logging.WARNING)
 logging.getLogger('onnxruntime').setLevel(logging.WARNING)
@@ -769,41 +744,35 @@ RapidOCR(params={
     'Rec.ocr_version': OCRVersion.PPOCRV4,
 })
 " >"$ocr_log" 2>&1; then
-              spinner_stop "Models ready"
-            else
-              spinner_stop "Models not downloaded"
-              fail "OCR models could not be pre-downloaded — will download on first use"
-              note "Check internet access if this persists"
-            fi
-            ok "Python packages installed"
-          else
-            fail "RapidOCR installed but cannot import — system library missing"
-            if [[ "$(uname -s)" == "Linux" ]]; then
-              note "On Linux, install: sudo apt-get install libgl1"
-            fi
-            warn "PDF/image OCR and Office doc conversion will not be available"
-          fi
+          spinner_stop "Models ready"
         else
-          warn "pip install failed — PDF/image OCR and Office doc conversion will not be available"
-          rm -f "${spinosa_vendor_dest}/rapidocr-cli" "${spinosa_vendor_dest}/markitdown-cli" 2>/dev/null || true
+          spinner_stop "Models not downloaded"
+          fail "OCR models could not be pre-downloaded — will download on first use"
+          note "Check internet access if this persists"
         fi
+        ok "Python packages installed"
       else
-        warn "Bundled Python not found — PDF/image OCR and Office doc conversion will not be available"
+        spinner_stop
+        fail "RapidOCR installed but cannot import — system library missing"
+        if [[ "$(uname -s)" == "Linux" ]]; then
+          note "On Linux, install: sudo apt-get install libgl1"
+        fi
+        warn "PDF/image OCR and Office doc conversion will not be available"
       fi
+    else
+      spinner_stop
+      warn "pip install failed — PDF/image OCR, Office doc conversion, and keyword extraction will not be available"
+      rm -f "${spinosa_vendor_dest}/rapidocr-cli" "${spinosa_vendor_dest}/markitdown-cli" "${spinosa_vendor_dest}/yake-cli" 2>/dev/null || true
     fi
-    if ! $download_ok; then
-      warn "Could not download vendor bundle for ${suffix}"
-      note "URL: ${vendor_url}"
-      note "Check your internet connection or download manually and extract to: ${spinosa_vendor_dest}"
-      note "PDF/image OCR and Office doc conversion will not be available"
-    fi
-
-    # Verify vendor binary checksums against the release manifest
-    local fw_root="${SPINOSA_HOME}/versions/${VERSION}/spinosa-framework-${VERSION}"
-    verify_vendor_binaries "$fw_root"
+  else
+    warn "Bundled Python not found — PDF/image OCR, Office doc conversion, and keyword extraction will not be available"
   fi
 
-  # ── create shim ─────────────────────────────────────────────────────────
+  local fw_root="${SPINOSA_HOME}/versions/${version}/spinosa-framework-${version}"
+  verify_vendor_binaries "$fw_root"
+}
+
+install_shims() {
   local shim="${SPINOSA_BIN_DIR}/spinosa"
   cat > "$shim" << SHIM_EOF
 #!/bin/sh
@@ -812,7 +781,6 @@ SHIM_EOF
   chmod +x "$shim"
   ok "Created wrapper script: ${shim}"
 
-  # ── pilosa → spinosa alias shim ─────────────────────────────────────────
   local pilosa_shim="${SPINOSA_BIN_DIR}/pilosa"
   if [[ ! -f "$pilosa_shim" ]] || ! grep -q 'exec.*spinosa' "$pilosa_shim" 2>/dev/null; then
     cat > "$pilosa_shim" << 'PILOSA_SHIM'
@@ -822,28 +790,14 @@ PILOSA_SHIM
     chmod +x "$pilosa_shim"
     ok "Created pilosa → spinosa alias: ${pilosa_shim}"
   fi
-  # Remove old standalone pilosa binary (pre-0.5 migration)
+
   local old_pilosa_bin="${SPINOSA_HOME}/bin/pilosa"
   if [[ -f "$old_pilosa_bin" ]]; then
     rm -f "$old_pilosa_bin" && warn "Removed old pilosa binary at ${old_pilosa_bin}"
   fi
+}
 
-  # ── clean up, check PATH, launch dashboard ──────────────────────────────
-  trap - EXIT
-  rm -rf "$tmpdir"
-
-  # ── basic test ──────────────────────────────────────────────────────────
-  echo ""
-  info "Running basic test..."
-  if "${SPINOSA_BIN_DIR}/spinosa" help >/dev/null 2>&1; then
-    ok "Basic test passed"
-  else
-    warn "Basic test failed. spinosa may need a PATH update."
-  fi
-
-  #
-  # ── PATH setup — opencode pattern: shell detection + deduplication ──────
-  #
+setup_shell_path() {
   if [[ "${NO_MODIFY_PATH:-false}" != "true" ]]; then
     local current_shell
     current_shell="$(basename "${SHELL:-/bin/sh}")"
@@ -883,23 +837,127 @@ PILOSA_SHIM
       info "  ${path_line}"
     fi
   fi
+}
+
+print_banner() {
+  printf '\n\n\n'
+  printf '  %s\n' "${G}███████╗██████╗ ██╗███╗   ██╗ ██████╗ ███████╗ █████╗ ${RESET}"
+  printf '  %s\n' "${G}██╔════╝██╔══██╗██║████╗  ██║██╔═══██╗██╔════╝██╔══██╗${RESET}"
+  printf '  %s\n' "${G}███████╗██████╔╝██║██╔██╗ ██║██║   ██║███████╗███████║${RESET}"
+  printf '  %s\n' "${G}╚════██║██╔═══╝ ██║██║╚██╗██║██║   ██║╚════██║██╔══██║${RESET}"
+  printf '  %s\n' "${G}███████║██║     ██║██║ ╚████║╚██████╔╝███████║██║  ██║${RESET}"
+  printf '  %s\n' "${G}╚══════╝╚═╝     ╚═╝╚═╝  ╚═══╝ ╚═════╝ ╚══════╝╚═╝  ╚═╝${RESET}"
+  printf '  %s%sFramework Installer%s\n\n' "${BOLD}" "${G}" "${RESET}"
+}
+
+run_basic_test() {
+  info "Running basic test..."
+  if "${SPINOSA_BIN_DIR}/spinosa" help >/dev/null 2>&1; then
+    ok "Basic test passed"
+  else
+    warn "Basic test failed. spinosa may need a PATH update."
+  fi
+}
+
+maybe_launch_dashboard() {
+  if [[ "$LAUNCH_DASHBOARD" == "1" ]] || { [[ "$LAUNCH_DASHBOARD" == "auto" ]] && [[ -t 0 && -r /dev/tty ]]; }; then
+    info "Launching Spinosa dashboard..."
+    sleep 1
+    exec "${SPINOSA_BIN_DIR}/spinosa" </dev/tty || die "Failed to launch Spinosa dashboard"
+  fi
+  info "Run Spinosa with: ${SPINOSA_BIN_DIR}/spinosa"
+}
+
+# ══════════════════════════════════════════════════════════════════════════════
+# MAIN
+# ══════════════════════════════════════════════════════════════════════════════
+
+main() {
+  local lockdir="${SPINOSA_HOME}/versions/.lock.${$}-${VERSION}"
+
+  # Stale lock check: if lock dir is older than 30 min, reclaim it
+  if [ -d "$lockdir" ]; then
+    if [[ "$(find "$lockdir" -maxdepth 0 -mmin +30 2>/dev/null)" == "$lockdir" ]]; then
+      rm -rf "$lockdir"
+      info "Removed stale lock from previous install attempt"
+    else
+      die "Another installer is running for version ${VERSION}. Wait and retry, or remove: rm -rf '${lockdir}'"
+    fi
+  fi
+  mkdir -p "$(dirname "$lockdir")" && mkdir "$lockdir"
+
+  print_banner
+  detect_platform
+  resolve_version
+  check_release_age "$VERSION" "$MIN_DAYS"
+
+  local base_url="https://github.com/${REPO}/releases/download/v${VERSION}"
+  local archive_name="spinosa-framework-${VERSION}.tar.gz"
+
+  info "Version: ${VERSION}"
+  info "Install root: ${SPINOSA_HOME}"
+  info "Bin directory: ${SPINOSA_BIN_DIR}"
+  echo ""
+
+  should_install "$VERSION" || { rm -rf "$lockdir"; return 0; }
+  handle_verify_only "$SPINOSA_HOME" && { rm -rf "$lockdir"; return 0; }
+  handle_dry_run "$base_url" "$archive_name" && { rm -rf "$lockdir"; return 0; }
+
+  mkdir -p "${SPINOSA_HOME}/bin"
+  mkdir -p "${SPINOSA_BIN_DIR}"
+
+  local tmpdir
+  tmpdir="$(mktemp -d)"
+  trap 'spinner_stop; rm -rf "$tmpdir" "$lockdir"' EXIT INT TERM
+
+  printf '\n' >&2
+
+  # Download framework archive + checksums
+  local framework_dest="${tmpdir}/${archive_name}"
+  download_and_verify \
+    "${base_url}/${archive_name}" "$framework_dest" \
+    "Framework v${VERSION}" \
+    "checksums.txt" "$archive_name" 1 0
+
+  # Extract to temp then move atomically (creates version dir only
+  # after verified content is ready — prevents marking partial installs)
+  local extract_tmp="${tmpdir}/framework-extract"
+  mkdir -p "$extract_tmp"
+  safe_untar "$framework_dest" "$extract_tmp"
+  rm -rf "${SPINOSA_HOME}/versions/${VERSION}" 2>/dev/null || true
+  mkdir -p "${SPINOSA_HOME}/versions/${VERSION}"
+  mv "$extract_tmp"/* "${SPINOSA_HOME}/versions/${VERSION}/"
+  clean_macos_metadata "${SPINOSA_HOME}/versions/${VERSION}"
+
+  # Install CLI binary
+  local spinosa_bin="${SPINOSA_HOME}/versions/${VERSION}/spinosa-framework-${VERSION}/.bin/spinosa"
+  if [ -f "$spinosa_bin" ]; then
+    cp "$spinosa_bin" "${SPINOSA_HOME}/bin/spinosa"
+    chmod +x "${SPINOSA_HOME}/bin/spinosa"
+    ok "Installed spinosa CLI"
+  else
+    die "spinosa CLI not found in archive"
+  fi
+
+  # Vendor bundles
+  if [ "$SKIP_BUNDLED_TOOLS" -eq 0 ]; then
+    install_vendor_bundles "$base_url" "$tmpdir" "$VERSION"
+  fi
+
+  install_shims
+
+  trap - EXIT INT TERM
+  rm -rf "$tmpdir" "$lockdir"
+
+  echo ""
+  run_basic_test
+  setup_shell_path
 
   echo ""
   divider
   printf '\n  %s%sSpinosa installed successfully!%s\n\n' "${BOLD}" "${G}" "${RESET}"
-
-	  if [[ "$LAUNCH_DASHBOARD" == "1" ]] || { [[ "$LAUNCH_DASHBOARD" == "auto" ]] && [[ -t 0 && -r /dev/tty ]]; }; then
-	    info "Launching Spinosa dashboard..."
-	    sleep 1
-	    exec "${SPINOSA_BIN_DIR}/spinosa" </dev/tty
-	  fi
-
-	  info "Run Spinosa with: ${SPINOSA_BIN_DIR}/spinosa"
-}
-
-# ── helpers ─────────────────────────────────────────────────────────────────
-divider() {
-  printf '%s\n' "${DIM}$(printf '%.0s─' 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60 61 62 63 64 65 66 67 68 69 70 71 72 73 74 75 76 77 78)${RESET}"
+  maybe_launch_dashboard
+  return 0
 }
 
 main "$@"

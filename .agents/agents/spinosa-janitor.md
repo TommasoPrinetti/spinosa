@@ -11,6 +11,7 @@ permissions:
   read: allow
   grep: allow
   glob: allow
+  grep_context: 200
   write:
     - agent_reports/
     - logs/session_metrics.tsv
@@ -92,4 +93,5 @@ Read `system/configuration.md` for `stale_after_days` thresholds:
 - Document every proposed move with a reason.
 - Do not move files that are still referenced by active maps or reports.
 - Return a log summary to the orchestrator when traceability is needed; the orchestrator writes `logs/user_requests.md`.
+- Limit grep context to ~200 lines per query to manage token usage.
 - Append one metrics row with operation `cleanup_audit`, directories seen, maps read if applicable, files checked, files read, reports written, and output path. Use `.bin/lib/metrics.sh` when available; never log raw command output, long grep terms, source excerpts, secrets, or credentials.

@@ -11,6 +11,7 @@ permissions:
   read: allow
   grep: allow
   glob: allow
+  grep_context: 200
   write:
     - AGENTS.md
     - .agents/agents/
@@ -55,4 +56,5 @@ You are Pilosa's framework evolution agent. You apply narrowly targeted control-
 - Never perform opportunistic cleanup or unrelated refactors.
 - If the audit is weak or the requested change exceeds scope, refuse to edit and state why in the evolution report.
 - Self-edits apply to the next request only.
+- Limit grep context to ~200 lines per query to manage token usage.
 - Append one metrics row with operation `evolve`, directories seen, files read, reports written, and output path.

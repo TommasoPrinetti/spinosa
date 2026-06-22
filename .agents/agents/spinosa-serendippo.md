@@ -12,6 +12,7 @@ permissions:
   read: allow
   grep: allow
   glob: allow
+  grep_context: 200
   write:
     - agent_reports/
     - maps/ # only when route_constraints include map_write
@@ -166,6 +167,7 @@ Look for these types of connections:
 - Follow threads, don't force connections. If a link isn't there, don't invent one.
 - Document your reasoning — explain why a connection matters, not just that it exists.
 - When in doubt, flag it as "possible connection" rather than dismissing it.
+- Limit grep context to ~200 lines per query to manage token usage.
 - Append one metrics row with operation `serendipity`, directories seen, maps read, raw match count if applicable, raw files read, reports written, and output path. Use `.bin/lib/metrics.sh` when available; never log raw command output, long grep terms, source excerpts, secrets, or credentials.
 
 ## Triggers

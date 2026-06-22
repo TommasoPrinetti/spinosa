@@ -11,6 +11,7 @@ permissions:
   read: allow
   grep: allow
   glob: allow
+  grep_context: 200
   write:
     - agent_reports/
     - logs/session_metrics.tsv
@@ -55,4 +56,5 @@ You are Pilosa's route evaluation agent. You inspect how a completed route perfo
 - Prefer `no_edit` when the finding is weak, speculative, or not actionable through control/doc changes.
 - Separate answer-quality findings from framework/process findings.
 - Self-edit recommendations apply only to future requests, never to the already completed answer.
+- Limit grep context to ~200 lines per query to manage token usage.
 - Append one metrics row with operation `evaluate`, directories seen, maps read if any, files read, reports written, and output path.
