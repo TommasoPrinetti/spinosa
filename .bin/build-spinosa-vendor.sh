@@ -25,6 +25,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FRAMEWORK_ROOT="$(dirname "$SCRIPT_DIR")"
 VENDOR_BASE="${FRAMEWORK_ROOT}/.bin/lib/vendor"
 MARKITDOWN_CLI="${FRAMEWORK_ROOT}/.bin/lib/markitdown-cli.py"
+RAPIDOCR_CLI="${FRAMEWORK_ROOT}/.bin/lib/rapidocr-cli.py"
 YAKE_CLI="${FRAMEWORK_ROOT}/.bin/lib/yake-cli.py"
 
 PYTHON_VERSION="3.11.15"
@@ -151,6 +152,7 @@ build_platform() {
     # Copy CLI wrappers
     log "Copying CLI wrappers..."
     cp "${MARKITDOWN_CLI}" "${vendor_dir}/markitdown-cli.py"
+    cp "${RAPIDOCR_CLI}" "${vendor_dir}/rapidocr-cli.py"
     cp "${YAKE_CLI}" "${vendor_dir}/yake-cli.py"
 
     # Create markitdown-cli bash launcher
@@ -169,6 +171,23 @@ fi
 exec "${PYTHON_BIN}" "${SCRIPT_DIR}/markitdown-cli.py" "$@"
 MDWRAP_EOF
     chmod +x "${vendor_dir}/markitdown-cli"
+
+    # Create rapidocr-cli bash launcher
+    cat > "${vendor_dir}/rapidocr-cli" << 'RAPIDWRAP_EOF'
+#!/usr/bin/env bash
+# RapidOCR CLI wrapper for Spinosa
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PYTHON_BIN="${SCRIPT_DIR}/python/bin/python3"
+if [[ ! -x "${PYTHON_BIN}" ]]; then
+    PYTHON_BIN="${SCRIPT_DIR}/Python.framework/Versions/Current/bin/python3"
+fi
+if [[ ! -x "${PYTHON_BIN}" ]]; then
+    echo "ERROR: Bundled Python not found in ${SCRIPT_DIR}/python/" >&2
+    exit 1
+fi
+exec "${PYTHON_BIN}" "${SCRIPT_DIR}/rapidocr-cli.py" "$@"
+RAPIDWRAP_EOF
+    chmod +x "${vendor_dir}/rapidocr-cli"
 
     # Create yake-cli bash launcher
     cat > "${vendor_dir}/yake-cli" << 'YKWRAP_EOF'

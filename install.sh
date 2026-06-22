@@ -32,7 +32,7 @@ set -euo pipefail
 # CONFIGURATION
 # ══════════════════════════════════════════════════════════════════════════════
 
-PINNED_VERSION="0.5.11"
+PINNED_VERSION="0.5.12"
 VERSION="${VERSION:-$PINNED_VERSION}"
 DRY_RUN=0
 VERIFY_ONLY=0

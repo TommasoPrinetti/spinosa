@@ -121,6 +121,80 @@ def extract_keywords(text, language, top=20, max_ngram=3):
         return []
 
 
+STOPWORDS = {
+    'a', 'afin', 'ah', 'ai', 'aie', 'ainsi', 'aller', 'alors', 'après', 'as',
+    'assez', 'attendu', 'au', 'aucun', 'aujourd', 'auprès', 'aussi', 'autre',
+    'aux', 'avaient', 'avais', 'avait', 'avant', 'avec', 'avez', 'avons',
+    'bah', 'beaucoup', 'ben', 'bien', 'bon', 'c', 'car', 'ce', 'cela',
+    'celle', 'celles', 'celui', 'cent', 'cependant', 'certain', 'certes',
+    'ces', 'cet', 'cette', 'ceux', 'chez', 'ci', 'combien', 'comme',
+    'comment', 'concernant', 'contre', 'coucou', 'd', 'dans', 'de', 'debout',
+    'dedans', 'dehors', 'delà', 'depuis', 'derrière', 'des', 'dès', 'dessous',
+    'dessus', 'devant', 'devenu', 'devoir', 'doit', 'donc', 'dont', 'du',
+    'durant', 'déjà', 'e', 'effet', 'elle', 'elles', 'en', 'encore', 'enfin',
+    'entre', 'envers', 'environ', 'er', 'es', 'est', 'et', 'etaient', 'etait',
+    'etant', 'etc', 'ete', 'etes', 'euh', 'eurent', 'eut', 'eût', 'eûtes',
+    'excepté', 'fais', 'faisaient', 'faisait', 'faisant', 'fait', 'faite',
+    'faites', 'fallait', 'faut', 'furent', 'fus', 'fusse', 'fussent',
+    'fusses', 'fussiez', 'fussions', 'fut', 'fût', 'fûtes', 'grâce',
+    'h', 'ha', 'hein', 'hem', 'hep', 'ho', 'holà', 'hop', 'hormis',
+    'hou', 'houp', 'hue', 'hui', 'hum', 'hurrah', 'i', 'il', 'ils',
+    'j', 'je', 'jusque', 'k', 'l', 'la', 'là', 'le', 'les', 'leur',
+    'leurs', 'lui', 'm', 'ma', 'maint', 'maintenant', 'mais', 'malgré',
+    'me', 'mes', 'mien', 'mienne', 'miennes', 'miens', 'mieux', 'moi',
+    'moins', 'mon', 'mot', 'moyennant', 'n', 'na', 'ne', 'ner', 'nes',
+    'ni', 'non', 'nos', 'notre', 'nous', 'nul', 'o', 'oh', 'ohé', 'olà',
+    'on', 'ont', 'ore', 'ou', 'où', 'oui', 'par', 'parce', 'parmi',
+    'pas', 'pendant', 'peu', 'peut', 'peuvent', 'peux', 'plu', 'plus',
+    'plutôt', 'pour', 'pourquoi', 'pourtant', 'pouvait', 'puis', 'puisque',
+    'qu', 'quand', 'quant', 'que', 'quel', 'quelle', 'quelles', 'quels',
+    'qui', 'quoi', 'r', 'revoici', 'revoilà', 'rien', 's', 'sa', 'sans',
+    'sauf', 'se', 'selon', 'sera', 'serai', 'seraient', 'serais', 'serait',
+    'seras', 'serez', 'seriez', 'serions', 'serons', 'seront', 'ses',
+    'seul', 'si', 'sien', 'sienne', 'siennes', 'siens', 'sinon', 'soi',
+    'soit', 'sois', 'sommes', 'sont', 'sous', 'soyez', 'soyons', 'sujet',
+    'sur', 't', 'ta', 'tandis', 'tant', 'tard', 'te', 'tel', 'telle',
+    'telles', 'tels', 'tes', 'tien', 'tienne', 'tiennes', 'tiens', 'toi',
+    'ton', 'tôt', 'toujours', 'tout', 'toute', 'toutes', 'très', 'trop',
+    'tu', 'u', 'un', 'une', 'va', 'vais', 'vas', 'vers', 'veut', 'veux',
+    'via', 'vite', 'voici', 'voilà', 'voire', 'vont', 'vos', 'votre',
+    'vous', 'vu', 'vêt', 'y', 'z', 'à', 'ça', 'étaient', 'étais',
+    'était', 'étant', 'été', 'étiez', 'étions', 'été', 'êtes',
+    # English
+    'a', 'about', 'above', 'after', 'again', 'against', 'all', 'am',
+    'an', 'and', 'any', 'are', 'aren', 'as', 'at', 'be', 'because',
+    'been', 'before', 'being', 'below', 'between', 'both', 'but', 'by',
+    'can', 'cannot', 'could', 'did', 'do', 'does', 'doing', 'down',
+    'during', 'each', 'few', 'for', 'from', 'further', 'had', 'has',
+    'have', 'having', 'he', 'her', 'here', 'hers', 'herself', 'him',
+    'himself', 'his', 'how', 'i', 'if', 'in', 'into', 'is', 'it',
+    'its', 'itself', 'just', 'll', 'me', 'might', 'more', 'most',
+    'my', 'myself', 'no', 'nor', 'not', 'now', 'of', 'oh', 'on',
+    'once', 'only', 'or', 'other', 'our', 'ours', 'ourselves', 'out',
+    'over', 'own', 'per', 'quite', 're', 's', 'same', 'she', 'should',
+    'so', 'some', 'such', 't', 'than', 'that', 'the', 'their', 'theirs',
+    'them', 'themselves', 'then', 'there', 'these', 'they', 'this',
+    'those', 'through', 'to', 'too', 'under', 'until', 'up', 'us',
+    'very', 'was', 'we', 'were', 'what', 'when', 'where', 'which',
+    'while', 'who', 'whom', 'why', 'will', 'with', 'would', 'you',
+    'your', 'yours', 'yourself', 'yourselves',
+    # Transcription artifacts
+    'speaker', 'speakers', 'detected', 'model', 'asr', 'diarization',
+    'unknown', 'transcription', 'transcript',
+}
+
+def is_stopword_only(kw):
+    """Return True if keyword is pure stopword content (no research value)."""
+    tokens = kw.lower().strip().strip('.,;:!?()[]{}"\'').split()
+    if not tokens:
+        return True
+    for t in tokens:
+        t = t.strip('.,;:!?()[]{}"\'')
+        if t and t not in STOPWORDS:
+            return False
+    return True
+
+
 def normalize_keyword(kw):
     """Normalise a keyword for dedup comparison."""
     return kw.lower().strip().strip('.,;:!?()[]{}"\'').strip()
@@ -249,6 +323,7 @@ def process_file(filepath, inplace=False):
     language = detect_language(body, existing_lang)
 
     keywords_list = extract_keywords(body, language)
+    keywords_list = [(kw, sc) for kw, sc in keywords_list if not is_stopword_only(kw)]
 
     if not keywords_list:
         print(f"  No keywords extracted from {filepath}", file=sys.stderr, flush=True)
@@ -276,12 +351,7 @@ def process_file(filepath, inplace=False):
 
 def single_main(filepath, inplace=False):
     """Handle single-file mode."""
-    start = time.time()
     ok = process_file(filepath, inplace=inplace)
-    dur = int(time.time() - start)
-    rel = os.path.basename(filepath)
-    status = 'ok' if ok else 'fail'
-    print(f"END\t{status}\t{rel}\t{dur}", file=sys.stderr, flush=True)
     sys.exit(0 if ok else 1)
 
 
