@@ -1561,6 +1561,11 @@ print_onboarding_preflight() {
   else
     note_wilted "MarkItDown not available — Office docs, EPUB, HTML, and text-based PDFs will be skipped."
   fi
+  if yake_available; then
+    ok "${C}YAKE${RESET} available for keyword extraction"
+  else
+    note_wilted "YAKE not available — keyword extraction will be skipped."
+  fi
   if [[ "${FLAG_NO_COMPRESS:-0}" -eq 1 ]]; then
     note "Audio/video compression disabled (--no-compress)"
   elif ffmpeg_available; then
@@ -2194,6 +2199,30 @@ copy_source() {
   ok "Workspace source copy prepared in ${BOLD}$(dirname "$dest_dir")${RESET}"
 }
 
+run_yake_index() {
+  local raw_root="$1" total=0 failed=0
+  local yb
+  yb="$(yake_bin)" || { warn "YAKE binary not found — skipping keyword extraction"; return 1; }
+  while IFS= read -r -d '' f; do
+    total=$((total + 1))
+    if "$yb" --inplace "$f"; then
+      :
+    else
+      failed=$((failed + 1))
+      warn "YAKE failed on: ${f#${raw_root}/}"
+    fi
+  done < <(find "$raw_root" -name '*.md' -type f -print0 2>/dev/null)
+  if [[ "$total" -gt 0 ]]; then
+    if [[ "$failed" -eq 0 ]]; then
+      ok "YAKE: ${total} files indexed"
+    else
+      warn "YAKE: ${total} files, ${failed} failed, $((total - failed)) indexed"
+    fi
+  else
+    note "No markdown files to index"
+  fi
+}
+
 choose_preferred_cli() {
   local options=(
     "$(option_spec "opencode" "OpenCode" "run the OpenCode CLI with the startup prompt")"
@@ -2571,6 +2600,22 @@ markitdown_bin() {
   return 1
 }
 
+yake_available() {
+  local unified_bin="${SPINOSA_VENDOR_DIR}-${PLATFORM}/yake-cli"
+  [[ -x "$unified_bin" ]] && return 0
+  local framework_bin="${FRAMEWORK_ROOT:-.}/.bin/lib/vendor/spinosa-${PLATFORM}/yake-cli"
+  [[ -x "$framework_bin" ]] && return 0
+  return 1
+}
+
+yake_bin() {
+  local unified_bin="${SPINOSA_VENDOR_DIR}-${PLATFORM}/yake-cli"
+  if [[ -x "$unified_bin" ]]; then echo "$unified_bin"; return; fi
+  local framework_bin="${FRAMEWORK_ROOT:-.}/.bin/lib/vendor/spinosa-${PLATFORM}/yake-cli"
+  if [[ -x "$framework_bin" ]]; then echo "$framework_bin"; return; fi
+  return 1
+}
+
 ffmpeg_available() {
   local _bin
   _bin="$(ffmpeg_bin)" || return 1
@@ -2589,6 +2634,7 @@ repair_vendor_tools() {
   [[ -t 0 ]] || return 0
   local needs_repair=0 pkgs=() vendor_dir="${SPINOSA_VENDOR_DIR}-${PLATFORM}"
   if ! markitdown_available; then needs_repair=1; pkgs+=("markitdown"); fi
+  if ! yake_available; then needs_repair=1; pkgs+=("yake"); fi
   [[ "$needs_repair" -eq 1 ]] || return 0
 
   if [[ ! -d "$vendor_dir" ]]; then
@@ -2612,6 +2658,10 @@ repair_vendor_tools() {
     if [[ " ${pkgs[*]} " == *" markitdown "* ]]; then
       info "Installing MarkItDown..."
       "$python_bin" -m pip install "markitdown[docx,pptx,xlsx,xls,outlook,pdf]==0.1.6" --quiet 2>&1 || true
+    fi
+    if [[ " ${pkgs[*]} " == *" yake "* ]]; then
+      info "Installing YAKE + langdetect..."
+      "$python_bin" -m pip install "yake==0.7.3" "langdetect==1.0.9" --quiet 2>&1 || true
     fi
     if markitdown_available; then
       ok "Document processing packages ready"
@@ -2748,6 +2798,8 @@ run_integrated_onboarding() {
     note "Source is on cloud storage (Google Drive / iCloud / Dropbox). Files that are not fully synced locally may time out during copy and will be skipped."
   fi
   copy_source "$source_path" "$root/raw"
+
+  run_yake_index "$root/raw" || true
 
   print_step 3 3 "Startup prompt"
   reset_terminal
@@ -4322,6 +4374,12 @@ cmd_health() {
     note_wilted "MarkItDown not bundled — Office docs and text PDFs will be skipped"
   fi
 
+  if yake_available; then
+    ok "YAKE available for keyword extraction"
+  else
+    note_wilted "YAKE not bundled — keyword extraction will be skipped"
+  fi
+
   local ws_count
   spinner_start "Discovering workspaces"
   local workspace_data
@@ -4694,7 +4752,6 @@ auto_upgrade_check() {
     last_check="$(sed -n '1p' "$cache_file" 2>/dev/null || echo 0)"
     skip_until="$(sed -n '3p' "$cache_file" 2>/dev/null || echo 0)"
     [[ "$now" -lt "$skip_until" ]] && return 0
-    (( now - last_check < 86400 )) && return 0
   fi
 
   local latest

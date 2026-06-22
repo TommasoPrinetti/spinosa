@@ -5,7 +5,7 @@ set -euo pipefail
 if [[ "${NO_COLOR:-}" == "1" ]] || [[ ! -t 1 ]]; then
   R="" G="" Y="" BOLD="" RESET=""
 else
-  R=$'\033[31m' G=$'\033[32m' Y=$'\033[92m' BOLD=$'\033[1m' RESET=$'\033[0m'
+  R=$'\033[31m' G=$'\033[32m' Y=$'\033[33m' BOLD=$'\033[1m' RESET=$'\033[0m'
 fi
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

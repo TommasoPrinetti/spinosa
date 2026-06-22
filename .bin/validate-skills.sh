@@ -16,17 +16,15 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 SKILLS_DIR="${REPO_ROOT}/.agents/skills"
 
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[0;92m'
-NC='\033[0m'
+R=$'\033[31m' G=$'\033[32m' Y=$'\033[33m'
+BOLD=$'\033[1m' DIM=$'\033[2m' RESET=$'\033[0m'
 
 errors=0
 warnings=0
 
-err()  { echo -e "${RED}✗${NC} $*"; errors=$((errors + 1)); }
-ok()   { echo -e "${GREEN}✓${NC} $*"; }
-warn() { echo -e "${YELLOW}⚠${NC} $*"; warnings=$((warnings + 1)); }
+err()  { printf '  %s %s\n' "${R}✗${RESET}" "$*"; errors=$((errors + 1)); }
+ok()   { printf '  %s %s\n' "${G}✓${RESET}" "$*"; }
+warn() { printf '  %s %s\n' "${Y}⚠${RESET}" "$*"; warnings=$((warnings + 1)); }
 
 echo "=== Pilosa Skill Validation ==="
 echo ""
@@ -132,9 +130,9 @@ echo "  Warnings: $warnings"
 echo ""
 
 if [[ $errors -gt 0 ]]; then
-    echo -e "${RED}Validation failed.${NC}"
+    printf '  %s\n' "${R}Validation failed.${RESET}"
     exit 1
 else
-    echo -e "${GREEN}All skills valid.${NC}"
+    printf '  %s\n' "${G}All skills valid.${RESET}"
     exit 0
 fi
