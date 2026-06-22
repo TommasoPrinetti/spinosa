@@ -199,12 +199,7 @@ System documentation: [`system/startup.md`](system/startup.md), [`system/configu
 | Command | What it does |
 |---|---|
 | `spinosa new` | Create a workspace from your corpus folder |
-| `spinosa prepare <ws>` | Re-run setup on an existing workspace |
-| `spinosa update <ws>` | Update workspace framework files |
 | `spinosa upgrade` | Upgrade the CLI to the latest release |
-| `spinosa check <ws>` | Validate workspace structure |
-| `spinosa health` | Check system status |
-| `spinosa sync` | Sync agent and skill definitions |
 | `spinosa uninstall` | Remove Spinosa from your system |
 
 ## Upgrading

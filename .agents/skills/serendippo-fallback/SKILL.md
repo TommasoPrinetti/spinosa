@@ -1,5 +1,5 @@
 ---
-name: pilosa-serendippo-fallback
+name: spinosa-serendippo-fallback
 type: skill
 scope: serendipitous_research
 description: |
@@ -35,8 +35,9 @@ Find serendipitous connections between concepts across the raw corpus. Your job 
 ### Phase 1: Orient
 
 1. Read `system/dictionary.md` to understand the current vocabulary.
-2. Read `maps/` — start with the structural overview, then group maps, then theme maps. Identify which groups are under-connected and which concepts lack cross-cutting threads. Track every map you access.
-3. Identify gaps: which concepts are under-connected? Which files are isolated?
+2. **Graph-first navigation:** If `system/concept-graph.json` exists, query it via `python3 .bin/lib/concept-graph.py query <concept>` for each target concept to find which files and related concepts are connected. The graph reveals the structure before you read maps.
+3. Read `maps/` — start with the structural overview, then group maps, then theme maps. Identify which groups are under-connected and which concepts lack cross-cutting threads. Track every map you access.
+4. Identify gaps: which concepts are under-connected? Which files are isolated? Cross-reference with graph query results.
 
 ### Phase 2: Roam
 

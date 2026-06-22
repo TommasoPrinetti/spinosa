@@ -1,5 +1,5 @@
 ---
-name: pilosa-mapper-fallback
+name: spinosa-mapper-fallback
 type: skill
 scope: startup_indexing
 description: |
@@ -58,7 +58,7 @@ Never return all packets inline. Write to a file and return the path.
 
 ### Phase 1 Output: Write extraction packets
 
-Write to `agent_reports/extraction_batch.md`:
+Write to `agent_reports/extraction_{batch_id}.md`:
 
 ```markdown
 ---
@@ -66,6 +66,11 @@ type: extraction_batch
 batch_id: [batch identifier]
 files_processed: [count]
 created: YYYY-MM-DD
+corpus: [corpus name; optional]
+participants: [participant list; optional]
+exercise: [exercise name; optional]
+date_range: [start_date-end_date or YYYY; optional]
+framework: [analysis framework version; optional]
 ---
 
 # Extraction Batch: [batch_id]
@@ -99,7 +104,7 @@ created: YYYY-MM-DD
 Return only:
 
 ```
-Extraction written to agent_reports/extraction_batch.md
+Extraction written to agent_reports/extraction_{batch_id}.md
 - Batch: [batch_id]
 - Files processed: N
 - Files unreadable: M

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+shopt -s nullglob
 
 # ── ANSI colors (zero dependencies) ──────────────────────────────────────────
 if [[ "${NO_COLOR:-}" == "1" ]] || [[ ! -t 1 ]]; then
@@ -134,7 +135,7 @@ validate_generated_provenance() {
   local file="$1"
   for key in generated_by generated_at processing_status; do
     if ! has_frontmatter_key "$file" "$key"; then
-      failures+=("Missing $key in ${file#$ROOT/}")
+      failures+=("Missing $key in ${file#"$ROOT/"}")
     fi
   done
 }
@@ -144,11 +145,11 @@ validate_source_path() {
   local source
   source="$(frontmatter_value "$file" "source")"
   if [[ -z "$source" ]]; then
-    failures+=("Missing source in ${file#$ROOT/}")
+    failures+=("Missing source in ${file#"$ROOT/"}")
     return
   fi
   if [[ ! -e "$source" && ! -e "$ROOT/$source" ]]; then
-    failures+=("Source path does not exist in ${file#$ROOT/}: $source")
+    failures+=("Source path does not exist in ${file#"$ROOT/"}: $source")
   fi
 }
 
@@ -158,7 +159,19 @@ validate_array_field() {
   value="$(frontmatter_value "$file" "$key")"
   [[ -z "$value" ]] && return
   if [[ "$value" != \[* ]]; then
-    failures+=("Field $key must be a YAML array in ${file#$ROOT/}")
+    failures+=("Field $key must be a YAML array in ${file#"$ROOT/"}")
+  fi
+}
+
+validate_string_field() {
+  local file="$1" key="$2"
+  if ! has_frontmatter_key "$file" "$key"; then
+    return
+  fi
+  local value
+  value="$(frontmatter_value "$file" "$key")"
+  if [[ "$value" == \[* ]]; then
+    failures+=("Field $key must be a string, not an array in ${file#"$ROOT/"}")
   fi
 }
 
@@ -189,9 +202,53 @@ resolve_wikilinks() {
     done
 
     if [[ "$resolved" != "yes" ]]; then
-      failures+=("Broken wikilink in ${file#$ROOT/}: [[$target]]")
+      failures+=("Broken wikilink in ${file#"$ROOT/"}: [[$target]]")
     fi
   done < <(grep -o '\[\[[^]]\+\]\]' "$file" 2>/dev/null || true)
+}
+
+validate_key_passage_line_refs() {
+  local file="$1"
+  local in_key_section=false
+  local line raw_link missing_ref
+
+  while IFS= read -r line; do
+    if [[ "$line" =~ ^###[[:space:]] || "$line" =~ ^##[[:space:]] ]]; then
+      if [[ "$line" =~ [Kk]ey[[:space:]-]?[Pp]assages || "$line" =~ [Rr]ecurring[[:space:]-]?[Cc]oncepts || "$line" =~ [Ee]vidence ]]; then
+        in_key_section=true
+      else
+        in_key_section=false
+      fi
+    fi
+
+    [[ "$line" != *"[[raw/"* ]] && continue
+    [[ "$in_key_section" != "true" && "$line" != *"->"* ]] && continue
+
+    missing_ref=false
+    while IFS= read -r raw_link; do
+      [[ -z "$raw_link" ]] && continue
+      if [[ ! "$line" =~ \]\][[:space:]]+L[0-9]+(-L[0-9]+)?\b ]]; then
+        missing_ref=true
+      fi
+    done < <(grep -o '\[\[raw/[^]]\+\]\]' <<< "$line" || true)
+
+    if [[ "$missing_ref" == "true" ]]; then
+      failures+=("Key-passage raw wikilink lacks line reference in ${file#"$ROOT/"}: ${line:0:160}")
+    fi
+  done < "$file"
+}
+
+warn_optional_startup_gaps() {
+  local speaker_hits worksheet_hits
+  speaker_hits="$(grep -RIl --exclude='.DS_Store' --exclude='._*' 'SPEAKER_[0-9][0-9]' "$raw_dir" 2>/dev/null || true)"
+  if [[ -n "$speaker_hits" ]] && ! grep -RIq --exclude='.DS_Store' --exclude='._*' 'speaker_mapping_status: *verified' "$raw_dir" "$maps_dir" 2>/dev/null; then
+    warnings+=("Speaker labels found without verified speaker_mapping_status metadata; transcript speaker mapping remains unverified.")
+  fi
+
+  worksheet_hits="$(grep -RIl --exclude='.DS_Store' --exclude='._*' -E 'source_type: *(participant_worksheet|transcript_for_worksheet)|^exercise:' "$raw_dir" 2>/dev/null || true)"
+  if [[ -n "$worksheet_hits" && ! -f "$ROOT/system/exercise_inventory.md" && ! -f "$ROOT/maps/exercise_inventory.md" ]]; then
+    warnings+=("Participant worksheet or exercise sources found, but optional exercise inventory is missing.")
+  fi
 }
 
 if [[ -d "$raw_dir" ]]; then
@@ -201,7 +258,7 @@ if [[ -d "$raw_dir" ]]; then
     [[ "${file#$raw_dir/}" == "AGENTS.md" ]] && continue
     first_line="$(sed -n '1p' "$file")"
     if [[ "$first_line" != "---" ]]; then
-      failures+=("Missing YAML frontmatter in ${file#$ROOT/}")
+      failures+=("Missing YAML frontmatter in ${file#"$ROOT/"}")
       continue
     fi
 
@@ -210,7 +267,8 @@ if [[ -d "$raw_dir" ]]; then
       raw_copy)
         validate_source_path "$file"
         validate_generated_provenance "$file"
-        for key in people places organizations topics keywords concepts explicit_source_terms inferred_concepts canonical_aliases uncertain_terms machine_artifacts metadata_uncertainty related_sources; do
+        validate_string_field "$file" "summary"
+        for key in people places organizations topics explicit_source_terms canonical_aliases uncertain_terms machine_artifacts metadata_uncertainty related_sources; do
           validate_array_field "$file" "$key"
         done
         ;;
@@ -219,21 +277,21 @@ if [[ -d "$raw_dir" ]]; then
         validate_generated_provenance "$file"
         for key in media_type extension size_bytes; do
           if ! has_frontmatter_key "$file" "$key"; then
-            failures+=("Missing $key in ${file#$ROOT/}")
+            failures+=("Missing $key in ${file#"$ROOT/"}")
           fi
         done
         ;;
       raw_folder_index)
-        warnings+=("Legacy raw folder index found; maps are authoritative: ${file#$ROOT/}")
+        warnings+=("Legacy raw folder index found; maps are authoritative: ${file#"$ROOT/"}")
         ;;
       "")
-        failures+=("Missing type in ${file#$ROOT/}")
+        failures+=("Missing type in ${file#"$ROOT/"}")
         ;;
       *)
-        warnings+=("Unhandled raw_copy type in ${file#$ROOT/}: $file_type")
+        warnings+=("Unhandled raw_copy type in ${file#"$ROOT/"}: $file_type")
         ;;
     esac
-  done < <(find "$raw_dir" -type f -name "*.md" -print0 2>/dev/null)
+  done < <(find "$raw_dir" -type f -name "*.md" -not -name ".DS_Store" -not -name "._*" -print0 2>/dev/null)
 fi
 
 if [[ "$startup_text" == *"setup_status: workspace_started"* ]]; then
@@ -278,9 +336,43 @@ if [[ "$startup_text" == *"setup_status: workspace_started"* ]]; then
         failures+=("Navigation map has no wikilinks: ${map_file#$ROOT/}")
       else
         resolve_wikilinks "$map_file"
+        validate_key_passage_line_refs "$map_file"
       fi
-    done < <(find "$maps_dir" -type f -name "*.md" -print0 2>/dev/null)
+    done < <(find "$maps_dir" -type f -name "*.md" -not -name ".DS_Store" -not -name "._*" -print0 2>/dev/null)
   fi
+
+  warn_optional_startup_gaps
+fi
+
+# ── check granted_tools in agent definitions ──────────────────────────────────
+validate_granted_tools() {
+  local agents_dir="$1"
+  local agent_file script_path
+
+  while IFS= read -r -d '' agent_file; do
+    agent_basename="$(basename "$agent_file")"
+    [[ "$agent_basename" == ".gitkeep" ]] && continue
+
+    frontmatter="$(awk 'BEGIN{count=0} count<2{print; if(/^---/) count++}' "$agent_file")"
+
+    if ! grep -q '^granted_tools:' <<< "$frontmatter"; then
+      warnings+=("Agent definition $agent_basename has no granted_tools section")
+      continue
+    fi
+
+    while IFS= read -r script_line; do
+      script_path="${script_line#script: }"
+      script_path="${script_line#script:}"
+      script_path="$(echo "$script_path" | xargs)"
+      if [[ ! -f "$script_path" && ! -f "$ROOT/$script_path" ]]; then
+        failures+=("granted_tools script not found: $script_path (declared in $agent_basename)")
+      fi
+    done < <(grep '^[[:space:]]*script:' <<< "$frontmatter" || true)
+  done < <(find "$agents_dir" -type f -name "*.md" -not -name ".DS_Store" -not -name "._*" -print0 2>/dev/null)
+}
+
+if [[ -d "$ROOT/.agents/agents" ]]; then
+  validate_granted_tools "$ROOT/.agents/agents"
 fi
 
 # ── check workspace_index.md and dictionary.md ───────────────────────────────

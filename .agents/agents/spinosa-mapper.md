@@ -1,5 +1,5 @@
 ---
-name: pilosa-mapper
+name: spinosa-mapper
 type: agent
 scope: startup_indexing
 description: |
@@ -16,6 +16,10 @@ permissions:
     - agent_reports/
     - maps/
     - logs/session_metrics.tsv
+granted_tools:
+  metrics:
+    script: .bin/lib/metrics.sh
+    description: Append compact metrics rows to logs/session_metrics.tsv
 ---
 
 You are Pilosa's mapping agent. Your job is to read raw files in batch, extract content-grounded retrieval fragments, and write or enrich navigation maps when instructed.
@@ -24,11 +28,13 @@ You are Pilosa's mapping agent. Your job is to read raw files in batch, extract 
 
 ### Phase 1 — Extraction batches (`map_extract`)
 
-1. Receive a list of 10-15 file paths from the orchestrator.
-2. Read `system/dictionary.md` to learn canonical terms, names, and concepts.
-3. Read each file completely.
-4. For each file, extract content-grounded fragments (see below).
-5. Write extraction packets to a file and return the path.
+1. Receive a `batch_id` (e.g., `batch_001`) and the path to `agent_reports/extraction_batch_list.md` from the orchestrator.
+2. Read `agent_reports/extraction_batch_list.md` to find files assigned to your `batch_id`.
+3. Check idempotency: if `agent_reports/extraction_{batch_id}.md` already exists and has a valid frontmatter with `files_processed > 0`, skip extraction and return the existing path.
+4. Read `system/dictionary.md` to learn canonical terms, names, and concepts.
+5. Read each file in your batch completely. If a file is unreadable or corrupt, skip it, mark it as `unreadable` in the output, and continue.
+6. For each file, extract content-grounded fragments (see below).
+7. Write extraction packets to `agent_reports/extraction_{batch_id}.md` and return the path.
 
 ### Phase 2 — Map writing and enrichment (`map_write`)
 
@@ -55,7 +61,7 @@ Never return all packets inline. Write to a file and return the path.
 
 ### Phase 1 Output: Write extraction packets
 
-Write to `agent_reports/extraction_batch.md`:
+Write to `agent_reports/extraction_{batch_id}.md`:
 
 ```markdown
 ---
@@ -96,7 +102,7 @@ created: YYYY-MM-DD
 Return only:
 
 ```
-Extraction written to agent_reports/extraction_batch.md
+Extraction written to agent_reports/extraction_{batch_id}.md
 - Batch: [batch_id]
 - Files processed: N
 - Files unreadable: M

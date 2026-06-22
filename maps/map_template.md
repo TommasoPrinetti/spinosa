@@ -16,6 +16,8 @@ updated: 2026-06-04
 
 Every map file in `maps/` must include the navigation_map header and use Obsidian wikilinks for all internal references.
 
+Every quoted passage or close paraphrase that points to a raw source must include a line reference after the wikilink: `[[raw/path/file]]` L12 or `[[raw/path/file]]` L12-L15. Omitting the line reference for a key passage is a startup validation failure.
+
 ## YAML Header Schema
 
 ```yaml
@@ -62,6 +64,7 @@ Format:
 - Each concept: 1-2 sentence description + examples with wikilinks and line references: `[[raw/path/file]]` L12-L15
 - Wikilink back to hub: `[[corpus_overview]]`
 - Wikilinks to related group maps when cross-references exist
+- For multi-page participant, worksheet, or transcript material, link the most specific page/file when citing a passage. For dossier-level observations, describe the folder or participant scope in prose and include the most representative raw file wikilinks available.
 
 ## Level 2: Theme Map
 
@@ -78,3 +81,5 @@ Format:
 ## Key Principle
 
 The template defines what maps should contain (depth, format, content quality) without prescribing how they're organized. The mapper figures out the organization from the corpus.
+
+Maps should remain prose-based. Use tables only for compact inventories when prose would be less readable; never use tables as the primary structure for key passages or recurring concepts.

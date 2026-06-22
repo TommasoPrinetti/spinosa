@@ -9,7 +9,7 @@ Startup time depends on corpus size. A typical corpus (50-100 files) takes 5-15 
 OCR works best on clear, high-resolution images. If text comes out jumbled, check the original image quality. You can replace the file and re-run source intake. Some garbled text is expected — the dictionary marks these as "machine artifacts" so agents know to treat them cautiously.
 
 **Can I add more files after startup?**
-Yes. Spinosa has a source intake workflow that converts new files, generates headers, and updates navigation maps. Run `spinosa prepare <workspace>` or trigger the intake workflow from your LLM tool.
+Yes. Spinosa has a source intake workflow that converts new files, generates headers, and updates navigation maps. Trigger the intake workflow from your LLM tool.
 
 ## Using the workspace
 
@@ -54,9 +54,6 @@ Run the Janitor agent. It scans for stale files, broken links, and outdated repo
 
 **Command not found: spinosa**
 Make sure `~/.spinosa/bin` is on your PATH, or re-run the install script.
-
-**spinosa check says something is wrong**
-Run `spinosa check <workspace>` and read the output. It identifies missing files, broken paths, and configuration issues. Most problems can be fixed by re-running startup or updating framework files with `spinosa update <workspace>`.
 
 **The LLM tool can't find my workspace**
 Make sure you ran the startup prompt that `spinosa new` printed. The prompt includes the workspace path. If you closed the terminal, re-run with the workspace folder as the argument.

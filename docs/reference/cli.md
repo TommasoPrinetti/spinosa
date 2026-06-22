@@ -24,29 +24,9 @@ During scanning, you'll see a summary of what was found:
 └─ 0 files ignored
 ```
 
-### `spinosa prepare <workspace>`
-
-Re-run setup on an existing workspace.
-
-### `spinosa update <workspace>`
-
-Update framework files from a release. Preserves your data (configuration, context, dictionary, workspace index, logs).
-
 ### `spinosa upgrade`
 
 Upgrade the CLI to the latest release. Downloads and verifies checksums automatically.
-
-### `spinosa check <workspace>`
-
-Validate workspace structure and settings. Reports missing files, broken paths, configuration issues.
-
-### `spinosa health`
-
-Check system status and which conversion engines are available on this machine.
-
-### `spinosa sync`
-
-Sync agent and skill definitions between the canonical `.agents/` directory and vendor-specific directories (`.claude/`, `.opencode/`, `.codex/`).
 
 ### `spinosa uninstall`
 

@@ -6,10 +6,18 @@ if [ -z "${BASH_VERSION-}" ]; then
     if [ -n "${0-}" ] && [ -f "${0-}" ]; then
       exec bash "$0" "$@"
     fi
-    TMP_SCRIPT="$(mktemp /tmp/spinosa-install.XXXXXX)"
-    trap 'rm -f "$TMP_SCRIPT"' EXIT
-    cat > "$TMP_SCRIPT"
-    exec bash "$TMP_SCRIPT" "$@"
+    # Piped to a non-bash shell (e.g. curl ... | sh) but bash is present.
+    # The previous 'cat > tmp + exec' approach is unreliable (POSIX sh parser
+    # has already consumed part of stdin, leading to truncated/dangling script).
+    # Guide user to the supported invocation (docs already recommend | bash).
+    echo "" >&2
+    echo "  This installer must be run under bash." >&2
+    echo "  Please use one of the following:" >&2
+    echo "    curl -fsSL https://github.com/TommasoPrinetti/spinosa/releases/download/v0.5.12/install.sh | bash" >&2
+    echo "    bash <(curl -fsSL https://github.com/TommasoPrinetti/spinosa/releases/download/v0.5.12/install.sh)" >&2
+    echo "    curl -fsSL ... -o install.sh && bash install.sh" >&2
+    echo "" >&2
+    exit 1
   fi
   echo "" >&2
   echo "  Spinosa requires bash. Install it first:" >&2
@@ -32,7 +40,7 @@ set -euo pipefail
 # CONFIGURATION
 # ══════════════════════════════════════════════════════════════════════════════
 
-PINNED_VERSION="0.5.12"
+PINNED_VERSION="0.5.13"
 VERSION="${VERSION:-$PINNED_VERSION}"
 DRY_RUN=0
 VERIFY_ONLY=0
@@ -215,9 +223,9 @@ detect_platform_suffix() {
 download() {
   local url="$1" dest="$2"
   if command -v curl >/dev/null 2>&1; then
-    curl -fSL --silent --show-error "$url" -o "$dest"
+    curl -fSL --silent --show-error --max-time 300 --connect-timeout 30 "$url" -o "$dest"
   elif command -v wget >/dev/null 2>&1; then
-    wget -q --show-progress "$url" -O "$dest"
+    wget -q --show-progress --timeout=30 --tries=1 "$url" -O "$dest"
   else
     die "Neither curl nor wget found. Please install one."
   fi
@@ -359,7 +367,7 @@ resolve_version() {
   if [ "$VERSION" = "latest" ]; then
     info "Resolving latest version..."
     local resolved
-    resolved="$(curl -fsSL -o /dev/null -w '%{url_effective}' "https://github.com/${REPO}/releases/latest" 2>/dev/null | sed 's|.*/tag/||' | sed 's/^v//')" || true
+    resolved="$(curl -fsSL --max-time 30 -o /dev/null -w '%{url_effective}' "https://github.com/${REPO}/releases/latest" 2>/dev/null | sed 's|.*/tag/||' | sed 's/^v//')" || true
     if [ -z "$resolved" ]; then
       die "Could not resolve latest version. Use --version to specify."
     fi
@@ -375,7 +383,7 @@ check_release_age() {
 
   local api_url="https://api.github.com/repos/${REPO}/releases/tags/v${version}"
   local published_at
-  published_at="$(curl -fsSL "$api_url" 2>/dev/null | grep '"published_at":' | head -1 | sed 's/.*"published_at": "\([^"]*\)".*/\1/')" || true
+  published_at="$(curl -fsSL --max-time 30 "$api_url" 2>/dev/null | grep '"published_at":' | head -1 | sed 's/.*"published_at": "\([^"]*\)".*/\1/')" || true
 
   if [ -z "$published_at" ]; then
     if [ -n "$min_days" ]; then
@@ -662,9 +670,6 @@ install_vendor_bundles() {
   clean_macos_metadata "$spinosa_vendor_dest"
   chmod +x "${spinosa_vendor_dest}/rapidocr-cli" 2>/dev/null || true
   chmod +x "${spinosa_vendor_dest}/markitdown-cli" 2>/dev/null || true
-  if ! chmod +x "${spinosa_vendor_dest}/yake-cli" 2>/dev/null; then
-    warn "yake-cli not found in vendor bundle — keyword extraction will be unavailable"
-  fi
   spinner_stop
 
   local spinosa_python="${spinosa_vendor_dest}/python/bin/python3"
@@ -673,7 +678,7 @@ install_vendor_bundles() {
   fi
 
   if [[ -x "$spinosa_python" ]]; then
-    spinner_start "Installing Python packages (MarkItDown + RapidOCR + YAKE + ffmpeg)"
+    spinner_start "Installing Python packages (MarkItDown + RapidOCR)"
     local pip_ok=0 pip_attempt=0 pip_max=3
     "$spinosa_python" -m pip install --upgrade pip --quiet 2>/dev/null || true
     while [[ $pip_ok -eq 0 && $pip_attempt -lt $pip_max ]]; do
@@ -683,9 +688,6 @@ install_vendor_bundles() {
         "rapidocr==3.8.1" \
         "onnxruntime==1.26.0" \
         "pypdfium2==5.9.0" \
-        "imageio-ffmpeg==0.6.0" \
-        "yake==0.7.3" \
-        "langdetect==1.0.9" \
         --quiet 2>&1; then
         pip_ok=1
       else
@@ -699,19 +701,11 @@ install_vendor_bundles() {
     done
 
     if [[ $pip_ok -eq 1 ]]; then
-      spinner_stop "MarkItDown + RapidOCR + YAKE + ffmpeg installed"
+      spinner_stop "MarkItDown + RapidOCR installed"
       spinner_start "Verifying RapidOCR import"
       if "$spinosa_python" -c "from rapidocr import RapidOCR" 2>/dev/null; then
         spinner_stop
         ok "RapidOCR import verified"
-        spinner_start "Verifying YAKE + langdetect import"
-        if "$spinosa_python" -c "import yake; import langdetect" 2>/dev/null; then
-          spinner_stop
-          ok "YAKE + langdetect imports verified"
-        else
-          spinner_stop
-          warn "YAKE or langdetect import failed — keyword extraction may fail"
-        fi
         spinner_start "Cleaning up unused models"
         "$spinosa_python" -c "
 import rapidocr, os
@@ -761,11 +755,11 @@ RapidOCR(params={
       fi
     else
       spinner_stop
-      warn "pip install failed — PDF/image OCR, Office doc conversion, and keyword extraction will not be available"
-      rm -f "${spinosa_vendor_dest}/rapidocr-cli" "${spinosa_vendor_dest}/markitdown-cli" "${spinosa_vendor_dest}/yake-cli" 2>/dev/null || true
+      warn "pip install failed — PDF/image OCR and Office doc conversion will not be available"
+      rm -f "${spinosa_vendor_dest}/rapidocr-cli" "${spinosa_vendor_dest}/markitdown-cli" 2>/dev/null || true
     fi
   else
-    warn "Bundled Python not found — PDF/image OCR, Office doc conversion, and keyword extraction will not be available"
+    warn "Bundled Python not found — PDF/image OCR and Office doc conversion will not be available"
   fi
 
   local fw_root="${SPINOSA_HOME}/versions/${version}/spinosa-framework-${version}"
@@ -907,8 +901,12 @@ main() {
   mkdir -p "${SPINOSA_BIN_DIR}"
 
   local tmpdir
-  tmpdir="$(mktemp -d)"
-  trap 'spinner_stop; rm -rf "$tmpdir" "$lockdir"' EXIT INT TERM
+  tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/spinosa-install.XXXXXX")"
+  cleanup() {
+    spinner_stop
+    rm -rf "$tmpdir" "$lockdir" 2>/dev/null || true
+  }
+  trap cleanup EXIT INT TERM HUP
 
   printf '\n' >&2
 
@@ -917,7 +915,7 @@ main() {
   download_and_verify \
     "${base_url}/${archive_name}" "$framework_dest" \
     "Framework v${VERSION}" \
-    "checksums.txt" "$archive_name" 1 0
+    "checksums.txt" "$archive_name" 3 3
 
   # Extract to temp then move atomically (creates version dir only
   # after verified content is ready — prevents marking partial installs)
@@ -946,8 +944,8 @@ main() {
 
   install_shims
 
-  trap - EXIT INT TERM
-  rm -rf "$tmpdir" "$lockdir"
+  cleanup
+  trap - EXIT INT TERM HUP
 
   echo ""
   run_basic_test

@@ -1,5 +1,5 @@
 ---
-name: pilosa-evolver
+name: spinosa-evolver
 type: skill
 scope: framework_evolution
 description: |
@@ -55,4 +55,4 @@ You are Pilosa's framework evolution agent. You apply narrowly targeted control-
 - Never perform opportunistic cleanup or unrelated refactors.
 - If the audit is weak or the requested change exceeds scope, refuse to edit and state why in the evolution report.
 - Self-edits apply to the next request only.
-- Append one metrics row with operation `evolve`, directories seen, files read, reports written, and output path.
+- Append one metrics row with operation `evolve`, directories seen, files read, reports written, and output path. Use `.bin/lib/metrics.sh` when available; never log raw command output, long grep terms, source excerpts, secrets, or credentials.

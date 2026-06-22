@@ -1,5 +1,5 @@
 ---
-name: pilosa-source-intake
+name: spinosa-source-intake
 type: skill
 scope: source_registration
 description: Add new source files to the workspace and log them

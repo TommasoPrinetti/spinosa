@@ -1,5 +1,5 @@
 ---
-name: pilosa-evaluator
+name: spinosa-evaluator
 type: skill
 scope: route_audit
 description: |
@@ -55,7 +55,7 @@ You are Pilosa's route evaluation agent. You inspect how a completed route perfo
 - Prefer `no_edit` when the finding is weak, speculative, or not actionable through control/doc changes.
 - Separate answer-quality findings from framework/process findings.
 - Self-edit recommendations apply only to future requests, never to the already completed answer.
-- Append one metrics row with operation `evaluate`, directories seen, maps read if any, files read, reports written, and output path.
+- Append one metrics row with operation `evaluate`, directories seen, maps read if any, files read, reports written, and output path. Use `.bin/lib/metrics.sh` when available; never log raw command output, long grep terms, source excerpts, secrets, or credentials.
 
 ## References
 

@@ -2,14 +2,14 @@
 name: spinosa-orchestrator-dispatch
 type: skill
 scope: prompt_routing
-description: Condense a user prompt into a frozen goal artifact, route it through a sequential sub-agent pipeline, and run the post-route audit loop
+description: Condense a user prompt into a frozen goal artifact, route it through a sub-agent pipeline (sequential by default; parallel mapper dispatch during startup Phase 2.2), and run the post-route audit loop
 created: 2026-05-26
 updated: 2026-06-21
 ---
 
 ## Purpose
 
-Log the request, split it into `fast_path` or `non-fast-path`, write a frozen goal artifact for non-fast-path work, dispatch the sequential sub-agent chain, run the mandatory post-route audit loop, and close the route.
+Log the request, split it into `fast_path` or `non-fast-path`, write a frozen goal artifact for non-fast-path work, dispatch the sub-agent chain (sequential by default; parallel mapper dispatch during startup Phase 2.2), run the mandatory post-route audit loop, and close the route.
 
 ## Safety & Permissions
 
@@ -67,7 +67,7 @@ Chain rules:
 - `non-fast-path` starts with an orchestrator-written goal artifact in `agent_reports/`.
 - Choose the smallest chain that can honestly finish the work.
 - Every chosen Phase A agent must write a durable artifact to `agent_reports/`.
-- The chain is sequential once frozen: no parallel steps, no appended steps, no skipped steps, no mid-route replanning.
+- The chain is sequential once frozen: no parallel steps, no appended steps, no skipped steps, no mid-route replanning. Exception: during startup Phase 2.2, all `spinosa-mapper` sub-agents are spawned in parallel in a single message (one per batch). See `system/startup.md` Phase 2.2.
 - Repeated agents are allowed only when declared in the goal artifact with separate rationale lines.
 - If the route produces a user-facing answer report, Writer must produce it before Verifier.
 - Verifier is required whenever the route yields claims, citations, or quotes that need truth-checking.
@@ -85,9 +85,11 @@ For each sub-agent in the frozen sequence:
 1. **Native spawn** (preferred): Spawn by canonical name — `spinosa-searcher`, `spinosa-analyst`, `spinosa-writer`, `spinosa-verifier`, `spinosa-evaluator`, `spinosa-evolver`, `spinosa-janitor`, `spinosa-mapper`, or `spinosa-serendippo`. Pass: goal artifact path, prior sub-agent outputs, route constraints.
 2. **Fallback** (if native unavailable): Read the skill's `SKILL.md` from `.agents/skills/<skill-name>/SKILL.md`, inject into the task prompt as instructions.
 
-Phase A is always sequential and file-based. The orchestrator writes the goal artifact first, then passes prior artifact paths into each later step. Evaluator runs after the Phase A terminal artifact reaches the intended checking state. Evolver runs only when the evaluator emits `edit_recommended`.
+Phase A is sequential and file-based by default. The orchestrator writes the goal artifact first, then passes prior artifact paths into each later step. **Exception:** during startup Phase 2.2, all `spinosa-mapper` sub-agents are dispatched in a single message (one per batch) — see `system/startup.md` Sections 2.2 Steps 1-3. Evaluator runs after the Phase A terminal artifact reaches the intended checking state. Evolver runs only when the evaluator emits `edit_recommended`.
 
 Canonical definitions live in `.agents/agents/`. Vendor agent directories are generated mirrors, including `.codex/agents/` as generated TOML wrappers. The orchestrator playbook lives in `AGENTS.md`.
+
+After each sub-agent returns, verify that `logs/session_metrics.tsv` contains a row for the current `session_id` and the expected operation (`search`, `analysis`, `synthesis`, `verify`, `evaluate`, `evolve`, `map_extract`, `map_write`, or the route-specific operation). If the row is missing, record a process warning in the next durable artifact or final route notes. Missing metrics do not block the substantive route when the expected output artifact exists and passes its own checks.
 
 ### File-Based Handoff
 
@@ -100,7 +102,8 @@ Sub-agents write results to files and return paths. The orchestrator passes **pa
 3. **Writer** creates the user-facing answer report only when the goal artifact includes an answer-producing step.
 4. **Verifier** truth-checks substantive outputs when the route presents claims, citations, or quotes.
 5. **Phase B audit**: Evaluator writes a separate audit report to `agent_reports/`. If needed, Evolver writes a separate evolution report there too.
-6. **Cleanup**: After the terminal artifact is checked and the Phase B loop is complete, process files are moved to `.trash/`. Final reports and audit/evolution reports remain in `agent_reports/`.
+6. **Metrics check**: After each returned artifact, verify that `logs/session_metrics.tsv` contains a row for the current `session_id` and the expected operation. If the row is missing, record a process warning in the next durable artifact or final route notes. Missing metrics do not block the substantive route when the expected output artifact exists and passes its own checks.
+7. **Cleanup**: After the terminal artifact is checked and the Phase B loop is complete, process files are moved to `.trash/`. Final reports and audit/evolution reports remain in `agent_reports/`.
 
 **Size thresholds:**
 - If a sub-agent returns a file path instead of inline content, always pass the path — never cat the file into the next agent's prompt.
@@ -113,6 +116,7 @@ Sub-agents write results to files and return paths. The orchestrator passes **pa
 - Trim, summarize, or normalize the user prompt before dispatch when useful.
 - Do not invent facts, source evidence, arguments, or route constraints.
 - Do not pass raw tool logs unless a sub-agent explicitly needs them for verification.
+- Each sub-agent may invoke only the scripts listed in its `granted_tools` YAML frontmatter. If a sub-agent needs a tool not declared there, either update the agent definition before dispatch or note the gap as a route constraint.
 - Use fenced `spinosa-subagent` blocks when documenting or preparing a handoff. These blocks are clarity markers, not a substitute for native spawn.
 - When invoking Evaluator, pass: original prompt, goal artifact path, frozen chain, produced artifact paths, verifier outcome when present, and `session_id`.
 - When invoking Evolver, pass only the evaluator audit path and the allowed mutation scope.

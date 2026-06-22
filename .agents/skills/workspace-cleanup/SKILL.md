@@ -1,5 +1,5 @@
 ---
-name: pilosa-workspace-cleanup
+name: spinosa-workspace-cleanup
 type: skill
 scope: workspace_hygiene
 description: |

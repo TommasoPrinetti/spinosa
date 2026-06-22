@@ -27,9 +27,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 DIST="${REPO_ROOT}/dist/v${VERSION}"
 FRAMEWORK_ARCHIVE="spinosa-framework-${VERSION}.tar.gz"
-STAGE="$(mktemp -d)"
+STAGE="$(mktemp -d "${TMPDIR:-/tmp}/spinosa-pkg.XXXXXX")"
 FRAMEWORK_DIR="${STAGE}/spinosa-framework-${VERSION}"
 MANIFEST="${REPO_ROOT}/.spinosa/framework-files.tsv"
+
+# Ensure stage is cleaned on any exit (errors, interrupts, etc.)
+trap 'rm -rf "$STAGE" 2>/dev/null || true' EXIT
 
 echo "Packaging Spinosa Framework v${VERSION}"
 echo "  Source: ${REPO_ROOT}"
@@ -73,7 +76,7 @@ excluded_count=0
 copied_count=0
 missing_count=0
 
-while IFS=$'\t' read -r path role policy; do
+while IFS=$'\t' read -r path role _policy; do
   # Skip header
   [[ "$path" == "path" ]] && continue
 
@@ -106,7 +109,6 @@ echo "  Excluded: $excluded_count user/generated paths"
 if [[ "$missing_count" -gt 0 ]]; then
   echo ""
   echo "Aborted: $missing_count required manifest paths missing."
-  rm -rf "$STAGE"
   exit 1
 fi
 
@@ -185,7 +187,6 @@ done
 if [[ $bad_files -gt 0 ]]; then
   echo ""
   echo "Aborted: $bad_files exclusion violations found."
-  rm -rf "$STAGE"
   exit 1
 fi
 
@@ -211,6 +212,13 @@ COPYFILE_DISABLE=1 tar --no-xattrs -czf "${DIST}/${FRAMEWORK_ARCHIVE}" -C "$STAG
 echo "Staging install.sh..."
 
 cp "${REPO_ROOT}/install.sh" "${DIST}/install.sh"
+
+# Basic validation that we copied a plausible installer (guards against drift or bad source at release time).
+if ! head -5 "${DIST}/install.sh" | grep -q 'auto-re-execs with bash'; then
+  echo "Error: staged install.sh does not appear to be the Spinosa installer"
+  exit 1
+fi
+echo "  install.sh staged and validated"
 
 # ── Stage vendor tarballs ───────────────────────────────────────────────────
 echo "Staging vendor tarballs..."
@@ -244,4 +252,5 @@ ls -lh "${DIST}/${FRAMEWORK_ARCHIVE}"
 echo ""
 
 # ── Cleanup ─────────────────────────────────────────────────────────────────
-rm -rf "$STAGE"
+rm -rf "$STAGE" 2>/dev/null || true
+trap - EXIT

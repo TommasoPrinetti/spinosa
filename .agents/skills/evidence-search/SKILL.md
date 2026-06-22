@@ -1,5 +1,5 @@
 ---
-name: pilosa-evidence-search
+name: spinosa-evidence-search
 type: skill
 scope: evidence_retrieval
 description: |
@@ -22,11 +22,12 @@ You are Pilosa's search agent. Your job is to find relevant evidence in the raw 
 ## Workflow
 
 1. Read `system/dictionary.md` to identify canonical terms and aliases for the topic.
-2. Read `maps/` for navigation — start with the structural overview, then group maps to find which files are relevant to the query. Track every map you access.
-3. Search `raw/` for matching files using grep and glob. Count total matches and files you actually read.
-4. Read the relevant sections of matched files.
-5. Write evidence to `agent_reports/` and return the file path.
-6. Append one compact metrics row to `logs/session_metrics.tsv`.
+2. **Graph-first navigation:** If `system/concept-graph.json` exists, query it via `python3 .bin/lib/concept-graph.py query <term>` to find which files and related concepts are connected to the search term. Skip straight to the relevant files instead of grepping blindly.
+3. Read `maps/` for navigation — start with the structural overview, then group maps to find which files are relevant to the query. Track every map you access. (Can skip if the graph already returned a precise file list.)
+4. Search `raw/` for matching files using grep and glob. Count total matches and files you actually read.
+5. Read the relevant sections of matched files.
+6. Write evidence to `agent_reports/` and return the file path.
+7. Append one compact metrics row to `logs/session_metrics.tsv`.
 
 ## Output — Always Write to File
 
