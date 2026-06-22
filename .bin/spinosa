@@ -4443,40 +4443,13 @@ except:
 # Display release notes in a formatted way
 display_release_notes() {
   local release_data="$1"
-  local tag_name published_at body
+  local tag_name
   
   tag_name="$(echo "$release_data" | cut -d'|' -f1)"
-  published_at="$(echo "$release_data" | cut -d'|' -f2)"
-  body="$(echo "$release_data" | cut -d'|' -f3-)"
-
-  # Extract key lines: strip markdown, code fences, commands, keep only descriptions
-  local lines
-  lines="$(echo "$body" | sed -E '
-    /^```/d
-    /^curl /d
-    /^bash /d
-    /^spinosa /d
-    /^For options/d
-    /^Spinosa Framework/d
-    /^##+ (Install|Update)/d
-    s/^This installs.*/↳ Zero dependencies, bundled OCR + MarkItDown/
-    s/^- Framework-owned.*/↳ Framework files updated from release/
-    s/^- User workspace.*/↳ Your workspace is preserved/
-    s/^- Locally modified.*/↳ Modified files get .spinosa-new sidecars/
-  ' | sed '/^$/d')"
 
   printf '\n'
-  if [[ -n "$lines" ]]; then
-    printf '  %s┌%s┐\n' "${DIM}" "$(printf '%.0s─' 1 {1..60})"
-    printf '  %s│%s %s%s%s\n' "${DIM}" "${RESET}" "${BOLD}${tag_name}${RESET}" "${DIM}" "${RESET}"
-    printf '  %s├%s┤\n' "${DIM}" "$(printf '%.0s─' 1 {1..60})"
-    echo "$lines" | while IFS= read -r line; do
-      printf '  %s│%s %s\n' "${DIM}" "${RESET}" "$line"
-    done
-    printf '  %s└%s┘\n' "${DIM}" "$(printf '%.0s─' 1 {1..60})"
-  else
-    note "${BOLD}${tag_name}${RESET}"
-  fi
+  printf '  %s  %s  %s\n' " " " " "A new version is available (${tag_name})."
+  printf '  %s  %s  %s\n' " " " " "Run the installer to upgrade."
   echo ""
 }
 
