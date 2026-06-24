@@ -40,7 +40,7 @@ set -euo pipefail
 # CONFIGURATION
 # ══════════════════════════════════════════════════════════════════════════════
 
-PINNED_VERSION="0.5.13"
+PINNED_VERSION="0.5.14"
 VERSION="${VERSION:-$PINNED_VERSION}"
 DRY_RUN=0
 VERIFY_ONLY=0
@@ -679,25 +679,30 @@ install_vendor_bundles() {
 
   if [[ -x "$spinosa_python" ]]; then
     spinner_start "Installing Python packages (MarkItDown + RapidOCR)"
-    local pip_ok=0 pip_attempt=0 pip_max=3
     "$spinosa_python" -m pip install --upgrade pip --quiet 2>/dev/null || true
-    while [[ $pip_ok -eq 0 && $pip_attempt -lt $pip_max ]]; do
-      pip_attempt=$((pip_attempt + 1))
-      if "$spinosa_python" -m pip install \
-        "markitdown[docx,pptx,xlsx,xls,outlook,pdf]==0.1.6" \
-        "rapidocr==3.8.1" \
-        "onnxruntime==1.26.0" \
-        "pypdfium2==5.9.0" \
-        --quiet 2>&1; then
-        pip_ok=1
-      else
-        if [[ $pip_attempt -lt $pip_max ]]; then
-          warn "pip install attempt ${pip_attempt}/${pip_max} failed — retrying in 4s"
-          sleep 4
+    local pip_ok=0 onnx_ver pip_attempt
+    for onnx_ver in 1.23.2 1.23.1 1.23.0 1.22.1 1.22.0; do
+      pip_attempt=0
+      while [[ $pip_ok -eq 0 && $pip_attempt -lt 2 ]]; do
+        pip_attempt=$((pip_attempt + 1))
+        if "$spinosa_python" -m pip install \
+          "markitdown[docx,pptx,xlsx,xls,outlook,pdf]==0.1.6" \
+          "rapidocr==3.8.1" \
+          "onnxruntime==${onnx_ver}" \
+          "pypdfium2==5.9.0" \
+          --quiet 2>&1; then
+          pip_ok=1
+          break
         else
-          fail "pip install failed after ${pip_max} attempts"
+          if [[ $pip_attempt -lt 2 ]]; then
+            warn "onnxruntime ${onnx_ver} attempt ${pip_attempt}/2 failed — retrying"
+            sleep 4
+          else
+            warn "onnxruntime ${onnx_ver} failed — trying older version"
+          fi
         fi
-      fi
+      done
+      [[ $pip_ok -eq 1 ]] && break
     done
 
     if [[ $pip_ok -eq 1 ]]; then
