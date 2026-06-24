@@ -7,7 +7,7 @@ description:
   - Defines format levels without prescribing corpus structure.
 scope: maps/
 connects_to:
-  - system/startup.md
+
 created: 2026-06-03
 updated: 2026-06-04
 ---

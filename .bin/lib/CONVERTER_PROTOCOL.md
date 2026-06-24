@@ -15,7 +15,7 @@ updated: 2026-06-09
 
 Formal specification for the batch converter protocol. Every converter engine CLI
 wrapper (`rapidocr-cli`, `markitdown-cli`, and future engines) implements this protocol.
-The orchestrator (`.bin/pilosa`) parses events from all converters uniformly.
+The orchestrator (`.bin/spinosa`) parses events from all converters uniformly.
 
 ## stdin (tab-separated lines)
 

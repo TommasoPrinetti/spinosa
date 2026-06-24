@@ -49,3 +49,16 @@ Short routing log for user prompts. Log the request before deciding whether to a
 | 2026-06-22 | Framework contract: concept-graph parser, startup validation checks, YAML schema, map template, orchestrator metrics contract | non-fast-path | done | concept-graph.py, check-startup.sh, startup.md, yaml_header_template.md, map_template.md, orchestrator-dispatch/SKILL.md updated |
 | 2026-06-22 | Add granted_tools to all 9 agent definitions, fix evaluator/evolver fallback skills, add orchestrator tool contract, add validation | non-fast-path | done | 9 agent defs, 2 fallback skills, orchestrator SKILL, check-startup.sh updated |
 | 2026-06-24 | Rewrite AGENTS.md: replace frozen chain with adaptive routing, add verifiable gates, archive accumulation, metrics-informed decisions | non-fast-path | done | AGENTS.md rewritten; agent_reports/archive/ created |
+| 2026-06-24 | Installer PATH fallback text and macOS TCC-safe file discovery | fast_path | done | install.sh and .bin/spinosa updated |
+| 2026-06-24 | Check MarkItDown file-type routing, including CSV | fast_path | done | confirmed current extension routing |
+| 2026-06-24 | Fix CSV-only folder import MarkItDown early exit | fast_path | done | copy_source guard corrected |
+| 2026-06-24 | Implement production reliability plan for imports and installer fallback | fast_path | done | structured fallback, preflight, vendor smoke checks, docs, tests |
+| 2026-06-24 | Add MarkItDown-first intake, persistent global metadata, and finish spinosa add integration; run global bug checks | fast_path | done | MarkItDown/plugin routing, metadata-preserving uninstall, add dashboard/docs, validation passed |
+| 2026-06-24 | Fix dev-mode spinosa new repair flow launching installer dashboard and still reporting converters unavailable | fast_path | done | upgrade no-launch, bash shim, legacy vendor checks, dev new CSV smoke passed |
+| 2026-06-24 | Replace onboarding converter repair installer relaunch with direct vendor/package repair and no prompt | fast_path | done | direct vendor/package repair added; no repair prompt or installer relaunch; checks passed |
+| 2026-06-24 | Run function-level edge-case audit across CLI and converter repair paths | fast_path | done | 247 shell + 43 Python functions indexed; noninteractive repair bug fixed; edge smokes passed |
+| 2026-06-24 | Split multi-page converted PDFs/page-marked Markdown into per-page raw files with provenance headers | fast_path | done | RapidOCR/MarkItDown page split, page YAML provenance, docs/tests updated |
+| 2026-06-24 | Audit vendor agent/skill protocols and fix queued ENTER prompt consumption | non-fast-path | done | vendor protocol audit written; queued ENTER prompt drain fixed; checks passed |
+| 2026-06-24 | Plan Bun binary migration (Python shelled-out) | non-fast-path | done | agent_reports/g_20260624-bun-migration-plan.md |
+| 2026-06-24 | Make vendor sub-agent and skill setup operational from canonical Spinosa agents | non-fast-path | done | generated skills and vendor mirrors operational; Codex fake agents removed; checks passed |
+| 2026-06-24 | Fix terminal freeze/stacking, add pypdf page splitting, prepare 0.5.15 release | non-fast-path | done | flush_pending_input rewritten, cursor save/restore removed, pagination added, pypdf installed in vendor, page splitting working, red missing-tool warnings |

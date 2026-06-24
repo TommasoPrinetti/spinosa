@@ -20,7 +20,7 @@ You can edit YAML headers (the metadata block at the top of each file), but don'
 Only with explicit researcher authorization. By default, Spinosa works exclusively with files you've provided. If you need external sources, set `external_sources_allowed: yes` in `system/configuration.md` first.
 
 **How do I ask a question?**
-In plain language, directly to your LLM tool. "Find all mentions of X in the Y interviews." "Compare what group A said about Z vs group B." "Summarize the key findings about W." The orchestrator either answers directly on `fast_path` or writes a goal artifact and dispatches a frozen non-fast-path chain.
+ In plain language, directly to your LLM tool. "Find all mentions of X in the Y interviews." "Compare what group A said about Z vs group B." "Summarize the key findings about W." The orchestrator either answers directly on `fast_path` or writes a goal artifact and dispatches a non-fast-path chain through sub-agents.
 
 **My question got a fast-path answer instead of a full report. Why?**
 Some questions are operational — "what's in my corpus?", "how do I add files?" — and get answered directly without the full sub-agent pipeline. If you want a full evidence-grounded report, be explicit: "Find evidence for X in my sources."
@@ -48,7 +48,7 @@ Run `spinosa upgrade` to download and install the latest release. Your workspace
 Run the Janitor agent. It scans for stale files, broken links, and outdated reports, then presents a cleanup proposal. You confirm before anything moves to `.trash/`.
 
 **Can I uninstall?**
-`spinosa uninstall` removes the CLI and framework files. Your workspace folders are left in place.
+`spinosa uninstall` removes the CLI and framework runtime files. Your workspace folders are left in place, and `~/.spinosa/metadata/` remains so a future reinstall can reuse remembered workspace paths and configuration.
 
 ## Troubleshooting
 

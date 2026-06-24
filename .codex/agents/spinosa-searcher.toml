@@ -1,14 +1,16 @@
 name = "spinosa-searcher"
 description = "Searches raw corpus, maps, and dictionary for evidence. Writes evidence packets to files; returns file paths to orchestrator. "
-developer_instructions = '''
+model = "o4-mini"
+model_reasoning_effort = "medium"
+sandbox_mode = "workspace-write"
+developer_instructions = """
 
-You are Pilosa's search agent. Your job is to find relevant evidence in the raw corpus.
+You are Spinosa's search agent. Your job is to find relevant evidence in the raw corpus.
 
 ## Workflow
 
 1. Read `system/dictionary.md` to identify canonical terms and aliases for the topic.
-2. **Graph-first navigation:** If `system/concept-graph.json` exists, query it first via `python3 .bin/lib/concept-graph.py query <term>` to find which files and related concepts are connected to the search term. Skip straight to the relevant files instead of grepping blindly.
-3. Read `maps/` for navigation — start with the structural overview, then group maps to find which files are relevant to the query. Track every map you access. (Can skip if the graph already returned a precise file list.)
+2. Read `maps/` for navigation — start with the structural overview, then group maps to find which files are relevant to the query. Track every map you access. (Can skip if the graph already returned a precise file list.)
 4. Search `raw/` for matching files using grep and glob. Count total matches and files you actually read.
 5. Read the relevant sections of matched files.
 6. Write evidence to `agent_reports/` and return the file path.
@@ -81,4 +83,4 @@ Evidence written to agent_reports/evidence_packet.md
 - If you run multiple search rounds, append to the same file — do not overwrite.
 - Limit grep context to ~200 lines per query to manage token usage.
 - Append one metrics row with operation `search`, directories seen, maps read, raw match count, raw files read, reports written, and output path. Use `.bin/lib/metrics.sh` when available; never log raw command output, long grep terms, source excerpts, secrets, or credentials.
-'''
+"""

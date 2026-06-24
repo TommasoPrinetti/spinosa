@@ -48,6 +48,10 @@ Required for every file in [[raw/]]. The dictionary is the source of truth for c
 ---
 type: raw_copy
 source: "raw/[relative-path]/[filename]"
+source_document: "raw/[relative-path]/[source-folder]" # split page files only
+original_source: "[relative original source path]" # split page files only
+page_number: 1 # split page files only
+page_count: 1 # split page files only
 source_type: interview | fieldnote | article | report | dataset | correspondence | researcher_note | participant_worksheet | transcript | transcript_for_worksheet | book
 original_format: pdf | docx | pptx | xlsx | xls | epub | html | txt | rtf | csv | json | yaml | md | jpg | png | ...
 converter_engine: markitdown | rapidocr | renamer | native
@@ -75,6 +79,7 @@ updated: YYYY-MM-DD
 
 Rules:
 - `source` uses a relative path from the repo root (e.g., `raw/folder/file.md`).
+- Split page files use `source_document`, `original_source`, `page_number`, `page_count`, and `part_of` so agents can cite exact pages while preserving source-document grouping.
 - `original_format` records the source file extension before conversion (e.g., `pdf`, `docx`, `txt`). Replaces the former `text_type` field. Used for provenance tracking and re-onboarding idempotency checks.
 - `converter_engine` records which engine produced this `.md` file: `renamer` (extension rename only), `native` (copied unchanged), `markitdown` (MarkItDown conversion), or `rapidocr` (OCR via RapidOCR). Enables engine-specific re-classification warnings on re-onboarding.
 - `ocr_confidence` is optional and applies when OCR or scan conversion produced the text. Use `unknown` when OCR quality was not measured.

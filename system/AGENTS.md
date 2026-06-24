@@ -18,7 +18,6 @@ Core system files that define how Spinosa operates. All other directories depend
 | ---------------------------- | ----------------------------------------------------------------------------------------- |
 | `context.md`                 | Project context: scope, names, particularities. Read by Writer; updated by startup.       |
 | `configuration.md`           | Operating profile: source policy, active corpus path, evidence standards, enabled workflows. |
-| `startup.md`                 | Workspace indexing protocol (read by orchestrator).                                       |
 | `dictionary.md`              | Shared vocabulary of canonical names, places, organizations, concepts.                    |
 | `yaml_header_template.md`    | Canonical YAML frontmatter schema for raw copies.                                         |
 | `workspace_index.md`         | Master workspace index (generated at startup).                                            |
@@ -28,7 +27,7 @@ Core system files that define how Spinosa operates. All other directories depend
 
 - These files are the source of truth for system behavior.
 - `context.md` and `configuration.md` are editable during initial setup and by startup.
-- `startup.md` and `system_architecture_map.md` are framework reference — not edited by agents during normal operations.
+- `system_architecture_map.md` is framework reference — not edited by agents during normal operations.
 - `dictionary.md`, `yaml_header_template.md`, and `workspace_index.md` are generated at startup; framework branch keeps templates only.
 
 ## See also

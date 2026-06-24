@@ -5,7 +5,6 @@ description:
   - Root routing contract for coding agents and the Spinosa orchestrator.
   - Read this first to understand setup gates, sub-agent chains, and write boundaries.
 connects_to:
-  - system/startup.md
   - system/configuration.md
   - system/context.md
 created: 2026-05-26
@@ -47,61 +46,64 @@ Map the prompt to one route. See `.agents/references/classification.md` for rout
 | `fast_path` | Operational answer, no source search or orchestrated artifact chain needed |
 | `non-fast-path` | Any source-grounded, verification, maintenance, cleanup, indexing, or synthesis request that requires orchestrated artifacts |
 
-### 3. Plan — Write Goal Artifact with Verifiable Gates
+### 3. Frame — Write Goal Artifact
 
 Write a goal artifact in `agent_reports/g_{session_id}.md` before dispatching any sub-agent.
 
 The goal artifact must include:
 - cleaned prompt
 - goal statement
-- verifiable success gates (e.g., `sources_found >= 5`, `verifier = pass`, `all_cited_paths_exist`)
-- chosen **next** agent and its output gate (what "pass" looks like for THIS step)
-- fallback agent if output gate fails
-- archive check: whether an equivalent query exists in `agent_reports/archive/`
+- chosen first agent and its output gate
+
+The orchestrator defines the sequence by picking the next agent after each step lands. There is NO frozen chain — each step adapts based on what arrived. Sub-agents MUST be called through the chain. Never short-circuit the pipeline by doing an agent's work inline.
 
 Chain rules:
-- Only the NEXT agent is chosen. The chain is NOT frozen globally.
+- Every non-fast-path request dispatches at least one sub-agent. You MUST NOT do an agent's job yourself.
 - Past steps are locked; future steps adapt based on what arrives.
 - Session metrics from past routes are consulted before choosing the next agent.
-- `spinosa-verifier` is required whenever the route produces claims, citations, or quotes.
-- If archive has an equivalent evidence_packet, skip Searcher and use the cached artifact (note in goal artifact).
+- `spinosa-verifier` is required at the end of every route that produces claims, citations, or quotes.
+- `spinosa-evaluator` is required after verifier completes, to audit the route and decide if framework evolution is needed.
 
 ### 4. Execute → Inspect → Decide Loop
 
-For each step after the goal artifact, run this loop until gates pass or exhaustion is reached:
-
 ```
-  4a. Execute → Dispatch exactly one sub-agent
-  4b. Inspect → Check output against gates + metrics
-  4c. Decide → Continue | Re-route | Repeat | Abort
-  4d. Loop → Carry decision forward
+1. Route Split → fast_path (direct) or non-fast-path (orchestrated)
+2. Frame → Write goal artifact in agent_reports/g_{session_id}.md
+3. Select → Pick next sub-agent
+4. Dispatch → Call agent with goal + prior artifact paths
+5. Execute → Agent reads inputs, writes artifact, logs metrics
+6. Inspect → Does output clear the gate?
+   - Yes, progress expected → check if chain is complete
+     - Complete → go to Close (step 7)
+     - Not complete → go to Select (step 3)
+   - No, fixable gap → Repeat same agent (step 4)
+   - No, wrong direction → Re-route to different agent (step 3)
+   - No, blocker → Abort route, go to Deliver (step 7d)
+7. Close
+   a. Verifier → check every claim against source
+   b. Evaluator → audit the route
+   c. Evolver → apply framework fix if evaluator recommends
+   d. Deliver → update log row, report done/blocked/partial
 ```
 
-#### 4a. Execute
+#### 4a. Dispatch
 
-Dispatch the next agent. Pass the goal artifact path, all prior artifact paths, and `session_id`. Each agent writes exactly one durable artifact to `agent_reports/`.
+Pass the goal artifact path, all prior artifact paths, and `session_id`. Each agent writes exactly one durable artifact to `agent_reports/`.
 
-Sub-agents run strictly one at a time. Exception — during startup Phase 2.2, mappers dispatch in parallel (see `system/startup.md`).
+Sub-agents run strictly one at a time. Exception — during startup Phase 2.2, mappers dispatch in parallel.
 
 #### 4b. Inspect
 
-After each agent returns, check:
-1. Was the artifact produced?
-2. Does it clear the output gate (e.g., `sources_found >= 3`, verifier output consistent)?
-3. Do session metrics show anomalies for this agent on this route type?
-4. Quick plausibility check: does the output make sense before proceeding?
+After each agent returns, check: does the output clear the output gate?
 
 #### 4c. Decide
 
-| Observation                                      | Decision                                          |
-| ------------------------------------------------ | ------------------------------------------------- |
-| Gate passes, progress expected                   | Continue to next planned agent or close           |
-| Gate fails — partial output, fixable gap         | Repeat same agent with refined context            |
-| Gate fails — wrong direction                     | Re-route to a different agent                     |
-| Gate fails — plausible output, thin evidence     | Route to spinosa-serendippo before spinosa-writer |
-| Gate fails — complete blocker                    | Abort, log as blocked                             |
-| Archive has equivalent evidence_packet           | Skip Searcher, use cached artifact                |
-| Past metrics show agent fails on this query type | Try a different agent or adjust prompt            |
+| Observation                           | Decision                               |
+| ------------------------------------- | -------------------------------------- |
+| Gate passes, progress expected        | Continue to next planned agent or stop |
+| Gate fails — fixable gap              | Repeat same agent with refined context |
+| Gate fails — wrong direction          | Re-route to a different agent          |
+| Gate fails — complete blocker         | Abort, log as blocked                  |
 
 Record the decision as a brief note appended to the goal artifact. The next step reads it.
 
@@ -109,19 +111,17 @@ Record the decision as a brief note appended to the goal artifact. The next step
 
 Return to 4a with the decision. Repeat until gates pass or abort.
 
-### 5. Close — Audit, Archive, Learn
+### 5. Close — Verify, Audit, Deliver
 
 When goal gates are satisfied or a blocker stops progress:
 
-1. **Phase B audit:** Run `spinosa-evaluator` with the full route trace (goal artifact, all produced artifacts, session_id, metrics). It writes `agent_reports/e_{session_id}.md` and decides whether a framework edit is justified.
+1. **Verify:** Run `spinosa-verifier` on the terminal artifact. Every claim, quote, and citation must be checked against the original source. This is mandatory — never skip verifier.
 
-2. **Evolve if warranted:** If evaluator approves, run `spinosa-evolver` with the audit path and mutation scope. Record what changed.
+2. **Audit:** Run `spinosa-evaluator` with the full route trace (goal artifact, all produced artifacts, session_id, metrics). It writes `agent_reports/e_{session_id}.md` and decides whether a framework edit is justified.
 
-3. **Archive:** Move ALL process artifacts (goal artifact, evidence packets, extractions, reports, audit) to `agent_reports/archive/{session_id}/`. Never delete. The archive is the durable substrate for future learning loops.
+3. **Evolve if warranted:** If evaluator approves, run `spinosa-evolver` with the audit path and mutation scope. Record what changed.
 
-4. **Update log row** in `logs/user_requests.md` to `done`, `blocked`, or `partial`.
-
-5. **Report** validation performed and any blockers or unchecked claims.
+4. **Deliver:** Update log row in `logs/user_requests.md` to `done`, `blocked`, or `partial`. Report validation performed and any blockers or unchecked claims.
 
 
 ### Sub-Agent Invocation Rules
@@ -170,19 +170,21 @@ Rules:
 
 ## Sub-Agent Pipeline
 
-| NativeAgent         | Role                                                                                  |
-| ------------------- | ------------------------------------------------------------------------------------- |
-| `spinosa-searcher`   | Queries concept graph first (if available), then searches maps and raw files; writes evidence packets |
+| NativeAgent          | Role                                                                                                                          |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `spinosa-searcher`   | Searches maps and raw files for evidence; writes evidence packets                                                             |
 | `spinosa-mapper`     | Reads raw files in batch, extracts content-grounded fragments with idempotency, writes extraction packets and navigation maps |
-| `spinosa-serendippo` | Reads prior artifacts and raw files to write hidden-connection reports                |
-| `spinosa-analyst`    | Reads prior artifacts and project context to write contextual analysis packets        |
-| `spinosa-writer`     | Produces the user-facing answer report                                                |
-| `spinosa-verifier`   | Truth-checks substantive outputs and corrects claims, quotes, and paths               |
-| `spinosa-evaluator`  | Audits the completed route and decides whether framework evolution is justified        |
-| `spinosa-evolver`    | Applies tightly scoped control/doc updates when evaluator approves                    |
-| `spinosa-janitor`    | Audits hygiene and writes a cleanup artifact before any confirmed move                |
+| `spinosa-serendippo` | Reads prior artifacts and raw files to write hidden-connection reports                                                        |
+| `spinosa-analyst`    | Reads prior artifacts and project context to write contextual analysis packets                                                |
+| `spinosa-writer`     | Produces the user-facing answer report                                                                                        |
+| `spinosa-verifier`   | Truth-checks substantive outputs and corrects claims, quotes, and paths                                                       |
+| `spinosa-evaluator`  | Audits the completed route and decides whether framework evolution is justified                                               |
+| `spinosa-evolver`    | Applies tightly scoped control/doc updates when evaluator approves                                                            |
+| `spinosa-janitor`    | Audits hygiene and writes a cleanup artifact before any confirmed move                                                        |
 
 Canonical agent definitions: `.agents/agents/`. Vendor mirrors: `.opencode/agents/`, `.claude/agents/`, `.codex/agents/`, `.hermes/` (generated). Shared references: `.agents/references/`.
+
+**Codex note:** Codex reads `AGENTS.md` for orchestration and `.codex/agents/*.toml` for project-specific custom sub-agent profiles. Each TOML declares `name`, `description`, `developer_instructions`, and optional model/sandbox settings. Wire them via `.codex/config.toml` under `[agents.<name>]` for role-name routing. Codex also discovers `.agents/skills/<name>/SKILL.md` via the Agent Skills standard for fallback invocation.
 
 ## Global Rules
 

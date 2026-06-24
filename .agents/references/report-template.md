@@ -211,12 +211,4 @@ For each segment:
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-## Process File Cleanup
 
-After the final report is verified, move process files to `.trash/`:
-
-- `agent_reports/evidence_packet.md`
-- `agent_reports/evidence_appendix.md`
-- `agent_reports/extraction_batch_*.md`
-
-Only the numbered final reports stay in `agent_reports/` (e.g., `00_startup-report.md`, `01_evidence-analysis.md`).

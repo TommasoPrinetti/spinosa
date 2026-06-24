@@ -23,7 +23,7 @@ your-workspace/
 
 | Directory | What lives there |
 |---|---|
-| `raw/` | Your converted documents. One `.md` file per source. Each has a YAML header (metadata block) with date, language, people mentioned, topics. The agents search here. |
+| `raw/` | Your converted documents. Single-page sources usually become one `.md` file. Split multi-page sources become one folder with `page-001.md`, `page-002.md`, etc. Each page file has a YAML header with provenance and page data. The agents search here. |
 | `maps/` | Navigation maps built during startup. Think of them as a smart index — they say "these 5 files are about coastal erosion, these 3 are about farming practices, and here are the key passages." Uses Obsidian wikilinks (`[[filename]]`) so you can browse connections visually if you open the workspace in Obsidian. |
 | `system/` | Your workspace settings. `context.md` stores project scope and research vocabulary. `configuration.md` stores operating settings. `dictionary.md` is the master vocabulary list. |
 | `agent_reports/` | All agent output. Numbered files like `00_startup-report.md` are final results. Files like `evidence_packet.md` are intermediate work files that get cleaned up. |
@@ -41,6 +41,9 @@ Every file in `raw/` has a small metadata block at the top called a YAML header.
 ---
 type: raw_copy
 source: "raw/folder/interview-normandy-2024.md"
+source_document: "raw/folder/interview-normandy-2024"
+page_number: 1
+page_count: 12
 source_type: interview
 original_format: pdf
 converter_engine: markitdown
@@ -55,6 +58,8 @@ keywords: ["shoreline retreat", "sea defences"]
 
 **What this means in plain English:**
 - **source:** where the file lives in your workspace
+- **source_document:** for split page files, the raw folder all pages belong to
+- **page_number/page_count:** for split page files, the page position in the source document
 - **source_type:** what kind of document this is (interview, field note, report, etc.)
 - **original_format:** what it was before conversion (PDF, Word doc, etc.)
 - **converter_engine:** how it was converted (MarkItDown for text, RapidOCR for scanned images)
@@ -143,7 +148,7 @@ When you first create a workspace, the startup protocol indexes everything:
 
 Startup is complete only when all validation checks pass. The status then changes from `cli_started` to `workspace_started`.
 
-> For the full protocol with detailed specifications, see `system/startup.md`.
+> For the full protocol with detailed specifications, see the Startup Protocol in `.bin/startup-prompt.md`.
 
 ## AGENTS.md files
 

@@ -11,7 +11,7 @@ scope:
   - repo-wide architecture
 connects_to:
   - AGENTS.md
-  - system/startup.md
+
   - .agents/skills/source-intake/SKILL.md
   - .agents/skills/report-writing/SKILL.md
   - .agents/skills/claim-verification/SKILL.md
@@ -98,7 +98,6 @@ CLI copies accepted text-like files unchanged into [[raw/]]
 Phase 2 — Indexing
   agent builds master dictionary (parallel mapper dispatch — one sub-agent per batch)
   agent generates YAML headers for all raw copies
-  agent builds concept graph from dictionary + extraction batches
   agent creates multi-level navigation maps: structural overview, group maps with key passages, and theme threads
   disambiguate with user (via orchestrator) if needed
   build maps from repeated themes
@@ -130,7 +129,6 @@ The setup output is not a final interpretation of the research corpus. It is the
 | [[dictionary]]                                  | Shared term vocabulary                                                 |     |
 | [[workspace_index]]                             | Master index                                                           |     |
 | [[maps/]]                                       | Multi-level navigation: structural overview, group maps, theme threads |     |
-| `system/concept-graph.json`                     | Concept adjacency graph — one-hop concept-to-file lookups              |     |
 | [[raw/]]                                        | Active working corpus with raw text/native/PDF copies                  |     |
 | [[yaml_header_template]]                             | YAML header schema                                                     |     |
 | [[user_requests]]                               | Request log                                                            |     |
