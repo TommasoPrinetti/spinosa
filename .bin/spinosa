@@ -4040,9 +4040,8 @@ cmd_upgrade() {
     resolved_version="$target_version"
   else
     spinner_start "Resolving latest version"
-    resolved_version="$(curl -fsSL -o /dev/null -w '%{url_effective}' \
-      "https://github.com/TommasoPrinetti/spinosa/releases/latest" 2>/dev/null \
-      | sed 's|.*/tag/v||' || echo "")"
+    resolved_version="$(curl -fsSL "https://api.github.com/repos/TommasoPrinetti/spinosa/releases/latest" 2>/dev/null \
+      | grep '"tag_name"' | sed 's/.*"v//;s/".*//' || echo "")"
     spinner_stop
   fi
 
@@ -4272,9 +4271,8 @@ auto_upgrade_check() {
 
   local latest
   if ! command -v curl >/dev/null 2>&1; then return 0; fi
-  latest="$(curl -fsSL -o /dev/null -w '%{url_effective}' \
-    "https://github.com/TommasoPrinetti/spinosa/releases/latest" 2>/dev/null \
-    | sed 's|.*/tag/v||')"
+  latest="$(curl -fsSL "https://api.github.com/repos/TommasoPrinetti/spinosa/releases/latest" 2>/dev/null \
+    | grep '"tag_name"' | sed 's/.*"v//;s/".*//')"
   [[ -n "$latest" ]] || return 0
 
   printf '%s\n%s\n0\n' "$now" "$latest" > "$cache_file"
