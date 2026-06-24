@@ -12,7 +12,7 @@
 
 Spinosa is a **local research framework** for AI coding agents. You give it a folder of PDFs, notes, transcripts, images, CSVs. It builds a workspace where agents can search, analyse, synthesise, and verify evidence from those sources. Every claim in a report traces back to a file you provided.
 
-Spinosa routes questions through a goal-driven agent system. Operational questions can stay on `fast_path`; source-grounded work goes through a frozen non-fast-path chain of artifacts and specialist agents. **No cloud, no uploads.** All document processing happens on your machine. (The LLM tool you open the workspace with may use its own API key.)
+Spinosa routes questions through a goal-driven agent system. Operational questions can stay on `fast_path`; source-grounded work goes through an adaptive non-fast-path chain of artifacts and specialist agents. **No cloud, no uploads.** All document processing happens on your machine. (The LLM tool you open the workspace with may use its own API key.)
 
 ## Welcome
 
@@ -27,8 +27,8 @@ You have a folder of interviews, PDFs, field notes, reports. You need to find pa
 
 ## Features
 
-- **Multi-format import** — PDFs, Word docs, images (OCR), CSVs, Markdown — all converted to `.md`
-- **Goal-driven orchestration** — non-fast-path work starts with a frozen goal artifact, then runs through sequential specialist agents
+- **Multi-format import** — PDFs, Word docs, spreadsheets, presentations, EPUB, HTML, ZIP, Outlook messages, structured data, audio formats supported by MarkItDown, images (OCR), CSVs, Markdown — all converted to `.md` where possible
+- **Goal-driven orchestration** — non-fast-path work starts with a goal artifact, then adapts through sequential specialist agents
 - **Source-grounded reports** — every claim links back to a source file
 - **Offline-first** — all conversion and OCR runs locally
 - **Cross-platform** — macOS and Linux, bash 3.2+
@@ -118,7 +118,7 @@ Behind the scenes, Spinosa routes the request through the right agent chain:
 ```text
 question -> fast_path
          or
-question -> non-fast-path -> goal artifact -> frozen sequential chain
+question -> non-fast-path -> goal artifact -> adaptive agent chain
          -> report and audit artifacts in agent_reports/
 ```
 
@@ -144,7 +144,7 @@ In plain English:
 1. Spinosa copies your documents into `raw/`, converting them to text where needed.
 2. It builds a dictionary and navigation maps so future searches know where to look.
 3. You ask a question and the orchestrator dispatches specialized agents.
-4. On non-fast-path work, it writes a goal artifact and freezes the chain before dispatch.
+4. On non-fast-path work, it writes a goal artifact, dispatches one next agent, inspects the result, and adapts.
 5. A writer composes a report when the chain needs one.
 6. A verifier checks substantive claims back against the source files when needed.
 7. An evaluator audits the route and may trigger a tightly scoped future-facing framework edit.
@@ -175,7 +175,7 @@ Your corpus  ──►  raw/ (converted to .md)  ──►  maps/ (navigation in
 | **Analyst** | Adds broader context from prior artifacts and project context |
 | **Writer** | Produces a user-facing report when the chain needs one |
 | **Verifier** | Checks substantive claims and quotes against source files |
-| **Evaluator** | Audits each non-fast-path route after Phase A |
+| **Evaluator** | Audits each non-fast-path route after the main chain completes |
 
 See [`system/system_architecture_map.md`](system/system_architecture_map.md) for detailed diagrams.
 
@@ -192,13 +192,14 @@ workspace/
 └── .spinosa/          Framework metadata
 ```
 
-System documentation: [`system/startup.md`](system/startup.md), [`system/configuration.md`](system/configuration.md), [`system/dictionary.md`](system/dictionary.md), [`system/workspace_index.md`](system/workspace_index.md).
+System documentation: [`system/configuration.md`](system/configuration.md), [`system/dictionary.md`](system/dictionary.md), [`system/workspace_index.md`](system/workspace_index.md).
 
 ## Commands
 
 | Command | What it does |
 |---|---|
 | `spinosa new` | Create a workspace from your corpus folder |
+| `spinosa add` | Add new files or folders to an existing workspace |
 | `spinosa upgrade` | Upgrade the CLI to the latest release |
 | `spinosa uninstall` | Remove Spinosa from your system |
 

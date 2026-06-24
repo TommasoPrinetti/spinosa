@@ -10,7 +10,7 @@ session_id: YYYYMMDD-HHMMSS-route
 route: fast_path | non-fast-path
 decision: no_edit | edit_recommended
 goal_artifact: agent_reports/NN_goal.md
-phase_a_terminal_artifact: agent_reports/NN_answer.md | agent_reports/cleanup_report.md | other artifact path
+terminal_artifact: agent_reports/NN_answer.md | agent_reports/cleanup_report.md | other artifact path
 ---
 
 # Route Audit: [short title]
@@ -19,7 +19,7 @@ phase_a_terminal_artifact: agent_reports/NN_answer.md | agent_reports/cleanup_re
 - Prompt: [one-sentence cleaned prompt]
 - Route: [fast_path | non-fast-path]
 - Goal artifact: [path]
-- Frozen chain: [Phase A sequence]
+- Chain: [agent sequence]
 - Verifier outcome: [pass | pass_with_corrections | partial | fail | not_applicable]
 
 ## Findings

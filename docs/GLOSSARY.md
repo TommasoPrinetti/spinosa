@@ -12,9 +12,9 @@ Plain-English definitions of terms you'll encounter.
 | **Dictionary** | A list of all the names, places, organizations, and key terms the agent found in your documents. Agents use this to search consistently. |
 | **agent_reports/** | Where all answers live. Each time you ask a question, the result is a numbered report stored here. |
 | **Sub-agent** | A specialized AI helper. The main set includes Searcher, Analyst, Writer, Verifier, Mapper, Serendippo, Janitor, Evaluator, and Evolver. |
-| **Pipeline** | The frozen sequence of steps that handles your question. On non-fast-path routes, the orchestrator writes a goal artifact first, then dispatches the chosen chain sequentially by file path. |
-| **Goal artifact** | A planning file written before any non-fast-path agent runs. It records the cleaned prompt, goal, success metric, frozen chain, expected artifacts, and rationale for each step. |
-| **Orchestrator** | The main agent that reads your question, splits it into `fast_path` or `non-fast-path`, writes the goal artifact for non-fast-path work, dispatches the frozen chain, and runs the post-route audit tail. Governed by `AGENTS.md`. |
+| **Pipeline** | The sequence of sub-agents that handles your question. On non-fast-path routes, the orchestrator writes a goal artifact first, then dispatches agents sequentially, adapting the chain as it goes. Always terminates with verifier + evaluator. |
+| **Goal artifact** | A planning file written before any non-fast-path agent runs. It records the cleaned prompt, goal, and the first agent to dispatch. |
+| **Orchestrator** | The main agent that reads your question, splits it into `fast_path` or `non-fast-path`, writes the goal artifact for non-fast-path work, dispatches sub-agents through the adaptive loop, and terminates with verifier + evaluator. Governed by `AGENTS.md`. |
 | **Evidence packet** | A file the Searcher writes while finding evidence. Contains quotes from your sources, file paths, and confidence levels. The Writer reads this to compose your report. |
 | **YAML header** | A small block of labels at the top of each file (between `---` marks) that tells agents what the file contains: title, date, language, people mentioned, topics, keywords. Like a library card for each document. |
 | **Obsidian wikilinks** | A way to link between files using double brackets (`[[filename]]`). Spinosa uses these in navigation maps. If you open the workspace in Obsidian, you get a visual graph of how documents connect. |

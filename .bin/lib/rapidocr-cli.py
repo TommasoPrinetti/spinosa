@@ -37,6 +37,96 @@ from pathlib import Path
 logging.getLogger("RapidOCR").setLevel(logging.WARNING)
 logging.getLogger("onnxruntime").setLevel(logging.WARNING)
 
+
+def yaml_quote(value: str) -> str:
+    return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def workspace_relative(path: str) -> str:
+    parts = Path(path).parts
+    if "raw" in parts:
+        idx = parts.index("raw")
+        return "/".join(parts[idx:])
+    return Path(path).name
+
+
+def page_folder_for_output(output_path: str) -> str:
+    path = Path(output_path)
+    if path.suffix.lower() == ".md":
+        return str(path.with_suffix(""))
+    return str(path) + "_pages"
+
+
+def write_page_markdown(
+    page_path: str,
+    title: str,
+    page_text: str,
+    page_number: int,
+    page_count: int,
+    original_source: str,
+    converter_engine: str,
+    original_format: str,
+    processing_status: str,
+) -> None:
+    source_rel = workspace_relative(page_path)
+    folder_rel = workspace_relative(str(Path(page_path).parent))
+    header = "\n".join(
+        [
+            "---",
+            "type: raw_source_page",
+            f"source: {yaml_quote(source_rel)}",
+            f"source_document: {yaml_quote(folder_rel)}",
+            f"original_source: {yaml_quote(original_source)}",
+            f"source_document_name: {yaml_quote(Path(original_source).name)}",
+            f"page_number: {page_number}",
+            f"page_count: {page_count}",
+            f"part_of: {yaml_quote(original_source)}",
+            f"converter_engine: {converter_engine}",
+            f"original_format: {original_format}",
+            f"processing_status: {processing_status}",
+            "---",
+            "",
+        ]
+    )
+    body = page_text.strip() or "[No text detected on this page]"
+    markdown = f"{header}# {title} — Page {page_number}\n\n{body}\n"
+    os.makedirs(os.path.dirname(page_path) or ".", exist_ok=True)
+    with open(page_path, "w", encoding="utf-8") as f:
+        f.write(markdown)
+
+
+def write_split_pages(
+    output_path: str,
+    title: str,
+    pages: list[tuple[int, str]],
+    original_source: str,
+    converter_engine: str,
+    original_format: str,
+    processing_status: str,
+) -> str:
+    folder = page_folder_for_output(output_path)
+    if os.path.isfile(output_path):
+        os.remove(output_path)
+    if os.path.isdir(folder):
+        for existing in Path(folder).glob("page-*.md"):
+            existing.unlink()
+    os.makedirs(folder, exist_ok=True)
+    page_count = len(pages)
+    for page_number, page_text in pages:
+        page_path = os.path.join(folder, f"page-{page_number:03d}.md")
+        write_page_markdown(
+            page_path,
+            title,
+            page_text,
+            page_number,
+            page_count,
+            original_source,
+            converter_engine,
+            original_format,
+            processing_status,
+        )
+    return folder
+
 def is_pdf(path: str) -> bool:
     """Check if file is a PDF by extension."""
     return Path(path).suffix.lower() == '.pdf'
@@ -159,11 +249,24 @@ def single_main(input_path: str, output_path: str):
             else:
                 all_text = []
                 total_pages = len(images)
+                page_texts = []
                 for page_num, image in images:
                     print(f"PROGRESS\t{page_num}/{total_pages}", file=sys.stderr, flush=True)
                     text = ocr_pil_image(engine, image)
+                    page_texts.append((page_num, text))
                     if text.strip():
                         all_text.append(f"## Page {page_num}\n\n{text}")
+                if total_pages > 1:
+                    write_split_pages(
+                        output_path,
+                        extract_title(input_path),
+                        page_texts,
+                        os.path.basename(input_path),
+                        "rapidocr",
+                        "pdf",
+                        "ocr_page_split",
+                    )
+                    sys.exit(0)
                 ocr_text = "\n\n---\n\n".join(all_text)
         else:
             ocr_text = ocr_image_file(engine, input_path)
@@ -255,14 +358,29 @@ def batch_main():
 
                 ocr_text = ""
 
+                split_done = False
                 if is_pdf(src_path):
                     all_text = []
+                    page_texts = []
                     for page_num, total_pages, image in pdf_page_renderer(src_path):
                         print(f"PROGRESS\t{page_num}/{total_pages}", file=sys.stderr, flush=True)
                         text = ocr_pil_image(engine, image)
+                        page_texts.append((page_num, text))
                         if text.strip():
                             all_text.append(f"## Page {page_num}\n\n{text}")
-                    if all_text:
+                    if len(page_texts) > 1:
+                        write_split_pages(
+                            dest_path,
+                            extract_title(src_path),
+                            page_texts,
+                            rel_path,
+                            "rapidocr",
+                            "pdf",
+                            "ocr_page_split",
+                        )
+                        split_done = True
+                        ocr_text = "[Split into page files]"
+                    elif all_text:
                         ocr_text = "\n\n---\n\n".join(all_text)
                     else:
                         ocr_text = ""
@@ -272,7 +390,9 @@ def batch_main():
                     print(f"END\tfail\t{rel_path}\t{int(time.time() - start_s)}", file=sys.stderr, flush=True)
                     continue
 
-                if not ocr_text.strip():
+                if split_done:
+                    print(f"END\tok\t{rel_path}\t{int(time.time() - start_s)}", file=sys.stderr, flush=True)
+                elif not ocr_text.strip():
                     print(f"END\tfail\t{rel_path}\t{int(time.time() - start_s)}", file=sys.stderr, flush=True)
                 else:
                     title = extract_title(src_path)
@@ -292,6 +412,8 @@ def main():
     parser = argparse.ArgumentParser(
         description="RapidOCR: Convert PDFs and images to Markdown"
     )
+    parser.add_argument("--check-rapidocr", action="store_true",
+                        help="Exit 0 only when RapidOCR runtime packages can be imported")
     parser.add_argument("--batch", action="store_true",
                         help="Process multiple files from stdin (single engine instance)")
     parser.add_argument("input", nargs="?",
@@ -300,6 +422,15 @@ def main():
                         help="Output Markdown file (ignored with --batch)")
 
     args = parser.parse_args()
+
+    if args.check_rapidocr:
+        try:
+            from rapidocr import RapidOCR  # noqa: F401
+            import onnxruntime  # noqa: F401
+            import pypdfium2  # noqa: F401
+        except Exception:
+            sys.exit(1)
+        sys.exit(0)
 
     if args.batch:
         batch_main()

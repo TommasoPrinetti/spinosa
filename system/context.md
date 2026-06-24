@@ -10,7 +10,6 @@ setup_status: not_started
 connects_to:
   - AGENTS.md
   - system/configuration.md
-  - system/startup.md
   - logs/user_requests.md
 ---
 # Context

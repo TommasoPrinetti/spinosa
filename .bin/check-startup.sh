@@ -28,7 +28,6 @@ read_file() {
 required_files=(
   "AGENTS.md"
   "system/configuration.md"
-  "system/startup.md"
   "system/context.md"
 )
 

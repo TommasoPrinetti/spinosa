@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# validate-skills.sh — Validate all Pilosa skills against SKILL protocol
+# validate-skills.sh — Validate all Spinosa skills against SKILL protocol
 #
 # Checks:
 #   - Valid YAML frontmatter with name + description
@@ -17,7 +17,7 @@ REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 SKILLS_DIR="${REPO_ROOT}/.agents/skills"
 
 R=$'\033[31m' G=$'\033[32m' Y=$'\033[33m'
-BOLD=$'\033[1m' DIM=$'\033[2m' RESET=$'\033[0m'
+RESET=$'\033[0m'
 
 errors=0
 warnings=0
@@ -26,8 +26,16 @@ err()  { printf '  %s %s\n' "${R}✗${RESET}" "$*"; errors=$((errors + 1)); }
 ok()   { printf '  %s %s\n' "${G}✓${RESET}" "$*"; }
 warn() { printf '  %s %s\n' "${Y}⚠${RESET}" "$*"; warnings=$((warnings + 1)); }
 
-echo "=== Pilosa Skill Validation ==="
+echo "=== Spinosa Skill Validation ==="
 echo ""
+
+skill_count=0
+if [[ -d "$SKILLS_DIR" ]]; then
+    skill_count=$(find "$SKILLS_DIR" -mindepth 2 -maxdepth 2 -name "SKILL.md" | wc -l | tr -d ' ')
+fi
+if [[ "$skill_count" -eq 0 ]]; then
+    err "no skills found in .agents/skills; run: bash .bin/sync-agents.sh"
+fi
 
 for skill_dir in "$SKILLS_DIR"/*/; do
     [ -d "$skill_dir" ] || continue
@@ -98,9 +106,9 @@ if command -v agentskills &>/dev/null; then
         skill_name=$(basename "$skill_dir")
         output=$(agentskills validate "$skill_dir" 2>&1) || true
         if echo "$output" | grep -q "Validation failed"; then
-            # Check if the failures are only about extra fields and dir name
-            # Our pilosa-specific fields (type, scope, created, updated, permissions)
-            # are expected extras, and dir naming uses semantic names
+            # Check if the failures are only about extra fields and dir name.
+            # Spinosa-specific fields are expected extras, and some skill
+            # directories use semantic names.
             fail_lines=$(echo "$output" | grep "  - " || true)
             non_pilosa_fails=0
             while IFS= read -r line; do
@@ -113,7 +121,7 @@ if command -v agentskills &>/dev/null; then
                 warn "agentskills: $skill_name: $line"
             done <<< "$fail_lines"
             if [[ $non_pilosa_fails -eq 0 ]]; then
-                ok "$skill_name: agentskills (pilosa-extensions ignored)"
+                ok "$skill_name: agentskills (spinosa extensions ignored)"
             fi
         else
             ok "$skill_name: agentskills validate passed"

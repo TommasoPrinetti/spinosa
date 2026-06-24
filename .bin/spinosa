@@ -58,8 +58,11 @@ trap cleanup_on_signal INT TERM
 MARKDOWN_EXTENSIONS="txt|rtf|textile|wiki|mediawiki|dokuwiki|pmwiki|outliner|workflowy|dynalist|yaml|yml|toml|css|js|ts|py|rb|sh|log|ini|cfg|conf|tex|bib|org|adoc|rst|tiddlywiki|logseq|roam|obsidian"
 NATIVE_EXTENSIONS="md"
 BINARY_COPYABLE_EXTENSIONS=""
-# Engine: markitdown — convert Office docs, EPUB, HTML, ZIP, and text-based PDFs to .md
-MARKITDOWN_EXTENSIONS="docx|pptx|xlsx|xls|epub|html|htm|msg|zip|json|csv|xml"
+# Engine: MarkItDown — convert supported local files before OCR/copy fallbacks.
+# Plugins stay disabled by default; opt in with SPINOSA_MARKITDOWN_ENABLE_PLUGINS=1
+# and add plugin-owned extensions with SPINOSA_MARKITDOWN_EXTRA_EXTENSIONS.
+MARKITDOWN_EXTENSIONS="docx|pptx|xlsx|xls|epub|html|htm|msg|zip|json|csv|xml|wav|mp3|m4a"
+STRUCTURED_FALLBACK_EXTENSIONS="csv|json|xml"
 IMAGE_EXTENSIONS="jpg|jpeg|png|gif|webp|heic|heif|tif|tiff|bmp|svg"
 AUDIO_VIDEO_EXTENSIONS="mp4|mov|m4v|avi|mkv|webm|wmv|mp3|wav|m4a|aac|flac|ogg|opus|aiff"
 OPTION_SEP=$'\t'
@@ -78,13 +81,11 @@ resolve_framework_root() {
   # Installed mode: find latest version
   if [[ -d "${SPINOSA_HOME}/versions" ]]; then
       local latest_version
-      local portable_sort_args
       if sort -V /dev/null 2>/dev/null; then
-        portable_sort_args=(sort -V)
+        latest_version="$(ls -1 "${SPINOSA_HOME}/versions" 2>/dev/null | sort -V | tail -1)"
       else
-        portable_sort_args=(sort -t. -k1,1n -k2,2n -k3,3n)
+        latest_version="$(ls -1 "${SPINOSA_HOME}/versions" 2>/dev/null | sort -t. -k1,1n -k2,2n -k3,3n | tail -1)"
       fi
-      latest_version="$(ls -1 "${SPINOSA_HOME}/versions" 2>/dev/null | "${portable_sort_args[@]}" | tail -1)"
     if [[ -n "$latest_version" ]]; then
       local fw_dir="${SPINOSA_HOME}/versions/${latest_version}"
       # The archive unpacks to spinosa-framework-<version>/
@@ -144,13 +145,23 @@ print_step(){ printf '\n  %s%s[%s/%s] %s%s\n' "${BOLD}" "${C}" "$1" "$2" "$3" "$
 
 read_from_tty() {
   if [[ -t 0 ]]; then
+    flush_pending_input
     IFS= read -r "$@"
   elif [[ "${NUMBERED:-0}" = "1" ]]; then
     return 1
   else
     # Try to read from /dev/tty if available, suppress all errors
-    { [[ -r /dev/tty ]] && IFS= read -r "$@" < /dev/tty; } 2>/dev/null || return 1
+    { [[ -r /dev/tty ]] && flush_pending_input && IFS= read -r "$@" < /dev/tty; } 2>/dev/null || return 1
   fi
+}
+
+flush_pending_input() {
+  [[ "${SPINOSA_FLUSH_TTY_INPUT:-1}" == "0" ]] && return 0
+  [[ -t 0 ]] || return 0
+
+  # Drain any buffered keystrokes — short timeout, no stty changes.
+  # Caller must restore stty to cooked mode before calling this.
+  read -t 0.1 -n 100 2>/dev/null || true
 }
 
 spinner_start() {
@@ -403,6 +414,8 @@ arrow_select() {
     return
   fi
 
+  flush_pending_input
+
   local count=${#options[@]}
   local current=0
   local key seq part
@@ -434,6 +447,7 @@ arrow_select() {
 
   cleanup_arrow() {
     restore_arrow_terminal
+    flush_pending_input
     restore_arrow_traps
   }
 
@@ -447,7 +461,7 @@ arrow_select() {
     return
   fi
   printf '\033[?25l' >&2
-  trap 'restore_arrow_terminal; printf "\n  Cancelled.\n" >&2; exit 130' INT TERM
+  trap 'restore_arrow_terminal; flush_pending_input; printf "\n  Cancelled.\n" >&2; exit 130' INT TERM
 
   while true; do
     IFS= read -r -n 1 -s key 2>/dev/null || { cleanup_arrow; return 1; }
@@ -474,8 +488,6 @@ arrow_select() {
         ;;
       ''|$'\r'|$'\n')
         cleanup_arrow
-        printf '\033[%dF' "$count" >&2
-        render_arrow_options
         echo "$(option_value "${options[$current]}")"
         return
         ;;
@@ -603,35 +615,58 @@ multi_arrow_select() {
     return
   fi
 
+  flush_pending_input
+
   local total_rows=$(( ${#options[@]} + 2 ))
   local continue_row=${#options[@]}
   local cancel_row=$(( ${#options[@]} + 1 ))
   local current="$continue_row"
   local key seq part
+  local term_lines page_capacity page_first=0 visible_rows=0
   local old_stty old_int_trap old_term_trap
   old_stty="$(stty -g 2>/dev/null)" || { multi_select_menu "$prompt" "${options[@]}"; return; }
   old_int_trap="$(trap -p INT || true)"
   old_term_trap="$(trap -p TERM || true)"
 
   render_multi_arrow_rows() {
-    local i option value prefix selected current_flag
-    for ((i = 0; i < total_rows; i++)); do
+    local i option value prefix selected current_flag visible_end remaining
+    visible_end=$(( page_first + page_capacity ))
+    (( visible_end > ${#options[@]} )) && visible_end=${#options[@]}
+    visible_rows=0
+
+    if (( page_first > 0 )); then
+      printf '  %s↑ %s more%s\n' "${DIM}" "$page_first" "${RESET}" >&2
+      visible_rows=$((visible_rows + 1))
+    fi
+
+    for ((i = page_first; i < visible_end; i++)); do
       prefix="    "
       (( i == current )) && prefix="  ${C}›${RESET} "
-      if (( i < ${#options[@]} )); then
-        option="${options[$i]}"
-        value="$(option_value "$option")"
-        selected=0
-        multi_option_is_selected "$value" && selected=1
-        current_flag=0
-        (( i == current )) && current_flag=1
-        render_multi_option_line "$option" "$selected" "$prefix" "$current_flag"
-      elif (( i == continue_row )); then
-        printf '\r\033[2K%s%sContinue with selected file types%s\n' "$prefix" "${BOLD}" "${RESET}" >&2
-      else
-        printf '\r\033[2K%sCancel selection\n' "$prefix" >&2
-      fi
+      option="${options[$i]}"
+      value="$(option_value "$option")"
+      selected=0
+      multi_option_is_selected "$value" && selected=1
+      current_flag=0
+      (( i == current )) && current_flag=1
+      render_multi_option_line "$option" "$selected" "$prefix" "$current_flag"
+      visible_rows=$((visible_rows + 1))
     done
+
+    remaining=$(( ${#options[@]} - visible_end ))
+    if (( remaining > 0 )); then
+      printf '  %s↓ %s more%s\n' "${DIM}" "$remaining" "${RESET}" >&2
+      visible_rows=$((visible_rows + 1))
+    fi
+
+    prefix="    "
+    (( current == continue_row )) && prefix="  ${C}›${RESET} "
+    printf '\r\033[2K%s%sContinue with selected file types%s\n' "$prefix" "${BOLD}" "${RESET}" >&2
+    visible_rows=$((visible_rows + 1))
+
+    prefix="    "
+    (( current == cancel_row )) && prefix="  ${C}›${RESET} "
+    printf '\r\033[2K%sCancel selection\n' "$prefix" >&2
+    visible_rows=$((visible_rows + 1))
   }
 
   restore_multi_arrow_terminal() {
@@ -646,6 +681,7 @@ multi_arrow_select() {
 
   cleanup_multi_arrow() {
     restore_multi_arrow_terminal
+    flush_pending_input
     restore_multi_arrow_traps
   }
 
@@ -657,17 +693,21 @@ multi_arrow_select() {
     done
   }
 
+  term_lines="$(tput lines 2>/dev/null || echo 24)"
+  page_capacity=$(( term_lines - 6 ))
+  (( page_capacity < 1 )) && page_capacity=1
+
   printf '\n  %s\n' "${BOLD}${prompt}${RESET}" >&2
   printf '  %s\n' "${DIM}↑/↓ to move, Space to toggle, Enter to proceed (continue), Esc/q to cancel${RESET}" >&2
   render_multi_arrow_rows
 
   if ! stty raw -echo 2>/dev/null; then
-    printf '\033[%dF' "$total_rows" >&2
+    printf '\033[%dF' "$visible_rows" >&2
     multi_select_menu "$prompt" "${options[@]}"
     return
   fi
   printf '\033[?25l' >&2
-  trap 'restore_multi_arrow_terminal; printf "\n  Cancelled.\n" >&2; exit 130' INT TERM
+  trap 'restore_multi_arrow_terminal; flush_pending_input; printf "\n  Cancelled.\n" >&2; exit 130' INT TERM
 
   while true; do
     IFS= read -r -n 1 -s key 2>/dev/null || { cleanup_multi_arrow; return 1; }
@@ -685,25 +725,31 @@ multi_arrow_select() {
           return 1
         fi
         case "$seq" in
-          '[A'|'OA') current=$(( (current + total_rows - 1) % total_rows )) ;;
-          '[B'|'OB') current=$(( (current + 1) % total_rows )) ;;
+          '[A'|'OA')
+            current=$(( (current + total_rows - 1) % total_rows ))
+            (( current < ${#options[@]} )) && page_first=$(( current / page_capacity * page_capacity ))
+            ;;
+          '[B'|'OB')
+            current=$(( (current + 1) % total_rows ))
+            (( current < ${#options[@]} )) && page_first=$(( current / page_capacity * page_capacity ))
+            ;;
           *) continue ;;
         esac
-        printf '\033[%dF' "$total_rows" >&2
+        printf '\033[%dF' "$visible_rows" >&2
         render_multi_arrow_rows
         ;;
       ' ')
         if (( current < ${#options[@]} )); then
           toggle_multi_option "$(option_value "${options[$current]}")"
-          printf '\033[%dF' "$total_rows" >&2
+          printf '\033[%dF' "$visible_rows" >&2
           render_multi_arrow_rows
         fi
         ;;
       ''|$'\r'|$'\n')
         if (( current == continue_row )); then
           cleanup_multi_arrow
-          printf '\033[%dF' "$total_rows" >&2
-          render_multi_arrow_rows
+          printf '\n' >&2
+          ok "Selection confirmed." >&2
           finish_multi_arrow
           return 0
         elif (( current == cancel_row )); then
@@ -898,7 +944,7 @@ shell_quote() {
 }
 
 print_box() {
-  local iw=$((COLS > 6 ? COLS - 4 : 10)) ow=$((COLS > 4 ? COLS - 2 : 10))
+  local iw=$((COLS > 6 ? COLS - 4 : 10))
   printf '\n  %s┌%s┐%s\n' "${DIM}" "$(printf '%.0s─' $(seq 1 "$iw"))" "${RESET}"
   printf '  %s│%s %s%s%s\n' "${DIM}" "${RESET}" "${BOLD}$1${RESET}" "${DIM}" "${RESET}"
   printf '  %s├%s┤%s\n' "${DIM}" "$(printf '%.0s─' $(seq 1 "$iw"))" "${RESET}"
@@ -1130,6 +1176,7 @@ handoff_selected_cli() {
 
 should_skip_source_file() {
   local name lower_name
+  is_tcc_sensitive_source_path "$1" && return 0
   name="$(basename "$1")"
   lower_name="$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]')"
   [[ "$lower_name" == "agents.md" ]] && return 0
@@ -1137,6 +1184,42 @@ should_skip_source_file() {
     */.DS_Store|*/._*|*/.localized|*/__MACOSX/*|*/.gitkeep|*/node_modules/*|*/.git/*) return 0 ;;
     *) return 1 ;;
   esac
+}
+
+is_tcc_sensitive_source_path() {
+  local path="${1%/}"
+  case "$path" in
+    /System|/System/*|/private|/private/*|*.app|*.app/*|*.photoslibrary|*.photoslibrary/*) return 0 ;;
+  esac
+  if [[ -n "${HOME:-}" ]]; then
+    case "$path" in
+      "$HOME/Music"|"$HOME/Music"/*|\
+      "$HOME/Library/Calendar"|"$HOME/Library/Calendar"/*|\
+      "$HOME/Library/Calendars"|"$HOME/Library/Calendars"/*|\
+      "$HOME/Library/Mail"|"$HOME/Library/Mail"/*|\
+      "$HOME/Library/Messages"|"$HOME/Library/Messages"/*|\
+      "$HOME/Library/Safari"|"$HOME/Library/Safari"/*|\
+      "$HOME/Pictures/Photos Library.photoslibrary"|"$HOME/Pictures/Photos Library.photoslibrary"/*) return 0 ;;
+    esac
+  fi
+  return 1
+}
+
+find_source_files() {
+  local source_path="$1"
+  find "$source_path" \
+    \( \
+      -path /System -o -path '/System/*' -o \
+      -path /private -o -path '/private/*' -o \
+      -path "$HOME/Music" -o -path "$HOME/Music/*" -o \
+      -path "$HOME/Library/Calendar" -o -path "$HOME/Library/Calendar/*" -o \
+      -path "$HOME/Library/Calendars" -o -path "$HOME/Library/Calendars/*" -o \
+      -path "$HOME/Library/Mail" -o -path "$HOME/Library/Mail/*" -o \
+      -path "$HOME/Library/Messages" -o -path "$HOME/Library/Messages/*" -o \
+      -path "$HOME/Library/Safari" -o -path "$HOME/Library/Safari/*" -o \
+      -path "$HOME/Pictures/Photos Library.photoslibrary" -o -path "$HOME/Pictures/Photos Library.photoslibrary/*" -o \
+      -name '*.app' -o -name '*.photoslibrary' \
+    \) -prune -o -type f -print0 2>/dev/null
 }
 
 file_ext() {
@@ -1158,7 +1241,26 @@ ext_in_list() {
 is_markdown_convertible_file() { local ext; ext="$(file_ext "$1")"; [[ -n "$ext" ]] && ext_in_list "$ext" "$MARKDOWN_EXTENSIONS"; }
 is_native_readable_file() { local ext; ext="$(file_ext "$1")"; [[ -n "$ext" ]] && ext_in_list "$ext" "$NATIVE_EXTENSIONS"; }
 is_binary_copyable_file() { local ext; ext="$(file_ext "$1")"; [[ -n "$ext" ]] && ext_in_list "$ext" "$BINARY_COPYABLE_EXTENSIONS"; }
-is_markitdown_convertible_file() { local ext; ext="$(file_ext "$1")"; [[ -n "$ext" ]] && ext_in_list "$ext" "$MARKITDOWN_EXTENSIONS"; }
+markitdown_extension_list() {
+  local list="$MARKITDOWN_EXTENSIONS" raw item
+  raw="${SPINOSA_MARKITDOWN_EXTRA_EXTENSIONS:-}"
+  raw="${raw//,/|}"
+  raw="${raw// /}"
+  while [[ "$raw" == *"||"* ]]; do raw="${raw//||/|}"; done
+  raw="${raw#|}"
+  raw="${raw%|}"
+  if [[ -n "$raw" ]]; then
+    IFS='|' read -ra _spinosa_extra_md_exts <<< "$raw"
+    for item in "${_spinosa_extra_md_exts[@]}"; do
+      item="${item#.}"
+      [[ -n "$item" ]] || continue
+      ext_in_list "$item" "$list" || list="${list}|${item}"
+    done
+  fi
+  printf '%s' "$list"
+}
+is_markitdown_convertible_file() { local ext; ext="$(file_ext "$1")"; [[ -n "$ext" ]] && ext_in_list "$ext" "$(markitdown_extension_list)"; }
+is_structured_fallback_ext() { local ext="$1"; [[ -n "$ext" ]] && ext_in_list "$ext" "$STRUCTURED_FALLBACK_EXTENSIONS"; }
 
 # ── PDF classification (text-based vs scanned) ──────────────────────────────
 
@@ -1205,6 +1307,27 @@ markdown_raw_rel_path() {
   else
     echo "${dir}/${stem}__${ext}.md"
   fi
+}
+
+converted_output_exists() {
+  local output_path="$1" page_dir="$1"
+  if [[ "$page_dir" == *.md ]]; then
+    page_dir="${page_dir%.md}"
+  else
+    page_dir="${page_dir}_pages"
+  fi
+  [[ -f "$output_path" || -d "$page_dir" ]]
+}
+
+remove_converted_output() {
+  local output_path="$1" page_dir="$1"
+  if [[ "$page_dir" == *.md ]]; then
+    page_dir="${page_dir%.md}"
+  else
+    page_dir="${page_dir}_pages"
+  fi
+  rm -f "$output_path" 2>/dev/null || true
+  rm -rf "$page_dir" 2>/dev/null || true
 }
 
 truncate_display_path() {
@@ -1409,7 +1532,7 @@ selected_copy_count() {
   for i in "${!IMPORT_BATCH_EXTENSIONS[@]}"; do
     ext="${IMPORT_BATCH_EXTENSIONS[$i]}"
     if import_extension_selected "$ext"; then
-      if [[ "$ext" != "pdf" ]] && ! ext_in_list "$ext" "$IMAGE_EXTENSIONS" && ! ext_in_list "$ext" "$MARKITDOWN_EXTENSIONS"; then
+      if [[ "$ext" != "pdf" ]] && ! ext_in_list "$ext" "$IMAGE_EXTENSIONS" && ! ext_in_list "$ext" "$(markitdown_extension_list)"; then
         total=$((total + IMPORT_BATCH_COUNTS[$i]))
       fi
     fi
@@ -1534,7 +1657,7 @@ scan_source() {
       unknown) SCAN_UNKNOWN_COUNT=$((SCAN_UNKNOWN_COUNT + 1)); SCAN_UNKNOWN_BYTES=$((SCAN_UNKNOWN_BYTES + size)) ;;
       ignored) SCAN_IGNORED_COUNT=$((SCAN_IGNORED_COUNT + 1)) ;;
     esac
-  done < <(find "$source_path" -type f -print0 2>/dev/null)
+  done < <(find_source_files "$source_path")
   sort_import_batches
   select_all_import_batches
   printf '\r\033[2K' >&2
@@ -1551,9 +1674,11 @@ print_scan_summary() {
   [[ "$SCAN_MARKDOWN_COUNT" -gt 0 ]] && print_scan_row "$(file_type_label markdown "$(plural_count "$SCAN_MARKDOWN_COUNT" "text-based file")") to rename to .md" "$(format_bytes "$SCAN_MARKDOWN_BYTES")"
   if [[ "$SCAN_MARKITDOWN_COUNT" -gt 0 ]]; then
     if markitdown_available; then
-      print_scan_row "$(file_type_label markitdown "$(plural_count "$SCAN_MARKITDOWN_COUNT" "Office/EPUB/HTML file")") available for MarkItDown conversion" "$(format_bytes "$SCAN_MARKITDOWN_BYTES")"
+      print_scan_row "$(file_type_label markitdown "$(plural_count "$SCAN_MARKITDOWN_COUNT" "MarkItDown/structured file")") available for Markdown conversion" "$(format_bytes "$SCAN_MARKITDOWN_BYTES")"
+    elif structured_fallback_available; then
+      print_scan_row "$(file_type_label markitdown "$(plural_count "$SCAN_MARKITDOWN_COUNT" "MarkItDown/structured file")") available only for csv/json/xml fallback" "$(format_bytes "$SCAN_MARKITDOWN_BYTES")"
     else
-      print_scan_row "$(file_type_label markitdown "$(plural_count "$SCAN_MARKITDOWN_COUNT" "Office/EPUB/HTML file")") skipped — MarkItDown not available" "$(format_bytes "$SCAN_MARKITDOWN_BYTES")"
+      print_scan_row "$(file_type_label markitdown "$(plural_count "$SCAN_MARKITDOWN_COUNT" "MarkItDown/structured file")") skipped — converter not available" "$(format_bytes "$SCAN_MARKITDOWN_BYTES")"
     fi
   fi
   [[ "$SCAN_NATIVE_COUNT" -gt 0 ]] && print_scan_row "$(file_type_label native "$(plural_count "$SCAN_NATIVE_COUNT" "native-readable file")") to copy unchanged" "$(format_bytes "$SCAN_NATIVE_BYTES")"
@@ -1596,12 +1721,24 @@ print_onboarding_preflight() {
   if rapidocr_ocr_available; then
     ok "${M}RapidOCR${RESET} available for scanned PDFs and images"
   else
-    note_wilted "RapidOCR not available — scanned PDFs and images will be skipped."
+    printf '  %s %s\n' "${R}✗${RESET}" "RapidOCR not available — scanned PDFs and images will be skipped." >&2
   fi
   if markitdown_available; then
-    ok "MarkItDown available for Office docs, EPUB, HTML, and text-based PDFs"
+    ok "MarkItDown available for Office docs, structured data, EPUB, HTML, and text-based PDFs"
+  elif structured_fallback_available; then
+    note_wilted "MarkItDown not available — CSV, JSON, and XML will use the built-in Markdown fallback."
   else
-    note_wilted "MarkItDown not available — Office docs, EPUB, HTML, and text-based PDFs will be skipped."
+    printf '  %s %s\n' "${R}✗${RESET}" "MarkItDown not available — Office docs, EPUB, HTML, and text-based PDFs will be skipped." >&2
+  fi
+  if pypdfium2_available; then
+    ok "${C}pypdfium2${RESET} available for PDF page rendering (scanned)"
+  else
+    printf '  %s %s\n' "${R}✗${RESET}" "pypdfium2 not available — scanned PDF page rendering will not work" >&2
+  fi
+  if pypdf_available; then
+    ok "${C}pypdf${RESET} available for PDF page splitting (text)"
+  else
+    printf '  %s %s\n' "${R}✗${RESET}" "pypdf not available — multi-page text PDFs will not be split" >&2
   fi
 
   free_bytes="$(available_disk_bytes "$root")"
@@ -1668,16 +1805,17 @@ is_cloud_storage_path() {
 
 copy_source() {
   local source_path="$1" dest_dir="$2"
-  local total_files copy_processed=0
+  local total_files selected_total copy_processed=0
+  selected_total="$(selected_import_count)"
+  [[ "$selected_total" -gt 0 ]] || { warn "No selected files found in source location."; return 1; }
   total_files="$(selected_copy_count)"
-  [[ "$total_files" -gt 0 ]] || { warn "No copyable files found in source location."; return 1; }
 
   local copied=0 skipped=0 failed=0 processed=0 ocr_converted=0 ocr_skipped=0 md_converted=0 md_skipped=0 src_file rel_path raw_rel_path dest_file dest_parent
   local md_name md_dest
-  COPY_TOTAL_COUNT="$total_files"
+  COPY_TOTAL_COUNT="$selected_total"
   COPY_COPIED_COUNT=0
   COPY_SKIPPED_COUNT=0
-  render_copy_progress 0 "$total_files" 0 0 ""
+  [[ "$total_files" -gt 0 ]] && render_copy_progress 0 "$total_files" 0 0 ""
 
   while IFS= read -r -d '' src_file; do
     should_skip_source_file "$src_file" && continue
@@ -1700,7 +1838,7 @@ copy_source() {
     processed=$((processed + 1))
     copy_processed=$((copy_processed + 1))
     render_copy_progress "$copy_processed" "$total_files" "$copied" "$skipped" "$rel_path"
-  done < <(find "$source_path" -type f -print0 2>/dev/null)
+  done < <(find_source_files "$source_path")
 
   while IFS= read -r -d '' src_file; do
     should_skip_source_file "$src_file" && continue
@@ -1722,7 +1860,7 @@ copy_source() {
     processed=$((processed + 1))
     copy_processed=$((copy_processed + 1))
     render_copy_progress "$copy_processed" "$total_files" "$copied" "$skipped" "$rel_path"
-  done < <(find "$source_path" -type f -print0 2>/dev/null)
+  done < <(find_source_files "$source_path")
 
   while IFS= read -r -d '' src_file; do
     should_skip_source_file "$src_file" && continue
@@ -1746,12 +1884,12 @@ copy_source() {
     processed=$((processed + 1))
     copy_processed=$((copy_processed + 1))
     render_copy_progress "$copy_processed" "$total_files" "$copied" "$skipped" "$rel_path"
-  done < <(find "$source_path" -type f -print0 2>/dev/null)
+  done < <(find_source_files "$source_path")
 
   # ── MarkItDown conversion pass — Office docs, EPUB, HTML, text-based PDFs → .md ──
   if [[ "${SCAN_MARKITDOWN_CHOICE:-no}" == "yes" ]]; then
-    if ! markitdown_available; then
-      warn "MarkItDown not available — skipping MarkItDown pass"
+    if ! markitdown_available && ! structured_fallback_available; then
+      warn "Markdown converter not available — skipping MarkItDown/structured fallback pass"
     else
       local md_files=()
       while IFS= read -r -d '' src_file; do
@@ -1764,7 +1902,7 @@ copy_source() {
         [[ "$md_pass" -eq 1 ]] || continue
         import_extension_selected "$(file_ext "$src_file")" || continue
         md_files+=("$src_file")
-      done < <(find "$source_path" -type f -print0 2>/dev/null)
+      done < <(find_source_files "$source_path")
 
       if [[ ${#md_files[@]} -gt 0 ]]; then
         printf '\n'
@@ -1781,9 +1919,13 @@ copy_source() {
         _md_prev_term="$(trap -p TERM 2>/dev/null || true)"
         trap 'spinosa_debug_md "ERROR trap fired at line $LINENO exit=$?"; trap - ERR' ERR
         local md_total=${#md_files[@]} md_idx=0
-        local _md_bin
+        local _md_bin="" _md_python="" _md_script=""
         _md_bin="$(markitdown_bin)" || _md_bin=""
-        spinosa_debug_md "md_total=$md_total _md_bin=${_md_bin:-<empty>} dest_dir=$dest_dir source_path=$source_path"
+        if [[ -z "$_md_bin" ]] && structured_fallback_available; then
+          _md_python="$(fallback_python_bin)" || _md_python=""
+          _md_script="$(markitdown_script_path)" || _md_script=""
+        fi
+        spinosa_debug_md "md_total=$md_total _md_bin=${_md_bin:-<empty>} _md_python=${_md_python:-<empty>} dest_dir=$dest_dir source_path=$source_path"
 
         local _md_process_src=()
         local _md_process_rel=()
@@ -1804,7 +1946,7 @@ copy_source() {
           dest_parent="$(dirname "$md_dest")"
           mkdir -p "$dest_parent"
 
-          if [[ -f "$md_dest" ]]; then
+          if converted_output_exists "$md_dest"; then
             skipped=$((skipped + 1))
             md_skipped=$((md_skipped + 1))
             md_idx=$((md_idx + 1))
@@ -1814,8 +1956,16 @@ copy_source() {
               "$(dirname "$rel_path")/${_md_out}" >> "$_md_log"
             render_ocr_progress "$md_idx" "$md_total" "$md_converted" "$md_skipped" "$rel_path" "" ""
           else
-            _md_process_src+=("$src_file")
-            _md_process_rel+=("$rel_path")
+            if [[ -z "$_md_bin" ]] && ! is_structured_fallback_ext "$_md_out_ext"; then
+              skipped=$((skipped + 1))
+              md_skipped=$((md_skipped + 1))
+              md_idx=$((md_idx + 1))
+              warn "MarkItDown is not available for $(basename "$rel_path"), skipping"
+              render_ocr_progress "$md_idx" "$md_total" "$md_converted" "$md_skipped" "$rel_path" "" ""
+            else
+              _md_process_src+=("$src_file")
+              _md_process_rel+=("$rel_path")
+            fi
           fi
         done
         spinosa_debug_md "Separation done — skipped=$md_skipped process=${#_md_process_src[@]}"
@@ -1836,7 +1986,7 @@ copy_source() {
           }
           trap _markitdown_cleanup INT TERM
 
-          if [[ -n "$_md_bin" ]] && mkfifo "$_md_fifo" 2>/dev/null; then
+          if { [[ -n "$_md_bin" ]] || [[ -n "$_md_python" && -n "$_md_script" ]]; } && mkfifo "$_md_fifo" 2>/dev/null; then
             spinosa_debug_md "FIFO created — starting batch process"
             spinner_start "Loading MarkItDown engine" >&2
             (
@@ -1854,7 +2004,11 @@ copy_source() {
                 [[ -n "$_mext" && "$_mext" != "md" ]] && _mout="${_m}__${_mext}.md"
                 printf '%s\t%s\t%s\n' FILE "$_s" "$dest_dir/$(dirname "$_r")/${_mout}"
               done
-            ) | "$_md_bin" --batch 2>"$_md_fifo" &
+            ) | if [[ -n "$_md_bin" ]]; then
+                  "$_md_bin" --batch
+                else
+                  "$_md_python" "$_md_script" --batch
+                fi 2>"$_md_fifo" &
             local _md_pid=$!
             spinosa_debug_md "MarkItDown batch spawned — pid=$_md_pid, reading fifo..."
 
@@ -1955,7 +2109,7 @@ copy_source() {
               warn "MarkItDown exited with status ${_md_wait_status} — partial results may be available"
             fi
             rm -f "$_md_fifo"
-          elif [[ -n "$_md_bin" ]]; then
+          elif [[ -n "$_md_bin" || -n "$_md_python" ]]; then
             spinner_stop >&2 2>/dev/null || true
             warn "Could not create MarkItDown FIFO — skipped"
             for _r in "${_md_process_rel[@]}"; do
@@ -1996,7 +2150,7 @@ copy_source() {
         # Skip PDFs already handled by MarkItDown (check output .md exists)
         if is_rapidocr_pdf "$src_file"; then
           local _ocr_md_rel="${src_file#"$source_path"/}"
-          if [[ -f "$dest_dir/$(markdown_raw_rel_path "$_ocr_md_rel")" ]]; then
+        if converted_output_exists "$dest_dir/$(markdown_raw_rel_path "$_ocr_md_rel")"; then
             continue
           fi
         fi
@@ -2004,7 +2158,7 @@ copy_source() {
           import_extension_selected "$(file_ext "$src_file")" || continue
           ocr_files+=("$src_file")
         fi
-      done < <(find "$source_path" -type f -print0 2>/dev/null)
+      done < <(find_source_files "$source_path")
 
       if [[ ${#ocr_files[@]} -gt 0 ]]; then
         printf '\n'
@@ -2037,7 +2191,7 @@ copy_source() {
           dest_parent="$(dirname "$md_dest")"
           mkdir -p "$dest_parent"
 
-          if [[ -f "$md_dest" ]]; then
+          if converted_output_exists "$md_dest"; then
             skipped=$((skipped + 1))
             ocr_skipped=$((ocr_skipped + 1))
             ocr_idx=$((ocr_idx + 1))
@@ -2228,7 +2382,7 @@ copy_source() {
     processed=$((processed + 1))
     copy_processed=$((copy_processed + 1))
     render_copy_progress "$copy_processed" "$total_files" "$copied" "$skipped" "$rel_path"
-  done < <(find "$source_path" -type f -print0 2>/dev/null)
+  done < <(find_source_files "$source_path")
 
   COPY_COPIED_COUNT="$copied"
   COPY_FAILED_COUNT="$failed"
@@ -2283,8 +2437,12 @@ choose_import_batches() {
       elif [[ -n "$ocr_ok" ]]; then
         tag=" (OCR)"
       fi
-    elif markitdown_available 2>/dev/null && ext_in_list "$ext" "$MARKITDOWN_EXTENSIONS"; then
-      tag=" (MarkItDown)"
+    elif ext_in_list "$ext" "$(markitdown_extension_list)"; then
+      if markitdown_available 2>/dev/null; then
+        tag=" (MarkItDown)"
+      elif is_structured_fallback_ext "$ext" && structured_fallback_available 2>/dev/null; then
+        tag=" (built-in fallback)"
+      fi
     elif rapidocr_ocr_available 2>/dev/null && ext_in_list "$ext" "$IMAGE_EXTENSIONS"; then
       tag=" (OCR)"
     fi
@@ -2336,7 +2494,6 @@ write_setup_files() {
   local root="$1" project_title="$2" source_path="$3" preferred_cli="$4"
   local context="$root/system/context.md" config="$root/system/configuration.md"
   local agents="$root/AGENTS.md" claude="$root/CLAUDE.md"
-  local claude_created="no"
 
   mkdir -p "$(dirname "$context")" "$(dirname "$config")"
   cat > "$context" << CONTEXT_EOF
@@ -2435,7 +2592,7 @@ preferred_llm_cli: "$preferred_cli"
 
 ## Notes
 - This file was initialized by \`spinosa new\`.
-- The CLI collected: source folder and preferred LLM CLI. It seeded the initial workspace label from the source folder name, but the final vault/project naming can be refined during startup. It imported accepted files into raw/. Office documents and text-based PDFs were converted via MarkItDown. Scanned PDFs and images were processed via RapidOCR OCR. Selected audio and video files were copied unchanged. AGENTS.md control files were skipped.
+- The CLI collected: source folder and preferred LLM CLI. It seeded the initial workspace label from the source folder name, but the final vault/project naming can be refined during startup. It imported accepted files into raw/. Office documents, structured data, and text-based PDFs were converted to Markdown. Scanned PDFs and images were processed via RapidOCR OCR. Selected audio and video files were copied unchanged. AGENTS.md control files were skipped.
 - After onboarding, normal source-grounded work starts from raw/.
 - During startup, project description and helpful artifact URLs are optional. If absent, the LLM CLI agent records them as not provided, keeps external_sources_allowed at its default \`no\`, and infers working scope from the raw corpus.
 - When setup_status reaches workspace_started, the startup workflow has built the master dictionary, generated YAML headers, created multi-level navigation maps in maps/, and passed validation.
@@ -2444,7 +2601,6 @@ CONFIG_EOF
 
   if [[ "$preferred_cli" == "Claude Code" && -f "$agents" ]]; then
     cp "$agents" "$claude"
-    claude_created="yes"
   fi
 
   mkdir -p "$root/.obsidian/snippets"
@@ -2511,7 +2667,7 @@ updated: $TODAY
 - Ignored files: ${SCAN_IGNORED_COUNT}
 
 ## Workspace Import Result
-- Direct-copy candidates: ${COPY_TOTAL_COUNT:-0}
+- Selected import candidates: ${COPY_TOTAL_COUNT:-0}
 - Selected extension batches: $(selected_import_extensions_label)
 - Files copied directly into workspace: ${COPY_COPIED_COUNT:-0}
 - Files skipped during direct copy: ${COPY_SKIPPED_COUNT:-0}
@@ -2534,48 +2690,28 @@ SUMMARY_EOF
 
 startup_prompt_text() {
   local project_title="$1" root="$2" source_path="$3" preferred_cli="$4"
+  local script_dir
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+  # Read the self-contained startup prompt template
+  cat "$script_dir/startup-prompt.md"
+
+  # Append workspace-specific metadata
   cat << PROMPT_EOF
-Workspace: ${root}
 
-This Spinosa workspace has completed CLI onboarding.
+## Workspace Metadata
 
-Read these files first, in this order:
-1. AGENTS.md
-2. system/configuration.md
-3. system/context.md
-4. system/yaml_header_template.md
-5. system/startup.md
-6. .spinosa/onboarding-summary.md
+- **Project title:** ${project_title}
+- **Workspace root:** ${root}
+- **Preferred CLI:** ${preferred_cli}
+- **Onboarding summary:** .spinosa/onboarding-summary.md
 
-The setup draft already contains:
-- Initial workspace label: ${project_title} (derived from the source folder name)
-- Active corpus: raw/
-- Preferred LLM CLI: ${preferred_cli}
-- The CLI already imported supported files into raw/.
-- Skipped media and conversion counts, if needed, are in .spinosa/onboarding-summary.md.
+## Corpus Boundary
 
-Optional context not collected by fast setup:
-- Project description (if absent, infer from the raw corpus)
-- Helpful artifact URLs or file paths (if absent, record none provided)
-- External source policy defaults to no; ask only if external URL access is needed or the user requests external sources.
-
-Corpus boundary:
 - Treat raw/ as the only source corpus.
 - Do not inspect, validate, mention, or rely on the original import folder.
-- Do not edit raw/.
+- Do not edit raw/ file bodies.
 - External sources are disabled unless the user explicitly asks for them.
-
-Execute system/startup.md.
-
-Finished means:
-- setup_status is workspace_started in both system/context.md and system/configuration.md.
-- system/dictionary.md contains the master dictionary.
-- system/workspace_index.md records total raw files, extraction coverage, maps, and known gaps.
-- maps/ contains the navigation maps needed to retrieve the corpus.
-- agent_reports/ contains a startup report with validation and retrieval-test results.
-- Every non-skipped raw file has been accounted for, or the startup report names the blocker.
-
-Do not re-ask questions the CLI draft already answered. Do not stop after a partial index.
 PROMPT_EOF
 }
 
@@ -2588,11 +2724,49 @@ PLATFORM="${OS:-$(uname -s | tr '[:upper:]' '[:lower:]')}-$(uname -m | sed 's/x8
 
 # ── MarkItDown Functions ────────────────────────────────────────────────────
 
+vendor_python_for_tool() {
+  local tool="$1" vendor_dir python_bin
+  vendor_dir="$(cd "$(dirname "$tool")" 2>/dev/null && pwd -P)" || return 1
+  python_bin="${vendor_dir}/python/bin/python3"
+  if [[ -x "$python_bin" ]]; then echo "$python_bin"; return 0; fi
+  python_bin="${vendor_dir}/Python.framework/Versions/Current/bin/python3"
+  if [[ -x "$python_bin" ]]; then echo "$python_bin"; return 0; fi
+  return 1
+}
+
+markitdown_tool_available() {
+  local tool="$1" output python_bin
+  [[ -x "$tool" ]] || return 1
+  if output="$("$tool" --check-markitdown 2>&1)"; then
+    return 0
+  fi
+  if [[ "$output" == *"unrecognized arguments: --check-markitdown"* ]]; then
+    python_bin="$(vendor_python_for_tool "$tool")" || return 1
+    "$python_bin" -c 'from markitdown import MarkItDown' >/dev/null 2>&1
+    return $?
+  fi
+  return 1
+}
+
+rapidocr_tool_available() {
+  local tool="$1" output python_bin
+  [[ -x "$tool" ]] || return 1
+  if output="$("$tool" --check-rapidocr 2>&1)"; then
+    return 0
+  fi
+  if [[ "$output" == *"unrecognized arguments: --check-rapidocr"* ]]; then
+    python_bin="$(vendor_python_for_tool "$tool")" || return 1
+    "$python_bin" -c 'from rapidocr import RapidOCR; import onnxruntime; import pypdfium2' >/dev/null 2>&1
+    return $?
+  fi
+  return 1
+}
+
 rapidocr_ocr_available() {
   local unified_bin="${SPINOSA_VENDOR_DIR}-${PLATFORM}/rapidocr-cli"
-  [[ -x "$unified_bin" ]] && return 0
+  rapidocr_tool_available "$unified_bin" && return 0
   local framework_bin="${FRAMEWORK_ROOT:-.}/.bin/lib/vendor/spinosa-${PLATFORM}/rapidocr-cli"
-  [[ -x "$framework_bin" ]] && return 0
+  rapidocr_tool_available "$framework_bin" && return 0
   return 1
 }
 
@@ -2604,11 +2778,23 @@ rapidocr_ocr_bin() {
   return 1
 }
 
+pypdfium2_available() {
+  local python_bin
+  python_bin="$(fallback_python_bin)" || return 1
+  "$python_bin" -c 'import pypdfium2' >/dev/null 2>&1
+}
+
+pypdf_available() {
+  local python_bin
+  python_bin="$(fallback_python_bin)" || return 1
+  "$python_bin" -c 'import pypdf' >/dev/null 2>&1
+}
+
 markitdown_available() {
   local unified_bin="${SPINOSA_VENDOR_DIR}-${PLATFORM}/markitdown-cli"
-  [[ -x "$unified_bin" ]] && return 0
+  markitdown_tool_available "$unified_bin" && return 0
   local framework_bin="${FRAMEWORK_ROOT:-.}/.bin/lib/vendor/spinosa-${PLATFORM}/markitdown-cli"
-  [[ -x "$framework_bin" ]] && return 0
+  markitdown_tool_available "$framework_bin" && return 0
   return 1
 }
 
@@ -2620,38 +2806,217 @@ markitdown_bin() {
   return 1
 }
 
-repair_vendor_tools() {
-  [[ "${SPINOSA_NO_REPAIR:-0}" != "1" ]] || return 0
-  [[ -t 0 ]] || return 0
-  local needs_repair=0 pkgs=() vendor_dir="${SPINOSA_VENDOR_DIR}-${PLATFORM}"
-  if ! markitdown_available; then needs_repair=1; pkgs+=("markitdown"); fi
-  [[ "$needs_repair" -eq 1 ]] || return 0
+bundled_python_bin() {
+  local vendor_dir="${SPINOSA_VENDOR_DIR}-${PLATFORM}"
+  local python_bin="${vendor_dir}/python/bin/python3"
+  if [[ -x "$python_bin" ]]; then echo "$python_bin"; return; fi
+  python_bin="${vendor_dir}/Python.framework/Versions/Current/bin/python3"
+  if [[ -x "$python_bin" ]]; then echo "$python_bin"; return; fi
+  return 1
+}
 
-  if [[ ! -d "$vendor_dir" ]]; then
-    echo ""
-    note_cactus "Document processing tools not found — vendor bundle missing"
-    if confirm "Run spinosa upgrade to download the full vendor bundle?" "y"; then
-      cmd_upgrade --reinstall --yes
-    fi
+fallback_python_bin() {
+  local python_bin
+  if python_bin="$(bundled_python_bin 2>/dev/null)"; then
+    echo "$python_bin"
+    return
+  fi
+  if command -v python3 >/dev/null 2>&1; then
+    command -v python3
+    return
+  fi
+  return 1
+}
+
+markitdown_script_path() {
+  local script="${FRAMEWORK_ROOT:-.}/.bin/lib/markitdown-cli.py"
+  [[ -f "$script" ]] || return 1
+  echo "$script"
+}
+
+structured_fallback_available() {
+  fallback_python_bin >/dev/null 2>&1 || return 1
+  markitdown_script_path >/dev/null 2>&1 || return 1
+}
+
+installed_release_version() {
+  local version
+  version="$(framework_version "$FRAMEWORK_ROOT")"
+  if [[ -n "$version" && "$version" != "dev" ]]; then
+    echo "$version"
     return 0
   fi
+  if [[ -d "${SPINOSA_HOME}/versions" ]]; then
+    if sort -V /dev/null 2>/dev/null; then
+      version="$(ls -1 "${SPINOSA_HOME}/versions" 2>/dev/null | sort -V | tail -1)"
+    else
+      version="$(ls -1 "${SPINOSA_HOME}/versions" 2>/dev/null | sort -t. -k1,1n -k2,2n -k3,3n | tail -1)"
+    fi
+    if [[ -n "$version" ]]; then
+      echo "$version"
+      return 0
+    fi
+  fi
+  resolve_latest_release_version
+}
 
+verify_downloaded_asset() {
+  local file="$1" filename="$2" checksums_file="$3"
+  local expected actual
+  expected="$(awk -v f="$filename" '$2 == f { print $1; exit }' "$checksums_file" 2>/dev/null || true)"
+  [[ -n "$expected" ]] || die "${filename} not found in checksums file."
+  actual="$(sha256_file "$file" 2>/dev/null || true)"
+  [[ -n "$actual" ]] || die "No SHA-256 tool found. Cannot verify ${filename}."
+  [[ "$actual" == "$expected" ]] || die "Checksum mismatch for ${filename}."
+}
+
+download_vendor_bundle_direct() {
+  local version="$1" suffix="$PLATFORM"
+  local base_url="https://github.com/${SPINOSA_REPO}/releases/download/v${version}"
+  local vendor_name="spinosa-vendor-${suffix}.tar.gz"
+  local vendor_url="${base_url}/${vendor_name}"
+  local tmpdir vendor_tmp checksums extract_tmp vendor_dest
+
+  tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/spinosa-vendor-repair.XXXXXX")"
+  vendor_tmp="${tmpdir}/${vendor_name}"
+  checksums="${tmpdir}/checksums.txt"
+  extract_tmp="${tmpdir}/extract"
+  vendor_dest="${SPINOSA_VENDOR_DIR}-${suffix}"
+
+  spinner_start "Downloading document tools vendor bundle"
+  download_file "$vendor_url" "$vendor_tmp" >/dev/null 2>&1 || { spinner_stop; rm -rf "$tmpdir"; return 1; }
+  download_file "${base_url}/checksums.txt" "$checksums" >/dev/null 2>&1 || { spinner_stop; rm -rf "$tmpdir"; return 1; }
+  spinner_stop
+
+  verify_downloaded_asset "$vendor_tmp" "$vendor_name" "$checksums"
+  mkdir -p "$extract_tmp" "$(dirname "$vendor_dest")"
+  safe_untar "$vendor_tmp" "$extract_tmp" --strip-components=1
+  rm -rf "$vendor_dest" 2>/dev/null || true
+  mv "$extract_tmp" "$vendor_dest"
+  chmod +x "${vendor_dest}/markitdown-cli" "${vendor_dest}/rapidocr-cli" 2>/dev/null || true
+  rm -rf "$tmpdir"
+  ok "Document tools vendor bundle installed"
+}
+
+install_document_packages_direct() {
+  local vendor_dir="${SPINOSA_VENDOR_DIR}-${PLATFORM}"
   local python_bin="${vendor_dir}/python/bin/python3"
   if [[ ! -x "$python_bin" ]]; then
     python_bin="${vendor_dir}/Python.framework/Versions/Current/bin/python3"
   fi
-  [[ -x "$python_bin" ]] || return 0
+  [[ -x "$python_bin" ]] || return 1
 
-  echo ""
-  note_cactus "$(join_by " and " "${pkgs[@]}") not available — Python packages may be missing"
-  if confirm "Repair Python packages for document processing?" "y"; then
-    if [[ " ${pkgs[*]} " == *" markitdown "* ]]; then
+  spinner_start "Installing document processing packages"
+  "$python_bin" -m pip install --upgrade pip --quiet >/dev/null 2>&1 || true
+
+  local pip_ok=0 onnx_ver pip_attempt
+  for onnx_ver in 1.23.2 1.23.1 1.23.0 1.22.1 1.22.0; do
+    pip_attempt=0
+    while [[ "$pip_ok" -eq 0 && "$pip_attempt" -lt 2 ]]; do
+      pip_attempt=$((pip_attempt + 1))
+      if "$python_bin" -m pip install \
+        "markitdown[all]==0.1.6" \
+        "rapidocr==3.8.1" \
+        "onnxruntime==${onnx_ver}" \
+        "pypdfium2==5.9.0" \
+        "pypdf" \
+        --quiet >/dev/null 2>&1; then
+        pip_ok=1
+        break
+      fi
+      [[ "$pip_attempt" -lt 2 ]] && sleep 2
+    done
+    [[ "$pip_ok" -eq 1 ]] && break
+  done
+  spinner_stop
+
+  [[ "$pip_ok" -eq 1 ]] || return 1
+
+  if "$python_bin" -c 'from rapidocr import RapidOCR; import onnxruntime; import pypdfium2; from markitdown import MarkItDown; import pypdf' >/dev/null 2>&1; then
+    ok "Document processing packages installed"
+    return 0
+  fi
+  return 1
+}
+
+repair_document_tools_direct() {
+  local version vendor_dir
+  version="$(installed_release_version)" || return 1
+  vendor_dir="${SPINOSA_VENDOR_DIR}-${PLATFORM}"
+  if [[ ! -d "$vendor_dir" ]]; then
+    note_cactus "Document processing tools not found — downloading vendor bundle"
+    download_vendor_bundle_direct "$version" || return 1
+  fi
+  install_document_packages_direct || return 1
+}
+
+configure_selected_import_tools() {
+  SCAN_MARKITDOWN_CHOICE="no"
+  SCAN_OCR_CHOICE="no"
+
+  local ext missing_markitdown=() missing_structured=() missing_ocr=() missing_pdf=0
+  for ext in "${SELECTED_IMPORT_EXTENSIONS[@]-}"; do
+    if ext_in_list "$ext" "$(markitdown_extension_list)"; then
       if markitdown_available; then
-        ok "Document processing packages ready"
+        SCAN_MARKITDOWN_CHOICE="yes"
+      elif is_structured_fallback_ext "$ext" && structured_fallback_available; then
+        SCAN_MARKITDOWN_CHOICE="yes"
+      elif is_structured_fallback_ext "$ext"; then
+        missing_structured+=(".$ext")
       else
-        note_wilted "Package install failed — check network or run: spinosa upgrade"
+        missing_markitdown+=(".$ext")
+      fi
+    elif [[ "$ext" == "pdf" ]]; then
+      markitdown_available && SCAN_MARKITDOWN_CHOICE="yes"
+      rapidocr_ocr_available && SCAN_OCR_CHOICE="yes"
+      if ! markitdown_available && ! rapidocr_ocr_available; then
+        missing_pdf=1
+      fi
+    elif ext_in_list "$ext" "$IMAGE_EXTENSIONS"; then
+      if rapidocr_ocr_available; then
+        SCAN_OCR_CHOICE="yes"
+      else
+        missing_ocr+=(".$ext")
       fi
     fi
+  done
+
+  if [[ ${#missing_markitdown[@]} -gt 0 ]]; then
+    warn "MarkItDown is required for $(join_by ", " "${missing_markitdown[@]}") but is not available."
+    note_wilted "Run: spinosa upgrade --reinstall"
+    return 1
+  fi
+  if [[ ${#missing_structured[@]} -gt 0 ]]; then
+    warn "Structured fallback conversion is required for $(join_by ", " "${missing_structured[@]}") but no usable Python runtime was found."
+    note_wilted "Install bundled tools with: spinosa upgrade --reinstall"
+    return 1
+  fi
+  if [[ ${#missing_ocr[@]} -gt 0 ]]; then
+    warn "RapidOCR is required for $(join_by ", " "${missing_ocr[@]}") but is not available."
+    note_wilted "Run: spinosa upgrade --reinstall"
+    return 1
+  fi
+  if [[ "$missing_pdf" -eq 1 ]]; then
+    warn "PDF import requires MarkItDown or RapidOCR, but neither converter is available."
+    note_wilted "Run: spinosa upgrade --reinstall"
+    return 1
+  fi
+  return 0
+}
+
+repair_vendor_tools() {
+  [[ "${SPINOSA_NO_REPAIR:-0}" != "1" ]] || return 0
+  local needs_repair=0 pkgs=() vendor_dir="${SPINOSA_VENDOR_DIR}-${PLATFORM}"
+  if ! markitdown_available; then needs_repair=1; pkgs+=("markitdown"); fi
+  if ! rapidocr_ocr_available; then needs_repair=1; pkgs+=("rapidocr"); fi
+  [[ "$needs_repair" -eq 1 ]] || return 0
+
+  echo ""
+  note_cactus "$(join_by " and " "${pkgs[@]}") not available — repairing document tools"
+  if repair_document_tools_direct && markitdown_available && rapidocr_ocr_available; then
+    ok "Document processing tools ready"
+  else
+    note_wilted "Repair did not make all document tools available — check network or run: spinosa upgrade --reinstall"
   fi
 }
 
@@ -2720,46 +3085,10 @@ run_integrated_onboarding() {
       choose_import_batches || return 1
     fi
 
-    # Auto-detect MarkItDown from selected extensions
-    SCAN_MARKITDOWN_CHOICE="no"
-    if markitdown_available; then
-      local _md_ext
-      for _md_ext in "${SELECTED_IMPORT_EXTENSIONS[@]}"; do
-        if [[ "$_md_ext" == "pdf" ]] || ext_in_list "$_md_ext" "$MARKITDOWN_EXTENSIONS"; then
-          SCAN_MARKITDOWN_CHOICE="yes"
-          break
-        fi
-      done
-    fi
-
-    # Auto-detect OCR from selected extensions (images and scanned PDFs)
-    SCAN_OCR_CHOICE="no"
-    if rapidocr_ocr_available; then
-      local _ext
-      for _ext in "${SELECTED_IMPORT_EXTENSIONS[@]}"; do
-        if ext_in_list "$_ext" "$IMAGE_EXTENSIONS"; then
-          SCAN_OCR_CHOICE="yes"
-          break
-        fi
-        if [[ "$_ext" == "pdf" ]]; then
-          SCAN_OCR_CHOICE="yes"
-          break
-        fi
-      done
-    fi
+    configure_selected_import_tools || return 1
 
     copyable_count="$(selected_import_count)"
-    estimated_bytes="$(scan_copyable_bytes)"
-    free_bytes="$(available_disk_bytes "$root")"
-    if [[ "$free_bytes" -gt 0 ]]; then
-      if (( estimated_bytes > free_bytes )); then
-        warn "Estimated import size is $(format_bytes "$estimated_bytes"), but only $(format_bytes "$free_bytes") is free near the workspace."
-      else
-        note "Estimated import size: $(format_bytes "$estimated_bytes")"
-      fi
-    fi
 
-    echo ""
     if [[ "$copyable_count" -gt 0 ]]; then
       note "Ready to import ${copyable_count} files into the workspace. This does not modify your source."
       note "Selected file types: $(selected_import_extensions_label)"
@@ -2873,7 +3202,7 @@ cmd_uninstall() {
 
   echo ""
   info "This will remove:"
-  [[ -d "$SPINOSA_HOME" ]] && info "  ${SPINOSA_HOME}/  (framework + binary)"
+  [[ -d "$SPINOSA_HOME" ]] && info "  ${SPINOSA_HOME}/  (framework + binary; metadata kept)"
   [[ -f "$bin_dir/spinosa" ]] && info "  ${bin_dir}/spinosa  (shim)"
   echo ""
   warn "Research workspaces are NOT affected."
@@ -2886,7 +3215,12 @@ cmd_uninstall() {
     fi
   fi
 
-  [[ -d "$SPINOSA_HOME" ]] && rm -rf "$SPINOSA_HOME" && ok "Removed ${SPINOSA_HOME}"
+  if [[ -d "$SPINOSA_HOME" ]]; then
+    ensure_global_metadata
+    find "$SPINOSA_HOME" -mindepth 1 -maxdepth 1 ! -name "metadata" -exec rm -rf {} + 2>/dev/null || true
+    ok "Removed Spinosa runtime files from ${SPINOSA_HOME}"
+    info "Kept metadata registry: ${SPINOSA_METADATA_DIR}"
+  fi
   [[ -f "$bin_dir/spinosa" ]] && rm -f "$bin_dir/spinosa" && ok "Removed ${bin_dir}/spinosa"
 
   divider
@@ -2925,7 +3259,7 @@ cmd_help() {
   fi
 
   # Detect LLM CLIs
-  local clis_str clis_arr
+  local clis_str
   clis_str="$(detect_llm_clis)"
   if [[ -n "$clis_str" ]]; then
     divider
@@ -3036,7 +3370,7 @@ cmd_new() {
   source_framework_version="$(framework_version "$FRAMEWORK_ROOT")"
 
   # Copy all framework-owned files
-  while IFS=$'\t' read -r path role policy; do
+  while IFS=$'\t' read -r path role _policy; do
     is_framework_manifest_entry "$path" "$role" || continue
 
     local src="${FRAMEWORK_ROOT}/${path}"
@@ -3078,7 +3412,7 @@ EOF
 
   # Generate manifest with checksums
   printf 'path\tsha256\n' > "$workspace_path/.spinosa/manifest.tsv"
-  while IFS=$'\t' read -r path role policy; do
+  while IFS=$'\t' read -r path role _policy; do
     is_framework_manifest_entry "$path" "$role" || continue
 
     local full_path="${workspace_path}/${path}"
@@ -3126,7 +3460,7 @@ Read these files first, in this order:
 1. AGENTS.md
 2. system/configuration.md
 3. system/context.md
-4. system/startup.md
+4. .bin/startup-prompt.md (for extraction format and map structure reference)
 5. system/dictionary.md
 6. system/workspace_index.md
 7. .spinosa/add-summary.md
@@ -3306,27 +3640,7 @@ cmd_add() {
       choose_import_batches || die "No file types selected."
     fi
 
-    SCAN_MARKITDOWN_CHOICE="no"
-    if markitdown_available; then
-      local _ext
-      for _ext in "${SELECTED_IMPORT_EXTENSIONS[@]}"; do
-        if [[ "$_ext" == "pdf" ]] || ext_in_list "$_ext" "$MARKITDOWN_EXTENSIONS"; then
-          SCAN_MARKITDOWN_CHOICE="yes"
-          break
-        fi
-      done
-    fi
-
-    SCAN_OCR_CHOICE="no"
-    if rapidocr_ocr_available; then
-      local _oext
-      for _oext in "${SELECTED_IMPORT_EXTENSIONS[@]}"; do
-        if ext_in_list "$_oext" "$IMAGE_EXTENSIONS" || [[ "$_oext" == "pdf" ]]; then
-          SCAN_OCR_CHOICE="yes"
-          break
-        fi
-      done
-    fi
+    configure_selected_import_tools || die "Selected file types require unavailable conversion tools."
 
     local copyable_count
     copyable_count="$(selected_import_count)"
@@ -3378,8 +3692,10 @@ cmd_add() {
         ADD_TOTAL_COUNT=1
         ;;
       markitdown)
-        if ! markitdown_available; then
-          die "MarkItDown is not available. Cannot convert: $(basename "$src_file")"
+        local _src_ext
+        _src_ext="$(file_ext "$src_file")"
+        if ! markitdown_available && ! { is_structured_fallback_ext "$_src_ext" && structured_fallback_available; }; then
+          die "MarkItDown is not available. Cannot convert: $(basename "$src_file"). Run: spinosa upgrade --reinstall"
         fi
         local rel_path stem dest_name dest_file
         rel_path="$(basename "$src_file")"
@@ -3387,14 +3703,19 @@ cmd_add() {
         dest_name="${stem}__$(file_ext "$src_file").md"
         dest_file="$raw_dir/$dest_name"
         mkdir -p "$(dirname "$dest_file")"
-        if [[ -f "$dest_file" ]] && ! confirm "Overwrite?" "n"; then
+        if converted_output_exists "$dest_file" && ! confirm "Overwrite?" "n"; then
           add_skipped=1
           ADD_TOTAL_COUNT=1
         else
+          remove_converted_output "$dest_file"
           local _md_log="$workspace_path/logs/markitdown-processed.ndjson"
           mkdir -p "$(dirname "$_md_log")"
-          local _md_bin
-          _md_bin="$(markitdown_bin)" || die "MarkItDown binary not found."
+          local _md_bin="" _md_python="" _md_script=""
+          _md_bin="$(markitdown_bin)" || _md_bin=""
+          if [[ -z "$_md_bin" ]]; then
+            _md_python="$(fallback_python_bin)" || die "Python runtime not found for structured fallback conversion."
+            _md_script="$(markitdown_script_path)" || die "Structured fallback converter script not found."
+          fi
           local _md_fifo_dir _md_fifo
           _md_fifo_dir="$(mktemp -d)"
           _md_fifo="${_md_fifo_dir}/fifo"
@@ -3402,7 +3723,11 @@ cmd_add() {
           (
             printf '%s\t%s\n' SOURCE "$(dirname "$src_file")"
             printf '%s\t%s\t%s\n' FILE "$src_file" "$dest_file"
-          ) | "$_md_bin" --batch 2>"$_md_fifo" &
+          ) | if [[ -n "$_md_bin" ]]; then
+                "$_md_bin" --batch
+              else
+                "$_md_python" "$_md_script" --batch
+              fi 2>"$_md_fifo" &
           local _md_pid=$!
           local _md_status="fail"
           exec 3<"$_md_fifo"
@@ -3435,10 +3760,11 @@ cmd_add() {
         stem="${rel_path%.*}"
         dest_file="$raw_dir/${stem}.md"
         mkdir -p "$(dirname "$dest_file")"
-        if [[ -f "$dest_file" ]] && ! confirm "Overwrite?" "n"; then
+        if converted_output_exists "$dest_file" && ! confirm "Overwrite?" "n"; then
           add_skipped=1
           ADD_TOTAL_COUNT=1
         else
+          remove_converted_output "$dest_file"
           local _ocr_log="$workspace_path/logs/ocr-processed.ndjson"
           mkdir -p "$(dirname "$_ocr_log")"
           local _ocr_bin
@@ -3475,7 +3801,8 @@ cmd_add() {
         fi
         ;;
       video|audio)
-        local dest_file="$raw_dir/$(basename "$src_file")"
+        local dest_file
+        dest_file="$raw_dir/$(basename "$src_file")"
         mkdir -p "$(dirname "$dest_file")"
         if [[ -f "$dest_file" ]]; then
           warn "Already exists in raw/: $(basename "$src_file")"
@@ -3490,20 +3817,7 @@ cmd_add() {
         ADD_TOTAL_COUNT=1
         ;;
       unknown)
-        local dest_file="$raw_dir/$(basename "$src_file")"
-        note "Unknown type for $(basename "$src_file") -- copying as-is."
-        mkdir -p "$(dirname "$dest_file")"
-        if [[ -f "$dest_file" ]]; then
-          warn "Already exists in raw/: $(basename "$src_file")"
-          if confirm "Overwrite?" "n"; then
-            safe_copy "$src_file" "$dest_file" && add_copied=1 || add_failed=1
-          else
-            add_skipped=1
-          fi
-        else
-          safe_copy "$src_file" "$dest_file" && add_copied=1 || add_failed=1
-        fi
-        ADD_TOTAL_COUNT=1
+        die "Unsupported file type and no import route is available: $(basename "$src_file")"
         ;;
     esac
   fi
@@ -3614,12 +3928,27 @@ SUMMARY_EOF
 # WORKSPACE DISCOVERY & CONFIGURATION
 # ═══════════════════════════════════════════════════════════════════════════
 
-SPINOSA_CONFIG="${SPINOSA_HOME}/config.yaml"
-SPINOSA_CACHE="${SPINOSA_HOME}/workspace_cache.txt"
+SPINOSA_METADATA_DIR="${SPINOSA_HOME}/metadata"
+SPINOSA_CONFIG="${SPINOSA_METADATA_DIR}/config.yaml"
+SPINOSA_CACHE="${SPINOSA_METADATA_DIR}/workspace_cache.txt"
+SPINOSA_REGISTRY="${SPINOSA_METADATA_DIR}/workspaces.txt"
 DEFAULT_SCAN_ROOTS=("$HOME")
+
+ensure_global_metadata() {
+  mkdir -p "$SPINOSA_METADATA_DIR"
+  local name legacy current
+  for name in config.yaml workspace_cache.txt workspaces.txt; do
+    legacy="${SPINOSA_HOME}/${name}"
+    current="${SPINOSA_METADATA_DIR}/${name}"
+    if [[ -f "$legacy" && ! -f "$current" ]]; then
+      mv "$legacy" "$current" 2>/dev/null || cp "$legacy" "$current" 2>/dev/null || true
+    fi
+  done
+}
 
 # Load config from ~/.spinosa/config.yaml
 load_config() {
+  ensure_global_metadata
   SCAN_PERMISSION="unknown"
   SCAN_ROOTS=("${DEFAULT_SCAN_ROOTS[@]}")
   
@@ -3654,7 +3983,7 @@ save_config() {
   shift
   local roots=("$@")
   
-  mkdir -p "$SPINOSA_HOME"
+  ensure_global_metadata
   
   {
     echo "scan_permission: \"$permission\""
@@ -3668,8 +3997,8 @@ save_config() {
 # Ask permission on first run
 ask_scan_permission() {
   printf '\n%s\n' "${BOLD}Spinosa can auto-discover your workspaces.${RESET}"
-  printf '\n%s\n' "Search your home directory for existing Spinosa workspaces?"
-  printf '%s\n' "Scans for \`.spinosa/workspace\` marker files (5 folders deep at most)."
+  printf '\n%s\n' "Use the local workspace registry and allow explicit workspace scans?"
+  printf '%s\n' "Spinosa first reads ${SPINOSA_METADATA_DIR}/workspaces.txt. Scans run only when you choose Find other workspaces."
   printf '%s\n' "${DIM}Nothing leaves your computer — no data is uploaded, stored, or shared.${RESET}"
   printf '\n'
   
@@ -3710,7 +4039,7 @@ scan_workspaces() {
 update_cache() {
   local workspaces=("$@")
   
-  mkdir -p "$SPINOSA_HOME"
+  ensure_global_metadata
   
   {
     for ws in "${workspaces[@]}"; do
@@ -3733,27 +4062,15 @@ discover_workspaces_with_permission() {
   if load_registry; then
     return 0
   fi
-  
-  # Fallback to scan
-  local workspaces=()
-  while IFS= read -r ws; do
-    [[ -n "$ws" ]] && workspaces+=("$ws")
-  done < <(scan_workspaces "${SCAN_ROOTS[@]}")
-  
-  # Update both cache and registry (only if workspaces found)
-  if [[ ${#workspaces[@]} -gt 0 ]]; then
-    update_cache "${workspaces[@]}"
-    update_registry "${workspaces[@]}"
+
+  # Cache fallback covers installs before registry migration. Scanning happens
+  # only from explicit "Find other workspaces" action.
+  if [[ -f "$SPINOSA_CACHE" ]]; then
+    awk -F '|' '{ if ($1 != "") print $0 }' "$SPINOSA_CACHE"
+    return 0
   fi
-  
-  # Return results
-  if [[ ${#workspaces[@]} -gt 0 ]]; then
-    for ws in "${workspaces[@]}"; do
-      local project
-      project="$(grep 'project_name:' "$ws/.spinosa/workspace" 2>/dev/null | sed 's/project_name: *//' | head -1)"
-      printf '%s|%s\n' "$ws" "$project"
-    done
-  fi
+
+  return 1
 }
 
 registry_escape() {
@@ -3772,14 +4089,15 @@ registry_unescape() {
 
 # Load workspaces from persistent registry
 load_registry() {
-  local registry="${SPINOSA_HOME}/workspaces.txt"
+  ensure_global_metadata
+  local registry="$SPINOSA_REGISTRY"
   [[ -f "$registry" ]] || return 1
   
   local found=0
-	  while IFS='|' read -r path project created; do
+	  while IFS='|' read -r path project _created; do
 	    path="$(registry_unescape "$path")"
 	    project="$(registry_unescape "${project:-}")"
-	    [[ -d "$path/.spinosa" ]] || continue  # Validate still exists
+	    [[ -f "$path/.spinosa/workspace" ]] || continue
 	    printf '%s|%s\n' "$path" "$project"
     found=1
   done < "$registry"
@@ -3791,12 +4109,12 @@ load_registry() {
 register_workspace() {
 	  local path="$1"
 	  local project="${2:-}"
-	  local registry="${SPINOSA_HOME}/workspaces.txt"
+	  local registry="$SPINOSA_REGISTRY"
 	  local encoded_path encoded_project
 	  encoded_path="$(registry_escape "$path")"
 	  encoded_project="$(registry_escape "$project")"
   
-  mkdir -p "$SPINOSA_HOME"
+  ensure_global_metadata
   
 	  # Remove if already exists
 	  if [[ -f "$registry" ]]; then
@@ -3811,9 +4129,10 @@ register_workspace() {
 # Update registry with discovered workspaces
 update_registry() {
   local workspaces=("$@")
-  local registry="${SPINOSA_HOME}/workspaces.txt"
+  local registry="$SPINOSA_REGISTRY"
   
-  mkdir -p "$SPINOSA_HOME"
+  ensure_global_metadata
+  touch "$registry"
   
 	for ws in "${workspaces[@]}"; do
 	    local project
@@ -3881,7 +4200,7 @@ require_workspace() {
   local workspace_data
   
   spinner_start "Discovering workspaces"
-  workspace_data="$(discover_workspaces_with_permission 2>/dev/null)"
+   workspace_data="$(discover_workspaces_with_permission 2>/dev/null || true)"
   spinner_stop
   
   if [[ -z "$workspace_data" ]]; then
@@ -3931,7 +4250,7 @@ require_workspace() {
     
     local new_count=0
     for ws in "${scanned[@]}"; do
-      if ! grep -q "^${ws}|" "${SPINOSA_HOME}/workspaces.txt" 2>/dev/null; then
+      if ! awk -F '|' -v p="$(registry_escape "$ws")" '$1 == p { found=1 } END { exit found ? 0 : 1 }' "$SPINOSA_REGISTRY" 2>/dev/null; then
         new_count=$((new_count + 1))
       fi
     done
@@ -4090,7 +4409,7 @@ cmd_upgrade() {
 	  spinner_stop
 	  ok "Installer downloaded"
 
-  local upgrade_args=("--upgrade" "--version" "$resolved_version")
+  local upgrade_args=("--upgrade" "--version" "$resolved_version" "--no-launch")
   if [[ "$auto_yes" -eq 1 ]]; then
     upgrade_args+=("--yes")
   fi
@@ -4106,6 +4425,7 @@ cmd_upgrade() {
 # ═══════════════════════════════════════════════════════════════════════════
 # COMMAND: dashboard
 # ═══════════════════════════════════════════════════════════════════════════
+# shellcheck disable=SC2120
 cmd_dashboard() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -4155,7 +4475,7 @@ cmd_dashboard() {
     if [[ "$SCAN_PERMISSION" == "granted" ]]; then
       spinner_start "Discovering workspaces"
       local workspace_data
-      workspace_data="$(discover_workspaces_with_permission 2>/dev/null)"
+      workspace_data="$(discover_workspaces_with_permission 2>/dev/null || true)"
       spinner_stop
     else
       local workspace_data=""
@@ -4224,6 +4544,7 @@ cmd_dashboard() {
   while true; do
     local options=()
     options+=("$(option_spec "new" "New workspace" "Create a new workspace and run onboarding")")
+    options+=("$(option_spec "add" "Add files" "Import files into an existing workspace")")
     options+=("$(option_spec "upgrade" "Upgrade Spinosa" "Upgrade to latest release")")
     options+=("$(option_spec "uninstall" "Uninstall" "Remove Spinosa from this system")")
     options+=("$(option_spec "help" "Help" "Show help information")")
@@ -4236,6 +4557,7 @@ cmd_dashboard() {
 
     case "$choice" in
       new)       cmd_new "$@" ;;
+      add)       cmd_add "$@" ;;
       upgrade)   cmd_upgrade "$@" ;;
       uninstall) cmd_uninstall "$@" ;;
       help)      cmd_help ;;
@@ -4263,8 +4585,7 @@ auto_upgrade_check() {
   local now
   now="$(date +%s)"
   if [[ -f "$cache_file" ]]; then
-    local last_check skip_until
-    last_check="$(sed -n '1p' "$cache_file" 2>/dev/null || echo 0)"
+    local skip_until
     skip_until="$(sed -n '3p' "$cache_file" 2>/dev/null || echo 0)"
     [[ "$now" -lt "$skip_until" ]] && return 0
   fi

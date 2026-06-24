@@ -1,4 +1,5 @@
 #!/bin/sh
+# shellcheck shell=bash
 # ── install.sh — Spinosa Framework Installer (auto-re-execs with bash) ──────
 
 if [ -z "${BASH_VERSION-}" ]; then
@@ -40,7 +41,7 @@ set -euo pipefail
 # CONFIGURATION
 # ══════════════════════════════════════════════════════════════════════════════
 
-PINNED_VERSION="0.5.14"
+PINNED_VERSION="0.5.15"
 VERSION="${VERSION:-$PINNED_VERSION}"
 DRY_RUN=0
 VERIFY_ONLY=0
@@ -51,6 +52,7 @@ MIN_DAYS=""
 YES=0
 LAUNCH_DASHBOARD="auto"
 SPINOSA_HOME="${SPINOSA_HOME:-$HOME/.spinosa}"
+SPINOSA_METADATA_DIR="${SPINOSA_HOME}/metadata"
 SPINOSA_BIN_DIR="${SPINOSA_BIN_DIR:-$HOME/.local/bin}"
 NO_MODIFY_PATH=false
 REPO="TommasoPrinetti/spinosa"
@@ -76,12 +78,32 @@ divider() { printf '%s\n' "${DIM}$(printf '%.0s─' {1..78})${RESET}"; }
 
 read_from_tty() {
   if [ -t 0 ]; then
+    flush_pending_input
     IFS= read -r "$@"
   elif [ -r /dev/tty ]; then
+    flush_pending_input
     IFS= read -r "$@" < /dev/tty
   else
     return 1
   fi
+}
+
+flush_pending_input() {
+  [ "${SPINOSA_FLUSH_TTY_INPUT:-1}" = "0" ] && return 0
+  [ -r /dev/tty ] || return 0
+  command -v stty >/dev/null 2>&1 || return 0
+
+  local old_stty ch
+  old_stty="$(stty -g < /dev/tty 2>/dev/null)" || return 0
+  if ! stty -icanon -echo min 0 time 0 < /dev/tty 2>/dev/null; then
+    stty "$old_stty" < /dev/tty 2>/dev/null || true
+    return 0
+  fi
+
+  while IFS= read -r -n 1 -s ch < /dev/tty 2>/dev/null; do
+    [ -n "$ch" ] || break
+  done
+  stty "$old_stty" < /dev/tty 2>/dev/null || true
 }
 
 read_tty_or_die() {
@@ -324,6 +346,28 @@ clean_macos_metadata() {
   find "$dir" -name "._*" -delete 2>/dev/null || true
 }
 
+init_global_metadata() {
+  mkdir -p "$SPINOSA_METADATA_DIR"
+  local name legacy current
+  for name in config.yaml workspace_cache.txt workspaces.txt; do
+    legacy="${SPINOSA_HOME}/${name}"
+    current="${SPINOSA_METADATA_DIR}/${name}"
+    if [ -f "$legacy" ] && [ ! -f "$current" ]; then
+      mv "$legacy" "$current" 2>/dev/null || cp "$legacy" "$current" 2>/dev/null || true
+    fi
+  done
+}
+
+write_install_metadata() {
+  mkdir -p "$SPINOSA_METADATA_DIR"
+  cat > "${SPINOSA_METADATA_DIR}/install.yaml" << EOF
+install_root: "${SPINOSA_HOME}"
+bin_dir: "${SPINOSA_BIN_DIR}"
+last_installed_version: "${VERSION}"
+updated: "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+EOF
+}
+
 # ══════════════════════════════════════════════════════════════════════════════
 # VERSION & SECURITY
 # ══════════════════════════════════════════════════════════════════════════════
@@ -414,7 +458,7 @@ check_release_age() {
 }
 
 verify_vendor_binaries() {
-  local framework_root="$1"
+  local framework_root="$1" vendor_dir="${2:-}"
   local checksums_file="${framework_root}/metadata/vendor-checksums.txt"
 
   if [ ! -f "$checksums_file" ]; then
@@ -424,6 +468,9 @@ verify_vendor_binaries() {
 
   local suffix
   suffix="$(detect_platform_suffix)"
+  if [ -z "$vendor_dir" ]; then
+    vendor_dir="${SPINOSA_HOME}/vendor/spinosa-${suffix}"
+  fi
   info "Verifying vendor binary checksums..."
   local verified=0 failed=0 line expected_hash bin_name plat_suffix installed_bin
 
@@ -438,7 +485,8 @@ verify_vendor_binaries() {
 
     [ "$plat_suffix" = "$suffix" ] || continue
 
-    installed_bin="${SPINOSA_HOME}/bin/${bin_name}"
+    installed_bin="${vendor_dir}/${bin_name}"
+    [ -f "$installed_bin" ] || installed_bin="${SPINOSA_HOME}/bin/${bin_name}"
     [ -f "$installed_bin" ] || continue
 
     if verify_checksum "$installed_bin" "$expected_hash"; then
@@ -456,6 +504,42 @@ verify_vendor_binaries() {
   if [ "$verified" -gt 0 ]; then
     ok "${verified} vendor binary checksum(s) verified"
   fi
+}
+
+smoke_check_vendor_tools() {
+  local vendor_dir="$1"
+  local failed=0 tool
+
+  for tool in markitdown-cli rapidocr-cli; do
+    if [ ! -x "${vendor_dir}/${tool}" ]; then
+      warn "${tool} is not executable in vendor bundle"
+      failed=$((failed + 1))
+      continue
+    fi
+    case "$tool" in
+      markitdown-cli)
+        if "${vendor_dir}/${tool}" --check-markitdown >/dev/null 2>&1; then
+          ok "${tool} package check passed"
+        else
+          warn "${tool} package check failed"
+          failed=$((failed + 1))
+        fi
+        ;;
+      rapidocr-cli)
+        if "${vendor_dir}/${tool}" --check-rapidocr >/dev/null 2>&1; then
+          ok "${tool} package check passed"
+        else
+          warn "${tool} package check failed"
+          failed=$((failed + 1))
+        fi
+        ;;
+    esac
+  done
+
+  if [ "$failed" -gt 0 ]; then
+    warn "Document conversion tools are partially unavailable. Retry with: spinosa upgrade --reinstall"
+  fi
+  return 0
 }
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -686,10 +770,11 @@ install_vendor_bundles() {
       while [[ $pip_ok -eq 0 && $pip_attempt -lt 2 ]]; do
         pip_attempt=$((pip_attempt + 1))
         if "$spinosa_python" -m pip install \
-          "markitdown[docx,pptx,xlsx,xls,outlook,pdf]==0.1.6" \
+          "markitdown[all]==0.1.6" \
           "rapidocr==3.8.1" \
           "onnxruntime==${onnx_ver}" \
           "pypdfium2==5.9.0" \
+          "pypdf" \
           --quiet 2>&1; then
           pip_ok=1
           break
@@ -767,33 +852,20 @@ RapidOCR(params={
     warn "Bundled Python not found — PDF/image OCR and Office doc conversion will not be available"
   fi
 
+  smoke_check_vendor_tools "$spinosa_vendor_dest"
   local fw_root="${SPINOSA_HOME}/versions/${version}/spinosa-framework-${version}"
-  verify_vendor_binaries "$fw_root"
+  verify_vendor_binaries "$fw_root" "$spinosa_vendor_dest"
 }
 
 install_shims() {
   local shim="${SPINOSA_BIN_DIR}/spinosa"
   cat > "$shim" << SHIM_EOF
 #!/bin/sh
-exec "${SPINOSA_HOME}/bin/spinosa" "\$@"
+exec bash "${SPINOSA_HOME}/bin/spinosa" "\$@"
 SHIM_EOF
   chmod +x "$shim"
   ok "Created wrapper script: ${shim}"
 
-  local pilosa_shim="${SPINOSA_BIN_DIR}/pilosa"
-  if [[ ! -f "$pilosa_shim" ]] || ! grep -q 'exec.*spinosa' "$pilosa_shim" 2>/dev/null; then
-    cat > "$pilosa_shim" << 'PILOSA_SHIM'
-#!/bin/sh
-exec "$(dirname "$0")/spinosa" "$@"
-PILOSA_SHIM
-    chmod +x "$pilosa_shim"
-    ok "Created pilosa → spinosa alias: ${pilosa_shim}"
-  fi
-
-  local old_pilosa_bin="${SPINOSA_HOME}/bin/pilosa"
-  if [[ -f "$old_pilosa_bin" ]]; then
-    rm -f "$old_pilosa_bin" && warn "Removed old pilosa binary at ${old_pilosa_bin}"
-  fi
 }
 
 setup_shell_path() {
@@ -861,10 +933,14 @@ run_basic_test() {
 maybe_launch_dashboard() {
   if [[ "$LAUNCH_DASHBOARD" == "1" ]] || { [[ "$LAUNCH_DASHBOARD" == "auto" ]] && [[ -t 0 && -r /dev/tty ]]; }; then
     info "Launching Spinosa dashboard..."
+    flush_pending_input
     sleep 1
     exec "${SPINOSA_BIN_DIR}/spinosa" </dev/tty || die "Failed to launch Spinosa dashboard"
   fi
+  local fallback_bin="$SPINOSA_BIN_DIR"
+  [[ "$fallback_bin" == "$HOME/.local/bin" ]] && fallback_bin='$HOME/.local/bin'
   info "Run Spinosa with: spinosa"
+  info "If 'spinosa' is not found, run: export PATH=\"${fallback_bin}:\$PATH\""
 }
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -873,6 +949,8 @@ maybe_launch_dashboard() {
 
 main() {
   local lockdir="${SPINOSA_HOME}/versions/.lock.${$}-${VERSION}"
+
+  init_global_metadata
 
   # Stale lock check: if lock dir is older than 30 min, reclaim it
   if [ -d "$lockdir" ]; then
@@ -948,6 +1026,7 @@ main() {
   fi
 
   install_shims
+  write_install_metadata
 
   cleanup
   trap - EXIT INT TERM HUP

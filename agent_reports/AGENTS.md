@@ -7,24 +7,13 @@ description:
 connects_to:
   - AGENTS.md
   - logs/user_requests.md
-  - .trash/AGENTS.md
 created: 2026-06-03
-updated: 2026-06-04
+updated: 2026-06-24
 ---
 
 # agent_reports — Durable Reports & Checkpoints
 
 Synthesis reports, evidence packets, verification notes, checkpoints, and maintenance reports. These are the primary output artifacts of the sub-agent pipeline.
-
-## Process File Lifecycle
-
-Process files are intermediate artifacts. Only numbered final verified reports (e.g., `00_*.md`) persist.
-
-| Process File | Created By | Purpose | Lifecycle |
-|---|---|---|---|
-| `evidence_packet.md` / `evidence_appendix.md` | Searcher | Raw evidence from corpus | Created during search → Moved to `.trash/` after verification |
-| `extraction_batch_*.md` | Mapper | Extraction packets per batch | Created during indexing → Moved to `.trash/` after indexing |
-| `NN_*.md` | Writer / Serendippo | Numbered final reports | Keep in `agent_reports/` |
 
 ## Operations
 
@@ -41,5 +30,3 @@ Process files are intermediate artifacts. Only numbered final verified reports (
 - Report bodies are flavoured Markdown, well designed and tidy.
 - Use Obsidian wikilinks for in-workspace references.
 - If a report cites a claim that `spinosa-verifier` could not verify, mark it explicitly.
-
-

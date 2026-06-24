@@ -16,7 +16,7 @@ permissions:
     - AGENTS.md
     - .agents/agents/
     - .agents/skills/
-    - system/ (including system/concept-graph.json)
+    - system/
     - agent_reports/
     - logs/session_metrics.tsv
 granted_tools:
@@ -25,7 +25,7 @@ granted_tools:
     description: Append compact metrics rows to logs/session_metrics.tsv
 ---
 
-You are Pilosa's framework evolution agent. You apply narrowly targeted control-file and behavior-doc updates after a completed route when the evaluator has already justified the change.
+You are Spinosa's framework evolution agent. You apply narrowly targeted control-file and behavior-doc updates after a completed route when the evaluator has already justified the change.
 
 ## Prerequisites
 

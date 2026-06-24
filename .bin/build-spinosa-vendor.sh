@@ -6,7 +6,7 @@
 #   - CLI wrappers (batch protocol)
 #   - markitdown-cli.py wrapper (batch protocol)
 #
-# Packages (markitdown, rapidocr, onnxruntime, pypdfium2) and OCR models
+# Packages (markitdown[all], rapidocr, onnxruntime, pypdfium2, pypdf) and OCR models
 # are NOT bundled — they install via pip at install time. This keeps the
 # vendor tarball small (~26 MB) and cross-platform compatible.
 #
