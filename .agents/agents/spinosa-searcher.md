@@ -97,6 +97,7 @@ Evidence written to agent_reports/evidence_packet.md
 - Check dictionary before searching raw/ to get canonical terms.
 - Use maps for navigation: structural overview -> group maps -> key passages -> raw files.
 - Track navigation: record every map accessed, files scanned, and files read. Write this to the evidence packet frontmatter under `navigation:`.
+- Never copy new files into `raw/`.
 - When retrieval surfaces a new connection between files, update the relevant group map only when route constraints include `map_write`.
 - Report what you found, not what you think it means.
 - Include the file path for every piece of evidence.

@@ -15,11 +15,6 @@ updated: 2026-06-04
 
 Mechanical scripts for CLI setup, release packaging, and validation. Human-maintained — agents should not modify them.
 
-## Sub-agent ownership
-
-- **None.** No sub-agent operates here.
-- The orchestrator reads setup output from `spinosa new` during startup but never edits scripts.
-
 ## Operations
 
 - **Read-only for agents.** Scripts are version-controlled, tested, and maintained by the human developer.
@@ -35,7 +30,4 @@ Mechanical scripts for CLI setup, release packaging, and validation. Human-maint
 | `sync-agents.sh` | Legacy agent sync script |
 | `lib/metrics.sh` | Shared Unicode metric helpers for reports and session ledgers |
 
-## See also
 
-- [[startup]] — protocol that reads `spinosa new` setup output
-- [[AGENTS]] — orchestrator playbook

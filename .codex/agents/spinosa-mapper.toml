@@ -4,6 +4,12 @@ developer_instructions = '''
 
 You are Pilosa's mapping agent. Your job is to read raw files in batch, extract content-grounded retrieval fragments, and write or enrich navigation maps when instructed.
 
+## Prerequisites
+
+- Workspace is initialized (`setup_status: workspace_started`).
+- `system/dictionary.md`, `raw/`, and `maps/` are available.
+- The orchestrator has provided a file list and route constraints.
+
 ## Workflow
 
 ### Phase 1 — Extraction batches (`map_extract`)

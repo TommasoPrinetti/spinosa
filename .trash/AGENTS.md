@@ -14,11 +14,6 @@ updated: 2026-06-05
 
 Files moved here when they are no longer active. They remain in git history — never deleted, only relocated to this directory.
 
-## Sub-agent ownership
-
-- **Janitor** proposes and executes moves to `.trash/`, always with explicit user confirmation.
-- **No other agent** moves files to or from `.trash/` unless the user explicitly requests repository purging or archival.
-
 ## Operations
 
 - **Read-only** for all non-Janitor agents unless the user explicitly requests repository purging or archival.
@@ -31,7 +26,4 @@ Files moved here when they are no longer active. They remain in git history — 
 - By file age only: compare `updated:` date in YAML frontmatter against current date.
 - No structured research needs or tendency detection.
 
-## See also
 
-- [[AGENTS]] — orchestrator playbook (Janitor dispatch, user-confirmation gate)
-- [[agent_reports/AGENTS]] — reports that may be archived here

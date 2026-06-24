@@ -1,18 +1,19 @@
 #!/usr/bin/env bash
-# sync-agents.sh — Generate vendor-specific agent mirrors and sync skills
+# sync-agents.sh — Generate vendor-specific agent mirrors and sync references
 #
 # Source of truth:
 #   - .agents/agents/*.md → canonical agent definitions
-#   - .agents/skills/*/SKILL.md + references/ → skills
+#   - .agents/references/ → shared reference files (templates, format specs)
 #   - AGENTS.md → CLAUDE.md (Claude Code reads this automatically)
 #
 # Destinations (generated, platform-specific frontmatter):
 #   - .opencode/agents/   — mode: subagent, permission: (singular)
 #   - .claude/agents/     — tools: (comma-separated)
 #   - .codex/agents/      — Codex-native TOML generated from canonical body
-#   - .hermes/skills/     — Hermes SKILL.md mirror (Hermes reads AGENTS.md directly)
-#   - .claude/skills/
-#   - .codex/skills/
+#   - .opencode/references/ — OpenCode reference mirror
+#   - .claude/references/   — Claude reference mirror
+#   - .codex/references/    — Codex reference mirror
+#   - .hermes/references/   — Hermes reference mirror
 #   - CLAUDE.md
 #
 # Not synced (manually maintained):
@@ -179,36 +180,18 @@ CODEX_EOF
     echo "  $agent → .opencode/agents/ + .claude/agents/ + .codex/agents/"
 done
 
-# ── Sync skills ──────────────────────────────────────────────────────
+# ── Sync references ────────────────────────────────────────────────────
 echo ""
-echo "--- Syncing skills ---"
+echo "--- Syncing references ---"
 for platform in .opencode .claude .codex .hermes; do
-    dest="$REPO_ROOT/$platform/skills"
+    dest="$REPO_ROOT/$platform/references"
     rm -rf "$dest"
-    mkdir -p "$dest"
-	    # Copy each skill directory
-	    for skill_dir in "$REPO_ROOT/.agents/skills"/*/; do
-	        [ -d "$skill_dir" ] || continue
-	        skill_name=$(basename "$skill_dir")
-	        mkdir -p "$dest/$skill_name"
-	        # Copy SKILL.md and any other .md files from skill root
-	        shopt -s nullglob
-	        skill_docs=("$skill_dir"*.md)
-	        shopt -u nullglob
-	        [[ ${#skill_docs[@]} -gt 0 ]] || { echo "ERROR: no markdown skill files in $skill_dir" >&2; exit 1; }
-	        cp "${skill_docs[@]}" "$dest/$skill_name/"
-	        [[ -f "$dest/$skill_name/SKILL.md" ]] || { echo "ERROR: missing mirrored SKILL.md for $skill_name" >&2; exit 1; }
-	        # Copy references/ subdirectory if it exists
-	        if [[ -d "$skill_dir/references" ]]; then
-	            mkdir -p "$dest/$skill_name/references"
-	            shopt -s nullglob
-	            ref_docs=("$skill_dir/references/"*.md)
-	            shopt -u nullglob
-	            [[ ${#ref_docs[@]} -eq 0 ]] || cp "${ref_docs[@]}" "$dest/$skill_name/references/"
-	        fi
-	    done
-    count=$(find "$dest" -name "SKILL.md" | wc -l | tr -d ' ')
-    echo "  $platform/skills/ → $count skills"
+    if [[ -d "$REPO_ROOT/.agents/references" ]]; then
+        mkdir -p "$dest"
+        cp "$REPO_ROOT/.agents/references/"*.md "$dest/"
+        count=$(find "$dest" -name "*.md" | wc -l | tr -d ' ')
+        echo "  $platform/references/ → $count files"
+    fi
 done
 
 # ── Sync CLAUDE.md ──────────────────────────────────────────────────
