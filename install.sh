@@ -41,7 +41,7 @@ set -euo pipefail
 # CONFIGURATION
 # ══════════════════════════════════════════════════════════════════════════════
 
-PINNED_VERSION="0.5.15"
+PINNED_VERSION="0.5.16"
 VERSION="${VERSION:-$PINNED_VERSION}"
 DRY_RUN=0
 VERIFY_ONLY=0
@@ -931,16 +931,17 @@ run_basic_test() {
 }
 
 maybe_launch_dashboard() {
-  if [[ "$LAUNCH_DASHBOARD" == "1" ]] || { [[ "$LAUNCH_DASHBOARD" == "auto" ]] && [[ -t 0 && -r /dev/tty ]]; }; then
-    info "Launching Spinosa dashboard..."
-    flush_pending_input
-    sleep 1
-    exec "${SPINOSA_BIN_DIR}/spinosa" </dev/tty || die "Failed to launch Spinosa dashboard"
-  fi
   local fallback_bin="$SPINOSA_BIN_DIR"
   [[ "$fallback_bin" == "$HOME/.local/bin" ]] && fallback_bin='$HOME/.local/bin'
   info "Run Spinosa with: spinosa"
   info "If 'spinosa' is not found, run: export PATH=\"${fallback_bin}:\$PATH\""
+
+  if [[ "$LAUNCH_DASHBOARD" == "1" ]] || { [[ "$LAUNCH_DASHBOARD" == "auto" ]] && [[ -t 0 && -r /dev/tty ]]; }; then
+    info "Launching Spinosa dashboard..."
+    flush_pending_input
+    sleep 1
+    SPINOSA_NO_UPGRADE_CHECK=1 exec "${SPINOSA_BIN_DIR}/spinosa" </dev/tty || warn "Dashboard launch skipped — run 'spinosa' to start it manually"
+  fi
 }
 
 # ══════════════════════════════════════════════════════════════════════════════

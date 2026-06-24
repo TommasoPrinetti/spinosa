@@ -9,6 +9,7 @@ LICENSE	framework	replace_if_unmodified
 .bin/test-import-routing.sh	framework	replace_if_unmodified
 .bin/sync-agents.sh	framework	replace_if_unmodified
 .bin/spinosa	framework	replace_if_unmodified
+.bin/startup-prompt.md	framework	replace_if_unmodified
 .bin/AGENTS.md	framework	replace_if_unmodified
 .bin/lib/metrics.sh	framework	replace_if_unmodified
 .bin/lib/rapidocr-cli.py	framework	replace_if_unmodified
