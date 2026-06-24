@@ -201,6 +201,37 @@ echo "  Release date: ${TODAY}"
 VERSIONS_FILE="${FRAMEWORK_DIR}/metadata/vendor-versions.txt"
 printf 'python 3.11.15\n' > "$VERSIONS_FILE"
 echo "  Vendor versions recorded"
+
+# ── Vendor binary checksums ─────────────────────────────────────────────────────
+echo "Computing vendor binary checksums..."
+CHECKSUMS_FILE="${FRAMEWORK_DIR}/metadata/vendor-checksums.txt"
+: > "$CHECKSUMS_FILE"
+printf '# vendor-checksums.txt -- platform-pinned binary checksums\n' >> "$CHECKSUMS_FILE"
+printf '# format: <sha256> <relative_path_in_vendor_dir> <platform_suffix>\n' >> "$CHECKSUMS_FILE"
+
+shopt -s nullglob
+for tarball in "${REPO_ROOT}/.bin/lib/vendor"/spinosa-vendor-*.tar.gz; do
+  basename="$(basename "$tarball")"
+  suffix="${basename#spinosa-vendor-}"
+  suffix="${suffix%.tar.gz}"
+
+  vtmp="$(mktemp -d "${TMPDIR:-/tmp}/vendor-checksum.XXXXXX")"
+  tar -xzf "$tarball" -C "$vtmp" --strip-components=1
+
+  for binary in rapidocr-cli markitdown-cli python/bin/python3; do
+    if [[ -f "${vtmp}/${binary}" ]]; then
+      printf '%s  %s  %s\n' \
+        "$(sha256_artifact "${vtmp}/${binary}")" \
+        "$binary" \
+        "$suffix" >> "$CHECKSUMS_FILE"
+    fi
+  done
+
+  rm -rf "$vtmp"
+done
+shopt -u nullglob
+
+echo "  Vendor binary checksums recorded ($(wc -l < "$CHECKSUMS_FILE") entries across all platforms)"
 echo ""
 
 # ── Create tarball ──────────────────────────────────────────────────────────

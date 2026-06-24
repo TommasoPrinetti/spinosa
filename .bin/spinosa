@@ -61,7 +61,7 @@ BINARY_COPYABLE_EXTENSIONS=""
 # Engine: MarkItDown — convert supported local files before OCR/copy fallbacks.
 # Plugins stay disabled by default; opt in with SPINOSA_MARKITDOWN_ENABLE_PLUGINS=1
 # and add plugin-owned extensions with SPINOSA_MARKITDOWN_EXTRA_EXTENSIONS.
-MARKITDOWN_EXTENSIONS="docx|pptx|xlsx|xls|epub|html|htm|msg|zip|json|csv|xml|wav|mp3|m4a"
+MARKITDOWN_EXTENSIONS="docx|pptx|xlsx|xls|epub|html|htm|msg|zip|json|csv|xml"
 STRUCTURED_FALLBACK_EXTENSIONS="csv|json|xml"
 IMAGE_EXTENSIONS="jpg|jpeg|png|gif|webp|heic|heif|tif|tiff|bmp|svg"
 AUDIO_VIDEO_EXTENSIONS="mp4|mov|m4v|avi|mkv|webm|wmv|mp3|wav|m4a|aac|flac|ogg|opus|aiff"
@@ -1665,12 +1665,17 @@ scan_source() {
 
 print_scan_summary() {
   printf '  %s✓%s Source scan complete\n' "${G}" "${RESET}"
-  local first=1
-  local prefix
+  local first=1 prefix
   print_scan_row() {
     if [[ "$first" -eq 1 ]]; then prefix='├─'; first=0; else prefix='├─'; fi
     printf '  %s%s%s %s (%s)\n' "${DIM}" "$prefix" "${RESET}" "$1" "$2"
   }
+
+  # Copy-first: files that don't need conversion
+  [[ "$SCAN_NATIVE_COUNT" -gt 0 ]] && print_scan_row "$(file_type_label native "$(plural_count "$SCAN_NATIVE_COUNT" "native-readable file")") to copy unchanged" "$(format_bytes "$SCAN_NATIVE_BYTES")"
+  [[ "$SCAN_BINARY_COPYABLE_COUNT" -gt 0 ]] && print_scan_row "$(file_type_label pdf "$(plural_count "$SCAN_BINARY_COPYABLE_COUNT" "PDF")") to copy as-is" "$(format_bytes "$SCAN_BINARY_COPYABLE_BYTES")"
+
+  # Convert-first: files that need conversion tools
   [[ "$SCAN_MARKDOWN_COUNT" -gt 0 ]] && print_scan_row "$(file_type_label markdown "$(plural_count "$SCAN_MARKDOWN_COUNT" "text-based file")") to rename to .md" "$(format_bytes "$SCAN_MARKDOWN_BYTES")"
   if [[ "$SCAN_MARKITDOWN_COUNT" -gt 0 ]]; then
     if markitdown_available; then
@@ -1681,7 +1686,6 @@ print_scan_summary() {
       print_scan_row "$(file_type_label markitdown "$(plural_count "$SCAN_MARKITDOWN_COUNT" "MarkItDown/structured file")") skipped — converter not available" "$(format_bytes "$SCAN_MARKITDOWN_BYTES")"
     fi
   fi
-  [[ "$SCAN_NATIVE_COUNT" -gt 0 ]] && print_scan_row "$(file_type_label native "$(plural_count "$SCAN_NATIVE_COUNT" "native-readable file")") to copy unchanged" "$(format_bytes "$SCAN_NATIVE_BYTES")"
   if [[ "$SCAN_OCR_CONVERTIBLE_COUNT" -gt 0 ]]; then
     if rapidocr_ocr_available; then
       print_scan_row "$(file_type_label image "$(plural_count "$SCAN_OCR_CONVERTIBLE_COUNT" "scanned PDF and image")") available for OCR" "$(format_bytes "$SCAN_OCR_CONVERTIBLE_BYTES")"
@@ -1689,16 +1693,13 @@ print_scan_summary() {
       print_scan_row "$(file_type_label image "$(plural_count "$SCAN_OCR_CONVERTIBLE_COUNT" "scanned PDF and image")") skipped — RapidOCR not available" "$(format_bytes "$SCAN_OCR_CONVERTIBLE_BYTES")"
     fi
   fi
-  [[ "$SCAN_BINARY_COPYABLE_COUNT" -gt 0 ]] && print_scan_row "$(file_type_label pdf "$(plural_count "$SCAN_BINARY_COPYABLE_COUNT" "PDF")") to copy as-is" "$(format_bytes "$SCAN_BINARY_COPYABLE_BYTES")"
+
+  # Skip/optional: files not processed (or unselected by default)
   [[ "$SCAN_VIDEO_COUNT" -gt 0 ]] && print_scan_row "$(file_type_label video "$(plural_count "$SCAN_VIDEO_COUNT" "video")") available (not selected by default)" "$(format_bytes "$SCAN_VIDEO_BYTES")"
   [[ "$SCAN_AUDIO_COUNT" -gt 0 ]] && print_scan_row "$(file_type_label audio "$(plural_count "$SCAN_AUDIO_COUNT" "audio file")") available (not selected by default)" "$(format_bytes "$SCAN_AUDIO_BYTES")"
   [[ "$SCAN_UNKNOWN_COUNT" -gt 0 ]] && print_scan_row "$(file_type_label unknown "$(plural_count "$SCAN_UNKNOWN_COUNT" "file")") unsupported or unknown" "$(format_bytes "$SCAN_UNKNOWN_BYTES")"
   if [[ "$SCAN_IGNORED_COUNT" -gt 0 ]]; then
-    if [[ "$first" -eq 1 ]]; then prefix='├─'; first=0; else prefix='├─'; fi
-    printf '  %s%s%s %s\n' "${DIM}" "$prefix" "${RESET}" "$(file_type_label ignored "$(plural_count "$SCAN_IGNORED_COUNT" "file")")"
-  fi
-  if [[ "$first" -eq 0 ]]; then
-    printf '  %s└─%s\n' "${DIM}" "${RESET}"
+    print_scan_row "$(file_type_label ignored "$(plural_count "$SCAN_IGNORED_COUNT" "file")") skipped — system/dotfile" "0 B"
   fi
 }
 
@@ -2592,7 +2593,7 @@ preferred_llm_cli: "$preferred_cli"
 
 ## Notes
 - This file was initialized by \`spinosa new\`.
-- The CLI collected: source folder and preferred LLM CLI. It seeded the initial workspace label from the source folder name, but the final vault/project naming can be refined during startup. It imported accepted files into raw/. Office documents, structured data, and text-based PDFs were converted to Markdown. Scanned PDFs and images were processed via RapidOCR OCR. Selected audio and video files were copied unchanged. AGENTS.md control files were skipped.
+- The CLI collected: source folder and preferred LLM CLI. It seeded the initial workspace label from the source folder name. It imported accepted files into raw/. Office documents, structured data, and text-based PDFs were converted to Markdown. Scanned PDFs and images were processed via RapidOCR OCR. Selected audio and video files were copied unchanged. AGENTS.md control files were skipped.
 - After onboarding, normal source-grounded work starts from raw/.
 - During startup, project description and helpful artifact URLs are optional. If absent, the LLM CLI agent records them as not provided, keeps external_sources_allowed at its default \`no\`, and infers working scope from the raw corpus.
 - When setup_status reaches workspace_started, the startup workflow has built the master dictionary, generated YAML headers, created multi-level navigation maps in maps/, and passed validation.
@@ -2694,7 +2695,7 @@ startup_prompt_text() {
   script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
   # Read the self-contained startup prompt template
-  cat "$script_dir/startup-prompt.md"
+  cat "$script_dir/startup-prompt.md" 2>/dev/null || true
 
   # Append workspace-specific metadata
   cat << PROMPT_EOF
@@ -3354,7 +3355,7 @@ cmd_new() {
 
   # ── Step 3: Initial workspace label ─────────────────────────────────────
   local project_name="$corpus_name"
-  note "Initial workspace label: ${BOLD}${project_name}${RESET} (from the source folder; startup can refine it)"
+  note "Initial workspace label: ${BOLD}${project_name}${RESET} (from the source folder)"
 
   # ── Step 4: Create workspace and copy framework ──────────────────────────
   if [[ -z "$FRAMEWORK_ROOT" ]]; then
@@ -4592,7 +4593,7 @@ auto_upgrade_check() {
 
   local latest
   if ! command -v curl >/dev/null 2>&1; then return 0; fi
-  latest="$(curl -fsSL "https://api.github.com/repos/TommasoPrinetti/spinosa/releases/latest" 2>/dev/null \
+  latest="$(curl -fsSL --connect-timeout 5 --max-time 15 "https://api.github.com/repos/TommasoPrinetti/spinosa/releases/latest" 2>/dev/null \
     | grep '"tag_name"' | sed 's/.*"v//;s/".*//')"
   [[ -n "$latest" ]] || return 0
 
