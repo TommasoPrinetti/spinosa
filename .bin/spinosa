@@ -8,9 +8,10 @@ set -euo pipefail
 ORIGINAL_ARGS=("$@")
 
 # ── spinosa — CLI entry point ────────────────────────────────────────────────
-# Usage: spinosa [new|upgrade|uninstall|help]
+# Usage: spinosa [add|new|upgrade|uninstall|help]
 #
 # Commands:
+#   add       Add files to an existing Spinosa workspace
 #   new       Create a new Spinosa workspace and run setup
 #   upgrade   Upgrade Spinosa CLI to latest release
 #   uninstall Remove Spinosa from this system
@@ -20,7 +21,7 @@ ORIGINAL_ARGS=("$@")
 if [[ "${NO_COLOR:-}" == "1" ]] || [[ ! -t 1 ]]; then
   R="" G="" B="" Y="" C="" M="" PG="" DIM="" BOLD="" RESET=""
 else
-  R=$'\033[32m' G=$'\033[32m' B=$'\033[32m' Y=$'\033[32m'
+  R=$'\033[31m' G=$'\033[32m' B=$'\033[32m' Y=$'\033[32m'
   C=$'\033[32m' M=$'\033[32m' PG=$'\033[32m' DIM=$'\033[2m' BOLD=$'\033[1m' RESET=$'\033[0m'
 fi
 
@@ -121,6 +122,9 @@ print_spinosa_banner() {
 header()    {
   print_spinosa_banner
   printf '\n%s\n\n' "${BOLD}${C}$1${RESET}"
+}
+title()     {
+  printf '\n  %s%s%s\n\n' "${BOLD}${C}" "$1" "${RESET}"
 }
 info()      { printf '  %s %s\n' "${DIM}→${RESET}" "$1"; }
 ok()        { printf '  %s %s\n' "${G}✦${RESET}" "$1"; }
@@ -1538,29 +1542,39 @@ scan_source() {
 
 print_scan_summary() {
   printf '  %s✓%s Source scan complete\n' "${G}" "${RESET}"
-  [[ "$SCAN_MARKDOWN_COUNT" -gt 0 ]] && printf '  %s├─%s %s to rename to .md (%s)\n' "${DIM}" "${RESET}" "$(file_type_label markdown "$(plural_count "$SCAN_MARKDOWN_COUNT" "text-based file")")" "$(format_bytes "$SCAN_MARKDOWN_BYTES")"
+  local first=1
+  local prefix
+  print_scan_row() {
+    if [[ "$first" -eq 1 ]]; then prefix='├─'; first=0; else prefix='├─'; fi
+    printf '  %s%s%s %s (%s)\n' "${DIM}" "$prefix" "${RESET}" "$1" "$2"
+  }
+  [[ "$SCAN_MARKDOWN_COUNT" -gt 0 ]] && print_scan_row "$(file_type_label markdown "$(plural_count "$SCAN_MARKDOWN_COUNT" "text-based file")") to rename to .md" "$(format_bytes "$SCAN_MARKDOWN_BYTES")"
   if [[ "$SCAN_MARKITDOWN_COUNT" -gt 0 ]]; then
     if markitdown_available; then
-      printf '  %s├─%s %s available for MarkItDown conversion (%s)\n' "${DIM}" "${RESET}" "$(file_type_label markitdown "$(plural_count "$SCAN_MARKITDOWN_COUNT" "Office/EPUB/HTML file")")" "$(format_bytes "$SCAN_MARKITDOWN_BYTES")"
+      print_scan_row "$(file_type_label markitdown "$(plural_count "$SCAN_MARKITDOWN_COUNT" "Office/EPUB/HTML file")") available for MarkItDown conversion" "$(format_bytes "$SCAN_MARKITDOWN_BYTES")"
     else
-      printf '  %s├─🥀%s %s skipped — MarkItDown not available (%s)\n' "${DIM}" "${RESET}" "$(file_type_label markitdown "$(plural_count "$SCAN_MARKITDOWN_COUNT" "Office/EPUB/HTML file")")" "$(format_bytes "$SCAN_MARKITDOWN_BYTES")"
+      print_scan_row "$(file_type_label markitdown "$(plural_count "$SCAN_MARKITDOWN_COUNT" "Office/EPUB/HTML file")") skipped — MarkItDown not available" "$(format_bytes "$SCAN_MARKITDOWN_BYTES")"
     fi
   fi
-  [[ "$SCAN_NATIVE_COUNT" -gt 0 ]] && printf '  %s├─%s %s to copy unchanged (%s)\n' "${DIM}" "${RESET}" "$(file_type_label native "$(plural_count "$SCAN_NATIVE_COUNT" "native-readable file")")" "$(format_bytes "$SCAN_NATIVE_BYTES")"
+  [[ "$SCAN_NATIVE_COUNT" -gt 0 ]] && print_scan_row "$(file_type_label native "$(plural_count "$SCAN_NATIVE_COUNT" "native-readable file")") to copy unchanged" "$(format_bytes "$SCAN_NATIVE_BYTES")"
   if [[ "$SCAN_OCR_CONVERTIBLE_COUNT" -gt 0 ]]; then
     if rapidocr_ocr_available; then
-      printf '  %s├─%s %s available for OCR (scanned PDFs and images) (%s)\n' "${DIM}" "${RESET}" "$(file_type_label image "$(plural_count "$SCAN_OCR_CONVERTIBLE_COUNT" "scanned PDF and image")")" "$(format_bytes "$SCAN_OCR_CONVERTIBLE_BYTES")"
+      print_scan_row "$(file_type_label image "$(plural_count "$SCAN_OCR_CONVERTIBLE_COUNT" "scanned PDF and image")") available for OCR" "$(format_bytes "$SCAN_OCR_CONVERTIBLE_BYTES")"
     else
-      printf '  %s├─🥀%s %s skipped — RapidOCR not available (%s)\n' "${DIM}" "${RESET}" "$(file_type_label image "$(plural_count "$SCAN_OCR_CONVERTIBLE_COUNT" "scanned PDF and image")")" "$(format_bytes "$SCAN_OCR_CONVERTIBLE_BYTES")"
+      print_scan_row "$(file_type_label image "$(plural_count "$SCAN_OCR_CONVERTIBLE_COUNT" "scanned PDF and image")") skipped — RapidOCR not available" "$(format_bytes "$SCAN_OCR_CONVERTIBLE_BYTES")"
     fi
   fi
-  [[ "$SCAN_BINARY_COPYABLE_COUNT" -gt 0 ]] && printf '  %s├─%s %s to copy as-is (%s)\n' "${DIM}" "${RESET}" "$(file_type_label pdf "$(plural_count "$SCAN_BINARY_COPYABLE_COUNT" "PDF")")" "$(format_bytes "$SCAN_BINARY_COPYABLE_BYTES")"
-  [[ "$SCAN_VIDEO_COUNT" -gt 0 ]] && printf '  %s├─%s %s available (not selected by default) (%s)\n' "${DIM}" "${RESET}" "$(file_type_label video "$(plural_count "$SCAN_VIDEO_COUNT" "video")")" "$(format_bytes "$SCAN_VIDEO_BYTES")"
-  [[ "$SCAN_AUDIO_COUNT" -gt 0 ]] && printf '  %s├─%s %s available (not selected by default) (%s)\n' "${DIM}" "${RESET}" "$(file_type_label audio "$(plural_count "$SCAN_AUDIO_COUNT" "audio file")")" "$(format_bytes "$SCAN_AUDIO_BYTES")"
-  [[ "$SCAN_UNKNOWN_COUNT" -gt 0 ]] && printf '  %s├─🌵%s %s unsupported or unknown (%s)\n' "${DIM}" "${RESET}" "$(file_type_label unknown "$(plural_count "$SCAN_UNKNOWN_COUNT" "file")")" "$(format_bytes "$SCAN_UNKNOWN_BYTES")"
-  printf '  %s└─%s %s ignored\n' "${DIM}" "${RESET}" "$(file_type_label ignored "$(plural_count "$SCAN_IGNORED_COUNT" "file")")"
-  note "MarkItDown handles Office docs, EPUB, HTML, and text-based PDFs."
-  note "RapidOCR handles scanned PDFs and images via off-line OCR."
+  [[ "$SCAN_BINARY_COPYABLE_COUNT" -gt 0 ]] && print_scan_row "$(file_type_label pdf "$(plural_count "$SCAN_BINARY_COPYABLE_COUNT" "PDF")") to copy as-is" "$(format_bytes "$SCAN_BINARY_COPYABLE_BYTES")"
+  [[ "$SCAN_VIDEO_COUNT" -gt 0 ]] && print_scan_row "$(file_type_label video "$(plural_count "$SCAN_VIDEO_COUNT" "video")") available (not selected by default)" "$(format_bytes "$SCAN_VIDEO_BYTES")"
+  [[ "$SCAN_AUDIO_COUNT" -gt 0 ]] && print_scan_row "$(file_type_label audio "$(plural_count "$SCAN_AUDIO_COUNT" "audio file")") available (not selected by default)" "$(format_bytes "$SCAN_AUDIO_BYTES")"
+  [[ "$SCAN_UNKNOWN_COUNT" -gt 0 ]] && print_scan_row "$(file_type_label unknown "$(plural_count "$SCAN_UNKNOWN_COUNT" "file")") unsupported or unknown" "$(format_bytes "$SCAN_UNKNOWN_BYTES")"
+  if [[ "$SCAN_IGNORED_COUNT" -gt 0 ]]; then
+    if [[ "$first" -eq 1 ]]; then prefix='├─'; first=0; else prefix='├─'; fi
+    printf '  %s%s%s %s\n' "${DIM}" "$prefix" "${RESET}" "$(file_type_label ignored "$(plural_count "$SCAN_IGNORED_COUNT" "file")")"
+  fi
+  if [[ "$first" -eq 0 ]]; then
+    printf '  %s└─%s\n' "${DIM}" "${RESET}"
+  fi
 }
 
 scan_copyable_bytes() {
@@ -1580,16 +1594,15 @@ print_onboarding_preflight() {
   ok "Workspace writable: ${BOLD}$(display_path "$root")${RESET}"
   repair_vendor_tools
   if rapidocr_ocr_available; then
-    ok "${M}OCR${RESET} RapidOCR available for scanned PDFs and images"
+    ok "${M}RapidOCR${RESET} available for scanned PDFs and images"
   else
     note_wilted "RapidOCR not available — scanned PDFs and images will be skipped."
   fi
   if markitdown_available; then
-    ok "${G}MarkItDown${RESET} available for Office docs, EPUB, HTML, and text-based PDFs"
+    ok "MarkItDown available for Office docs, EPUB, HTML, and text-based PDFs"
   else
     note_wilted "MarkItDown not available — Office docs, EPUB, HTML, and text-based PDFs will be skipped."
   fi
-  note "Audio and video files are copied unchanged when selected."
 
   free_bytes="$(available_disk_bytes "$root")"
   if [[ "$free_bytes" -gt 0 ]]; then
@@ -2851,7 +2864,7 @@ cmd_uninstall() {
 
   local bin_dir="${SPINOSA_BIN_DIR:-$HOME/.local/bin}"
 
-  header "Spinosa — Uninstall"
+  title "Uninstall"
 
   if [[ ! -d "$SPINOSA_HOME" ]]; then
     info "Spinosa is not installed (${SPINOSA_HOME} not found)."
@@ -2888,13 +2901,14 @@ cmd_uninstall() {
 # COMMAND: help
 # ═══════════════════════════════════════════════════════════════════════════
 cmd_help() {
-  header "Spinosa — Research Framework CLI"
+  title "Spinosa — Research Framework CLI"
 
   printf '  %s\n' "${BOLD}Usage:${RESET}"
-  printf '    %s\n' "spinosa new [directory]    Create a new workspace and run setup"
-  printf '    %s\n' "spinosa upgrade           Upgrade Spinosa CLI to latest release"
-  printf '    %s\n' "spinosa uninstall         Remove Spinosa from this system"
-  printf '    %s\n' "spinosa help              Show this help"
+  printf '  %s\n' "spinosa new [directory]    Create a new workspace and run setup"
+  printf '  %s\n' "spinosa add [options]     Add files to an existing workspace"
+  printf '  %s\n' "spinosa upgrade           Upgrade Spinosa CLI to latest release"
+  printf '  %s\n' "spinosa uninstall         Remove Spinosa from this system"
+  printf '  %s\n' "spinosa help              Show this help"
   printf '\n'
 
   # Detect workspace
@@ -3094,6 +3108,502 @@ EOF
     exit 1
   fi
 }
+
+prompt_add_text() {
+  local root="$1" preferred_cli="$2"
+  local raw_count
+  raw_count="$(find "$root/raw" -type f -name '*.md' 2>/dev/null | wc -l | tr -d ' ')"
+  cat << PROMPT_EOF
+Workspace: ${root}
+
+New source files have been added to this Spinosa workspace.
+
+The CLI has already imported and converted the new files into raw/.
+
+The raw/ corpus now contains approximately ${raw_count} Markdown files.
+
+Read these files first, in this order:
+1. AGENTS.md
+2. system/configuration.md
+3. system/context.md
+4. system/startup.md
+5. system/dictionary.md
+6. system/workspace_index.md
+7. .spinosa/add-summary.md
+
+Tasks to perform:
+
+1. Detect new files in raw/ that are not yet in maps/ or system/dictionary.md.
+2. Group the new files into batches of 20-25.
+3. Spawn a spinosa-mapper sub-agent per batch to extract:
+   - Dictionary terms (names, places, organizations, domain terms, concepts)
+   - Content signatures (one-paragraph summary, key passages with line refs, concept signals, connections)
+4. Merge all extraction results into agent_reports/extraction_checkpoint.md.
+5. Update system/dictionary.md with new terms from the new files.
+6. Update navigation maps in maps/ to include the new files:
+   - Update maps/corpus_overview.md with new structural groups if needed.
+   - Update or create group maps for any new natural groups.
+   - Update theme maps with cross-cutting concepts from the new files.
+7. Update system/workspace_index.md to reflect the expanded corpus.
+8. Run spinosa-verifier on new content to truth-check claims and passages.
+9. Run .bin/check-startup.sh to validate workspace integrity.
+
+Corpus boundary:
+- Treat raw/ as the only source corpus.
+- Do not edit raw/ file bodies.
+- External sources are disabled unless the user explicitly asks for them.
+
+Preferred LLM CLI: ${preferred_cli}
+
+Finished means:
+- Every new file has been accounted for in dictionary, maps, and index.
+- system/workspace_index.md records updated coverage, maps, and gaps.
+- agent_reports/ contains an add report with validation and retrieval-test results.
+
+Do not re-index files that are already mapped. Only process additions.
+PROMPT_EOF
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# COMMAND: add
+# ═══════════════════════════════════════════════════════════════════════════
+# Flow: select workspace -> get source file/folder -> run pipeline -> generate re-mapper prompt
+cmd_add() {
+  header "Spinosa -- Add Files"
+
+  local workspace_path=""
+  local source_path=""
+  local source_is_dir=0
+  local flag_cli=""
+  local flag_launch=""
+  local add_args
+  add_args=()
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --workspace|-w)     workspace_path="$2"; shift 2 ;;
+      --file|-f)          source_path="$2"; shift 2 ;;
+      --dir|-d)           source_path="$2"; source_is_dir=1; shift 2 ;;
+      --cli)              flag_cli="$2"; shift 2 ;;
+      --launch)           flag_launch="$2"; shift 2 ;;
+      --no-color)         R="" G="" B="" Y="" C="" M="" PG="" DIM="" BOLD="" RESET=""; shift ;;
+      --help|-h)
+        printf '  %s\n' "Usage: spinosa add [options]"
+        printf '    %s\n' "  --workspace, -w  Path to existing Spinosa workspace"
+        printf '    %s\n' "  --file, -f       Single file to add to the workspace"
+        printf '    %s\n' "  --dir, -d        Directory of files to add (scanned and batch-converted)"
+        printf '    %s\n' "  --cli            Preferred LLM CLI (opencode, gemini, qwen, claude_code, codex, kilo, other)"
+        printf '    %s\n' "  --launch         Launch method (copy, run)"
+        printf '    %s\n' "  --no-color       Disable colored output"
+        return 0
+        ;;
+      *)
+        add_args+=("$1")
+        shift
+        ;;
+    esac
+  done
+
+  # ---- Step 1: Workspace selection ------------------------------------------------
+  print_step 1 3 "Workspace selection"
+
+  if [[ -n "$workspace_path" ]]; then
+    workspace_path="$(expand_home "$workspace_path")"
+    if ! validate_workspace "$workspace_path"; then
+      die "Not a valid Spinosa workspace: $workspace_path"
+    fi
+    ok "Workspace: ${BOLD}$(display_path "$workspace_path")${RESET}"
+  else
+    local ws_result
+    ws_result="$(require_workspace 2>&1)" || die "No workspace selected."
+    workspace_path="$ws_result"
+    ok "Workspace: ${BOLD}$(display_path "$workspace_path")${RESET}"
+  fi
+
+  # ---- Step 2: Source path collection -------------------------------------------------
+  print_step 2 3 "Source selection"
+
+  if [[ -z "$source_path" ]]; then
+    if [[ ${#add_args[@]} -gt 0 ]]; then
+      source_path="${add_args[0]}"
+      source_path="$(expand_home "$source_path")"
+      if [[ -d "$source_path" ]]; then
+        source_is_dir=1
+      elif [[ -f "$source_path" ]]; then
+        source_is_dir=0
+      else
+        die "Not a valid file or directory: $source_path"
+      fi
+    else
+      local source_options=(
+        "$(option_spec "file" "A single file" "import one file")"
+        "$(option_spec "dir" "A directory of files" "scan and batch-import a folder")"
+      )
+      local source_type
+      source_type="$(prompt_choose "What do you want to add?" "${source_options[@]}")" || die "Cancelled."
+
+      if [[ "$source_type" == "file" ]]; then
+        while true; do
+          source_path="$(prompt_input "File path" "" "absolute path to a single file")"
+          source_path="$(expand_home "$source_path")"
+          if [[ -z "$source_path" ]]; then
+            printf '  %s\n' "${R}File path is required.${RESET}" >&2
+          elif [[ ! -f "$source_path" ]]; then
+            printf '  %s\n' "${R}Not a file: $(display_path "$source_path")${RESET}" >&2
+          else
+            source_is_dir=0
+            break
+          fi
+        done
+      else
+        while true; do
+          source_path="$(prompt_directory "Folder path" "" "absolute path to a directory")"
+          source_path="$(expand_home "$source_path")"
+          if [[ -z "$source_path" ]]; then
+            printf '  %s\n' "${R}Folder path is required.${RESET}" >&2
+          elif [[ ! -d "$source_path" ]]; then
+            printf '  %s\n' "${R}Not a directory: $(display_path "$source_path")${RESET}" >&2
+          else
+            source_is_dir=1
+            break
+          fi
+        done
+      fi
+    fi
+  else
+    source_path="$(expand_home "$source_path")"
+    if [[ "$source_is_dir" -eq 1 ]]; then
+      [[ -d "$source_path" ]] || die "Not a directory: $(display_path "$source_path")"
+    else
+      [[ -f "$source_path" ]] || die "Not a file: $(display_path "$source_path")"
+    fi
+  fi
+
+  ok "Source: ${BOLD}$(display_path "$source_path")${RESET}"
+
+  local raw_dir="$workspace_path/raw"
+  [[ -d "$raw_dir" ]] || mkdir -p "$raw_dir"
+
+  # ---- Step 3: File intake -------------------------------------------------
+  print_step 3 3 "File import"
+
+  local add_copied=0 add_skipped=0 add_failed=0
+  local add_md_converted=0 add_md_skipped=0
+  local add_ocr_converted=0 add_ocr_skipped=0
+  local ADD_TOTAL_COUNT=0
+
+  if [[ "$source_is_dir" -eq 1 ]]; then
+    # ---- Folder mode: full scan + batch import -----------------------------
+    print_onboarding_preflight "$workspace_path"
+    reset_import_batches
+    scan_source "$source_path"
+    print_scan_summary
+
+    if [[ -n "${flag_extensions:-}" ]]; then
+      IFS=',' read -ra SELECTED_IMPORT_EXTENSIONS <<< "${flag_extensions:-}"
+    else
+      choose_import_batches || die "No file types selected."
+    fi
+
+    SCAN_MARKITDOWN_CHOICE="no"
+    if markitdown_available; then
+      local _ext
+      for _ext in "${SELECTED_IMPORT_EXTENSIONS[@]}"; do
+        if [[ "$_ext" == "pdf" ]] || ext_in_list "$_ext" "$MARKITDOWN_EXTENSIONS"; then
+          SCAN_MARKITDOWN_CHOICE="yes"
+          break
+        fi
+      done
+    fi
+
+    SCAN_OCR_CHOICE="no"
+    if rapidocr_ocr_available; then
+      local _oext
+      for _oext in "${SELECTED_IMPORT_EXTENSIONS[@]}"; do
+        if ext_in_list "$_oext" "$IMAGE_EXTENSIONS" || [[ "$_oext" == "pdf" ]]; then
+          SCAN_OCR_CHOICE="yes"
+          break
+        fi
+      done
+    fi
+
+    local copyable_count
+    copyable_count="$(selected_import_count)"
+    if [[ "$copyable_count" -eq 0 ]]; then
+      die "No files selected for import."
+    fi
+    note "Importing ${copyable_count} files..."
+    copy_source "$source_path" "$raw_dir"
+
+    add_copied="${COPY_COPIED_COUNT:-0}"
+    add_skipped="${COPY_SKIPPED_COUNT:-0}"
+    add_failed="${COPY_FAILED_COUNT:-0}"
+    add_md_converted="${COPY_MARKITDOWN_CONVERTED_COUNT:-0}"
+    add_md_skipped="${COPY_MARKITDOWN_SKIPPED_COUNT:-0}"
+    add_ocr_converted="${COPY_OCR_CONVERTED_COUNT:-0}"
+    add_ocr_skipped="${COPY_OCR_SKIPPED_COUNT:-0}"
+    ADD_TOTAL_COUNT="$copyable_count"
+  else
+    # ---- Single file mode: classify and process one file ---------------
+    local src_file="$source_path"
+    local file_class
+    file_class="$(classify_source_file "$src_file")"
+
+    case "$file_class" in
+      ignored)
+        die "File is a protected Spinosa file and will not be imported: $(basename "$src_file")"
+        ;;
+      markdown|native)
+        local rel_path dest_file dest_name
+        rel_path="$(basename "$src_file")"
+        if [[ "$file_class" == "markdown" ]]; then
+          dest_name="$(markdown_raw_rel_path "$rel_path")"
+          dest_file="$raw_dir/$dest_name"
+        else
+          dest_name="$rel_path"
+          dest_file="$raw_dir/$dest_name"
+        fi
+        mkdir -p "$(dirname "$dest_file")"
+        if [[ -f "$dest_file" ]]; then
+          warn "Already exists in raw/: $dest_name"
+          if confirm "Overwrite?" "n"; then
+            safe_copy "$src_file" "$dest_file" && add_copied=1 || add_failed=1
+          else
+            add_skipped=1
+          fi
+        else
+          safe_copy "$src_file" "$dest_file" && add_copied=1 || add_failed=1
+        fi
+        ADD_TOTAL_COUNT=1
+        ;;
+      markitdown)
+        if ! markitdown_available; then
+          die "MarkItDown is not available. Cannot convert: $(basename "$src_file")"
+        fi
+        local rel_path stem dest_name dest_file
+        rel_path="$(basename "$src_file")"
+        stem="${rel_path%.*}"
+        dest_name="${stem}__$(file_ext "$src_file").md"
+        dest_file="$raw_dir/$dest_name"
+        mkdir -p "$(dirname "$dest_file")"
+        if [[ -f "$dest_file" ]] && ! confirm "Overwrite?" "n"; then
+          add_skipped=1
+          ADD_TOTAL_COUNT=1
+        else
+          local _md_log="$workspace_path/logs/markitdown-processed.ndjson"
+          mkdir -p "$(dirname "$_md_log")"
+          local _md_bin
+          _md_bin="$(markitdown_bin)" || die "MarkItDown binary not found."
+          local _md_fifo_dir _md_fifo
+          _md_fifo_dir="$(mktemp -d)"
+          _md_fifo="${_md_fifo_dir}/fifo"
+          mkfifo "$_md_fifo" 2>/dev/null || die "Could not create FIFO for MarkItDown."
+          (
+            printf '%s\t%s\n' SOURCE "$(dirname "$src_file")"
+            printf '%s\t%s\t%s\n' FILE "$src_file" "$dest_file"
+          ) | "$_md_bin" --batch 2>"$_md_fifo" &
+          local _md_pid=$!
+          local _md_status="fail"
+          exec 3<"$_md_fifo"
+          while IFS= read -r -t 30 -u 3 _line; do
+            if [[ "$_line" == END* ]]; then
+              local _rest="${_line#END$'\t'}"
+              local _end_status="${_rest%%$'\t'*}"
+              [[ "$_end_status" == "ok" ]] && _md_status="ok"
+            fi
+          done
+          exec 3<&-
+          wait "$_md_pid" 2>/dev/null || true
+          rm -rf "$_md_fifo_dir"
+          if [[ "$_md_status" == "ok" ]]; then
+            add_copied=1
+            add_md_converted=1
+          else
+            add_skipped=1
+            add_md_skipped=1
+          fi
+          ADD_TOTAL_COUNT=1
+        fi
+        ;;
+      ocr_convertible)
+        if ! rapidocr_ocr_available; then
+          die "RapidOCR is not available. Cannot convert: $(basename "$src_file")"
+        fi
+        local rel_path stem dest_file
+        rel_path="$(basename "$src_file")"
+        stem="${rel_path%.*}"
+        dest_file="$raw_dir/${stem}.md"
+        mkdir -p "$(dirname "$dest_file")"
+        if [[ -f "$dest_file" ]] && ! confirm "Overwrite?" "n"; then
+          add_skipped=1
+          ADD_TOTAL_COUNT=1
+        else
+          local _ocr_log="$workspace_path/logs/ocr-processed.ndjson"
+          mkdir -p "$(dirname "$_ocr_log")"
+          local _ocr_bin
+          _ocr_bin="$(rapidocr_ocr_bin)" || die "OCR binary not found."
+          local _ocr_fifo_dir _ocr_fifo
+          _ocr_fifo_dir="$(mktemp -d)"
+          _ocr_fifo="${_ocr_fifo_dir}/fifo"
+          mkfifo "$_ocr_fifo" 2>/dev/null || die "Could not create FIFO for OCR."
+          (
+            printf '%s\t%s\n' SOURCE "$(dirname "$src_file")"
+            printf '%s\t%s\t%s\n' FILE "$src_file" "$dest_file"
+          ) | "$_ocr_bin" --batch 2>"$_ocr_fifo" &
+          local _ocr_pid=$!
+          local _ocr_status="fail"
+          exec 4<"$_ocr_fifo"
+          while IFS= read -r -t 60 -u 4 _line; do
+            if [[ "$_line" == END* ]]; then
+              local _rest="${_line#END$'\t'}"
+              local _end_status="${_rest%%$'\t'*}"
+              [[ "$_end_status" == "ok" ]] && _ocr_status="ok"
+            fi
+          done
+          exec 4<&-
+          wait "$_ocr_pid" 2>/dev/null || true
+          rm -rf "$_ocr_fifo_dir"
+          if [[ "$_ocr_status" == "ok" ]]; then
+            add_copied=1
+            add_ocr_converted=1
+          else
+            add_skipped=1
+            add_ocr_skipped=1
+          fi
+          ADD_TOTAL_COUNT=1
+        fi
+        ;;
+      video|audio)
+        local dest_file="$raw_dir/$(basename "$src_file")"
+        mkdir -p "$(dirname "$dest_file")"
+        if [[ -f "$dest_file" ]]; then
+          warn "Already exists in raw/: $(basename "$src_file")"
+          if confirm "Overwrite?" "n"; then
+            safe_copy "$src_file" "$dest_file" && add_copied=1 || add_failed=1
+          else
+            add_skipped=1
+          fi
+        else
+          safe_copy "$src_file" "$dest_file" && add_copied=1 || add_failed=1
+        fi
+        ADD_TOTAL_COUNT=1
+        ;;
+      unknown)
+        local dest_file="$raw_dir/$(basename "$src_file")"
+        note "Unknown type for $(basename "$src_file") -- copying as-is."
+        mkdir -p "$(dirname "$dest_file")"
+        if [[ -f "$dest_file" ]]; then
+          warn "Already exists in raw/: $(basename "$src_file")"
+          if confirm "Overwrite?" "n"; then
+            safe_copy "$src_file" "$dest_file" && add_copied=1 || add_failed=1
+          else
+            add_skipped=1
+          fi
+        else
+          safe_copy "$src_file" "$dest_file" && add_copied=1 || add_failed=1
+        fi
+        ADD_TOTAL_COUNT=1
+        ;;
+    esac
+  fi
+
+  printf '\n'
+  if [[ "$add_failed" -gt 0 ]]; then
+    warn "$add_failed file(s) could not be copied."
+  fi
+  if [[ "$add_copied" -gt 0 ]] || [[ "$add_md_converted" -gt 0 ]] || [[ "$add_ocr_converted" -gt 0 ]]; then
+    ok "Added ${add_copied} file(s) to workspace (${add_md_converted} MarkItDown, ${add_ocr_converted} OCR)"
+    [[ "$add_skipped" -gt 0 ]] && note "${add_skipped} file(s) skipped (already exist)"
+  else
+    warn "No files were added."
+  fi
+
+  # ---- Step 4: Write add summary -------------------------------------------------
+  local summary_path="$workspace_path/.spinosa/add-summary.md"
+  local preferred_cli_label="OpenCode"
+  if [[ -n "$flag_cli" ]]; then
+    preferred_cli_label="$(preferred_cli_name "$flag_cli")"
+  fi
+
+  local add_mode="folder"
+  [[ "$source_is_dir" -eq 0 ]] && add_mode="single_file"
+
+  mkdir -p "$(dirname "$summary_path")"
+  cat > "$summary_path" << SUMMARY_EOF
+---
+type: add_summary
+created: $TODAY
+add_timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+---
+
+# Add Summary
+
+## Source
+- Source path: $(display_path "$source_path")
+- Add mode: ${add_mode}
+- Workspace: $(display_path "$workspace_path")
+
+## Import Result
+- Total files targeted: ${ADD_TOTAL_COUNT:-0}
+- Files copied: ${add_copied:-0}
+- Files skipped: ${add_skipped:-0}
+- Files failed: ${add_failed:-0}
+- MarkItDown converted: ${add_md_converted:-0}
+- MarkItDown skipped: ${add_md_skipped:-0}
+- OCR converted: ${add_ocr_converted:-0}
+- OCR skipped: ${add_ocr_skipped:-0}
+
+## Post-Add Status
+- Post-add action: re-mapper prompt generated
+- Preferred CLI: ${preferred_cli_label}
+- Pending: mapper extraction, dictionary update, map update, verification
+SUMMARY_EOF
+
+  ok "Add summary written"
+
+  # ---- Step 5: Generate re-mapper prompt -------------------------------------------------
+  printf '\n'
+  header "Copy this prompt and paste it in your tool"
+
+  local add_prompt
+  add_prompt="$(prompt_add_text "$workspace_path" "$preferred_cli_label")"
+  printf '\n%s%s%s\n\n' "${G}" "$add_prompt" "${RESET}"
+
+  # ---- Step 6: Handoff -------------------------------------------------
+  local handoff_action handoff_action_text
+  local launch_command
+  launch_command="$(build_launch_command "$workspace_path" "${flag_cli:-other}" "$add_prompt")"
+
+  if [[ -n "$flag_launch" ]]; then
+    case "$flag_launch" in
+      copy) handoff_action="copy_command" ;;
+      run)  handoff_action="run_now" ;;
+      *)    die "Invalid --launch value: $flag_launch (valid: copy, run)" ;;
+    esac
+  else
+    handoff_action="selected_cli"
+  fi
+  handoff_action_text="$(handoff_action_label "$handoff_action")"
+
+  if [[ "$handoff_action" == "selected_cli" && -n "$flag_cli" ]]; then
+    handoff_selected_cli "$workspace_path" "$flag_cli" "$preferred_cli_label" "$add_prompt" "$launch_command"
+  elif [[ "$handoff_action" == "run_now" ]] && [[ -n "$flag_cli" ]]; then
+    run_cli_with_prompt "$workspace_path" "$flag_cli" "$add_prompt" || {
+      warn "Could not run ${preferred_cli_label}. Copying the launch command instead."
+      copy_to_clipboard "$launch_command" && ok "Launch command copied to your clipboard." || print_box "Terminal Launch Command -- full text" <<< "$launch_command"
+    }
+  else
+    copy_to_clipboard "$launch_command" && ok "Launch command copied to your clipboard." || print_box "Terminal Launch Command -- full text" <<< "$launch_command"
+  fi
+
+  divider
+  ok "Add complete: ${BOLD}$(display_path "$workspace_path")${RESET}"
+  printf '\n'
+}
+
+
+
+
 
 
 
@@ -3520,7 +4030,7 @@ cmd_upgrade() {
     esac
   done
 
-  header "Spinosa — Upgrade"
+  title "Upgrade"
 
   # ── resolve target version early ───────────────────────────────────────
   # SPINOSA_REPO env var is intentionally NOT used — self-upgrade
@@ -3801,6 +4311,7 @@ fi
 # MAIN
 # ═══════════════════════════════════════════════════════════════════════════
 case "${1:-}" in
+  add)       shift; cmd_add "$@" ;;
   new)       shift; cmd_new "$@" ;;
   upgrade)   shift; cmd_upgrade "$@" ;;
   uninstall) shift; cmd_uninstall "$@" ;;

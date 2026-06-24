@@ -277,7 +277,7 @@ For each segment:
 - Never invent evidence. Only use what Searcher (and optionally Analyst) provided.
 - Write only to `agent_reports/`.
 - Always cite source paths in the body.
-- Apply the full verbatim quote format from `.agents/skills/report-writing/references/verbatim-format.md` for direct quotes.
+- Apply the full verbatim quote format from `.agents/references/verbatim-format.md` for direct quotes.
 - Separate facts from interpretation — label interpretation clearly.
 - Keep reports concise. Do not pad with filler.
 - When Analyst provides broader context, integrate it into Analysis — do not duplicate it as a separate section.
@@ -286,10 +286,15 @@ For each segment:
 - Set Status to `○ pending` — Verifier updates it after verification.
 - Append one metrics row with operation `synthesis`, directories seen, maps read, raw files read, reports written, and output path. Use `.bin/lib/metrics.sh` when available; never log raw command output, long grep terms, source excerpts, secrets, or credentials.
 
-## Process File Cleanup
+## Process File Lifecycle
 
-After the final report is verified by Verifier:
+Process files are intermediate artifacts created during search and synthesis:
 
-1. Move process files to `.trash/`: `evidence_packet.md`, `evidence_appendix.md`, any `extraction_batch_*.md`.
-2. Keep only the numbered final reports in `agent_reports/` (e.g., `00_startup-report.md`, `01_evidence-analysis.md`).
-3. Report which files were moved in the close-out summary.
+| Process File | Created By | Purpose | Cleanup |
+|---|---|---|---|
+| `evidence_packet.md` | Searcher | Raw evidence from corpus | Move to `.trash/` after report verified |
+| `evidence_appendix.md` | Searcher | Overflow evidence (when >300 lines) | Move to `.trash/` after report verified |
+| `extraction_batch_*.md` | Mapper | Extraction packets per batch | Move to `.trash/` after indexing complete |
+| `NN_*.md` | Writer/Serendippo | Numbered final reports | Keep in `agent_reports/` |
+
+**Rule:** Only the numbered final verified reports stay in `agent_reports/`. All process files are moved to `.trash/` after delivery.
