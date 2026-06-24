@@ -864,7 +864,7 @@ maybe_launch_dashboard() {
     sleep 1
     exec "${SPINOSA_BIN_DIR}/spinosa" </dev/tty || die "Failed to launch Spinosa dashboard"
   fi
-  info "Run Spinosa with: ${SPINOSA_BIN_DIR}/spinosa"
+  info "Run Spinosa with: spinosa"
 }
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -955,6 +955,9 @@ main() {
   echo ""
   run_basic_test
   setup_shell_path
+
+  # Export PATH for current session so `spinosa` resolves immediately
+  export PATH="$SPINOSA_BIN_DIR:$PATH"
 
   echo ""
   divider
