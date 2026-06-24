@@ -3176,6 +3176,7 @@ cmd_add() {
   local source_is_dir=0
   local flag_cli=""
   local flag_launch=""
+  local flag_extensions=""
   local add_args
   add_args=()
 
@@ -3184,6 +3185,7 @@ cmd_add() {
       --workspace|-w)     workspace_path="$2"; shift 2 ;;
       --file|-f)          source_path="$2"; shift 2 ;;
       --dir|-d)           source_path="$2"; source_is_dir=1; shift 2 ;;
+      --extensions)       flag_extensions="$2"; shift 2 ;;
       --cli)              flag_cli="$2"; shift 2 ;;
       --launch)           flag_launch="$2"; shift 2 ;;
       --no-color)         R="" G="" B="" Y="" C="" M="" PG="" DIM="" BOLD="" RESET=""; shift ;;
@@ -3192,6 +3194,7 @@ cmd_add() {
         printf '    %s\n' "  --workspace, -w  Path to existing Spinosa workspace"
         printf '    %s\n' "  --file, -f       Single file to add to the workspace"
         printf '    %s\n' "  --dir, -d        Directory of files to add (scanned and batch-converted)"
+        printf '    %s\n' "  --extensions     Comma-separated file types to import (e.g. txt,pdf)"
         printf '    %s\n' "  --cli            Preferred LLM CLI (opencode, gemini, qwen, claude_code, codex, kilo, other)"
         printf '    %s\n' "  --launch         Launch method (copy, run)"
         printf '    %s\n' "  --no-color       Disable colored output"
@@ -3214,9 +3217,7 @@ cmd_add() {
     fi
     ok "Workspace: ${BOLD}$(display_path "$workspace_path")${RESET}"
   else
-    local ws_result
-    ws_result="$(require_workspace 2>&1)" || die "No workspace selected."
-    workspace_path="$ws_result"
+    workspace_path="$(require_workspace)" || die "No workspace selected."
     ok "Workspace: ${BOLD}$(display_path "$workspace_path")${RESET}"
   fi
 
@@ -3570,7 +3571,7 @@ SUMMARY_EOF
   printf '\n%s%s%s\n\n' "${G}" "$add_prompt" "${RESET}"
 
   # ---- Step 6: Handoff -------------------------------------------------
-  local handoff_action handoff_action_text
+  local handoff_action
   local launch_command
   launch_command="$(build_launch_command "$workspace_path" "${flag_cli:-other}" "$add_prompt")"
 
@@ -3583,8 +3584,6 @@ SUMMARY_EOF
   else
     handoff_action="selected_cli"
   fi
-  handoff_action_text="$(handoff_action_label "$handoff_action")"
-
   if [[ "$handoff_action" == "selected_cli" && -n "$flag_cli" ]]; then
     handoff_selected_cli "$workspace_path" "$flag_cli" "$preferred_cli_label" "$add_prompt" "$launch_command"
   elif [[ "$handoff_action" == "run_now" ]] && [[ -n "$flag_cli" ]]; then
