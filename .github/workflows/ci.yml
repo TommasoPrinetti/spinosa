@@ -15,6 +15,7 @@ jobs:
       - name: Shell syntax check
         run: |
           bash -n .bin/spinosa
+          bash -n .bin/lib/spinosa/*.sh
           bash -n .bin/check-doc-contract.sh
           bash -n .bin/check-startup.sh
           bash -n .bin/validate-skills.sh

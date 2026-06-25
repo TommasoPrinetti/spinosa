@@ -58,6 +58,7 @@ END\tok|fail\t<rel_path>\t<duration_seconds>
 5. **Exit code**: The converter process exits 0 on overall success. Individual file
    failures are reported via `END fail`, not via exit code.
 6. **PROGRESS omission**: If a converter emits BEGIN → END with no PROGRESS lines,
-   the orchestrator displays progress without per-unit page information. Converters
-   that know they never emit PROGRESS should signal this by emitting a single
-   `PROGRESS 0/0` immediately after BEGIN, or simply omit PROGRESS entirely.
+   the orchestrator displays the active file and elapsed wait time without advancing
+   per-unit progress. Converters that know they never emit PROGRESS should signal this
+   by emitting a single `PROGRESS 0/0` immediately after BEGIN, or simply omit
+   PROGRESS entirely.

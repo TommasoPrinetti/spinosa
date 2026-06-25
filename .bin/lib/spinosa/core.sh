@@ -1,0 +1,232 @@
+# shellcheck shell=bash
+# Core filesystem, release, checksum, and formatting helpers for spinosa.
+
+normalize_path_input() {
+  local value="$1"
+  value="${value#"${value%%[![:space:]]*}"}"
+  value="${value%"${value##*[![:space:]]}"}"
+  if [[ ${#value} -ge 2 ]]; then
+    if [[ "${value:0:1}" == "'" && "${value: -1}" == "'" ]] || [[ "${value:0:1}" == '"' && "${value: -1}" == '"' ]]; then
+      value="${value:1:${#value}-2}"
+    fi
+  fi
+  value="${value//\\ / }"
+  echo "$value"
+}
+
+
+expand_home() {
+  local path="$1"
+  if [[ "$path" == "~"* ]]; then
+    path="${path/#\~/$HOME}"
+  fi
+  echo "$path"
+}
+
+# ── checksum helper ─────────────────────────────────────────────────────────
+
+sha256_file() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$1" | awk '{print $1}'
+  else
+    return 1
+  fi
+}
+
+
+download_file() {
+  local url="$1" dest="$2"
+  if command -v curl >/dev/null 2>&1; then
+    curl -fSL --progress-bar "$url" -o "$dest"
+  elif command -v wget >/dev/null 2>&1; then
+    wget -q --show-progress "$url" -O "$dest"
+  else
+    die "Neither curl nor wget found. Please install one."
+  fi
+}
+
+
+verify_checksum() {
+  local file="$1" expected="$2"
+  local actual
+  actual="$(sha256_file "$file" 2>/dev/null || true)"
+  [[ -n "$actual" ]] || die "No SHA-256 tool found. Cannot verify release artifact."
+  [[ "$actual" == "$expected" ]] || die "Checksum mismatch for $(basename "$file")"
+}
+
+
+safe_untar() {
+  local archive="$1" dest="$2"
+  shift 2
+
+  local listing verbose_listing
+  listing="$(tar -tzf "$archive" 2>/dev/null)" || die "Cannot read archive: $archive"
+  verbose_listing="$(tar -tzvf "$archive" 2>/dev/null)" || die "Cannot inspect archive: $archive"
+
+  if printf '%s\n' "$listing" | grep -qE '(^|/)\.\.(/|$)'; then
+    die "Archive contains path traversal entries: $(basename "$archive")"
+  fi
+  if printf '%s\n' "$listing" | grep -qE '^/'; then
+    die "Archive contains absolute paths: $(basename "$archive")"
+  fi
+
+  local line target
+  while IFS= read -r line; do
+    [[ "$line" == l* && "$line" == *" -> "* ]] || continue
+    target="${line##* -> }"
+    if [[ "$target" == /* ]] || [[ "$target" =~ (^|/)\.\.(/|$) ]]; then
+      die "Archive contains unsafe symlink target: $(basename "$archive")"
+    fi
+  done <<< "$verbose_listing"
+
+  tar -xzf "$archive" -C "$dest" --no-same-owner "$@"
+}
+
+
+copy_dir_contents() {
+  local src="$1" dst="$2"
+  local src_real="" framework_real=""
+  mkdir -p "$dst"
+  src_real="$(cd "$src" 2>/dev/null && pwd -P)" || die "Cannot copy missing directory: $src"
+  if [[ -n "${FRAMEWORK_ROOT:-}" ]]; then
+    framework_real="$(cd "$FRAMEWORK_ROOT" 2>/dev/null && pwd -P)" || framework_real=""
+    if [[ -n "$framework_real" && "$src_real" == "$framework_real" ]]; then
+      die "Refusing to copy framework root as a directory; check .spinosa/framework-files.tsv for blank or unsafe paths."
+    fi
+  fi
+  cp -a "$src"/. "$dst"/
+}
+
+
+manifest_hash() {
+  local manifest="$1" path="$2"
+  awk -F '\t' -v p="$path" '$1 == p { print $2; exit }' "$manifest"
+}
+
+
+framework_version() {
+  local root="$1"
+  if [[ -f "${root}/metadata/version" ]]; then
+    sed -n '1p' "${root}/metadata/version"
+  else
+    echo "dev"
+  fi
+}
+
+
+is_release_managed_role() {
+  local role="$1"
+  [[ "$role" != "user_state" && "$role" != "generated_state" ]]
+}
+
+
+is_framework_manifest_entry() {
+  local path="$1" role="$2"
+  [[ -n "$path" ]] || return 1
+  [[ "$path" != "path" ]] || return 1
+  if [[ "$path" == "." || "$path" == "/" || "$path" == ./* || "$path" == ../* || "$path" == *"/../"* ]]; then
+    die "Unsafe framework manifest path: $path"
+  fi
+  is_release_managed_role "$role"
+}
+
+
+next_sidecar_path() {
+  local dst="$1"
+  local sidecar="${dst}.spinosa-new"
+  local n=1
+  while [[ -e "$sidecar" ]]; do
+    sidecar="${dst}.spinosa-new.${n}"
+    n=$((n + 1))
+  done
+  echo "$sidecar"
+}
+
+
+resolve_latest_release_version() {
+  local url
+  if ! command -v curl >/dev/null 2>&1; then
+    die "curl is required to resolve latest. Use --version X.Y.Z instead."
+  fi
+  spinner_start "Resolving latest version" >&2
+  url="$(curl -fsSL -o /dev/null -w '%{url_effective}' "https://github.com/${SPINOSA_REPO}/releases/latest" 2>/dev/null || true)"
+  spinner_stop >&2
+  [[ -n "$url" && "$url" != */latest ]] || die "Could not resolve latest version. Use --version X.Y.Z instead."
+  basename "$url" | sed 's/^v//'
+}
+
+
+release_dir_version() {
+  local release_dir="$1" version="$2"
+  if [[ "$version" != "latest" ]]; then
+    echo "$version"
+    return
+  fi
+  basename "$release_dir" | sed 's/^v//'
+}
+
+
+copy_to_clipboard() {
+  local text="$1"
+  if command -v pbcopy >/dev/null 2>&1; then
+    printf '%s' "$text" | pbcopy
+  elif command -v xclip >/dev/null 2>&1; then
+    printf '%s' "$text" | xclip -selection clipboard
+  elif command -v xsel >/dev/null 2>&1; then
+    printf '%s' "$text" | xsel --clipboard --input
+  elif command -v clip.exe >/dev/null 2>&1; then
+    printf '%s' "$text" | clip.exe
+  else
+    return 1
+  fi
+}
+
+
+sanitize_yaml() { printf '%s' "$1" | tr '"' "'" | tr '\n' ' '; }
+
+
+shell_quote() {
+  local value="$1"
+  value="${value//\'/\'\\\'\'}"
+  printf "'%s'" "$value"
+}
+
+
+print_box() {
+  local iw=$((COLS > 6 ? COLS - 4 : 10))
+  printf '\n  %s┌%s┐%s\n' "${DIM}" "$(printf '%.0s─' $(seq 1 "$iw"))" "${RESET}"
+  printf '  %s│%s %s%s%s\n' "${DIM}" "${RESET}" "${BOLD}$1${RESET}" "${DIM}" "${RESET}"
+  printf '  %s├%s┤%s\n' "${DIM}" "$(printf '%.0s─' $(seq 1 "$iw"))" "${RESET}"
+  while IFS= read -r line; do
+    printf '  %s│%s %s\n' "${DIM}" "${RESET}" "$line"
+  done
+  printf '  %s└%s┘%s\n' "${DIM}" "$(printf '%.0s─' $(seq 1 "$iw"))" "${RESET}"
+}
+
+
+file_size_bytes() {
+  local path="$1"
+  if stat -c %s "$path" >/dev/null 2>&1; then
+    stat -c %s "$path"
+  elif stat -f %z "$path" >/dev/null 2>&1; then
+    stat -f %z "$path"
+  else
+    printf '0'
+  fi
+}
+
+
+available_disk_bytes() {
+  local path="$1"
+  local value
+  value="$(df -Pk "$path" 2>/dev/null | awk 'NR==2 {print $4}')" || value=""
+  if [[ "$value" =~ ^[0-9]+$ ]]; then
+    printf '%d' $((value * 1024))
+  else
+    printf '0'
+  fi
+}
+
+
