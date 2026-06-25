@@ -108,7 +108,7 @@ copy_source() {
       done < <(find_source_files "$source_path")
 
       if [[ ${#md_files[@]} -gt 0 ]]; then
-        printf '\n'
+        printf '\n\n'
         info "${G}MarkItDown${RESET} Processing ${#md_files[@]} files with MarkItDown..."
         local _md_log
         _md_log="$dest_dir/../logs/markitdown-processed.ndjson"
@@ -358,7 +358,7 @@ copy_source() {
       done < <(find_source_files "$source_path")
 
       if [[ ${#ocr_files[@]} -gt 0 ]]; then
-        printf '\n'
+        printf '\n\n'
         info "${M}OCR${RESET} Processing ${#ocr_files[@]} scanned images and PDFs with RapidOCR..."
         local _ocr_log
         _ocr_log="$dest_dir/../logs/ocr-processed.ndjson"
@@ -575,6 +575,7 @@ copy_source() {
   if [[ "$failed" -gt 0 ]]; then
     warn "$failed files could not be copied (cloud storage timeout or I/O error). These files are skipped. Run the copy again when all files are synced locally."
   fi
+  tree_sep
   tree_row "Workspace copy" "prepared" "${BOLD}$(dirname "$dest_dir")${RESET}"
 }
 
