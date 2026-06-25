@@ -278,7 +278,7 @@ auto_upgrade_check() {
 
   [[ "$latest" != "$installed_version" ]] || return 0
 
-  printf '\n  %sSpinosa v%s is installed. v%s is available. ✨%s\n\n' "${BOLD}" "$installed_version" "$latest" "${RESET}"
+  printf '\n  %sSpinosa v%s is installed. -----> v%s is available. ✨%s\n\n' "${BOLD}" "$installed_version" "$latest" "${RESET}"
   if confirm "Upgrade now?" "y"; then
     info "Running upgrade..."
     cmd_upgrade --version "$latest" --yes
