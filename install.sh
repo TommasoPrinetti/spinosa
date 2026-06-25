@@ -762,7 +762,7 @@ install_vendor_bundles() {
   fi
 
   if [[ -x "$spinosa_python" ]]; then
-    spinner_start "Installing Python packages (MarkItDown + RapidOCR)"
+    spinner_start "Installing Python packages (MarkItDown + RapidOCR + PDF tools)"
     "$spinosa_python" -m pip install --upgrade pip --quiet 2>/dev/null || true
     local pip_ok=0 onnx_ver pip_attempt
     for onnx_ver in 1.23.2 1.23.1 1.23.0 1.22.1 1.22.0; do
@@ -791,7 +791,7 @@ install_vendor_bundles() {
     done
 
     if [[ $pip_ok -eq 1 ]]; then
-      spinner_stop "MarkItDown + RapidOCR installed"
+      spinner_stop "MarkItDown + RapidOCR + PDF tools installed"
       spinner_start "Verifying RapidOCR import"
       if "$spinosa_python" -c "from rapidocr import RapidOCR" 2>/dev/null; then
         spinner_stop
