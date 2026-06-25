@@ -16,8 +16,8 @@ print_spinosa_banner() {
   printf '  %s%s%s\n' "${PG}" "███████╗██████╔╝██║██╔██╗ ██║██║   ██║███████╗███████║" "${RESET}"
   printf '  %s%s%s\n' "${PG}" "╚════██║██╔═══╝ ██║██║╚██╗██║██║   ██║╚════██║██╔══██║" "${RESET}"
   printf '  %s%s%s\n' "${PG}" "███████║██║     ██║██║ ╚████║╚██████╔╝███████║██║  ██║" "${RESET}"
-  printf '  %s%s%s\n' "${PG}" "╚══════╝╚═╝     ╚═╝╚═╝  ╚═══╝ ╚═════╝ ╚══════╝╚═╝  ╚═╝" "${RESET}"
-  printf '\n  %s v%s%s\n' "${BOLD}" "$version" "${RESET}"
+  printf '  %s%s%s' "${PG}" "╚══════╝╚═╝     ╚═╝╚═╝  ╚═══╝ ╚═════╝ ╚══════╝╚═╝  ╚═╝" "${RESET}"
+  printf '   %s%s%s\n' "${PG}" "v${version}" "${RESET}"
   SPINOSA_BANNER_PRINTED=1
 }
 

@@ -259,6 +259,11 @@ done < "${FRAMEWORK_ROOT}/.spinosa/framework-files.tsv"
 find "$workspace_path" -name ".DS_Store" -delete 2>/dev/null || true
 find "$workspace_path" -name "._*" -delete 2>/dev/null || true
 
+# ── Sync vendor agent folders ──────────────────────────────────────
+if [[ -f "$workspace_path/.bin/sync-agents.sh" ]]; then
+  bash "$workspace_path/.bin/sync-agents.sh" >/dev/null 2>&1 || true
+fi
+
 # Create empty user-state directories with .gitkeep
   for dir in raw maps logs agent_reports .trash; do
     mkdir -p "$workspace_path/$dir"
