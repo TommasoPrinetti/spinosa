@@ -242,6 +242,7 @@ cmd_upgrade() {
 
   bash "$installer" "${upgrade_args[@]}"
 
+  rm -f "$SPINOSA_VERSION_CACHE" 2>/dev/null || true
   rm -rf "$tmpdir"
 }
 
@@ -262,10 +263,25 @@ auto_upgrade_check() {
   local cache_file="$SPINOSA_VERSION_CACHE"
   local now
   now="$(date +%s)"
+
+  # ── offline check: if installed >= cached latest, clear stale cache ──
   if [[ -f "$cache_file" ]]; then
-    local skip_until
+    local cached_latest skip_until
+    cached_latest="$(sed -n '2p' "$cache_file" 2>/dev/null || echo "")"
     skip_until="$(sed -n '3p' "$cache_file" 2>/dev/null || echo 0)"
-    [[ "$now" -lt "$skip_until" ]] && return 0
+
+    if [[ -n "$cached_latest" ]]; then
+      local lower
+      lower="$(printf '%s\n%s\n' "$installed_version" "$cached_latest" | sort -V | head -1)"
+      if [[ "$lower" == "$cached_latest" || "$lower" == "$installed_version" && "$installed_version" == "$cached_latest" ]]; then
+        # installed >= cached latest — cache is stale, clear it and proceed silently
+        if [[ "$installed_version" != "$cached_latest" ]]; then
+          rm -f "$cache_file" 2>/dev/null || true
+        elif [[ "$now" -lt "$skip_until" ]]; then
+          return 0
+        fi
+      fi
+    fi
   fi
 
   local latest
