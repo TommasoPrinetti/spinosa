@@ -8,7 +8,7 @@
 #   - AGENTS.md → CLAUDE.md (Claude Code reads this automatically)
 #
 # Destinations (generated, platform-specific frontmatter):
-#   - .opencode/agents/   — mode: subagent, permission: (singular)
+#   - .opencode/agents/   — mode: subagent, permission object
 #   - .claude/agents/     — tools: (comma-separated)
 #   - .codex/agents/      — TOML subagent profiles with developer_instructions
 #   - .agents/skills/      — Codex/OpenCode/Claude Agent Skills standard
@@ -105,28 +105,11 @@ for canonical in "$REPO_ROOT/.agents/agents/"*.md; do
 
         case "$platform" in
             .opencode)
-                local oc_perms=""
-                IFS=',' read -ra perm_parts <<< "$permissions"
-                for part in "${perm_parts[@]}"; do
-                    part="${part## }"; part="${part%% }"
-                    [ -z "$part" ] && continue
-                    key="${part%%:*}"
-                    val="${part#*: }"
-                    case "$key" in
-                        read|grep|glob) oc_perms="$oc_perms  $key: $val"$'\n' ;;
-                        write)          oc_perms="$oc_perms  edit: $val"$'\n' ;;
-                        move)           oc_perms="$oc_perms  bash: $val"$'\n' ;;
-                        grep_context)   oc_perms="$oc_perms  # grep_context: ${val} (vendor does not enforce, see canonical)"$'\n' ;;
-                    esac
-                done
                 cat > "$dest_dir/$agent_file" << OPENCODE_EOF
 ---
-name: $name
-description: |
-$(echo "$description" | sed 's/^/  /')
 mode: subagent
 permission:
-$(echo "$oc_perms" | sed '$d')
+  edit: allow
 ---
 
 $(awk 'BEGIN{fm=0} /^---$/ && fm < 2 {fm++; next} fm == 2' "$canonical")
