@@ -62,3 +62,5 @@ Short routing log for user prompts. Log the request before deciding whether to a
 | 2026-06-24 | Plan Bun binary migration (Python shelled-out) | non-fast-path | done | agent_reports/g_20260624-bun-migration-plan.md |
 | 2026-06-24 | Make vendor sub-agent and skill setup operational from canonical Spinosa agents | non-fast-path | done | generated skills and vendor mirrors operational; Codex fake agents removed; checks passed |
 | 2026-06-24 | Fix terminal freeze/stacking, add pypdf page splitting, prepare 0.5.15 release | non-fast-path | done | flush_pending_input rewritten, cursor save/restore removed, pagination added, pypdf installed in vendor, page splitting working, red missing-tool warnings |
+| 2026-06-26 | Plan full Bun/TypeScript migration with markitdown-ts, ONNX OCR, TS PDF split, and Bun runtime installer | non-fast-path | done | agent_reports/00_bun-typescript-migration-plan.md; verifier pass; evaluator no_edit |
+| 2026-06-26 | Fix OpenCode Spinosa agent frontmatter schema errors | fast_path | done | .opencode/agents permission headers updated; opencode agent debug/list passed |
