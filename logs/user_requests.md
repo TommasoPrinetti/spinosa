@@ -63,3 +63,4 @@ Short routing log for user prompts. Log the request before deciding whether to a
 | 2026-06-24 | Make vendor sub-agent and skill setup operational from canonical Spinosa agents | non-fast-path | done | generated skills and vendor mirrors operational; Codex fake agents removed; checks passed |
 | 2026-06-24 | Fix terminal freeze/stacking, add pypdf page splitting, prepare 0.5.15 release | non-fast-path | done | flush_pending_input rewritten, cursor save/restore removed, pagination added, pypdf installed in vendor, page splitting working, red missing-tool warnings |
 | 2026-06-26 | Fix OpenCode agent mirror generator on main | fast_path | done | .bin/sync-agents.sh emits valid OpenCode agent frontmatter; temp sync and opencode agent list passed |
+| 2026-06-26 | Push main and republish Spinosa 0.5.17 | fast_path | in_progress | pending push and release asset replacement |
