@@ -15,9 +15,14 @@ this file based on what the user requests.
 
 - **2026-06-29 — Branch cleanup + framework apply.** Reset `development` to `main` (shell-based CLI), deleted `bun-migration` branch (local + remote). Applied 44-file framework upgrade: agent memory model (return counts, no TSV), Overseer agent, AGENTS.md §4e recovery + session_id format, startup prompt consolidation, docs fixes, framework manifest cleanup, memory/archive dirs. Removed all Bun/TS artifacts (spinosa/, package.json). Regenerated vendor mirrors via sync-agents.sh. Committed as `5d93d5bc` to `development`. `main` untouched (savepoint).
 
+- **2026-06-29 — Stale file cleanup + overseer upgrade.** Removed stale references (spinosa/src/ in docs, logs/AGENTS.md scope), cleaned 10 old dist/ releases, deleted .bin/pilosa, removed 7 stale .codex/ TOML files from git tracking, fixed both framework manifests (add missing shell CLI entries, un-retire 14 false Bun entries). Extended spinosa-overseer to load agent-interception skill and analyze raw Codex/OpenCode session logs for file-access coverage detection. Added agent-interception skill (scripts + references) to project .agents/skills/. Committed as `3a5bf02a`.
+
 ## Observations
 
 - Branch cleanup went cleanly: `development = main` after reset, no conflicts.
-- `.codex/` remains gitignored (build artifact). 7 stale TOML files still tracked on main but will be refreshed by sync-agents.sh in practice.
+- `.codex/` remains gitignored (build artifact). Stale TOML files removed from index; sync-agents.sh generates fresh ones.
 - Log files auto-renamed to `.spinosa/archive/` by git's rename detection during commit — history preserved.
-- Two deploy sub-agents per the plan. Main agent wrote this final report from the serialized plan output.
+- spinosa-overseer now has Phase 0 for raw session log analysis via agent-interception skill (scripts: extract-codex.sh, extract-opencode.sh, analyze-events.sh).
+- Agent-interception skill added to project .agents/skills/ for version control + vendor mirror sync.
+- Old dist/ releases (v0.5.6 through v0.5.15) deleted; v0.5.16 and v0.5.17 retained.
+- dist/ releases and vendor/ tarballs left as gitignored disk artifacts (not tracked).
