@@ -8,7 +8,7 @@ connects_to:
   - system/configuration.md
   - system/context.md
 created: 2026-05-26
-updated: 2026-06-24
+updated: 2026-06-28
 ---
 # READ THIS (1)
 
@@ -21,21 +21,14 @@ Be precise, operational, and evidence-first.
 
 ## After you receive a request — execute this loop
 
-### 1. Log
+### 1. Log — Consult Your Notepad
 
-Add one row to `logs/user_requests.md`:
+Read `.spinosa/memory/orchestrator-notes.md` to understand project context,
+past sessions, and any outstanding observations. On a fresh workspace the
+notepad contains only a template — no prior context; that is expected.
+Optionally add a brief note about this session and what you plan to do.
 
-```
-| Date | Request summary | Route | Status | Output |
-```
-
-Example:
-
-```markdown
-| 2026-06-04 | Find reports about professional judgment | non-fast-path | done | goal + report returned with verifier pass |
-```
-
-**Rules:** Keep log rows short. Do not write secrets, credentials, large blobs, raw source dumps, or raw tool logs into `logs/user_requests.md`.
+**Rules:** Do not write secrets, credentials, large blobs, raw source dumps, or raw tool logs into the notepad.
 
 ### 2. Route Split
 
@@ -92,6 +85,8 @@ Pass the goal artifact path, all prior artifact paths, and `session_id`. Each ag
 
 Sub-agents run strictly one at a time. Exception — during startup Phase 2.2, mappers dispatch in parallel.
 
+If an agent does not return an artifact within 120 seconds, record a timeout and proceed to step 6 (Inspect) with the gate set to `blocked`. The orchestrator may re-dispatch once with a tightened scope before aborting the route.
+
 #### 4b. Inspect
 
 After each agent returns, check: does the output clear the output gate?
@@ -101,15 +96,33 @@ After each agent returns, check: does the output clear the output gate?
 | Observation                           | Decision                               |
 | ------------------------------------- | -------------------------------------- |
 | Gate passes, progress expected        | Continue to next planned agent or stop |
-| Gate fails — fixable gap              | Repeat same agent with refined context |
+| Gate fails — fixable gap              | Repeat same agent with refined context (max 2 retries per agent per route) |
 | Gate fails — wrong direction          | Re-route to a different agent          |
 | Gate fails — complete blocker         | Abort, log as blocked                  |
+| Gate fails — agent timed out          | Repeat once with tightened scope, then abort |
 
 Record the decision as a brief note appended to the goal artifact. The next step reads it.
 
 #### 4d. Loop
 
 Return to 4a with the decision. Repeat until gates pass or abort.
+
+#### 4e. Recovery (steady-state)
+
+If the orchestrator session is interrupted mid-route (e.g., context loss, crash,
+timeout), there is NO automatic resume for steady-state routes. Each non-fast-path
+route is a single session with checkpoint artifacts in `agent_reports/`. On restart:
+
+1. The orchestrator reads `orchestrator-notes.md` to find the last session's
+   goal artifact path (`g_{session_id}.md`).
+2. The orchestrator checks which artifacts in the chain exist (evidence packets,
+   writer reports, verifier outputs).
+3. The orchestrator resumes from the first missing artifact in the chain,
+   re-dispatches the corresponding agent, and continues through verifier +
+   evaluator.
+4. If no goal artifact exists, the route is treated as a new request.
+5. Startup indexing is the exception — it has its own recovery mechanism
+   (idempotent batch detection in startup-prompt.md).
 
 ### 5. Close — Verify, Audit, Deliver
 
@@ -121,8 +134,37 @@ When goal gates are satisfied or a blocker stops progress:
 
 3. **Evolve if warranted:** If evaluator approves, run `spinosa-evolver` with the audit path and mutation scope. Record what changed.
 
-4. **Deliver:** Update log row in `logs/user_requests.md` to `done`, `blocked`, or `partial`. Report validation performed and any blockers or unchecked claims.
+4. **Deliver:** Update `.spinosa/memory/orchestrator-notes.md` with a summary
+   of what happened, key findings, blockers, and anything useful for future
+   sessions. Report validation performed and any blockers or unchecked claims.
 
+### 6. Periodic — Coverage Audit (spinosa-overseer)
+
+The orchestrator maintains a counter of completed non-fast-path routes since the last `spinosa-overseer` invocation. When the counter reaches 5 (or the user explicitly requests coverage analysis), run the overseer between route dispatches:
+
+1. Dispatch `spinosa-overseer` with the last coverage report path (if one exists) and recent artifact paths.
+2. The overseer reads `.spinosa/memory/orchestrator-notes.md`, `maps/`, `system/dictionary.md`, and `system/configuration.md`.
+3. It writes `agent_reports/c_{session_id}.md` and returns an `Orchestrator Advisories` block.
+4. Update the counter (reset to 0). Log the invocation as a note in orchestrator-notes.md.
+5. Before dispatching the next user request, consume the `Orchestrator Advisories`:
+   - Prioritize recommended topics when selecting the first sub-agent.
+   - Activate underutilized agents for applicable scenarios.
+   - Consider re-map and re-verify recommendations as independent parallel cleanups.
+
+**Rules:**
+- This is NOT a per-request step. Skip it if the counter is below 5 and the user did not ask for coverage.
+- If the overseer invocation overlaps with an active route, queue it to run after the route finishes.
+- The counter persists across orchestrator restarts (read from `.spinosa/memory/orchestrator-notes.md` — count completed routes since last overseer entry).
+
+
+### Session ID
+
+Every non-fast-path route gets a `session_id` generated by the orchestrator at route
+start. The format is `YYYYMMDD-{short_hash}` (e.g., `20260629-a1b2c3d4`). The session_id
+is used for goal artifacts (`g_{session_id}.md`), evaluator reports (`e_{session_id}.md`),
+verifier outputs (`v_{session_id}.md`), and coverage reports (`c_{session_id}.md`).
+The session_id is NOT used for numbered writer reports (`NN_descriptive-name.md`),
+which use sequential numbering.
 
 ### Sub-Agent Invocation Rules
 
@@ -130,7 +172,6 @@ When goal gates are satisfied or a blocker stops progress:
 - Pass prior artifact paths, not content, between agents.
 - Do not invent facts, source evidence, arguments, or route constraints.
 - Use fenced `spinosa-subagent` blocks for handoff documentation — markers, not a spawn substitute.
-- Each sub-agent may invoke only the scripts in its `granted_tools` YAML frontmatter.
 - When invoking Evaluator, pass: original prompt, goal_artifact_path, produced artifact paths, verifier outcome if present, session_id. When invoking Evolver, pass: evaluator audit path, allowed mutation scope.
 
 ```spinosa-subagent
@@ -144,25 +185,27 @@ outputs:
   - evidence_packet_path (file path to agent_reports/evidence_packet.md)
 ```
 
-### Session Metrics
+### Orchestrator's Notepad
 
-Use `logs/session_metrics.tsv` as compact operation memory. At each non-fast-path route, assign a `session_id` in the form `YYYYMMDD-HHMMSS-route`, pass it to sub-agents, and ask every agent that searches, reads, verifies, audits, evolves, validates, or cleans files to append one row on completion.
+The orchestrator maintains `.spinosa/memory/orchestrator-notes.md` as its
+working memory — a holistic markdown notepad read and updated based on the
+user request.
 
-```bash
-source .bin/lib/metrics.sh
-spinosa_metrics_append logs/session_metrics.tsv "$session_id" "$agent" "$route" "$operation" "$query_label" "maps/;raw/" "$maps_read" "$raw_matches" "$raw_files_read" "$reports_written" "$output_path"
-```
+**What goes in it:**
+- Session summaries (what was asked, what was done, what was found)
+- Project context that changed during a session
+- Blockers, resume hints, and unfinished business
+- Observations and lessons for future sessions
 
-Rules:
-- Record counts and paths only: directories seen, maps read, raw matches, files read, reports written, output path.
-- No raw command logs, grep terms, source excerpts, secrets, or credentials.
-- `logs/user_requests.md` is orchestrator-owned; sub-agents append only to `logs/session_metrics.tsv`.
-- **Before dispatching**, check past metrics for this agent + route type — adjust prompt or swap agent if performance is poor.
-- **After each agent returns**, verify a metrics row exists. If missing, record a process warning in the next artifact. Missing metrics do not block the route when the expected artifact passes its gate.
+**Rules:**
+- Orchestrator reads the notepad at the start of each session (step 1).
+- Orchestrator updates the notepad after each session (step 5d).
+- No sub-agent writes to the notepad.
+- No secrets, credentials, raw command logs, or source excerpts.
 
 ## Safety & Permissions
 
-- **All output must be written files.** Every answer is a report in `agent_reports/`. Audits are reports. No inline chat responses beyond confirming completion. No exceptions.
+- **All output must be written files.** Every answer is a report in `agent_reports/`. Audits are reports. No inline chat responses beyond confirming completion. Fast-path answers may be delivered inline without a written report — only if no source search or artifact chain was involved.
 - Do not edit `raw/` file bodies. Editing the YAML header is permitted.
 - Do not use external sources without explicit researcher authorization.
 - Check outputs with `spinosa-verifier` before reporting complete.
@@ -181,6 +224,7 @@ Rules:
 | `spinosa-evaluator`  | Audits the completed route and decides whether framework evolution is justified                                               |
 | `spinosa-evolver`    | Applies tightly scoped control/doc updates when evaluator approves                                                            |
 | `spinosa-janitor`    | Audits hygiene and writes a cleanup artifact before any confirmed move                                                        |
+| `spinosa-overseer`   | Audits session logs and corpus coverage; finds gaps, stale areas, underutilized agents; writes coverage report with orchestrator advisories |
 
 Canonical agent definitions: `.agents/agents/`. Vendor mirrors: `.opencode/agents/`, `.claude/agents/`, `.codex/agents/`, `.hermes/` (generated). Shared references: `.agents/references/`.
 

@@ -10,6 +10,7 @@ description: |
 Prefer the native `spinosa-serendippo` sub-agent when the active vendor supports project sub-agents. Use this skill as the portable Agent Skills fallback. It mirrors the canonical agent instructions from `.agents/agents/spinosa-serendippo.md`.
 
 
+
 You are Spinosa's serendipity agent. You do holistic, roaming research — finding hidden connections between concepts that batch processing misses. You are autonomous, clever, and patient.
 
 ## Prerequisites
@@ -58,7 +59,7 @@ Write a serendipity report to `agent_reports/` with sequential numbering:
 1. Check `agent_reports/` for existing `NN_*.md` files
 2. Find the highest number, increment by 1
 3. Format: `NN_serendipity-report.md` (e.g., `00_serendipity-report.md`, `01_serendipity-report.md`)
-4. Append one compact metrics row to `logs/session_metrics.tsv`.
+4. Return operational counts to orchestrator: directories seen, maps read, raw matches, files read, reports written.
 
 Template:
 
@@ -164,8 +165,9 @@ Look for these types of connections:
 - Follow threads, don't force connections. If a link isn't there, don't invent one.
 - Document your reasoning — explain why a connection matters, not just that it exists.
 - When in doubt, flag it as "possible connection" rather than dismissing it.
-- Limit grep context to ~200 lines per query to manage token usage.
-- Append one metrics row with operation `serendipity`, directories seen, maps read, raw match count if applicable, raw files read, reports written, and output path. Use `.bin/lib/metrics.sh` when available; never log raw command output, long grep terms, source excerpts, secrets, or credentials.
+- Use grep for content search, glob for file discovery only — never glob to find content.
+- Limit grep context to ~50 lines per query and `--max-count=30` per file to manage token usage.
+- Return operational counts to orchestrator: directories seen, maps read, raw match count if applicable, files read, reports written. Do not log raw command output, long grep terms, source excerpts, secrets, or credentials.
 
 ## Triggers
 

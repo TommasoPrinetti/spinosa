@@ -2,134 +2,127 @@
 type: system_architecture_map
 role: framework_map
 purpose:
-  - show how the home session
-  - logs
+  - show how the orchestrator
   - sub-agents
-  - and evidence layers connect
-description: Architecture map for Spinosa's orchestration, evidence, and output layers.,Agents use this only when they need structural context beyond the root contract.
+  - file layers
+  - and evidence pipeline connect
+description: Architecture map for Spinosa's orchestration, evidence, and output layers.
 scope:
   - repo-wide architecture
 connects_to:
   - AGENTS.md
-
-  - .agents/skills/source-intake/SKILL.md
-  - .agents/skills/report-writing/SKILL.md
-  - .agents/skills/claim-verification/SKILL.md
-  - .agents/skills/workspace-cleanup/SKILL.md
-  - .agents/skills/orchestrator-dispatch/SKILL.md
-  - workspace_index.md
+  - docs/diagrams.md
+  - .agents/agents/
+  - system/dictionary.md
+  - system/workspace_index.md
 created: 2026-05-26
-updated: 2026-06-05
+updated: 2026-06-28
 status: active
 ---
 
 # System Architecture Map
 
-> **📐 Full Mermaid diagrams now live in [`docs/diagrams.md`](../docs/diagrams.md) — 6 diagrams with GitHub-native rendering.**
-> This file remains the ASCII/agent reference. See `docs/diagrams.md` for the external-facing versions.
+> **Full Mermaid diagrams live in [`docs/diagrams.md`](../docs/diagrams.md) — 9 diagrams with GitHub-native rendering.**
+> This file is the ASCII/agent reference. See `docs/diagrams.md` for the external-facing versions.
 
 ## Core Architecture
 
-Spinosa is a two-layer research system.
+Spinosa is a two-layer research framework with a CLI onboarding layer, an agent orchestration layer, and a persistent file-based memory.
 
 ```txt
-raw/
-  imported corpus copies
-  active evidence layer
+CLI onboarding (spinosa new)
+  scans, classifies, converts, imports
+  writes system/context.md + system/configuration.md
         |
-        | CLI imports accepted files into raw/,
-        | agent builds dictionary, headers, and maps
         v
-Spinosa workspace
-  writable indexed collection
-  raw copies with YAML headers, maps, dictionary, logs, reports
+Workspace (system/, raw/, maps/, agent_reports/)
+  indexed corpus with YAML headers, dictionary, navigation maps
         |
-        | prompt pipeline searches here first for token economy
+        | orchestrator reads user prompt
+        | routes to sub-agent chain
+        | every chain ends with verifier + evaluator
         v
-User-facing answers
-  checked against raw copies before factual claims are finalized
+Answer report (agent_reports/NN_*.md)
+  checked against raw/ before finalization
 ```
 
-## Prompt Lifecycle
+## Orchestrator Loop
 
 ```txt
-User prompt
-  |
-  v
-Home session orchestrator (AGENTS.md)
-  |
-  v
-Request log
-  |
-  v
-Classify
-  |
-  v
-Choose sequence (default shapes; orchestrator may deviate)
-  |
-  v
-Dispatch sub-agents — native spawn by canonical name, or inject SKILL.md fallback
-  |
-  v
-Final report
+1. Log          — Read .spinosa/memory/orchestrator-notes.md
+2. Route split  — fast_path (direct) or non-fast-path (orchestrated)
+3. Frame        — Write goal artifact agent_reports/g_{session_id}.md
+4. Loop:
+   a. Dispatch sub-agent with goal + prior artifact paths
+   b. Inspect output against gate
+   c. Decide: continue / retry / re-route / abort
+   d. Loop back to 4a
+5. Close:
+   a. spinosa-verifier — factual gate (mandatory)
+   b. spinosa-evaluator — process gate (mandatory after verifier)
+   c. spinosa-evolver — framework fix (only if evaluator recommends)
+   d. Deliver — update orchestrator-notes.md
+6. Periodic — spinosa-overseer every 5 routes (coverage audit)
 ```
 
-The home session is the orchestrator. It is governed by `AGENTS.md` and controls routing, handoffs, stop conditions, and final response assembly. `.agents/` is the canonical source for agent and skill definitions; vendor directories are generated mirrors.
+## Sub-Agent Pipeline
+
+| Agent               | Role                  | Produces                                    |
+|---------------------|-----------------------|---------------------------------------------|
+| spinosa-searcher    | Evidence retrieval    | evidence_packet.md                          |
+| spinosa-mapper      | Startup indexing      | extraction_batch_*.md, maps/, dictionary    |
+| spinosa-serendippo  | Hidden connections    | serendipity_report.md                       |
+| spinosa-analyst     | Contextual analysis   | analysis packet                             |
+| spinosa-writer      | Report synthesis      | NN_descriptive-name.md                      |
+| spinosa-verifier    | Claim verification    | verified artifact (badges added)            |
+| spinosa-evaluator   | Route audit           | e_{session_id}.md                           |
+| spinosa-evolver     | Framework evolution   | changed files summary                       |
+| spinosa-janitor     | Hygiene audit         | cleanup artifact                            |
+| spinosa-overseer    | Coverage audit        | c_{session_id}.md + Orchestrator Advisories |
+
+## File Layers
+
+```txt
+Framework (template — always_replace / replace_if_unmodified via framework-files.tsv):
+  AGENTS.md, startup-prompt.md, .agents/, .bin/, spinosa/src/, docs/, system/templates
+
+User state (per workspace — never_replace):
+  raw/            corpus copies with YAML headers
+  maps/           navigation maps (Obsidian wikilink graph)
+  system/         context.md, configuration.md, dictionary.md, workspace_index.md
+  agent_reports/  all agent output artifacts
+  .spinosa/memory/  orchestrator-notes.md
+  .trash/         archived intermediates
+
+Archive (pre-memory-migration):
+  logs/           frozen historical files — no longer written to
+```
 
 ## Setup Lifecycle
 
-Initial setup imports accepted corpus files into the workspace. The **startup** skill executes the protocol in [[startup]], which has two phases:
-
 ```txt
-Setup draft / user startup prompt
-  |
-  v
-Orchestrator reads [[startup]] protocol
-  |
-  v
-Phase 1 — Setup Translation
-  fill configuration and research context
-  audit translation
-  |
-  v
-CLI copies accepted text-like files unchanged into [[raw/]]
-  |
-  v
-Phase 2 — Indexing
-  agent builds master dictionary (parallel mapper dispatch — one sub-agent per batch)
-  agent generates YAML headers for all raw copies
-  agent creates multi-level navigation maps: structural overview, group maps with key passages, and theme threads
-  disambiguate with user (via orchestrator) if needed
-  build maps from repeated themes
-  update master index
-  |
-  v
-Run validation and retrieval tests
-  |
-  v
-Mark setup_status: workspace_started
+not_started
+    |
+    | spinosa new (CLI)
+    v
+cli_started
+    |
+    | startup-prompt.md (orchestrator)
+    |   Phase 1: Verify onboarding
+    |   Phase 2: Survey corpus
+    |   Phase 3: Extract + build dictionary (parallel mappers)
+    |   Phase 4: Write navigation maps
+    |   Phase 5: Serendipitous connection discovery
+    |   Phase 6: Validate + verifier + evaluator
+    v
+workspace_started
 ```
 
-The setup output is not a final interpretation of the research corpus. It is the first navigable, token-efficient map that later agents can search.
+## Key Patterns
 
-## Active Files
-
-| File                                            | Role                                                                   |     |
-| ----------------------------------------------- | ---------------------------------------------------------------------- | --- |
-| `AGENTS.md`                                     | Orchestrator playbook — single routing file                            |     |
-| [[startup]]                                     | Setup translation + indexing protocol (read by orchestrator)           |     |
-| [[configuration]]                               | Operating profile                                                      |     |
-| [[system_architecture_map]]                     | This file — diagrams                                                   |     |
-| `.agents/skills/source-intake/SKILL.md`         | Source file registration                                               |     |
-| `.agents/skills/report-writing/SKILL.md`        | Report synthesis                                                       |     |
-| `.agents/skills/claim-verification/SKILL.md`    | Claim verification                                                     |     |
-| `.agents/skills/workspace-cleanup/SKILL.md`     | Hygiene audit and archival                                             |     |
-| `.agents/skills/orchestrator-dispatch/SKILL.md` | Prompt routing and skill injection                                     |     |
-| `.agents/agents/`                               | Canonical native agent definitions                                     |     |
-| [[dictionary]]                                  | Shared term vocabulary                                                 |     |
-| [[workspace_index]]                             | Master index                                                           |     |
-| [[maps/]]                                       | Multi-level navigation: structural overview, group maps, theme threads |     |
-| [[raw/]]                                        | Active working corpus with raw text/native/PDF copies                  |     |
-| [[yaml_header_template]]                             | YAML header schema                                                     |     |
-| [[user_requests]]                               | Request log                                                            |     |
-| [[agent_reports/]]                              | Reports, checkpoints, evidence packets, verification notes             |     |
+- **File-to-file handoff:** Agents pass artifact paths, never inline content. Every step writes a durable file.
+- **Adaptive chain:** The orchestrator picks the next agent based on what arrived — no frozen pipeline.
+- **Dual gate:** verifier (factual) + evaluator (process) close every non-fast-path route.
+- **Single notepad:** orchestrator-notes.md replaces the old events.jsonl + per-session index files.
+- **Fallback:** If native agent spawn fails, inject the agent definition as the task prompt.
+- **Idempotent indexing:** Mappers operate per-batch with no shared state; startup resumes from the last checkpoint.

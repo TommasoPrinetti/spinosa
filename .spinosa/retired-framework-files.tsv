@@ -1,5 +1,20 @@
-path	reason
-onboard.command	replaced_by_spinosa_new
-onboard.cmd	replaced_by_spinosa_new
-.bin/onboard.sh	replaced_by_spinosa_new
-system/startup.md	replaced_by_inline_orchestrator_routing
+path	retired_date	reason
+onboard.command	2026-06-01	replaced_by_spinosa_new
+onboard.cmd	2026-06-01	replaced_by_spinosa_new
+.bin/onboard.sh	2026-06-01	replaced_by_spinosa_new
+system/startup.md	2026-06-01	replaced_by_inline_orchestrator_routing
+.bin/lib/rapidocr-cli.py	2026-06-01	replaced_by_spinosa_ts_paddleocr_engine
+.bin/lib/markitdown-cli.py	2026-06-01	replaced_by_spinosa_ts_markitdown_engine
+.bin/build-spinosa-vendor.sh	2026-06-01	replaced_by_model_only_vendor_packaging
+.bin/test-import-routing.sh	2026-06-01	replaced_by_spinosa_ts_phase4_parity_tests
+.bin/spinosa	2026-06-26	Replaced by Bun/TS — spinosa/src/main.ts (thin wrapper)
+.bin/lib/spinosa/ui.sh	2026-06-26	Replaced by Bun/TS — src/ui/primitives.ts, src/ui/prompts.ts, src/ui/progress.ts
+.bin/lib/spinosa/workspace.sh	2026-06-26	Replaced by Bun/TS — src/workspace/registry.ts
+.bin/lib/spinosa/handoff.sh	2026-06-26	Replaced by Bun/TS — src/workspace/handoff.ts
+.bin/lib/spinosa/commands_new.sh	2026-06-26	Replaced by Bun/TS — src/workspace/create.ts runNewWorkspace
+.bin/lib/spinosa/commands_add.sh	2026-06-26	Replaced by Bun/TS — src/commands/add.ts
+.bin/lib/spinosa/commands_dashboard.sh	2026-06-26	Replaced by Bun/TS — src/ui/dashboard.ts
+.bin/lib/spinosa/commands_system.sh	2026-06-26	Replaced by Bun/TS — src/commands/system.ts
+.bin/lib/spinosa/import.sh	2026-06-26	Replaced by Bun/TS — src/import/scan.ts + src/workspace/create.ts
+.bin/lib/spinosa/import_copy.sh	2026-06-26	Replaced by Bun/TS — src/workspace/create.ts copy+convert pipeline
+.bin/startup-prompt.md	2026-06-29	consolidated into root startup-prompt.md

@@ -4,6 +4,8 @@ Spinosa routes every prompt through one of two paths:
 - `fast_path` for direct operational answers
 - `non-fast-path` for orchestrated artifact-based work
 
+The orchestrator maintains `.spinosa/memory/orchestrator-notes.md` as its working memory — session summaries, blockers, and context that persist across routes.
+
 For every `non-fast-path` request, the orchestrator writes a goal artifact first, then dispatches agents sequentially file-to-file. The chain is adaptive — each step picks the next agent based on what arrived. The route always terminates with verifier + evaluator.
 
 ## The agents at a glance
@@ -19,6 +21,7 @@ For every `non-fast-path` request, the orchestrator writes a goal artifact first
 | **Janitor** | Audits workspace health and cleans stale files | On cleanup routes |
 | **Evaluator** | Audits the completed non-fast-path route | After verifier, always |
 | **Evolver** | Applies tightly scoped framework follow-up edits | Only when the Evaluator recommends an edit |
+| **Overseer** | Audits session history and corpus coverage | Every 5 routes or on user request |
 
 ## Routing model
 
@@ -94,10 +97,19 @@ The Verifier is the quality gate. It runs at the end of every route that produce
 
 **What it produces:** The same artifact with updated verification state — usually `✓ verified`, `⚠ corrections`, or `✗ failed`.
 
+### Artifact pattern reference
+
+| Pattern | Produced By | Description |
+|---|---|---|
+| `agent_reports/g_{session_id}.md` | Orchestrator | Goal artifact for a non-fast-path route |
+| `agent_reports/v_{session_id}.md` | Verifier | Verified artifact output |
+| `agent_reports/e_{session_id}.md` | Evaluator | Route audit report |
+| `agent_reports/c_{session_id}.md` | Overseer | Coverage report with Orchestrator Advisories |
+
 ### Mapper
 
 The Mapper runs during initial setup (startup). It:
-1. Reads files in batches of 10-15
+1. Reads files in batches of 20-25
 2. Extracts a summary, key passages, concept signals, and connections for each
 3. Writes navigation maps: a structural overview, per-group maps, and cross-cutting theme maps
 
@@ -131,6 +143,19 @@ The Evolver runs only when the Evaluator recommends an edit. It:
 
 **What it produces:** A narrowly scoped evolution report and any justified framework edits.
 
+### Overseer
+
+The Overseer audits session history and corpus coverage after every 5 non-fast-path routes, or on user request. It:
+
+| Field | Value |
+|---|---|
+| **Role** | Coverage audit |
+| **Scope** | `coverage_audit` |
+| **Produces** | `agent_reports/c_{session_id}.md` with `## Orchestrator Advisories` block |
+| **Inputs** | `.spinosa/memory/orchestrator-notes.md`, `maps/`, `system/dictionary.md`, `system/configuration.md` |
+| **Run trigger** | Every 5 non-fast-path routes, or on user request |
+| **Summary** | Audits session history, corpus coverage, and agent utilization; generates adversarial swarm probes for uncovered areas; returns routing advisories to the orchestrator |
+
 ## How agents hand off work
 
 Agents don't pass content to each other directly. On non-fast-path routes, the orchestrator writes the goal artifact first, then agents write files and pass file paths:
@@ -159,7 +184,7 @@ Evolver runs only if an edit is recommended
 
 ## Session metrics
 
-Every agent logs one compact row to `logs/session_metrics.tsv` when it finishes work. This includes counts of files read, maps accessed, and reports written. No content, no secrets — just operational numbers for tracking.
+The orchestrator maintains session notes in `.spinosa/memory/orchestrator-notes.md`. This includes session summaries, key findings, blockers, and anything useful for future work. No structured event logging — the orchestrator writes what it needs based on the user request.
 
 ## Skills (fallback mode)
 

@@ -81,10 +81,8 @@ done
 
 # ── check setup_status ──────────────────────────────────────────────────────
 if [[ "$startup_text" == *"setup_status: cli_started"* ]]; then
-  failures+=("setup_status is still cli_started; run the workspace startup agent.")
-fi
-
-if [[ "$startup_text" != *"setup_status: workspace_started"* ]]; then
+  warnings+=("setup_status is cli_started; startup indexing has not completed yet.")
+elif [[ "$startup_text" != *"setup_status: workspace_started"* ]]; then
   warnings+=("setup_status: workspace_started was not found.")
 fi
 
@@ -360,8 +358,9 @@ validate_granted_tools() {
     fi
 
     while IFS= read -r script_line; do
+      script_line="$(echo "$script_line" | xargs)"
       script_path="${script_line#script: }"
-      script_path="${script_line#script:}"
+      script_path="${script_path#script:}"
       script_path="$(echo "$script_path" | xargs)"
       if [[ ! -f "$script_path" && ! -f "$ROOT/$script_path" ]]; then
         failures+=("granted_tools script not found: $script_path (declared in $agent_basename)")

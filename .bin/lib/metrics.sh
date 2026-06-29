@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Shared Unicode metric helpers for Spinosa reports and agent session ledgers.
+# Shared Unicode metric helpers for Spinosa reports and terminal display.
 
 spinosa_bar() {
   local value="${1:-0}" total="${2:-0}" width="${3:-16}"
@@ -73,87 +73,18 @@ spinosa_metric_box() {
   printf '└%s┘\n' "$rule"
 }
 
-spinosa_metrics_header() {
-  printf 'date\tsession_id\tagent\troute\toperation\tquery_label\tdirs_seen\tmaps_read\traw_matches\traw_files_read\treports_written\toutput_path\n'
-}
-
-spinosa_session_id() {
-  if [[ -n "${SPINOSA_SESSION_ID:-}" ]]; then
-    printf '%s\n' "$SPINOSA_SESSION_ID"
-  else
-    date +%Y%m%d-%H%M%S
-  fi
-}
-
-spinosa_tsv_field() {
-  printf '%s' "${1:-}" | tr '\t\r\n' '   '
-}
-
-spinosa_metrics_append() {
-  local ledger="${1:-}"
-  shift || true
-
-  if [[ -z "$ledger" || "$#" -ne 11 ]]; then
-    printf 'usage: spinosa_metrics_append LEDGER session_id agent route operation query_label dirs_seen maps_read raw_matches raw_files_read reports_written output_path\n' >&2
-    return 2
-  fi
-
-  mkdir -p "$(dirname "$ledger")"
-  [[ -f "$ledger" ]] || spinosa_metrics_header > "$ledger"
-
-  # Portable advisory lock using mkdir (works on macOS + Linux, no flock required)
-  local lockdir="${ledger}.lockdir"
-  local locked=0
-  for _ in 1 2 3 4 5; do
-    if mkdir "$lockdir" 2>/dev/null; then
-      locked=1
-      break
-    fi
-    sleep 0.1
-  done
-
-  {
-    spinosa_tsv_field "$(date +%Y-%m-%d)"
-    for field in "$@"; do
-      printf '\t'
-      spinosa_tsv_field "$field"
-    done
-    printf '\n'
-  } >> "$ledger"
-
-  if [[ $locked -eq 1 ]]; then
-    rmdir "$lockdir" 2>/dev/null || true
-  fi
-}
-
 spinosa_metrics_summary() {
-  local ledger="${1:-logs/session_metrics.tsv}"
-  local summary rows matches files reports agents
+  local notepad="${1:-.spinosa/memory/orchestrator-notes.md}"
 
-  if [[ ! -f "$ledger" ]]; then
-    spinosa_metric_box "Agent Metrics" "No session metrics ledger found."
+  if [[ ! -f "$notepad" ]]; then
+    spinosa_metric_box "Orchestrator Notes" "No notepad found."
     return 0
   fi
 
-  summary="$(awk -F '\t' '
-    NR > 1 {
-      rows += 1
-      agents[$3] = 1
-      matches += ($9 + 0)
-      files += ($10 + 0)
-      reports += ($11 + 0)
-    }
-    END {
-      for (agent in agents) agent_count += 1
-      printf "%d\t%d\t%d\t%d\t%d\n", rows, agent_count, matches, files, reports
-    }
-  ' "$ledger")"
-
-  IFS=$'\t' read -r rows agents matches files reports <<< "$summary"
-  spinosa_metric_box "Agent Metrics" \
-    "Sessions  $(spinosa_bar "${rows:-0}" "${rows:-0}" 16)  ${rows:-0} rows" \
-    "Agents    $(spinosa_bar "${agents:-0}" "${agents:-0}" 16)  ${agents:-0} seen" \
-    "Matches   $(spinosa_bar "${matches:-0}" "${matches:-0}" 16)  ${matches:-0} raw matches" \
-    "Files     $(spinosa_bar "${files:-0}" "${files:-0}" 16)  ${files:-0} files read" \
-    "Reports   $(spinosa_bar "${reports:-0}" "${reports:-0}" 16)  ${reports:-0} reports"
+  local lines words
+  lines=$(wc -l < "$notepad" | tr -d ' ')
+  words=$(wc -w < "$notepad" | tr -d ' ')
+  spinosa_metric_box "Orchestrator Notes" \
+    "Lines  $(spinosa_bar "${lines:-0}" "${lines:-0}" 16)  ${lines:-0} lines" \
+    "Words  $(spinosa_bar "${words:-0}" "${words:-0}" 16)  ${words:-0} words"
 }

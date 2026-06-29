@@ -66,3 +66,7 @@ Short routing log for user prompts. Log the request before deciding whether to a
 | 2026-06-26 | Push main and republish Spinosa 0.5.17 | fast_path | in_progress | pending push and release asset replacement |
 | 2026-06-26 | Plan full Bun/TypeScript migration with markitdown-ts, ONNX OCR, TS PDF split, and Bun runtime installer | non-fast-path | done | agent_reports/00_bun-typescript-migration-plan.md; verifier pass; evaluator no_edit |
 | 2026-06-26 | Fix OpenCode Spinosa agent frontmatter schema errors | fast_path | done | .opencode/agents permission headers updated; opencode agent debug/list passed |
+| 2026-06-26 | Execute Bun/TypeScript migration phases 0-8 with trace and gates | non-fast-path | partial | phases 0-1 pass; phase 2 text workspace slice pass; full phase 2+ blocked by remaining UI/startup/converter work |
+| 2026-06-26 | Continue Bun/TypeScript migration to completion with active goal | non-fast-path | partial | phases 2-3 pass; phases 4-8 partial; real OCR model vendor and full doc parity still blocked |
+| 2026-06-28 | Evaluate GrepRAG product features (Memory, Mechanic, Inbox, Advisors) against Spinosa architecture | non-fast-path | done | agent_reports/07_greprag-feature-evaluation.md |
+| 2026-06-28 | Analyze query decomposition for Spinosa (agentic retrieval concept) | non-fast-path | done | agent_reports/08_query-decomposition-analysis.md |

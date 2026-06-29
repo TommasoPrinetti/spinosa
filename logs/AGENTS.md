@@ -1,34 +1,32 @@
 ---
 type: directory_guidance
-scope: logs/
+scope: agent_reports/
 description:
-  - Rules for lightweight request logs and compact agent session metrics.
-  - Append request, intake, external-access, and operation summaries here when traceability is needed.
+  - Rules for durable reports, checkpoints, evidence packets, and verification notes.
+  - "`spinosa-writer`, `spinosa-verifier`, `spinosa-janitor`, and `spinosa-searcher` use this directory for output artifacts."
 connects_to:
   - AGENTS.md
-  - logs/user_requests.md
-  - logs/session_metrics.tsv
-  - system/configuration.md
+  - .spinosa/memory/
 created: 2026-06-03
-updated: 2026-06-04
+updated: 2026-06-24
 ---
 
-# logs — Request Trail
+# agent_reports — Durable Reports & Checkpoints
 
-Append-only request trail and compact operation memory for user prompts, source intake summaries, external access decisions, route outcomes, and agent activity counts.
+Synthesis reports, evidence packets, verification notes, checkpoints, and maintenance reports. These are the primary output artifacts of the sub-agent pipeline.
 
 ## Operations
 
-- **Append-only**: never delete, edit, or reorder existing log rows. Add new rows at the bottom of the table. Preserve the header row.
-- Timestamps in YYYY-MM-DD format.
-- `user_requests.md` has YAML frontmatter with type, role, and purpose.
-- `session_metrics.tsv` is TSV without frontmatter so shell helpers can append and parse it safely.
+- Reports are **read-write**: `spinosa-writer` creates, `spinosa-verifier` corrects in-place. `spinosa-janitor` may archive.
+- Each report must have a clear `type` and `scope` in the body or frontmatter.
+- Evidence-bearing claims must cite source paths (raw copy).
+- Verification failures are documented, not hidden.
+- Partial results must be labeled as such.
+- `spinosa-janitor` evaluates staleness by comparing `updated:` dates against current date — no tendency detection or structured needs analysis.
 
-## Per-file rules
+## Conventions
 
-- `user_requests.md` — written by the orchestrator. One row per user prompt. Route, status, and output recorded after completion.
-- `session_metrics.tsv` — append-only operation ledger. Record counts and paths only; do not record raw command logs, long grep terms, source excerpts, secrets, or credentials.
-- Source intake rows use route `source_intake` and include batch/source location in the output field.
-- External access rows use route `external_access` and must name the user authorization and retained output.
-
-
+- Filenames: nn_descriptive-snake-case.md
+- Report bodies are flavoured Markdown, well designed and tidy.
+- Use Obsidian wikilinks for in-workspace references.
+- If a report cites a claim that `spinosa-verifier` could not verify, mark it explicitly.
