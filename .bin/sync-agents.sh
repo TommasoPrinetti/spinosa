@@ -108,6 +108,8 @@ for canonical in "$REPO_ROOT/.agents/agents/"*.md; do
                 cat > "$dest_dir/$agent_file" << OPENCODE_EOF
 ---
 mode: subagent
+description: >
+  $description
 permission:
   edit: allow
 ---
