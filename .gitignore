@@ -1,5 +1,6 @@
 # Local design notes (not pushed to GitHub)
 _notes/
+development/
 
 # Release guide — agent-only, never committed
 RELEASE_GUIDE.md

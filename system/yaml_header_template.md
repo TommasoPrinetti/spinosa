@@ -62,7 +62,7 @@ people: ["canonical name from dictionary"]
 places: ["canonical place from dictionary"]
 organizations: ["canonical org from dictionary"]
 topics: ["topic1", "topic2"]
-summary: "4-line max summary capturing the key areas and concepts in this document."
+summary: "keyword-dense summary — terms an agent would grep for to find this file's concepts"
 explicit_source_terms: ["surface term from source"]
 canonical_aliases: ["alias from dictionary"]
 uncertain_terms: ["term needing review"]
@@ -85,7 +85,7 @@ Rules:
 - `ocr_confidence` is optional and applies when OCR or scan conversion produced the text. Use `unknown` when OCR quality was not measured.
 - `language` is the ISO 639-1 code of the source file's primary language (en, fr, pt, es, etc.).
 - `people`, `places`, `organizations` MUST use canonical forms from [[dictionary]].
-- `summary` is a 4-line max plain-text capture of the document's key areas and concepts. Written during startup by a summarizer sub-agent; no automated extraction tools involved.
+- `summary` is a dense keyword string optimized for future search — terms an agent would grep for to find this file's concepts. Not prose. Single line. Written during startup by a summarizer sub-agent; no automated extraction tools involved.
 - `explicit_source_terms` are terms visibly present in the source.
 - `canonical_aliases` lists dictionary aliases included for retrieval.
 - `uncertain_terms`, `machine_artifacts`, and `metadata_uncertainty` quarantine noisy or incomplete metadata.

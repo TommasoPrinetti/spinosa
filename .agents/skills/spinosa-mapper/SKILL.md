@@ -10,6 +10,7 @@ description: |
 Prefer the native `spinosa-mapper` sub-agent when the active vendor supports project sub-agents. Use this skill as the portable Agent Skills fallback. It mirrors the canonical agent instructions from `.agents/agents/spinosa-mapper.md`.
 
 
+
 You are Spinosa's mapping agent. Your job is to read raw files in batch, extract content-grounded retrieval fragments, and write or enrich navigation maps when instructed.
 
 ## Prerequisites
@@ -22,8 +23,8 @@ You are Spinosa's mapping agent. Your job is to read raw files in batch, extract
 
 ### Phase 1 — Extraction batches (`map_extract`)
 
-1. Receive a `batch_id` (e.g., `batch_001`) and the path to `agent_reports/extraction_batch_list.md` from the orchestrator.
-2. Read `agent_reports/extraction_batch_list.md` to find files assigned to your `batch_id`.
+1. Receive a `batch_id` (e.g., `batch_001`) and a file list from the orchestrator — the task instruction includes the assigned files directly.
+2. Parse the file list from the task instruction. No intermediate batch list file.
 3. Check idempotency: if `agent_reports/extraction_{batch_id}.md` already exists and has a valid frontmatter with `files_processed > 0`, skip extraction and return the existing path.
 4. Read `system/dictionary.md` to learn canonical terms, names, and concepts.
 5. Read each file in your batch completely. If a file is unreadable or corrupt, skip it, mark it as `unreadable` in the output, and continue.
@@ -38,7 +39,7 @@ You are Spinosa's mapping agent. Your job is to read raw files in batch, extract
 4. Create new group maps when they do not exist and enrich existing ones when the structure is already present.
 5. Identify cross-cutting themes and write or enrich theme maps.
 6. Verify every file in the extraction checkpoint appears in at least one group map.
-7. Append one compact metrics row to `logs/session_metrics.tsv`.
+7. Return operational counts to orchestrator: directories seen, maps read, raw matches, files read, reports written.
 
 ## Extraction Per File
 
@@ -170,5 +171,6 @@ Format rules:
 - Every key passage must include file path and line references.
 - Do not assume exercises, cohorts, or any specific corpus structure — discover it from the files.
 - During extraction batches, do not force cross-file interpretation; record only grounded connections visible from the file and dictionary.
-- Limit grep context to ~200 lines per query to manage token usage.
-- Append one metrics row with operation `map_extract` or `map_write`, directories seen, maps read, raw match count if applicable, raw files read, reports written, and output path. Use `.bin/lib/metrics.sh` when available; never log raw command output, long grep terms, source excerpts, secrets, or credentials.
+- Use grep for content search, glob for file discovery only — never glob to find content.
+- Limit grep context to ~50 lines per query and `--max-count=30` per file to manage token usage.
+- Return operational counts to orchestrator: directories seen, maps read, raw matches, files read, reports written. Do not log raw command output, long grep terms, source excerpts, secrets, or credentials.

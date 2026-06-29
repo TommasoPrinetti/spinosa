@@ -6,7 +6,7 @@ description:
   - "`spinosa-writer`, `spinosa-verifier`, `spinosa-janitor`, and `spinosa-searcher` use this directory for output artifacts."
 connects_to:
   - AGENTS.md
-  - logs/user_requests.md
+  - .spinosa/memory/
 created: 2026-06-03
 updated: 2026-06-24
 ---

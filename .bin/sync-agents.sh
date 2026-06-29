@@ -127,6 +127,7 @@ OPENCODE_EOF
                     spinosa-janitor)     claude_tools="Read, Grep, Glob, Write" ;;
                     spinosa-mapper)      claude_tools="Read, Write" ;;
                     spinosa-serendippo)  claude_tools="Read, Grep, Glob, Write" ;;
+                    spinosa-overseer)   claude_tools="Read, Grep, Glob, Write" ;;
                 esac
                 cat > "$dest_dir/$agent_file" << CLAUDE_EOF
 ---
@@ -213,7 +214,7 @@ SKILL_EOF
     generated_skills=$((generated_skills + 1))
 done
 
-for platform in .opencode .claude; do
+for platform in .opencode .claude .codex; do
     dest="$REPO_ROOT/$platform/skills"
     rm -rf "$dest"
     mkdir -p "$dest"

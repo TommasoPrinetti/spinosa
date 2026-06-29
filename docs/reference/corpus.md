@@ -27,8 +27,8 @@ your-workspace/
 | `maps/` | Navigation maps built during startup. Think of them as a smart index — they say "these 5 files are about coastal erosion, these 3 are about farming practices, and here are the key passages." Uses Obsidian wikilinks (`[[filename]]`) so you can browse connections visually if you open the workspace in Obsidian. |
 | `system/` | Your workspace settings. `context.md` stores project scope and research vocabulary. `configuration.md` stores operating settings. `dictionary.md` is the master vocabulary list. |
 | `agent_reports/` | All agent output. Numbered files like `00_startup-report.md` are final results. Files like `evidence_packet.md` are intermediate work files that get cleaned up. |
-| `logs/` | Two files: `user_requests.md` (your question history) and `session_metrics.tsv` (agent activity counts). |
-| `.agents/agents/` | Definitions of the 7 sub-agents. Each is a `.md` file with permissions, workflow, and output format. |
+| `logs/` | Historical archives from before the memory migration (2026-06-28). Current session memory at `.spinosa/memory/`. |
+| `.agents/agents/` | Definitions of the 10 agents. Each is a `.md` file with permissions, workflow, and output format. |
 | `.agents/skills/` | Fallback instructions for each agent, used when native dispatch isn't available. |
 | `.bin/` | CLI scripts and conversion engines. |
 | `.trash/` | Archived process files — moved here automatically as reports are finalized. |
@@ -148,7 +148,7 @@ When you first create a workspace, the startup protocol indexes everything:
 
 Startup is complete only when all validation checks pass. The status then changes from `cli_started` to `workspace_started`.
 
-> For the full protocol with detailed specifications, see the Startup Protocol in `.bin/startup-prompt.md`.
+> For the full protocol with detailed specifications, see the Startup Protocol in `startup-prompt.md`.
 
 ## AGENTS.md files
 

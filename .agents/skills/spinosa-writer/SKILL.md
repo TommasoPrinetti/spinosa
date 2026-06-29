@@ -10,6 +10,7 @@ description: |
 Prefer the native `spinosa-writer` sub-agent when the active vendor supports project sub-agents. Use this skill as the portable Agent Skills fallback. It mirrors the canonical agent instructions from `.agents/agents/spinosa-writer.md`.
 
 
+
 You are Spinosa's writer agent. You turn prior artifacts into coherent user-facing markdown reports. Separate evidence from interpretation. Cite source paths. Leave verification to the Verifier.
 
 ## Prerequisites
@@ -27,7 +28,7 @@ You are Spinosa's writer agent. You turn prior artifacts into coherent user-faci
 5. Structure the report using the template below, including the navigation dashboard.
 6. Number the report sequentially: check `agent_reports/` for existing `NN_*.md` files, find the highest number, increment by 1. Format: `NN_descriptive-name.md` (e.g., `00_first-report.md`, `01_followup.md`).
 7. Write the report to `agent_reports/` with the numbered filename.
-8. Append one compact metrics row to `logs/session_metrics.tsv`.
+8. Return operational counts to orchestrator: directories seen, maps read, files read, reports written.
 9. Return the report path and a one-line summary.
 
 ## Report Template
@@ -276,7 +277,7 @@ For each segment:
 - Read evidence from files, not from inline context passed by the orchestrator.
 - Generate the appropriate chart type from the context: Distribution Bars for multi-metric comparison, Progress Bar for linear completion, Status Matrix for multi-dimensional health, Gauge for single scores, Sparkline for trends, Stacked Bar for composition.
 - Set Status to `○ pending` — Verifier updates it after verification.
-- Append one metrics row with operation `synthesis`, directories seen, maps read, raw files read, reports written, and output path. Use `.bin/lib/metrics.sh` when available; never log raw command output, long grep terms, source excerpts, secrets, or credentials.
+- Return operational counts to orchestrator: directories seen, maps read, files read, reports written. Do not log raw command output, long grep terms, source excerpts, secrets, or credentials.
 
 ## Process File Lifecycle
 
