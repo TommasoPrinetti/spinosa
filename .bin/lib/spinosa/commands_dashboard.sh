@@ -15,7 +15,6 @@ cmd_dashboard() {
   [[ -z "$version" || "$version" == "dev" ]] && version="dev"
   local in_workspace=0
   local project_name="" setup_status="" fw_version=""
-  local discovered_workspaces=()
   local cli_labels=()
 
   print_spinosa_banner "$version"
@@ -34,48 +33,7 @@ cmd_dashboard() {
     printf '  %sStatus:%s    %s\n' "${BOLD}" "${RESET}" "${setup_status:-unknown}"
     printf '  %sFramework:%s v%s\n' "${BOLD}" "${RESET}" "${fw_version:-unknown}"
   else
-    # Read remembered workspaces directly from ~/.spinosa/metadata and validate
-    # that each listed path still has .spinosa/workspace.
-    spinner_start "Loading registered workspaces"
-    local workspace_data
-    workspace_data="$(discover_registered_workspaces 2>/dev/null || true)"
-    spinner_stop
-    
-    if [[ -n "$workspace_data" ]]; then
-      while IFS='|' read -r ws_path project; do
-        [[ -n "$ws_path" ]] && discovered_workspaces+=("$ws_path|$project")
-      done <<< "$workspace_data"
-    fi
-
-    if [[ ${#discovered_workspaces[@]} -gt 0 ]]; then
-      printf '  %sDiscovered workspaces:%s %d\n' "${BOLD}" "${RESET}" "${#discovered_workspaces[@]}"
-      local i entry ws_path project ws_name _ws_count=${#discovered_workspaces[@]} _ws_shown=0
-      for i in "${!discovered_workspaces[@]}"; do
-        entry="${discovered_workspaces[$i]}"
-        ws_path="${entry%%|*}"
-        project="${entry#*|}"
-        ws_name="$(basename "$ws_path")"
-        if [[ $i -lt 3 ]]; then
-          [[ "$_ws_shown" -gt 0 ]] && tree_sep
-          if [[ -n "$project" ]]; then
-            tree_row "$ws_name" "(${project})"
-          else
-            tree_row "$ws_name"
-          fi
-          _ws_shown=$((_ws_shown + 1))
-        fi
-      done
-      if [[ ${#discovered_workspaces[@]} -gt 3 ]]; then
-        tree_sep
-        local _more=$(( ${#discovered_workspaces[@]} - 3 ))
-        tree_row_last "... and ${_more} more"
-      elif [[ "$_ws_shown" -gt 0 ]]; then
-        # Already printed with tree_row, last item handled above
-        :
-      fi
-    else
-      printf '  %sNo workspaces yet — start with New workspace%s\n' "${DIM}" "${RESET}"
-    fi
+    printf '  %sNo workspace selected — choose an action below%s\n' "${DIM}" "${RESET}"
   fi
 
   printf '\n'
