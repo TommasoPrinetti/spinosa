@@ -84,7 +84,7 @@ Answer report (agent_reports/NN_*.md)
 
 ```txt
 Framework (template — always_replace / replace_if_unmodified via framework-files.tsv):
-  AGENTS.md, startup-prompt.md, .agents/, .bin/, spinosa/src/, docs/, system/templates
+  AGENTS.md, startup-prompt.md, .agents/, .bin/, docs/, system/templates
 
 User state (per workspace — never_replace):
   raw/            corpus copies with YAML headers
