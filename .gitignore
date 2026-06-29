@@ -5,11 +5,8 @@ development/
 # Release guide — agent-only, never committed
 RELEASE_GUIDE.md
 
-# Developer-only scripts — local to maintainer, never shipped
-.bin/package-release.sh
+# Release publishing — local to maintainer, never shipped
 .bin/publish-release.sh
-.bin/sync.sh
-.bin/validate-skills.sh
 
 # OS junk
 .DS_Store

@@ -61,7 +61,7 @@ Each rollout begins with a `session_meta` record containing `payload.cwd`. Filte
 
 ```bash
 # Find sessions from a specific project
-grep -rl '"cwd":"/Users/tommasoprinetti/Documents/spinosa-main"' \
+grep -rl '"cwd":"/path/to/workspace"' \
   ~/.codex/sessions/2026/**/**/*.jsonl | head -5
 ```
 
