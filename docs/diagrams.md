@@ -154,7 +154,7 @@ flowchart TB
         AGENTS[AGENTS.md\nOrchestrator contract]
         STARTUP[startup-prompt.md\nIndexing protocol]
         CLI_BIN[.bin/spinosa\nCLI entry point]
-        SRC[spinosa/src/\nTypeScript application]
+        SRC[.bin/lib/spinosa/\nShell CLI library]
         DEF[.agents/agents/\n10 agent definitions]
         MIRRORS[.opencode/ .claude/ .codex/\nvendor agent mirrors]
         REF[.agents/references/\ntemplates + classification]

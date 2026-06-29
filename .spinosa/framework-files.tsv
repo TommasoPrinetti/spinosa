@@ -14,9 +14,15 @@ startup-prompt.md	framework	replace_if_unmodified
 .bin/lib/CONVERTER_PROTOCOL.md	framework	replace_if_unmodified
 .spinosa/retired-framework-files.tsv	framework	replace_if_unmodified
 .bin/startup-prompt.md	framework	replace_if_unmodified
+.bin/spinosa	framework	replace_if_unmodified
+.bin/lib/spinosa/	framework	replace_if_unmodified
+.bin/build-spinosa-vendor.sh	framework	replace_if_unmodified
+.bin/lib/markitdown-cli.py	framework	replace_if_unmodified
+.bin/lib/rapidocr-cli.py	framework	replace_if_unmodified
+.bin/test-import-routing.sh	framework	replace_if_unmodified
+.bin/sync-agents.sh	framework	replace_if_unmodified
 install.sh	framework	replace_if_unmodified
 .agents/	framework	replace_if_unmodified
-.opencode/package.json	framework	replace_if_unmodified
 docs/	framework	replace_if_unmodified
 system/yaml_header_template.md	framework	replace_if_unmodified
 system/AGENTS.md	framework	replace_if_unmodified
