@@ -15,10 +15,8 @@ cmd_dashboard() {
   [[ -z "$version" || "$version" == "dev" ]] && version="dev"
   local in_workspace=0
   local project_name="" setup_status="" fw_version=""
-  local cli_labels=()
 
   print_spinosa_banner "$version"
-  printf '\n'
 
   # ── Workspace context ─────────────────────────────────────────────────
   if [[ -f ".spinosa/workspace" ]]; then
@@ -32,33 +30,6 @@ cmd_dashboard() {
     printf '  %sWorkspace:%s %s\n' "${BOLD}" "${RESET}" "${project_name:-unknown}"
     printf '  %sStatus:%s    %s\n' "${BOLD}" "${RESET}" "${setup_status:-unknown}"
     printf '  %sFramework:%s v%s\n' "${BOLD}" "${RESET}" "${fw_version:-unknown}"
-  else
-    printf '  %sNo workspace selected — choose an action below%s\n' "${DIM}" "${RESET}"
-  fi
-
-  printf '\n'
-
-  # ── LLM CLIs ──────────────────────────────────────────────────────────
-  spinner_start "Detecting LLM CLIs"
-  local cli_output
-  cli_output="$(detect_llm_clis)"
-  spinner_stop
-  if [[ -n "$cli_output" ]]; then
-    while IFS= read -r line; do
-      [[ -n "$line" ]] && cli_labels+=("$line")
-    done <<< "$cli_output"
-  fi
-
-  if [[ ${#cli_labels[@]} -gt 0 ]]; then
-    printf '  %sLLM CLIs:%s ' "${BOLD}" "${RESET}"
-    local i
-    for i in "${!cli_labels[@]}"; do
-      if [[ $i -gt 0 ]]; then
-        printf ', '
-      fi
-      printf '%s %s' "${G}✓${RESET}" "${cli_labels[$i]}"
-    done
-    printf '\n'
   fi
 
   printf '\n'

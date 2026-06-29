@@ -5,7 +5,7 @@ safe_copy() {
   local src="$1" dst="$2"
   local retries="${3:-3}" delay=2 i
   for ((i = 1; i <= retries; i++)); do
-    if cp "$src" "$dst" 2>/dev/null; then
+    if cp -- "$src" "$dst" 2>/dev/null; then
       return 0
     fi
     [[ "$i" -lt "$retries" ]] || break
@@ -22,60 +22,52 @@ safe_copy() {
 # already have frontmatter — only missing cold fields are added.
 # Future agents update the existing frontmatter with semantic fields only.
 inject_cold_frontmatter() {
+  inject_cold_frontmatter_body "$@" || true
+}
+
+inject_cold_frontmatter_body() {
   local md_file="$1"
-  local original_source="$2"
-  local original_format="$3"
-  local converter_engine="$4"
-  local processing_status="$5"
 
   [[ -f "$md_file" ]] || return 0
 
-  local today source_rel
+  local today
   today="$(date -u +%Y-%m-%d)"
-  source_rel="raw/${md_file#*raw/}"
 
-  # No frontmatter → prepend new one
-  head -1 "$md_file" | grep -q '^---$' || {
+  # No frontmatter → prepend scaffold
+  head -1 -- "$md_file" | grep -q '^---$' || {
     {
-      printf '---\n'
-      printf 'type: raw_copy\n'
-      printf 'source: "%s"\n' "$source_rel"
-      [[ -n "$original_source" ]] && printf 'original_source: "%s"\n' "$original_source"
-      printf 'original_format: %s\n' "${original_format:-unknown}"
-      printf 'converter_engine: %s\n' "${converter_engine:-native}"
-      printf 'processing_status: %s\n' "${processing_status:-native_copied}"
-      printf 'generated_by: import_pipeline\n'
-      printf 'generated_at: %s\n' "$today"
+      printf -- '---\n'
+      printf 'type:\n'
+      printf 'summary:\n'
+      printf 'concepts:\n'
+      printf 'language:\n'
+      printf 'people:\n'
+      printf 'places:\n'
+      printf 'organizations:\n'
+      printf 'topics:\n'
       printf 'created: %s\n' "$today"
-      printf 'updated: %s\n' "$today"
-      printf '---\n\n'
-      cat "$md_file"
-    } > "${md_file}.tmp" && mv "${md_file}.tmp" "$md_file"
+      printf -- '---\n\n'
+      cat -- "$md_file"
+    } > "${md_file}.tmp" && mv -- "${md_file}.tmp" "$md_file"
     return
   }
 
-  # Has frontmatter → merge missing cold fields
-  awk -v source="$source_rel" \
-      -v orig_source="${original_source:-}" \
-      -v orig_format="${original_format:-unknown}" \
-      -v engine="${converter_engine:-native}" \
-      -v pstatus="${processing_status:-native_copied}" \
-      -v today="$today" \
+  # Has frontmatter → merge missing scaffold fields
+  awk -v today="$today" \
   '
   BEGIN { in_fm = 0; first = 1 }
 
   /^---$/ && first { print; in_fm = 1; first = 0; next }
   /^---$/ && in_fm {
-    if (!seen["type"])              print "type: raw_copy"
-    if (!seen["source"])            printf "source: \"%s\"\n", source
-    if (orig_source != "" && !seen["original_source"]) printf "original_source: \"%s\"\n", orig_source
-    if (!seen["original_format"])   printf "original_format: %s\n", orig_format
-    if (!seen["converter_engine"])  printf "converter_engine: %s\n", engine
-    if (!seen["processing_status"]) printf "processing_status: %s\n", pstatus
-    if (!seen["generated_by"])      print "generated_by: import_pipeline"
-    if (!seen["generated_at"])      printf "generated_at: %s\n", today
-    if (!seen["created"])           printf "created: %s\n", today
-    if (!seen["updated"])           printf "updated: %s\n", today
+    if (!seen["type"])            print "type:"
+    if (!seen["summary"])         print "summary:"
+    if (!seen["concepts"])        print "concepts:"
+    if (!seen["language"])        print "language:"
+    if (!seen["people"])          print "people:"
+    if (!seen["places"])          print "places:"
+    if (!seen["organizations"])   print "organizations:"
+    if (!seen["topics"])          print "topics:"
+    if (!seen["created"])         printf "created: %s\n", today
     print "---"
     in_fm = 0
     next
@@ -85,7 +77,7 @@ inject_cold_frontmatter() {
     seen[parts[1]] = 1
   }
   { print }
-  ' "$md_file" > "${md_file}.tmp" && mv "${md_file}.tmp" "$md_file"
+  ' "$md_file" > "${md_file}.tmp" && mv -- "${md_file}.tmp" "$md_file"
 }
 
 copy_direct_raw_file() {
@@ -142,7 +134,7 @@ copy_source() {
     rel_path="${src_file#"$source_path"/}"
     raw_rel_path="$(markdown_raw_rel_path "$rel_path")"
     copy_direct_raw_file "$source_path" "$dest_dir" "$src_file" "$raw_rel_path"
-    inject_cold_frontmatter "$dest_dir/$raw_rel_path" "$rel_path" "$(file_ext "$src_file")" "renamer" "copied_text_headered"
+    inject_cold_frontmatter "$dest_dir/$raw_rel_path"
   done < <(find_source_files "$source_path")
 
   while IFS= read -r -d '' src_file; do
@@ -152,7 +144,7 @@ copy_source() {
     rel_path="${src_file#"$source_path"/}"
     copy_direct_raw_file "$source_path" "$dest_dir" "$src_file" "$rel_path"
     if [[ "$rel_path" == *.md ]]; then
-      inject_cold_frontmatter "$dest_dir/$rel_path" "$rel_path" "$(file_ext "$src_file")" "renamer" "native_copied"
+      inject_cold_frontmatter "$dest_dir/$rel_path"
     fi
   done < <(find_source_files "$source_path")
 
@@ -351,7 +343,13 @@ copy_source() {
 
                   if [[ "$_md_end_status" == "ok" ]]; then
                     md_converted=$((md_converted + 1))
-                    inject_cold_frontmatter "$dest_dir/$_md_out_log" "$_md_current_rel" "${_md_out_log_ext:-unknown}" "markitdown" "markitdown_converted"
+                    inject_cold_frontmatter "$dest_dir/$_md_out_log"
+                    _page_folder="${_md_out_log%.md}"
+                    if [[ -n "$_page_folder" && -d "$dest_dir/$_page_folder" ]]; then
+                      for _page_file in "$dest_dir/$_page_folder"/page-*.md; do
+                        [[ -f "$_page_file" ]] && inject_cold_frontmatter "$_page_file"
+                      done
+                    fi
                     printf '{"ts":"%s","status":"ok","source":"%s","output":"%s","engine":"markitdown","pages":"%s","duration_s":%s}\n' \
                       "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
                       "$_md_current_rel" \
@@ -571,7 +569,13 @@ copy_source() {
                     ocr_converted=$((ocr_converted + 1))
                     local _ocr_format
                     _ocr_format="$(file_ext "$_current_rel")"
-                    inject_cold_frontmatter "$dest_dir/$_md_out" "$_current_rel" "${_ocr_format:-unknown}" "rapidocr" "ocr_processed"
+                    inject_cold_frontmatter "$dest_dir/$_md_out"
+                    _page_folder="${_md_out%.md}"
+                    if [[ -n "$_page_folder" && -d "$dest_dir/$_page_folder" ]]; then
+                      for _page_file in "$dest_dir/$_page_folder"/page-*.md; do
+                        [[ -f "$_page_file" ]] && inject_cold_frontmatter "$_page_file"
+                      done
+                    fi
                     printf '{"ts":"%s","status":"ok","source":"%s","output":"%s","pages":"%s","duration_s":%s}\n' \
                       "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
                       "$_current_rel" \

@@ -42,14 +42,6 @@ def yaml_quote(value: str) -> str:
     return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
-def workspace_relative(path: str) -> str:
-    parts = Path(path).parts
-    if "raw" in parts:
-        idx = parts.index("raw")
-        return "/".join(parts[idx:])
-    return Path(path).name
-
-
 def page_folder_for_output(output_path: str) -> str:
     path = Path(output_path)
     if path.suffix.lower() == ".md":
@@ -68,22 +60,12 @@ def write_page_markdown(
     original_format: str,
     processing_status: str,
 ) -> None:
-    source_rel = workspace_relative(page_path)
-    folder_rel = workspace_relative(str(Path(page_path).parent))
     header = "\n".join(
         [
             "---",
-            "type: raw_source_page",
-            f"source: {yaml_quote(source_rel)}",
-            f"source_document: {yaml_quote(folder_rel)}",
-            f"original_source: {yaml_quote(original_source)}",
-            f"source_document_name: {yaml_quote(Path(original_source).name)}",
-            f"page_number: {page_number}",
+            f"source_document: {yaml_quote(Path(original_source).name)}",
+            f"page: {page_number}",
             f"page_count: {page_count}",
-            f"part_of: {yaml_quote(original_source)}",
-            f"converter_engine: {converter_engine}",
-            f"original_format: {original_format}",
-            f"processing_status: {processing_status}",
             "---",
             "",
         ]
