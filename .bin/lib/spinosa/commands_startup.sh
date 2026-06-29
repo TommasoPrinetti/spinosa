@@ -31,7 +31,7 @@ cmd_startup() {
   print_step 1 2 "Workspace selection"
 
   workspace_path="$(require_workspace "$workspace_path")" || die "No workspace selected."
-  ok "Selected: ${BOLD}$(display_path "$workspace_path")${RESET}"
+  ok "Selected: ${BOLD}${workspace_path##*/}${RESET}"
 
   # ---- Read workspace metadata ----------------------------------------------------
   local project_name source_location
@@ -56,23 +56,42 @@ cmd_startup() {
   startup_prompt="$(startup_prompt_text "$project_name" "$workspace_path" "$source_location" "$preferred_cli_label")"
   launch_command="$(build_launch_command "$workspace_path" "$preferred_cli" "$startup_prompt")"
 
-  printf '\n'
-  header "Copy this prompt and paste it in your tool"
-  printf '\n%s%s%s\n\n' "${BOLD}" "$startup_prompt" "${RESET}"
+  copy_to_clipboard "$startup_prompt" || true
 
-  # ---- Handoff ----------------------------------------------------
-  if [[ "$flag_launch" == "copy" ]]; then
-    copy_to_clipboard "$launch_command" && ok "Launch command copied to your clipboard." || print_box "Terminal Launch Command -- full text" <<< "$launch_command"
-  elif [[ "$flag_launch" == "run" ]] && [[ -n "$preferred_cli" ]]; then
-    run_cli_with_prompt "$workspace_path" "$preferred_cli" "$startup_prompt" || {
-      warn "Could not run ${preferred_cli_label}. Copying the launch command instead."
-      copy_to_clipboard "$launch_command" && ok "Launch command copied to your clipboard." || print_box "Terminal Launch Command -- full text" <<< "$launch_command"
-    }
+  if [[ "$preferred_cli" == "other" && -z "$flag_launch" ]]; then
+    local _psize
+    _psize="$(printf '%s' "$startup_prompt" | wc -c | tr -d ' ')"
+    printf '\n'
+    divider
+    printf '\n'
+    ok "Startup prompt copied to clipboard ($(format_bytes "$_psize"))"
+    printf '\n'
+    printf '  %sWorkspace:%s  %s\n' "${BOLD}" "${RESET}" "${workspace_path##*/}"
+    printf '  %sCLI:%s        Other (manual paste)\n' "${BOLD}" "${RESET}"
+    printf '\n'
+    printf '  %sPress Enter to finish.%s\n' "${DIM}" "${RESET}"
+    printf '\n'
+    divider
+    read_from_tty _ >/dev/null 2>&1 || true
   else
-    handoff_selected_cli "$workspace_path" "$preferred_cli" "$preferred_cli_label" "$startup_prompt" "$launch_command"
+    printf '\n'
+    header "Copy this prompt and paste it in your tool"
+    printf '\n%s%s%s\n\n' "${BOLD}" "$startup_prompt" "${RESET}"
+
+    # ---- Handoff ----------------------------------------------------
+    if [[ "$flag_launch" == "copy" ]]; then
+      copy_to_clipboard "$launch_command" && ok "Launch command copied to your clipboard." || print_box "Terminal Launch Command -- full text" <<< "$launch_command"
+    elif [[ "$flag_launch" == "run" ]] && [[ -n "$preferred_cli" ]]; then
+      run_cli_with_prompt "$workspace_path" "$preferred_cli" "$startup_prompt" || {
+        warn "Could not run ${preferred_cli_label}. Copying the launch command instead."
+        copy_to_clipboard "$launch_command" && ok "Launch command copied to your clipboard." || print_box "Terminal Launch Command -- full text" <<< "$launch_command"
+      }
+    else
+      handoff_selected_cli "$workspace_path" "$preferred_cli" "$preferred_cli_label" "$startup_prompt" "$launch_command"
+    fi
   fi
 
   divider
-  ok "Startup prompt ready for: ${BOLD}$(display_path "$workspace_path")${RESET}"
+  ok "Startup prompt ready for: ${BOLD}${workspace_path##*/}${RESET}"
   printf '\n'
 }

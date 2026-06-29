@@ -152,7 +152,7 @@ print_onboarding_preflight() {
   [[ "$_last_is_tools" -eq 0 && "$free_bytes" -gt 0 ]] && _last_is_free=1
 
   local _fn="tree_row"
-  tree_row "Workspace" "writable" "${BOLD}$(display_path "$root")${RESET}"
+  tree_row "Workspace" "writable" "${BOLD}${root##*/}${RESET}"
   repair_vendor_tools
   if rapidocr_ocr_available; then
     tree_sep; tree_row "${M}RapidOCR${RESET}" "available" "scanned PDFs and images"

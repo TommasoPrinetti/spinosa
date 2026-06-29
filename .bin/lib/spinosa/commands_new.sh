@@ -111,10 +111,9 @@ run_integrated_onboarding() {
   startup_prompt="$(startup_prompt_text "$project_title" "$root" "$source_path" "$preferred_cli_label")"
   launch_command="$(build_launch_command "$root" "$preferred_cli" "$startup_prompt")"
 
-  echo ""
-  header "Copy this prompt and paste it in your tool"
-  printf '\n%s%s%s\n\n' "${BOLD}" "$startup_prompt" "${RESET}"
+  copy_to_clipboard "$startup_prompt" || true
 
+  echo ""
   if [[ -n "$flag_launch" ]]; then
     case "$flag_launch" in
       copy) handoff_action="copy_command" ;;
@@ -124,24 +123,43 @@ run_integrated_onboarding() {
   else
     handoff_action="selected_cli"
   fi
-  handoff_action_text="$(handoff_action_label "$handoff_action")"
-  if [[ "$handoff_action" == "selected_cli" && "$preferred_cli" == "other" ]]; then
+
+  if [[ "$preferred_cli" == "other" && "$handoff_action" == "selected_cli" ]]; then
+    local _psize
+    _psize="$(printf '%s' "$startup_prompt" | wc -c | tr -d ' ')"
+    divider
+    printf '\n'
+    ok "Startup prompt copied to clipboard ($(format_bytes "$_psize"))"
+    printf '\n'
+    printf '  %sWorkspace:%s  %s\n' "${BOLD}" "${RESET}" "${root##*/}"
+    printf '  %sCLI:%s        Other (manual paste)\n' "${BOLD}" "${RESET}"
+    printf '\n'
+    printf '  %sPress Enter to finish.%s\n' "${DIM}" "${RESET}"
+    printf '\n'
+    divider
+    read_from_tty _ >/dev/null 2>&1 || true
     handoff_action_text="$(handoff_action_label "copy_command")"
-  fi
-  handoff_result="launch_command_copied"
-  if [[ "$handoff_action" == "selected_cli" ]]; then
-    handoff_selected_cli "$root" "$preferred_cli" "$preferred_cli_label" "$startup_prompt" "$launch_command"
-  elif [[ "$handoff_action" == "run_now" ]]; then
-    run_cli_with_prompt "$root" "$preferred_cli" "$startup_prompt" || {
-      handoff_result="run_failed_command_copied"
-      warn "Could not run ${preferred_cli_label}. Copying the launch command instead."
+    handoff_result="prompt_copied"
+  else
+    header "Copy this prompt and paste it in your tool"
+    printf '\n%s%s%s\n\n' "${BOLD}" "$startup_prompt" "${RESET}"
+
+    handoff_action_text="$(handoff_action_label "$handoff_action")"
+    handoff_result="launch_command_copied"
+    if [[ "$handoff_action" == "selected_cli" ]]; then
+      handoff_selected_cli "$root" "$preferred_cli" "$preferred_cli_label" "$startup_prompt" "$launch_command"
+    elif [[ "$handoff_action" == "run_now" ]]; then
+      run_cli_with_prompt "$root" "$preferred_cli" "$startup_prompt" || {
+        handoff_result="run_failed_command_copied"
+        warn "Could not run ${preferred_cli_label}. Copying the launch command instead."
+        tree_sep
+        copy_to_clipboard "$launch_command" && tree_row "Launch command" "copied to clipboard" || print_box "Terminal Launch Command — full text" <<< "$launch_command"
+      }
+      [[ "$handoff_result" != "run_failed_command_copied" ]] && handoff_result="run_requested"
+    else
       tree_sep
       copy_to_clipboard "$launch_command" && tree_row "Launch command" "copied to clipboard" || print_box "Terminal Launch Command — full text" <<< "$launch_command"
-    }
-    [[ "$handoff_result" != "run_failed_command_copied" ]] && handoff_result="run_requested"
-  else
-    tree_sep
-    copy_to_clipboard "$launch_command" && tree_row "Launch command" "copied to clipboard" || print_box "Terminal Launch Command — full text" <<< "$launch_command"
+    fi
   fi
 
   write_onboarding_summary "$root" "$project_title" "$source_path" "$preferred_cli_label" "$handoff_action_text" "$handoff_result"
@@ -305,7 +323,7 @@ EOF
   if run_integrated_onboarding "$workspace_path" "$project_name" "$corpus_path" \
     "$flag_extensions" "$flag_cli" "$flag_launch"; then
     tree_sep
-    tree_row_last "Workspace" "ready" "${BOLD}$(display_path "$workspace_path")${RESET}"
+    tree_row_last "Workspace" "ready" "${BOLD}${workspace_path##*/}${RESET}"
     printf '\n'
     exit 0
   else

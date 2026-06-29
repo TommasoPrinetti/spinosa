@@ -48,10 +48,14 @@ cmd_add() {
     if ! validate_workspace "$workspace_path"; then
       die "Not a valid Spinosa workspace: $workspace_path"
     fi
-    ok "Workspace: ${BOLD}$(display_path "$workspace_path")${RESET}"
+    ok "Workspace: ${BOLD}${workspace_path##*/}${RESET}"
+  elif [[ ${#add_args[@]} -gt 0 && -f "$(expand_home "${add_args[0]}")/.spinosa/workspace" ]]; then
+    workspace_path="$(expand_home "${add_args[0]}")"
+    add_args=("${add_args[@]:1}")
+    ok "Workspace: ${BOLD}${workspace_path##*/}${RESET}"
   else
     workspace_path="$(require_workspace)" || die "No workspace selected."
-    ok "Workspace: ${BOLD}$(display_path "$workspace_path")${RESET}"
+    ok "Workspace: ${BOLD}${workspace_path##*/}${RESET}"
   fi
 
   # ---- Step 2: Source path collection -------------------------------------------------
@@ -194,7 +198,7 @@ cmd_add() {
           safe_copy "$src_file" "$dest_file" && add_copied=1 || add_failed=1
         fi
         if [[ "$dest_file" == *.md ]] && [[ -f "$dest_file" ]]; then
-          inject_cold_frontmatter "$dest_file" "$rel_path" "$(file_ext "$src_file")" "renamer" "copied_text_headered"
+          inject_cold_frontmatter "$dest_file"
         fi
         ADD_TOTAL_COUNT=1
         ;;
@@ -250,7 +254,7 @@ cmd_add() {
           rm -rf "$_md_fifo_dir"
           if [[ "$_md_status" == "ok" ]]; then
             add_md_converted=1
-            inject_cold_frontmatter "$dest_file" "$(basename "$src_file")" "$(file_ext "$src_file")" "markitdown" "markitdown_converted"
+            inject_cold_frontmatter "$dest_file"
           else
             add_skipped=1
             add_md_skipped=1
@@ -299,7 +303,7 @@ cmd_add() {
           rm -rf "$_ocr_fifo_dir"
           if [[ "$_ocr_status" == "ok" ]]; then
             add_ocr_converted=1
-            inject_cold_frontmatter "$dest_file" "$(basename "$src_file")" "$(file_ext "$src_file")" "rapidocr" "ocr_processed"
+            inject_cold_frontmatter "$dest_file"
           else
             add_skipped=1
             add_ocr_skipped=1
@@ -385,18 +389,16 @@ SUMMARY_EOF
   ok "Add summary written"
 
   # ---- Step 5: Generate re-mapper prompt -------------------------------------------------
-  printf '\n'
-  header "Copy this prompt and paste it in your tool"
-
   local add_prompt
   add_prompt="$(prompt_add_text "$workspace_path" "$preferred_cli_label")"
-  printf '\n%s%s%s\n\n' "${BOLD}" "$add_prompt" "${RESET}"
 
-  # ---- Step 6: Handoff -------------------------------------------------
-  local handoff_action
   local launch_command
   launch_command="$(build_launch_command "$workspace_path" "${flag_cli:-other}" "$add_prompt")"
 
+  copy_to_clipboard "$add_prompt" || true
+
+  local _effective_cli="${flag_cli:-other}"
+  local handoff_action
   if [[ -n "$flag_launch" ]]; then
     case "$flag_launch" in
       copy) handoff_action="copy_command" ;;
@@ -406,18 +408,40 @@ SUMMARY_EOF
   else
     handoff_action="selected_cli"
   fi
-  if [[ "$handoff_action" == "selected_cli" && -n "$flag_cli" ]]; then
-    handoff_selected_cli "$workspace_path" "$flag_cli" "$preferred_cli_label" "$add_prompt" "$launch_command"
-  elif [[ "$handoff_action" == "run_now" ]] && [[ -n "$flag_cli" ]]; then
-    run_cli_with_prompt "$workspace_path" "$flag_cli" "$add_prompt" || {
-      warn "Could not run ${preferred_cli_label}. Copying the launch command instead."
-      copy_to_clipboard "$launch_command" && ok "Launch command copied to your clipboard." || print_box "Terminal Launch Command -- full text" <<< "$launch_command"
-    }
+
+  if [[ "$_effective_cli" == "other" && "$handoff_action" != "run_now" ]]; then
+    local _psize
+    _psize="$(printf '%s' "$add_prompt" | wc -c | tr -d ' ')"
+    printf '\n'
+    divider
+    printf '\n'
+    ok "Re-mapper prompt copied to clipboard ($(format_bytes "$_psize"))"
+    printf '\n'
+    printf '  %sWorkspace:%s  %s\n' "${BOLD}" "${RESET}" "${workspace_path##*/}"
+    printf '  %sCLI:%s        Other (manual paste)\n' "${BOLD}" "${RESET}"
+    printf '\n'
+    printf '  %sPress Enter to finish.%s\n' "${DIM}" "${RESET}"
+    printf '\n'
+    divider
+    read_from_tty _ >/dev/null 2>&1 || true
   else
-    copy_to_clipboard "$launch_command" && ok "Launch command copied to your clipboard." || print_box "Terminal Launch Command -- full text" <<< "$launch_command"
+    printf '\n'
+    header "Copy this prompt and paste it in your tool"
+    printf '\n%s%s%s\n\n' "${BOLD}" "$add_prompt" "${RESET}"
+
+    if [[ "$handoff_action" == "selected_cli" && -n "$flag_cli" ]]; then
+      handoff_selected_cli "$workspace_path" "$flag_cli" "$preferred_cli_label" "$add_prompt" "$launch_command"
+    elif [[ "$handoff_action" == "run_now" ]] && [[ -n "$flag_cli" ]]; then
+      run_cli_with_prompt "$workspace_path" "$flag_cli" "$add_prompt" || {
+        warn "Could not run ${preferred_cli_label}. Copying the launch command instead."
+        copy_to_clipboard "$launch_command" && ok "Launch command copied to your clipboard." || print_box "Terminal Launch Command -- full text" <<< "$launch_command"
+      }
+    else
+      copy_to_clipboard "$launch_command" && ok "Launch command copied to your clipboard." || print_box "Terminal Launch Command -- full text" <<< "$launch_command"
+    fi
   fi
 
   divider
-  ok "Add complete: ${BOLD}$(display_path "$workspace_path")${RESET}"
+  ok "Add complete: ${BOLD}${workspace_path##*/}${RESET}"
   printf '\n'
 }

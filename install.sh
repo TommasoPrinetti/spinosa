@@ -14,8 +14,8 @@ if [ -z "${BASH_VERSION-}" ]; then
     echo "" >&2
     echo "  This installer must be run under bash." >&2
     echo "  Please use one of the following:" >&2
-    echo "    curl -fsSL https://github.com/TommasoPrinetti/spinosa/releases/download/v0.6.1/install.sh | bash" >&2
-    echo "    bash <(curl -fsSL https://github.com/TommasoPrinetti/spinosa/releases/download/v0.6.1/install.sh)" >&2
+    echo "    curl -fsSL https://github.com/TommasoPrinetti/spinosa/releases/download/v0.7.0/install.sh | bash" >&2
+    echo "    bash <(curl -fsSL https://github.com/TommasoPrinetti/spinosa/releases/download/v0.7.0/install.sh)" >&2
     echo "    curl -fsSL ... -o install.sh && bash install.sh" >&2
     echo "" >&2
     exit 1
@@ -41,7 +41,7 @@ set -euo pipefail
 # CONFIGURATION
 # ══════════════════════════════════════════════════════════════════════════════
 
-PINNED_VERSION="0.6.1"
+PINNED_VERSION="0.7.0"
 VERSION="${VERSION:-$PINNED_VERSION}"
 DRY_RUN=0
 VERIFY_ONLY=0

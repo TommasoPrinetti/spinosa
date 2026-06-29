@@ -267,7 +267,7 @@ Tasks to perform:
 1. Detect new files in raw/ that are not yet in maps/ or system/dictionary.md.
 2. Group the new files into batches of 20-25.
 3. Spawn a spinosa-mapper sub-agent per batch to:
-   - Update each raw/ file's YAML frontmatter with semantic fields (summary, source_type, language, people, places, organizations, topics) — cold structural fields (type, source, original_format, converter_engine, processing_status, generated_by) are already present from the import pipeline, so only add missing semantic fields
+    - Update each raw/ file's YAML frontmatter with semantic fields (type, summary, concepts, language, people, places, organizations, topics) — these are pre-structured as empty scaffold fields from the import pipeline, fill them with content-derived values
    - Extract dictionary terms (names, places, organizations, domain terms, concepts)
    - Extract content signatures (one-paragraph summary, key passages with line refs, concept signals, connections)
 4. Merge all extraction results into agent_reports/extraction_checkpoint.md.

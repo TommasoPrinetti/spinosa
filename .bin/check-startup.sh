@@ -130,23 +130,8 @@ has_frontmatter_key() {
 
 validate_generated_provenance() {
   local file="$1"
-  for key in generated_by generated_at processing_status; do
-    if ! has_frontmatter_key "$file" "$key"; then
-      failures+=("Missing $key in ${file#"$ROOT/"}")
-    fi
-  done
-}
-
-validate_source_path() {
-  local file="$1"
-  local source
-  source="$(frontmatter_value "$file" "source")"
-  if [[ -z "$source" ]]; then
-    failures+=("Missing source in ${file#"$ROOT/"}")
-    return
-  fi
-  if [[ ! -e "$source" && ! -e "$ROOT/$source" ]]; then
-    failures+=("Source path does not exist in ${file#"$ROOT/"}: $source")
+  if ! has_frontmatter_key "$file" "created"; then
+    failures+=("Missing created in ${file#"$ROOT/"}")
   fi
 }
 
@@ -262,7 +247,6 @@ if [[ -d "$raw_dir" ]]; then
     file_type="$(frontmatter_value "$file" "type")"
     case "$file_type" in
       raw_copy)
-        validate_source_path "$file"
         validate_generated_provenance "$file"
         validate_string_field "$file" "summary"
         for key in people places organizations topics explicit_source_terms canonical_aliases uncertain_terms machine_artifacts metadata_uncertainty related_sources; do
@@ -270,7 +254,6 @@ if [[ -d "$raw_dir" ]]; then
         done
         ;;
       source_pointer)
-        validate_source_path "$file"
         validate_generated_provenance "$file"
         for key in media_type extension size_bytes; do
           if ! has_frontmatter_key "$file" "$key"; then
