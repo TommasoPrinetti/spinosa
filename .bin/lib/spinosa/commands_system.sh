@@ -136,7 +136,7 @@ display_release_notes() {
   local release_data="$1"
   local tag_name
   
-  tag_name="$(echo "$release_data" | cut -d'|' -f1)"
+  tag_name="$(echo "$release_data" | awk -F'|' '{print $1; exit}')"
 
   printf '\n'
   printf '  %s  %s  %s\n' " " " " "A new version is available (${tag_name})."
