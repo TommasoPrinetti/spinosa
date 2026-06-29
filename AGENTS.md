@@ -62,7 +62,7 @@ Chain rules:
 ```
 1. Route Split → fast_path (direct) or non-fast-path (orchestrated)
 2. Frame → Write goal artifact in agent_reports/g_{session_id}.md
-3. Select → Pick next sub-agent
+3. Select → Pick next sub-agent (check overseer advisories if any are unread)
 4. Dispatch → Call agent with goal + prior artifact paths
 5. Execute → Agent reads inputs, writes artifact, logs metrics
 6. Inspect → Does output clear the gate?
@@ -140,21 +140,30 @@ When goal gates are satisfied or a blocker stops progress:
 
 ### 6. Periodic — Coverage Audit (spinosa-overseer)
 
-The orchestrator maintains a counter of completed non-fast-path routes since the last `spinosa-overseer` invocation. When the counter reaches 5 (or the user explicitly requests coverage analysis), run the overseer between route dispatches:
+The orchestrator maintains a counter of completed non-fast-path routes since the last `spinosa-overseer` invocation. Run the overseer between route dispatches when:
+  a) The counter reaches 5 (mandatory minimum), OR
+  b) The user explicitly requests coverage analysis, OR
+  c) The orchestrator detects a discretionary trigger:
+     - **Corpus expansion** — new `raw/` directories or files added since last audit
+     - **Topic shift** — user prompts have moved to an unfamiliar dictionary domain
+     - **Agent imbalance** — the same 2-3 agents are used repeatedly while others sit idle
+     - **Unusual session** — a route produced a blocker, gap, or partial result
+     - **Coverage intuition** — orchestrator senses the current direction may be over-indexing a narrow area
 
 1. Dispatch `spinosa-overseer` with the last coverage report path (if one exists) and recent artifact paths.
 2. The overseer reads `.spinosa/memory/orchestrator-notes.md`, `maps/`, `system/dictionary.md`, and `system/configuration.md`.
 3. It writes `agent_reports/c_{session_id}.md` and returns an `Orchestrator Advisories` block.
 4. Update the counter (reset to 0). Log the invocation as a note in orchestrator-notes.md.
-5. Before dispatching the next user request, consume the `Orchestrator Advisories`:
+5. Consume `Orchestrator Advisories` per the standing rules below.
+
+**Rules:**
+- This is NOT a per-request step. Skip it if the counter is below 5 and the user did not ask for coverage and no discretionary trigger fires.
+- If the overseer invocation overlaps with an active route, queue it to run after the route finishes.
+- The counter persists across orchestrator restarts (read from `.spinosa/memory/orchestrator-notes.md` — count completed routes since last overseer entry).
+- Before dispatching the next user request, consume any unread `Orchestrator Advisories` from the last overseer run:
    - Prioritize recommended topics when selecting the first sub-agent.
    - Activate underutilized agents for applicable scenarios.
    - Consider re-map and re-verify recommendations as independent parallel cleanups.
-
-**Rules:**
-- This is NOT a per-request step. Skip it if the counter is below 5 and the user did not ask for coverage.
-- If the overseer invocation overlaps with an active route, queue it to run after the route finishes.
-- The counter persists across orchestrator restarts (read from `.spinosa/memory/orchestrator-notes.md` — count completed routes since last overseer entry).
 
 
 ### Session ID
