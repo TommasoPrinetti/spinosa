@@ -202,21 +202,22 @@ install_document_packages_direct() {
   fi
   [[ -x "$python_bin" ]] || return 1
 
-  spinner_start "Installing document processing packages"
-  "$python_bin" -m pip install --upgrade pip --quiet >/dev/null 2>&1 || true
-
-  local pip_ok=0 onnx_ver pip_attempt
+  local pip_ok=0 onnx_ver pip_attempt _pip_start
+  _pip_start=$SECONDS
   for onnx_ver in 1.23.2 1.23.1 1.23.0 1.22.1 1.22.0; do
+    [[ $((SECONDS - _pip_start)) -lt 300 ]] || break
     pip_attempt=0
     while [[ "$pip_ok" -eq 0 && "$pip_attempt" -lt 2 ]]; do
       pip_attempt=$((pip_attempt + 1))
+      spinner_stop 2>/dev/null || true
+      spinner_start "Installing packages (onnxruntime ${onnx_ver}, attempt ${pip_attempt}/2)"
       if "$python_bin" -m pip install \
         "markitdown[all]==0.1.6" \
         "rapidocr==3.8.1" \
         "onnxruntime==${onnx_ver}" \
         "pypdfium2==5.9.0" \
         "pypdf" \
-        --quiet >/dev/null 2>&1; then
+        --quiet --timeout 120 --only-binary onnxruntime 2>&1; then
         pip_ok=1
         break
       fi
