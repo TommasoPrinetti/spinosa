@@ -20,3 +20,5 @@ this file based on what the user requests.
 - `sync-agents.sh` is the true root cause of broken sub-agent dispatch — it hardcodes the model name. The generated TOML files are downstream artifacts. Fix the script, re-run, done.
 - `.bin/AGENTS.md` says scripts are read-only for agents. The user explicitly authorized the edit.
 - The biggest single thing blocking the framework from working correctly was one line in one script. No other changes were needed to unblock native sub-agent dispatch.
+- CLAUDE.md fact-check revealed 3 stale claims (metrics) + 2 false claims (log row, `.hermes/` as agent mirror). Fixed in AGENTS.md, regenerated CLAUDE.md via sync-agents.sh.
+- Released v0.6.3. Includes: pip install reliability fixes, sync-agents model fix, AGENTS.md stale-claim cleanup, orchestrator notes populated.
