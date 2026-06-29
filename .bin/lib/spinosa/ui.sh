@@ -69,7 +69,7 @@ if [[ "${SPINOSA_NO_EMOJI:-0}" == "1" ]]; then
 else
   note_wilted() { printf '  %s🥀%s %s\n' "${DIM}" "${RESET}" "$1"; }
   note_empty()  { printf '  %s🪾%s %s\n' "${DIM}" "${RESET}" "$1"; }
-  note_cactus() { printf '  %s🌵%s %s\n' "${DIM}" "${RESET}" "$1"; }
+  note_cactus() { printf '  %s⚠️%s %s\n' "${DIM}" "${RESET}" "$1"; }
 fi
 
 die()       { printf '\n  %s %s\n\n' "${R}✗${RESET}" "$1" >&2; exit 1; }
