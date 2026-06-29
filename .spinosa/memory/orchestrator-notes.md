@@ -28,3 +28,5 @@ this file based on what the user requests.
 - dist/ releases and vendor/ tarballs left as gitignored disk artifacts (not tracked).
 
 - **2026-06-29 — overseer discretion.** AGENTS.md §6 updated: orchestrator can now trigger spinosa-overseer based on discretionary triggers (corpus expansion, topic shift, agent imbalance, unusual session, intuition) in addition to the 5-route minimum counter and user request. §4 step 3 now checks unread overseer advisories before selecting the next sub-agent. Advisory consumption moved to standing rules, deduplicated. Committed as `d44af109`.
+
+- **2026-06-29 — OpenCode sub-agent description fix.** Added `description: >` field to `.opencode` agent template in `sync-agents.sh`. Previously, the `.opencode` template emitted only `mode: subagent` + `permission`, missing `description`. OpenCode fell back to "should only be called manually by the user" for all spinosa sub-agent types. Fixed by emitting the canonical agent description into the `.opencode` YAML frontmatter. Ran sync-agents.sh — regenerates `.opencode/agents/*.md` with proper descriptions. Committed as `bf7f50ce`.
