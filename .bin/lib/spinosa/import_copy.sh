@@ -127,6 +127,20 @@ copy_source() {
   COPY_SKIPPED_COUNT=0
   [[ "$total_files" -gt 0 ]] && render_copy_progress 0 "$total_files" 0 0 "" "direct-copy"
 
+  # Cache file list to avoid 6× directory traversal on big corpora
+  local _file_cache=""
+  _file_cache="$(mktemp 2>/dev/null)" || true
+  if [[ -n "$_file_cache" ]]; then
+    find_source_files "$source_path" > "$_file_cache" 2>/dev/null || true
+  fi
+  _cache_or_find() {
+    if [[ -n "$_file_cache" ]] && [[ -s "$_file_cache" ]]; then
+      cat "$_file_cache"
+    else
+      find_source_files "$source_path"
+    fi
+  }
+
   while IFS= read -r -d '' src_file; do
     should_skip_source_file "$src_file" && continue
     is_markdown_convertible_file "$src_file" || continue
@@ -135,7 +149,7 @@ copy_source() {
     raw_rel_path="$(markdown_raw_rel_path "$rel_path")"
     copy_direct_raw_file "$source_path" "$dest_dir" "$src_file" "$raw_rel_path"
     inject_cold_frontmatter "$dest_dir/$raw_rel_path"
-  done < <(find_source_files "$source_path")
+  done < <(_cache_or_find)
 
   while IFS= read -r -d '' src_file; do
     should_skip_source_file "$src_file" && continue
@@ -146,7 +160,7 @@ copy_source() {
     if [[ "$rel_path" == *.md ]]; then
       inject_cold_frontmatter "$dest_dir/$rel_path"
     fi
-  done < <(find_source_files "$source_path")
+  done < <(_cache_or_find)
 
   while IFS= read -r -d '' src_file; do
     should_skip_source_file "$src_file" && continue
@@ -156,7 +170,7 @@ copy_source() {
     import_extension_selected "$src_ext" || continue
     rel_path="${src_file#"$source_path"/}"
     copy_direct_raw_file "$source_path" "$dest_dir" "$src_file" "$rel_path"
-  done < <(find_source_files "$source_path")
+  done < <(_cache_or_find)
 
   # ── MarkItDown conversion pass — Office docs, EPUB, HTML, text-based PDFs → .md ──
   if [[ "${SCAN_MARKITDOWN_CHOICE:-no}" == "yes" ]]; then
@@ -174,7 +188,7 @@ copy_source() {
         [[ "$md_pass" -eq 1 ]] || continue
         import_extension_selected "$(file_ext "$src_file")" || continue
         md_files+=("$src_file")
-      done < <(find_source_files "$source_path")
+      done < <(_cache_or_find)
 
       if [[ ${#md_files[@]} -gt 0 ]]; then
         printf '\n\n'
@@ -431,7 +445,7 @@ copy_source() {
           import_extension_selected "$(file_ext "$src_file")" || continue
           ocr_files+=("$src_file")
         fi
-      done < <(find_source_files "$source_path")
+      done < <(_cache_or_find)
 
       if [[ ${#ocr_files[@]} -gt 0 ]]; then
         printf '\n\n'
@@ -639,13 +653,15 @@ copy_source() {
   fi
 
   # Binary copyable pass (non-OCR files)
-  while IFS= read -r -d '' src_file; do
-    should_skip_source_file "$src_file" && continue
-    is_binary_copyable_file "$src_file" || continue
-    import_extension_selected "$(file_ext "$src_file")" || continue
-    rel_path="${src_file#"$source_path"/}"
-    copy_direct_raw_file "$source_path" "$dest_dir" "$src_file" "$rel_path"
-  done < <(find_source_files "$source_path")
+  [[ -n "$BINARY_COPYABLE_EXTENSIONS" ]] && {
+    while IFS= read -r -d '' src_file; do
+      should_skip_source_file "$src_file" && continue
+      is_binary_copyable_file "$src_file" || continue
+      import_extension_selected "$(file_ext "$src_file")" || continue
+      rel_path="${src_file#"$source_path"/}"
+      copy_direct_raw_file "$source_path" "$dest_dir" "$src_file" "$rel_path"
+    done < <(_cache_or_find)
+  }
 
   COPY_COPIED_COUNT="$copied"
   COPY_FAILED_COUNT="$failed"
@@ -662,6 +678,8 @@ copy_source() {
   fi
   tree_sep
   tree_row "Workspace copy" "prepared" "${BOLD}$(dirname "$dest_dir")${RESET}"
+
+  [[ -z "$_file_cache" ]] || rm -f "$_file_cache" 2>/dev/null || true
 }
 
 choose_import_batches() {

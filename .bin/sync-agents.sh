@@ -152,8 +152,7 @@ CLAUDE_EOF
                 cat > "$dest_dir/${agent}.toml" << CODEX_EOF
 name = "$name"
 description = "$(echo "$description" | sed 's/"/\\"/g')"
-model = "o4-mini"
-model_reasoning_effort = "medium"
+# model: orchestrator sets at dispatch via --model flag (small model recommended)
 sandbox_mode = "${sandbox}"
 developer_instructions = """
 ${agent_body}

@@ -56,7 +56,7 @@ The orchestrator defines the sequence by picking the next agent after each step 
 Chain rules:
 - Every non-fast-path request dispatches at least one sub-agent. You MUST NOT do an agent's job yourself.
 - Past steps are locked; future steps adapt based on what arrives.
-- Session metrics from past routes are consulted before choosing the next agent.
+- Past session history from orchestrator-notes.md is consulted before choosing the next agent.
 - `spinosa-verifier` is required at the end of every route that produces claims, citations, or quotes.
 - `spinosa-evaluator` is required after verifier completes, to audit the route and decide if framework evolution is needed.
 
@@ -79,7 +79,7 @@ Chain rules:
    a. Verifier → check every claim against source
    b. Evaluator → audit the route
    c. Evolver → apply framework fix if evaluator recommends
-   d. Deliver → update log row, report done/blocked/partial
+   d. Deliver → update orchestrator-notes.md, report done/blocked/partial
 ```
 
 #### 4a. Dispatch
@@ -133,7 +133,7 @@ When goal gates are satisfied or a blocker stops progress:
 
 1. **Verify:** Run `spinosa-verifier` on the terminal artifact. Every claim, quote, and citation must be checked against the original source. This is mandatory — never skip verifier.
 
-2. **Audit:** Run `spinosa-evaluator` with the full route trace (goal artifact, all produced artifacts, session_id, metrics). It writes `agent_reports/e_{session_id}.md` and decides whether a framework edit is justified.
+2. **Audit:** Run `spinosa-evaluator` with the full route trace (goal artifact, all produced artifacts, session_id, verifier outcome if present). It writes `agent_reports/e_{session_id}.md` and decides whether a framework edit is justified.
 
 3. **Evolve if warranted:** If evaluator approves, run `spinosa-evolver` with the audit path and mutation scope. Record what changed.
 
@@ -238,7 +238,7 @@ user request.
 | `spinosa-janitor`    | Audits hygiene and writes a cleanup artifact before any confirmed move                                                        |
 | `spinosa-overseer`   | Audits session logs and corpus coverage; finds gaps, stale areas, underutilized agents; writes coverage report with orchestrator advisories |
 
-Canonical agent definitions: `.agents/agents/`. Vendor mirrors: `.opencode/agents/`, `.claude/agents/`, `.codex/agents/`, `.hermes/` (generated). Shared references: `.agents/references/`.
+Canonical agent definitions: `.agents/agents/`. Agent vendor mirrors: `.opencode/agents/`, `.claude/agents/`, `.codex/agents/` (generated). Reference mirror: `.hermes/references/` (generated). Shared references: `.agents/references/`.
 
 **Codex note:** Codex reads `AGENTS.md` for orchestration and `.codex/agents/*.toml` for project-specific custom sub-agent profiles. Each TOML declares `name`, `description`, `developer_instructions`, and optional model/sandbox settings. Wire them via `.codex/config.toml` under `[agents.<name>]` for role-name routing. Codex also discovers `.agents/skills/<name>/SKILL.md` via the Agent Skills standard for fallback invocation.
 
