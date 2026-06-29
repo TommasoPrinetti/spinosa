@@ -26,3 +26,5 @@ this file based on what the user requests.
 - Agent-interception skill added to project .agents/skills/ for version control + vendor mirror sync.
 - Old dist/ releases (v0.5.6 through v0.5.15) deleted; v0.5.16 and v0.5.17 retained.
 - dist/ releases and vendor/ tarballs left as gitignored disk artifacts (not tracked).
+
+- **2026-06-29 — overseer discretion.** AGENTS.md §6 updated: orchestrator can now trigger spinosa-overseer based on discretionary triggers (corpus expansion, topic shift, agent imbalance, unusual session, intuition) in addition to the 5-route minimum counter and user request. §4 step 3 now checks unread overseer advisories before selecting the next sub-agent. Advisory consumption moved to standing rules, deduplicated. Committed as `d44af109`.
