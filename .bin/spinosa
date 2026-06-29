@@ -8,11 +8,12 @@ set -euo pipefail
 ORIGINAL_ARGS=("$@")
 
 # ── spinosa — CLI entry point ────────────────────────────────────────────────
-# Usage: spinosa [add|new|upgrade|uninstall|help]
+# Usage: spinosa [add|new|startup|upgrade|uninstall|help]
 #
 # Commands:
 #   add       Add files to an existing Spinosa workspace
 #   new       Create a new Spinosa workspace and run setup
+#   startup   Re-run the startup prompt on an existing workspace
 #   upgrade   Upgrade Spinosa CLI to latest release
 #   uninstall Remove Spinosa from this system
 #   help      Show this help
@@ -122,6 +123,7 @@ SPINOSA_LIBS=(
   commands_add
   commands_system
   commands_dashboard
+  commands_startup
 )
 for spinosa_lib in "${SPINOSA_LIBS[@]}"; do
   spinosa_lib_path="${SPINOSA_LIB_DIR}/${spinosa_lib}.sh"
@@ -154,6 +156,7 @@ fi
 case "${1:-}" in
   add)       shift; cmd_add "$@" ;;
   new)       shift; cmd_new "$@" ;;
+  startup)   shift; cmd_startup "$@" ;;
   upgrade)   shift; cmd_upgrade "$@" ;;
   uninstall) shift; cmd_uninstall "$@" ;;
   help|-h|--help) cmd_help ;;

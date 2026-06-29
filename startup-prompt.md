@@ -133,6 +133,8 @@ One pass over the corpus. Build the dictionary and extraction packets together. 
 
 3. **Write per-file keyword summaries into YAML headers.** After all batches complete, write a `summary` into each raw file's YAML frontmatter. Read `system/yaml_header_template.md` for the canonical schema. The summary is a dense keyword string optimized for future search — terms an agent would grep for to find this file's concepts. Not prose. Single line. Spawn a **summarizer sub-agent** for this batch work. Use a smaller/cheaper model when available. For each file, it reads the extraction packet and distills the key concepts into a searchable keyword summary, then writes the `summary` field into the YAML header.
 
+    **Frontmatter note:** the import pipeline already injects cold structural fields (type, source, original_format, converter_engine, processing_status, generated_by) into each raw/ file's YAML header. Do not rewrite these. Only add the missing semantic fields: summary, source_type, language, people, places, organizations, topics, explicit_source_terms, canonical_aliases, uncertain_terms, machine_artifacts, metadata_uncertainty, related_sources. Then update `generated_by` to `startup_agent`.
+
 4. **Finalize dictionary.** Write `system/dictionary.md` with accumulated canonical forms, aliases, explicit source terms, inferred concepts, uncertain terms, machine artifacts, languages, and source file references.
 
 5. **Enrich context.** Use accumulated evidence to enrich `system/context.md`:

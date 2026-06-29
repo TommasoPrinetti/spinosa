@@ -211,7 +211,9 @@ SUMMARY_EOF
 
 startup_prompt_text() {
   local project_title="$1" root="$2" source_path="$3" preferred_cli="$4"
-  local prompt_template="${FRAMEWORK_ROOT}/.bin/startup-prompt.md"
+  local prompt_template="${FRAMEWORK_ROOT}/startup-prompt.md"
+  local display_root
+  display_root="$(display_path "$root")"
 
   # Read the self-contained startup prompt template
   cat "$prompt_template" 2>/dev/null || true
@@ -222,7 +224,7 @@ startup_prompt_text() {
 ## Workspace Metadata
 
 - **Project title:** ${project_title}
-- **Workspace root:** ${root}
+- **Workspace root:** ${display_root}
 - **Preferred CLI:** ${preferred_cli}
 - **Onboarding summary:** .spinosa/onboarding-summary.md
 
@@ -239,9 +241,11 @@ PROMPT_EOF
 prompt_add_text() {
   local root="$1" preferred_cli="$2"
   local raw_count
+  local display_root
+  display_root="$(display_path "$root")"
   raw_count="$(find "$root/raw" -type f -name '*.md' 2>/dev/null | wc -l | tr -d ' ')"
   cat << PROMPT_EOF
-Workspace: ${root}
+Workspace: ${display_root}
 
 New source files have been added to this Spinosa workspace.
 
@@ -253,7 +257,7 @@ Read these files first, in this order:
 1. AGENTS.md
 2. system/configuration.md
 3. system/context.md
-4. .bin/startup-prompt.md (for extraction format and map structure reference)
+4. startup-prompt.md (for extraction format and map structure reference)
 5. system/dictionary.md
 6. system/workspace_index.md
 7. .spinosa/add-summary.md
@@ -262,9 +266,10 @@ Tasks to perform:
 
 1. Detect new files in raw/ that are not yet in maps/ or system/dictionary.md.
 2. Group the new files into batches of 20-25.
-3. Spawn a spinosa-mapper sub-agent per batch to extract:
-   - Dictionary terms (names, places, organizations, domain terms, concepts)
-   - Content signatures (one-paragraph summary, key passages with line refs, concept signals, connections)
+3. Spawn a spinosa-mapper sub-agent per batch to:
+   - Update each raw/ file's YAML frontmatter with semantic fields (summary, source_type, language, people, places, organizations, topics) — cold structural fields (type, source, original_format, converter_engine, processing_status, generated_by) are already present from the import pipeline, so only add missing semantic fields
+   - Extract dictionary terms (names, places, organizations, domain terms, concepts)
+   - Extract content signatures (one-paragraph summary, key passages with line refs, concept signals, connections)
 4. Merge all extraction results into agent_reports/extraction_checkpoint.md.
 5. Update system/dictionary.md with new terms from the new files.
 6. Update navigation maps in maps/ to include the new files:
