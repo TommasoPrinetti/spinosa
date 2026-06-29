@@ -791,9 +791,6 @@ redraw_long_path_reply() {
   local prompt="$1" fb="$2" reply="$3" display
   [[ -t 0 && -t 2 ]] || return 0
   [[ "$reply" == */* ]] || return 0
-  # Long pasted paths can wrap across several terminal rows; redrawing one row
-  # would duplicate the prompt instead of tidying it.
-  [[ "${#reply}" -lt "$((COLS - ${#prompt} - 6))" ]] || return 0
   display="$(display_path "$reply")"
   [[ "$display" != "$reply" ]] || return 0
   printf '\033[1A\r\033[2K%s%s\n' "${BOLD}${prompt}${RESET}${fb}${DIM}: ${RESET}" "$display" >&2

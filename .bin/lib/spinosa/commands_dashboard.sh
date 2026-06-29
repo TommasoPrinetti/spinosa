@@ -70,6 +70,7 @@ cmd_dashboard() {
     local options=()
     options+=("$(option_spec "new" "New workspace" "Create a new workspace and run onboarding")")
     options+=("$(option_spec "add" "Add files" "Import files into an existing workspace")")
+    options+=("$(option_spec "startup" "Startup prompt" "Re-run startup prompt on a workspace")")
     options+=("$(option_spec "upgrade" "Upgrade Spinosa" "Upgrade to latest release")")
     options+=("$(option_spec "uninstall" "Uninstall" "Remove Spinosa from this system")")
     options+=("$(option_spec "help" "Help" "Show help information")")
@@ -83,6 +84,7 @@ cmd_dashboard() {
     case "$choice" in
       new)       cmd_new "$@" ;;
       add)       cmd_add "$@" ;;
+      startup)   cmd_startup "$@" ;;
       upgrade)   cmd_upgrade "$@" ;;
       uninstall) cmd_uninstall "$@" ;;
       help)      cmd_help ;;

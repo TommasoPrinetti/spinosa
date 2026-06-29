@@ -15,6 +15,79 @@ safe_copy() {
   return 1
 }
 
+# ── Cold frontmatter injection ──────────────────────────────────────────
+# Injects frontmatter fields derivable from the file itself (no LLM).
+# If the file already has frontmatter, merges missing cold fields into it
+# without overwriting existing keys. Split-page files (raw_source_page)
+# already have frontmatter — only missing cold fields are added.
+# Future agents update the existing frontmatter with semantic fields only.
+inject_cold_frontmatter() {
+  local md_file="$1"
+  local original_source="$2"
+  local original_format="$3"
+  local converter_engine="$4"
+  local processing_status="$5"
+
+  [[ -f "$md_file" ]] || return 0
+
+  local today source_rel
+  today="$(date -u +%Y-%m-%d)"
+  source_rel="raw/${md_file#*raw/}"
+
+  # No frontmatter → prepend new one
+  head -1 "$md_file" | grep -q '^---$' || {
+    {
+      printf '---\n'
+      printf 'type: raw_copy\n'
+      printf 'source: "%s"\n' "$source_rel"
+      [[ -n "$original_source" ]] && printf 'original_source: "%s"\n' "$original_source"
+      printf 'original_format: %s\n' "${original_format:-unknown}"
+      printf 'converter_engine: %s\n' "${converter_engine:-native}"
+      printf 'processing_status: %s\n' "${processing_status:-native_copied}"
+      printf 'generated_by: import_pipeline\n'
+      printf 'generated_at: %s\n' "$today"
+      printf 'created: %s\n' "$today"
+      printf 'updated: %s\n' "$today"
+      printf '---\n\n'
+      cat "$md_file"
+    } > "${md_file}.tmp" && mv "${md_file}.tmp" "$md_file"
+    return
+  }
+
+  # Has frontmatter → merge missing cold fields
+  awk -v source="$source_rel" \
+      -v orig_source="${original_source:-}" \
+      -v orig_format="${original_format:-unknown}" \
+      -v engine="${converter_engine:-native}" \
+      -v pstatus="${processing_status:-native_copied}" \
+      -v today="$today" \
+  '
+  BEGIN { in_fm = 0; first = 1 }
+
+  /^---$/ && first { print; in_fm = 1; first = 0; next }
+  /^---$/ && in_fm {
+    if (!seen["type"])              print "type: raw_copy"
+    if (!seen["source"])            printf "source: \"%s\"\n", source
+    if (orig_source != "" && !seen["original_source"]) printf "original_source: \"%s\"\n", orig_source
+    if (!seen["original_format"])   printf "original_format: %s\n", orig_format
+    if (!seen["converter_engine"])  printf "converter_engine: %s\n", engine
+    if (!seen["processing_status"]) printf "processing_status: %s\n", pstatus
+    if (!seen["generated_by"])      print "generated_by: import_pipeline"
+    if (!seen["generated_at"])      printf "generated_at: %s\n", today
+    if (!seen["created"])           printf "created: %s\n", today
+    if (!seen["updated"])           printf "updated: %s\n", today
+    print "---"
+    in_fm = 0
+    next
+  }
+  in_fm && /^[a-zA-Z_][a-zA-Z0-9_-]*:/ {
+    split($0, parts, ":")
+    seen[parts[1]] = 1
+  }
+  { print }
+  ' "$md_file" > "${md_file}.tmp" && mv "${md_file}.tmp" "$md_file"
+}
+
 copy_direct_raw_file() {
   local source_path="$1" dest_dir="$2" src_file="$3" raw_rel_path="$4"
   local rel_path dest_file dest_parent
@@ -69,6 +142,7 @@ copy_source() {
     rel_path="${src_file#"$source_path"/}"
     raw_rel_path="$(markdown_raw_rel_path "$rel_path")"
     copy_direct_raw_file "$source_path" "$dest_dir" "$src_file" "$raw_rel_path"
+    inject_cold_frontmatter "$dest_dir/$raw_rel_path" "$rel_path" "$(file_ext "$src_file")" "renamer" "copied_text_headered"
   done < <(find_source_files "$source_path")
 
   while IFS= read -r -d '' src_file; do
@@ -77,6 +151,9 @@ copy_source() {
     import_extension_selected "$(file_ext "$src_file")" || continue
     rel_path="${src_file#"$source_path"/}"
     copy_direct_raw_file "$source_path" "$dest_dir" "$src_file" "$rel_path"
+    if [[ "$rel_path" == *.md ]]; then
+      inject_cold_frontmatter "$dest_dir/$rel_path" "$rel_path" "$(file_ext "$src_file")" "renamer" "native_copied"
+    fi
   done < <(find_source_files "$source_path")
 
   while IFS= read -r -d '' src_file; do
@@ -274,6 +351,7 @@ copy_source() {
 
                   if [[ "$_md_end_status" == "ok" ]]; then
                     md_converted=$((md_converted + 1))
+                    inject_cold_frontmatter "$dest_dir/$_md_out_log" "$_md_current_rel" "${_md_out_log_ext:-unknown}" "markitdown" "markitdown_converted"
                     printf '{"ts":"%s","status":"ok","source":"%s","output":"%s","engine":"markitdown","pages":"%s","duration_s":%s}\n' \
                       "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
                       "$_md_current_rel" \
@@ -491,6 +569,9 @@ copy_source() {
 
                   if [[ "$_end_status" == "ok" ]]; then
                     ocr_converted=$((ocr_converted + 1))
+                    local _ocr_format
+                    _ocr_format="$(file_ext "$_current_rel")"
+                    inject_cold_frontmatter "$dest_dir/$_md_out" "$_current_rel" "${_ocr_format:-unknown}" "rapidocr" "ocr_processed"
                     printf '{"ts":"%s","status":"ok","source":"%s","output":"%s","pages":"%s","duration_s":%s}\n' \
                       "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
                       "$_current_rel" \

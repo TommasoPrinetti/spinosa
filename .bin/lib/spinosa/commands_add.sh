@@ -193,6 +193,9 @@ cmd_add() {
         else
           safe_copy "$src_file" "$dest_file" && add_copied=1 || add_failed=1
         fi
+        if [[ "$dest_file" == *.md ]] && [[ -f "$dest_file" ]]; then
+          inject_cold_frontmatter "$dest_file" "$rel_path" "$(file_ext "$src_file")" "renamer" "copied_text_headered"
+        fi
         ADD_TOTAL_COUNT=1
         ;;
       markitdown)
@@ -247,6 +250,7 @@ cmd_add() {
           rm -rf "$_md_fifo_dir"
           if [[ "$_md_status" == "ok" ]]; then
             add_md_converted=1
+            inject_cold_frontmatter "$dest_file" "$(basename "$src_file")" "$(file_ext "$src_file")" "markitdown" "markitdown_converted"
           else
             add_skipped=1
             add_md_skipped=1
@@ -295,6 +299,7 @@ cmd_add() {
           rm -rf "$_ocr_fifo_dir"
           if [[ "$_ocr_status" == "ok" ]]; then
             add_ocr_converted=1
+            inject_cold_frontmatter "$dest_file" "$(basename "$src_file")" "$(file_ext "$src_file")" "rapidocr" "ocr_processed"
           else
             add_skipped=1
             add_ocr_skipped=1
@@ -385,7 +390,7 @@ SUMMARY_EOF
 
   local add_prompt
   add_prompt="$(prompt_add_text "$workspace_path" "$preferred_cli_label")"
-  printf '\n%s%s%s\n\n' "${G}" "$add_prompt" "${RESET}"
+  printf '\n%s%s%s\n\n' "${BOLD}" "$add_prompt" "${RESET}"
 
   # ---- Step 6: Handoff -------------------------------------------------
   local handoff_action

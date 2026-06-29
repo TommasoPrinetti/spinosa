@@ -113,7 +113,7 @@ run_integrated_onboarding() {
 
   echo ""
   header "Copy this prompt and paste it in your tool"
-  printf '\n%s%s%s\n\n' "${G}" "$startup_prompt" "${RESET}"
+  printf '\n%s%s%s\n\n' "${BOLD}" "$startup_prompt" "${RESET}"
 
   if [[ -n "$flag_launch" ]]; then
     case "$flag_launch" in
@@ -305,7 +305,7 @@ EOF
   if run_integrated_onboarding "$workspace_path" "$project_name" "$corpus_path" \
     "$flag_extensions" "$flag_cli" "$flag_launch"; then
     tree_sep
-    tree_row_last "Workspace" "ready" "${BOLD}${workspace_path}${RESET}"
+    tree_row_last "Workspace" "ready" "${BOLD}$(display_path "$workspace_path")${RESET}"
     printf '\n'
     exit 0
   else
