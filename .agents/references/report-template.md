@@ -25,19 +25,11 @@ type: report
 created: YYYY-MM-DD
 updated: YYYY-MM-DD
 status: draft
-scope: [one-line description of what this report covers]
+scope: [one-line description]
+template_version: 2
 ---
 
-# [Report Title]
-
-```
-┌─ Corpus Navigation ──────────────────────────────────────────────┐
-│ Maps   ▓▓▓▓▓▓░░░░░░░░░░  6 consulted · 2 updated               │
-│ Raw    ▓▓▓▓▓▓▓▓▓▓░░░░░░  45 scanned · 12 read                  │
-│ Source ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓  18 cited                              │
-│ Status ○ pending                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
+# [Headline: task asked and goal — from goal artifact]
 
 ## Answer
 [Short direct answer to the original request]

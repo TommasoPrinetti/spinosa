@@ -7,6 +7,7 @@ SPINOSA_CACHE="${SPINOSA_METADATA_DIR}/workspace_cache.txt"
 SPINOSA_REGISTRY="${SPINOSA_METADATA_DIR}/workspaces.txt"
 SPINOSA_VERSION_CACHE="${SPINOSA_METADATA_DIR}/version_check_cache"
 DEFAULT_SCAN_ROOTS=("$HOME")
+SCAN_ROOTS=()
 
 write_setup_files() {
   local root="$1" project_title="$2" source_path="$3" preferred_cli="$4"
@@ -506,6 +507,7 @@ prompt_workspace_or_cancel() {
   while true; do
     local manual_path
     manual_path="$(prompt_input "Workspace path" "" "$hint")"
+    manual_path="$(normalize_path_input "$manual_path")"
     # Esc → cancel
     [[ "$manual_path" != $'\e'* ]] || return 1
     [[ -n "$manual_path" ]] || continue
@@ -526,6 +528,7 @@ require_workspace() {
 
   # Check if CWD is already a workspace
   if [[ -f ".spinosa/workspace" ]]; then
+    register_workspace "$(pwd)" "$(basename "$(pwd)")" 2>/dev/null || true
     pwd
     return 0
   fi
@@ -534,6 +537,7 @@ require_workspace() {
   if [[ -n "$provided_path" ]]; then
     provided_path="$(expand_home "$provided_path")"
     if validate_workspace "$provided_path"; then
+      register_workspace "$provided_path" "$(basename "$provided_path")" 2>/dev/null || true
       echo "$provided_path"
       return 0
     else
@@ -587,6 +591,7 @@ require_workspace() {
   choice="$(prompt_choose "Select a workspace" "${options[@]}")" || return 1
   
   if [[ "$choice" == "__scan__" ]]; then
+    load_config
     spinner_start "Scanning for workspaces"
     local scanned=()
     while IFS= read -r ws; do
@@ -614,11 +619,13 @@ require_workspace() {
   elif [[ "$choice" == "__enter__" ]]; then
     local manual_path
     manual_path="$(prompt_input "Workspace path")"
+    manual_path="$(normalize_path_input "$manual_path")"
     [[ -n "$manual_path" ]] || die "Path is required"
     manual_path="$(expand_home "$manual_path")"
     if ! validate_workspace "$manual_path"; then
       die "Not a valid Spinosa workspace: $manual_path"
     fi
+    register_workspace "$manual_path" "$(basename "$manual_path")" 2>/dev/null || true
     echo "$manual_path"
   else
     echo "$choice"

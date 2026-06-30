@@ -43,6 +43,7 @@ cmd_dashboard() {
     options+=("$(option_spec "add" "Add files" "Import files into an existing workspace")")
     options+=("$(option_spec "startup" "Startup prompt" "Re-run startup prompt on a workspace")")
     options+=("$(option_spec "upgrade" "Upgrade Spinosa" "Upgrade to latest release")")
+    options+=("$(option_spec "update" "Update workspace" "Update workspace framework files")")
     options+=("$(option_spec "uninstall" "Uninstall" "Remove Spinosa from this system")")
     options+=("$(option_spec "help" "Help" "Show help information")")
     options+=("$(option_spec "quit" "Quit" "Exit Spinosa")")
@@ -57,6 +58,7 @@ cmd_dashboard() {
       add)       cmd_add "$@" ;;
       startup)   cmd_startup "$@" ;;
       upgrade)   cmd_upgrade "$@" ;;
+      update)    cmd_update "$@" ;;
       uninstall) cmd_uninstall "$@" ;;
       help)      cmd_help ;;
       quit)      return 0 ;;

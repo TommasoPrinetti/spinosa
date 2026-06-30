@@ -8,13 +8,14 @@ set -euo pipefail
 ORIGINAL_ARGS=("$@")
 
 # ── spinosa — CLI entry point ────────────────────────────────────────────────
-# Usage: spinosa [add|new|startup|upgrade|uninstall|help]
+# Usage: spinosa [add|new|startup|upgrade|update|uninstall|help]
 #
 # Commands:
 #   add       Add files to an existing Spinosa workspace
 #   new       Create a new Spinosa workspace and run setup
 #   startup   Re-run the startup prompt on an existing workspace
 #   upgrade   Upgrade Spinosa CLI to latest release
+#   update    Update framework files in the current workspace
 #   uninstall Remove Spinosa from this system
 #   help      Show this help
 
@@ -158,6 +159,7 @@ case "${1:-}" in
   new)       shift; cmd_new "$@" ;;
   startup)   shift; cmd_startup "$@" ;;
   upgrade)   shift; cmd_upgrade "$@" ;;
+  update)    shift; cmd_update "$@" ;;
   uninstall) shift; cmd_uninstall "$@" ;;
   help|-h|--help) cmd_help ;;
   --version|-v) printf 'spinosa %s\n' "$(framework_version "$FRAMEWORK_ROOT")"; exit 0 ;;

@@ -142,6 +142,16 @@ navigation:
     rounds_completed: [number of rounds run]
     failed_searches: [terms that returned zero matches]
     gaps_remaining: [aspects still uncovered, if any]
+keyword_expansions:
+  "[original term]":
+    - [synonym1]
+    - [synonym2]
+    - [translation]
+grep_patterns_used:
+  - pattern: "[exact grep pattern used]"
+    matches: [number of grep matches]
+  - pattern: "[exact grep pattern used]"
+    matches: [number of grep matches]
 ---
 
 # Evidence for: [query summary]
