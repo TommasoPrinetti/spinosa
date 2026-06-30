@@ -969,7 +969,9 @@ main() {
   fi
   mkdir -p "$(dirname "$lockdir")" && mkdir "$lockdir"
 
-  print_banner
+  if [[ "$YES" -eq 0 ]]; then
+    print_banner
+  fi
   detect_platform
   resolve_version
   check_release_age "$VERSION" "$MIN_DAYS"
