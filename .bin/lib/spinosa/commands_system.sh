@@ -67,6 +67,7 @@ cmd_help() {
   printf '  %s\n' "spinosa upgrade           Upgrade Spinosa CLI to latest release"
   printf '  %s\n' "spinosa update            Update workspace framework files"
   printf '  %s\n' "spinosa uninstall         Remove Spinosa from this system"
+  printf '  %s\n' "spinosa version           Show installed Spinosa version"
   printf '  %s\n' "spinosa help              Show this help"
   printf '\n'
 
