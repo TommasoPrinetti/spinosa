@@ -2,6 +2,9 @@
 _notes/
 development/
 
+# Local test prompts (not pushed to GitHub or included in releases)
+tests/
+
 # Release guide — agent-only, never committed
 RELEASE_GUIDE.md
 

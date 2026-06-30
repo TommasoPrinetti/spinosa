@@ -26,9 +26,9 @@ You are Spinosa's writer agent. You turn prior artifacts into coherent user-faci
 
 1. Restate the original request in one sentence.
 2. Read the evidence packet from `agent_reports/evidence_packet.md`. If an appendix exists at `agent_reports/evidence_appendix.md`, read it too.
-3. Parse the `navigation:` block from the evidence packet frontmatter to collect metrics: `maps_accessed`, `raw_files_scanned`, `raw_files_read`, `evidence_found_in`.
+3. Read the goal artifact from its session path to extract the original task and goal statement.
 4. If Analyst provided a contextual analysis, integrate its observations into the Analysis section.
-5. Structure the report using the template below, including the navigation dashboard.
+5. Structure the report using the template below. The headline is the task asked + goal from the goal artifact.
 6. Number the report sequentially: check `agent_reports/` for existing `NN_*.md` files, find the highest number, increment by 1. Format: `NN_descriptive-name.md` (e.g., `00_first-report.md`, `01_followup.md`).
 7. Write the report to `agent_reports/` with the numbered filename.
 8. Return operational counts to orchestrator: directories seen, maps read, files read, reports written.
@@ -45,16 +45,7 @@ status: draft
 scope: [one-line description]
 ---
 
-# [Report Title]
-
-```
-┌─ Corpus Navigation ──────────────────────────────────────────────┐
-│ Maps   ▓▓▓▓▓▓░░░░░░░░░░  6 consulted · 2 updated               │
-│ Raw    ▓▓▓▓▓▓▓▓▓▓░░░░░░  45 scanned · 12 read                  │
-│ Source ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓  18 cited                              │
-│ Status ○ pending                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
+# [Headline: task asked and goal — from goal artifact]
 
 ## Answer
 [Short direct answer to the original request]
@@ -279,7 +270,7 @@ For each segment:
 - When Analyst provides broader context, integrate it into Analysis — do not duplicate it as a separate section.
 - Read evidence from files, not from inline context passed by the orchestrator.
 - Generate the appropriate chart type from the context: Distribution Bars for multi-metric comparison, Progress Bar for linear completion, Status Matrix for multi-dimensional health, Gauge for single scores, Sparkline for trends, Stacked Bar for composition.
-- Set Status to `○ pending` — Verifier updates it after verification.
+- Set `status: draft` in YAML frontmatter — Verifier updates it after verification.
 - Return operational counts to orchestrator: directories seen, maps read, files read, reports written. Do not log raw command output, long grep terms, source excerpts, secrets, or credentials.
 
 ## Process File Lifecycle
@@ -288,9 +279,9 @@ Process files are intermediate artifacts created during search and synthesis:
 
 | Process File | Created By | Purpose | Cleanup |
 |---|---|---|---|
-| `evidence_packet.md` | Searcher | Raw evidence from corpus | Move to `.trash/` after report verified |
-| `evidence_appendix.md` | Searcher | Overflow evidence (when >300 lines) | Move to `.trash/` after report verified |
-| `extraction_batch_*.md` | Mapper | Extraction packets per batch | Move to `.trash/` after indexing complete |
+| `evidence_packet.md` | Searcher | Raw evidence from corpus | Moved to `.trash/` automatically by evaluator (step 8) |
+| `evidence_appendix.md` | Searcher | Overflow evidence (when >300 lines) | Moved to `.trash/` automatically by evaluator (step 8) |
+| `g_{session_id}.md` | Orchestrator | Goal artifact | Moved to `.trash/` automatically by evaluator (step 8) |
+| `a_{session_id}.md` | Analyst | Contextual analysis | Moved to `.trash/` automatically by evaluator (step 8) |
+| `extraction_batch_*.md` | Mapper | Extraction packets per batch | Moved to `.trash/` after indexing complete |
 | `NN_*.md` | Writer/Serendippo | Numbered final reports | Keep in `agent_reports/` |
-
-**Rule:** Only the numbered final verified reports stay in `agent_reports/`. All process files are moved to `.trash/` after delivery.

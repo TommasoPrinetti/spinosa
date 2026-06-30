@@ -1,5 +1,10 @@
 # shellcheck shell=bash
 # Source file classification and import batch selection.
+#
+# Initialized at file scope so they're safe under set -u even if reset_import_batches() hasn't run yet
+IMPORT_BATCH_EXTENSIONS=()
+IMPORT_BATCH_COUNTS=()
+IMPORT_BATCH_BYTES=()
 
 should_skip_source_file() {
   local name lower_name
