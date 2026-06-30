@@ -1018,11 +1018,12 @@ main() {
   mv "$extract_tmp"/* "${SPINOSA_HOME}/versions/${VERSION}/"
   clean_macos_metadata "${SPINOSA_HOME}/versions/${VERSION}"
 
-  # Install CLI binary
+  # Install CLI binary (atomic write: temp + mv to avoid partial reads)
   local spinosa_bin="${SPINOSA_HOME}/versions/${VERSION}/spinosa-framework-${VERSION}/.bin/spinosa"
   if [ -f "$spinosa_bin" ]; then
-    cp "$spinosa_bin" "${SPINOSA_HOME}/bin/spinosa"
-    chmod +x "${SPINOSA_HOME}/bin/spinosa"
+    cp "$spinosa_bin" "${SPINOSA_HOME}/bin/.spinosa.tmp"
+    chmod +x "${SPINOSA_HOME}/bin/.spinosa.tmp"
+    mv "${SPINOSA_HOME}/bin/.spinosa.tmp" "${SPINOSA_HOME}/bin/spinosa"
     ok "Installed spinosa CLI"
   else
     die "spinosa CLI not found in archive"
