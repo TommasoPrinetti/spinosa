@@ -8,7 +8,7 @@ set -euo pipefail
 ORIGINAL_ARGS=("$@")
 
 # ── spinosa — CLI entry point ────────────────────────────────────────────────
-# Usage: spinosa [add|new|startup|upgrade|update|uninstall|help]
+# Usage: spinosa [add|new|startup|upgrade|update|uninstall|version|help]
 #
 # Commands:
 #   add       Add files to an existing Spinosa workspace
@@ -17,6 +17,7 @@ ORIGINAL_ARGS=("$@")
 #   upgrade   Upgrade Spinosa CLI to latest release
 #   update    Update framework files in the current workspace
 #   uninstall Remove Spinosa from this system
+#   version   Show Spinosa version
 #   help      Show this help
 
 # ── ANSI colors (zero dependencies) ─────────────────────────────────────────
@@ -147,7 +148,7 @@ while true; do
 done
 
 # ── Call auto-upgrade check before command screens render ──
-if [[ "${1:-}" != "upgrade" ]] && [[ "${1:-}" != "uninstall" ]] && [[ "${1:-}" != "--version" ]] && [[ "${1:-}" != "-v" ]]; then
+if [[ "${1:-}" != "upgrade" ]] && [[ "${1:-}" != "uninstall" ]] && [[ "${1:-}" != "version" ]] && [[ "${1:-}" != "--version" ]] && [[ "${1:-}" != "-v" ]]; then
   auto_upgrade_check
 fi
 
@@ -161,8 +162,8 @@ case "${1:-}" in
   upgrade)   shift; cmd_upgrade "$@" ;;
   update)    shift; cmd_update "$@" ;;
   uninstall) shift; cmd_uninstall "$@" ;;
+  version|--version|-v) printf 'spinosa %s\n' "$(framework_version "$FRAMEWORK_ROOT")"; exit 0 ;;
   help|-h|--help) cmd_help ;;
-  --version|-v) printf 'spinosa %s\n' "$(framework_version "$FRAMEWORK_ROOT")"; exit 0 ;;
   "") cmd_dashboard ;;
   *)
     printf '%s\n' "${R}Unknown command: $1${RESET}" >&2
