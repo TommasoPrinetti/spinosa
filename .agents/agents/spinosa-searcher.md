@@ -114,7 +114,8 @@ Never return a large evidence list inline. Write results to a file and return th
 
 ### Step 1: Write the evidence packet
 
-Write to `agent_reports/evidence_packet.md`:
+Write to `agent_reports/evidence_packet_{session_id}.md` (read `session_id` from the goal artifact).
+Legacy `agent_reports/evidence_packet.md` is allowed only for startup or single-route workspaces — prefer session-scoped names.
 
 ```markdown
 ---
@@ -168,15 +169,15 @@ grep_patterns_used:
 ### Step 2: Mandatory split when evidence is large
 
 If evidence exceeds 20,000 characters (~300 lines):
-- **Main file** (`agent_reports/evidence_packet.md`): summary, top sources by confidence, key patterns.
-- **Appendix file** (`agent_reports/evidence_appendix.md`): every source with full excerpts.
+- **Main file** (`agent_reports/evidence_packet_{session_id}.md`): summary, top sources by confidence, key patterns.
+- **Appendix file** (`agent_reports/evidence_appendix_{session_id}.md`): every source with full excerpts.
 
 ### Step 3: Return path to orchestrator
 
 Return only:
 
 ```
-Evidence written to agent_reports/evidence_packet.md
+Evidence written to agent_reports/evidence_packet_{session_id}.md
 - Sources found: N
 - Confidence breakdown: X high, Y medium, Z low
 - Key themes: [1-3 sentence summary]
@@ -197,6 +198,7 @@ Evidence written to agent_reports/evidence_packet.md
 - Include the file path for every piece of evidence.
 - If no relevant sources exist, write a packet with `sources_found: 0` and say so clearly.
 - If you run multiple search rounds, append to the same file — do not overwrite.
+- In coverage summaries, count each **distinct participant once** — do not double-count roles or duplicate rows.
 - Split evidence into main + appendix when exceeding 20,000 characters (~300 lines) — this is mandatory, not optional.
 - Limit grep context to ~50 lines and `--max-count=30` per file to manage token usage.
 - Return operational counts to orchestrator: directories seen, maps read, raw match count, raw files read, reports written. Do not log raw command output, long grep terms, source excerpts, secrets, or credentials.

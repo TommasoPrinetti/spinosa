@@ -25,7 +25,7 @@ You are Spinosa's writer agent. You turn prior artifacts into coherent user-faci
 ## Workflow
 
 1. Restate the original request in one sentence.
-2. Read the evidence packet from `agent_reports/evidence_packet.md`. If an appendix exists at `agent_reports/evidence_appendix.md`, read it too.
+2. Read the evidence packet from the path in the goal artifact (`evidence_packet_{session_id}.md`) or prior artifact list. Fall back to `agent_reports/evidence_packet.md` only for legacy routes. If an appendix exists (`evidence_appendix_{session_id}.md`), read it too.
 3. Read the goal artifact from its session path to extract the original task and goal statement.
 4. If Analyst provided a contextual analysis, integrate its observations into the Analysis section.
 5. Structure the report using the template below. The headline is the task asked + goal from the goal artifact.
@@ -271,6 +271,7 @@ For each segment:
 - Read evidence from files, not from inline context passed by the orchestrator.
 - Generate the appropriate chart type from the context: Distribution Bars for multi-metric comparison, Progress Bar for linear completion, Status Matrix for multi-dimensional health, Gauge for single scores, Sparkline for trends, Stacked Bar for composition.
 - Set `status: draft` in YAML frontmatter — Verifier updates it after verification.
+- Dashboard counts (People, Sources, cited) must match enumerated evidence IDs in the Evidence section — reconcile against the evidence packet list, not searcher summary tables alone.
 - Return operational counts to orchestrator: directories seen, maps read, files read, reports written. Do not log raw command output, long grep terms, source excerpts, secrets, or credentials.
 
 ## Process File Lifecycle
@@ -282,6 +283,6 @@ Process files are intermediate artifacts created during search and synthesis:
 | `evidence_packet.md` | Searcher | Raw evidence from corpus | Moved to `.trash/` automatically by evaluator (step 8) |
 | `evidence_appendix.md` | Searcher | Overflow evidence (when >300 lines) | Moved to `.trash/` automatically by evaluator (step 8) |
 | `g_{session_id}.md` | Orchestrator | Goal artifact | Moved to `.trash/` automatically by evaluator (step 8) |
-| `a_{session_id}.md` | Analyst | Contextual analysis | Moved to `.trash/` automatically by evaluator (step 8) |
+| `analysis_{session_id}.md` | Analyst | Contextual analysis | Archived/moved by evaluator (step 8) |
 | `extraction_batch_*.md` | Mapper | Extraction packets per batch | Moved to `.trash/` after indexing complete |
 | `NN_*.md` | Writer/Serendippo | Numbered final reports | Keep in `agent_reports/` |

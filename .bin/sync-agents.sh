@@ -287,6 +287,7 @@ $(for agent_toml in "$CODEX_AGENTS_DIR/"*.toml; do
 [agents.${agent_name}]
 description = "${agent_desc}"
 config_file = "agents/${agent_name}.toml"
+model = "gpt-5.4-mini"
 
 ENTRY
 done)

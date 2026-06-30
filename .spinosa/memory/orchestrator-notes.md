@@ -4,7 +4,14 @@ This is the orchestrator's working memory — a holistic record of context,
 decisions, and lessons across sessions. The orchestrator reads and updates
 this file based on what the user requests.
 
+## Overseer State
+
+- routes_since_overseer: 0
+- last_overseer_session: (none)
+- last_coverage_report: (none)
+
 ## Current Context
+- Last audit: `20260630-ac11dc72` on branch `audit/framework-contract-20260630` — report `agent_reports/11_spinosa-framework-audit.md`; P0 contract fixes applied (docs/agents); runtime deferred
 - Active audit session: `20260629-framework-audit`
 - Goal: audit the Spinosa framework's codebase-health and instruction-grounding after 3 Codex sessions revealed unmet startup gates, broken sub-agent dispatch, stale file claims, and missing session-metrics pipeline
 - This session produced a 7-phase fix plan verified against actual file state by 3 explore-agent probes
