@@ -288,13 +288,47 @@ safe_untar() {
   fi
 
   # Reject unsafe symlinks and hard links
-  local verbose_listing _entry _target
+  local verbose_listing _entry _file_path _target
   verbose_listing="$(tar -tzvf "$archive" 2>/dev/null)" || die "Cannot inspect archive: $archive"
+
+  # Get archive root prefix (first path component of the first entry)
+  local archive_root=""
+  while IFS= read -r _entry; do
+    # Skip non-entries (blank lines, etc.)
+    [[ -z "$_entry" ]] && continue
+    # Extract file path: last space-separated token in the tar listing (before " -> " if symlink)
+    _file_path="${_entry##* -> }"
+    # If no ->, the whole file path is the last token
+    echo "$_entry" | grep -q ' -> ' && _file_path="${_entry%% -> *}"
+    _file_path="$(echo "$_file_path" | awk '{print $NF}')"
+    archive_root="${_file_path%%/*}"
+    [[ -n "$archive_root" ]] && break
+  done <<< "$verbose_listing"
+
   while IFS= read -r _entry; do
     # Symlink check (l* entries with -> target)
     if [[ "$_entry" == l* && "$_entry" == *" -> "* ]]; then
       _target="${_entry##* -> }"
-      if [[ "$_target" == /* ]] || [[ "$_target" =~ (^|/)\.\.(/|$) ]]; then
+      # Absolute symlinks always unsafe
+      if [[ "$_target" == /* ]]; then
+        die "Archive contains unsafe symlinks — aborting for safety"
+      fi
+      # Count path components in symlink directory (depth from archive root)
+      _file_path="${_entry%% -> *}"
+      _file_path="$(echo "$_file_path" | awk '{print $NF}')"
+      local _dir="${_file_path%/*}"
+      # Strip archive root from dir to get relative depth
+      _dir="${_dir#$archive_root/}"
+      local _depth=0 _i
+      for _i in $(echo "$_dir" | tr '/' ' '); do _depth=$((_depth + 1)); done
+      # Count ../ traversals in target
+      local _traversals=0
+      local _part
+      for _part in $(echo "$_target" | tr '/' ' '); do
+        [[ "$_part" == ".." ]] && _traversals=$((_traversals + 1))
+      done
+      # Reject if symlink escapes the archive root
+      if (( _traversals > _depth )); then
         die "Archive contains unsafe symlinks — aborting for safety"
       fi
     fi
