@@ -522,7 +522,7 @@ multi_select_menu() {
 
   while true; do
     printf '%s\n' "${BOLD}${prompt}${RESET}" >&2
-    printf '  %s\n' "${DIM}Toggle file types, then continue with the selected batches. (Esc to cancel)${RESET}" >&2
+    printf '  %s\n' "${DIM}Space to toggle, Enter to proceed (Esc to cancel)${RESET}" >&2
     local i option value
     for i in "${!options[@]}"; do
       option="${options[$i]}"
@@ -534,8 +534,8 @@ multi_select_menu() {
         render_multi_option_line "$option" 0 "" 0
       fi
     done
-    printf '  %s %s\n' "${DIM}${continue_index}.${RESET}" "Continue with selected file types" >&2
-    printf '  %s %s\n' "${DIM}${cancel_index}.${RESET}" "Cancel selection" >&2
+    printf '  %s %s\n' "${DIM}${continue_index}.${RESET}" "Proceed with selection" >&2
+    printf '  %s %s\n' "${DIM}${cancel_index}.${RESET}" "Cancel" >&2
     printf '%s' "${DIM}  Enter number to toggle or continue: ${RESET}" >&2
 	    if ! read_from_tty choice; then
 	      if ! IFS= read -r choice; then
@@ -626,12 +626,12 @@ multi_arrow_select() {
 
     prefix="    "
     (( current == continue_row )) && prefix="  ${C}›${RESET} "
-    printf '\r\033[2K%s%sContinue with selected file types%s\n' "$prefix" "${BOLD}" "${RESET}" >&2
+    printf '\r\033[2K%s%sProceed with selection%s\n' "$prefix" "${BOLD}" "${RESET}" >&2
     visible_rows=$((visible_rows + 1))
 
     prefix="    "
     (( current == cancel_row )) && prefix="  ${C}›${RESET} "
-    printf '\r\033[2K%sCancel selection\n' "$prefix" >&2
+    printf '\r\033[2K%sCancel\n' "$prefix" >&2
     visible_rows=$((visible_rows + 1))
   }
 
