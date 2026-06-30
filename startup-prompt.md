@@ -16,6 +16,10 @@ Do not repeat onboarding. Startup takes the raw corpus and builds the workspace 
 
 Read `.spinosa/memory/orchestrator-notes.md` — on first startup this has only a template, no prior context. Initialize it with the startup goal and session_id.
 
+## Frame: goal artifact
+
+Before Phase 1 dispatch, write `agent_reports/g_{session_id}.md` using `.agents/references/goal-artifact-template.md`. Include startup scope, `session_id`, planned phases, and artifact paths. Append route decisions after each phase gate. Evaluator and recovery use this file as the route anchor (same as steady-state `AGENTS.md`).
+
 ## Gate: do not stop until ALL of
 
 - `setup_status` is `workspace_started` in both `system/context.md` and `system/configuration.md`

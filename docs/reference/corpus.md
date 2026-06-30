@@ -26,7 +26,7 @@ your-workspace/
 | `raw/` | Your converted documents. Single-page sources usually become one `.md` file. Split multi-page sources become one folder with `page-001.md`, `page-002.md`, etc. Each page file has a YAML header with provenance and page data. The agents search here. |
 | `maps/` | Navigation maps built during startup. Think of them as a smart index — they say "these 5 files are about coastal erosion, these 3 are about farming practices, and here are the key passages." Uses Obsidian wikilinks (`[[filename]]`) so you can browse connections visually if you open the workspace in Obsidian. |
 | `system/` | Your workspace settings. `context.md` stores project scope and research vocabulary. `configuration.md` stores operating settings. `dictionary.md` is the master vocabulary list. |
-| `agent_reports/` | All agent output. Numbered files like `00_startup-report.md` are final results. Files like `evidence_packet.md` are intermediate work files that get cleaned up. |
+| `agent_reports/` | All agent output. Numbered files like `00_startup-report.md` are final results. Session-scoped files like `evidence_packet_{session_id}.md` are intermediate work files the evaluator moves to `.trash/` after the route closes. |
 | `logs/` | Historical archives from before the memory migration (2026-06-28). Current session memory at `.spinosa/memory/`. |
 | `.agents/agents/` | Definitions of the 10 agents. Each is a `.md` file with permissions, workflow, and output format. |
 | `.agents/skills/` | Fallback instructions for each agent, used when native dispatch isn't available. |

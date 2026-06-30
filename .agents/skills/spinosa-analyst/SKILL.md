@@ -22,7 +22,7 @@ You are Spinosa's contextual analyst. You read the goal artifact and prior artif
     - What angles are potentially missing from a targeted search?
     - What alternative framings of the question exist?
     - What biases might a search-only approach introduce?
-4. Write a contextual analysis packet to `agent_reports/` for the next step.
+4. Write a contextual analysis packet to `agent_reports/analysis_{session_id}.md` (read `session_id` from the goal artifact).
 5. Return operational counts to orchestrator: directories seen, files read, reports written.
 
 ## Output Format

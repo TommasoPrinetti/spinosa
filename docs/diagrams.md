@@ -204,7 +204,8 @@ flowchart LR
 
     subgraph Q3 ["Hidden connections"]
         A3[Goal] --> B3[Searcher]
-        B3 --> C3[Serendippo]
+        B3 --> C3a[Analyst]
+        C3a --> C3[Serendippo]
         C3 --> D3[Writer]
         D3 --> E3[Verifier]
         E3 --> F3[Evaluator]
@@ -281,20 +282,25 @@ flowchart TB
     ORCH2[Orchestrator] --> TRY{Try native spawn}
 
     TRY -->|Available| NATIVE_SPAWN[Native sub-agent\ntool dispatch]
-    NATIVE_SPAWN --> ARTIFACT[Writes artifact\nagent_reports/*.md]
+    NATIVE_SPAWN --> ARTIFACT[Writes artifact\nagent_reports/*_{session_id}.md\nor NN_*.md]
     ARTIFACT --> GATE{Evaluate gate}
 
-    TRY -->|Fails| FALLBACK[Read fallback\n.agents/agents/<name>.md]
-    FALLBACK --> INJECT[Inject instruction body\nas task prompt]
+    TRY -->|Unavailable| TASK[Task-tool spawn\nCursor / Grok]
+    TASK --> INJECT2[Inject .agents/agents/name.md\nas Task prompt]
+    INJECT2 --> ARTIFACT
+
+    TRY -->|Fails| FALLBACK[Read fallback\n.agents/agents/name.md\nor SKILL.md]
+    FALLBACK --> INJECT[Inject instruction body]
     INJECT --> FALLBACK_SPAWN[Sub-agent via\nvendor tool]
     FALLBACK_SPAWN --> ARTIFACT
 
-    GATE -->|Pass| DONE2(Done)
+    GATE -->|Pass| LOG[Append Route Decision\nto g_{session_id}.md]
+    LOG --> DONE2(Done)
     GATE -->|Fail, fixable| RETRY[Retry same agent\nmax 2 times]
     GATE -->|Fail, direction| REROUT2[Re-route]
     GATE -->|Timeout| RETRY_TIGHT[Retry tightened scope\nor abort]
 
-    RETRY --> NATIVE_SPAWN
+    RETRY --> TRY
     REROUT2 --> TRY
-    RETRY_TIGHT --> NATIVE_SPAWN
+    RETRY_TIGHT --> TRY
 ```

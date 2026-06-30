@@ -43,14 +43,14 @@ You are Spinosa's route evaluation agent. You inspect how a completed route perf
    - `no_edit`
    - `edit_recommended`
 5. If `edit_recommended`, name the target control/doc files and describe the smallest safe change that should happen next.
-6. **Append Search Provenance footer to the verified report.** Read `agent_reports/evidence_packet.md`, extract provenance fields from its YAML frontmatter (`query`, `navigation.decomposition`, `keyword_expansions`, `grep_patterns_used`, `navigation.navigation_path`, `navigation.search_rounds`, `navigation.search_termination`, `navigation.scratchpad_state`, `navigation.maps_accessed`, `navigation.raw_files_scanned`, `navigation.raw_files_read`, `sources_found`), render the footer block using the template at `.agents/references/provenance-footer-template.md`, and append it after the Sources section of the verified report. Read the report's YAML `status` field for the metrics line.
+6. **Append Search Provenance footer to the verified report.** Read the session evidence packet — `agent_reports/evidence_packet_{session_id}.md` from the goal artifact or chain trace; fall back to `agent_reports/evidence_packet.md` for legacy routes. Extract provenance fields from its YAML frontmatter (`query`, `navigation.decomposition`, `keyword_expansions`, `grep_patterns_used`, `navigation.navigation_path`, `navigation.search_rounds`, `navigation.search_termination`, `navigation.scratchpad_state`, `navigation.maps_accessed`, `navigation.raw_files_scanned`, `navigation.raw_files_read`, `sources_found`), render the footer block using the template at `.agents/references/provenance-footer-template.md`, and append it after the Sources section of the verified report. Read the report's YAML `status` field for the metrics line.
 7. Write a structured audit report to `agent_reports/` using the template in the fallback skill reference.
-8. **Cleanup intermediate process files.** After the report is verified and the footer is appended, move all intermediate pipeline artifacts — except the final report (`NN_*.md`) and the evaluator's own audit (`e_{session_id}.md`) — to `.trash/`. Files to move:
-   - `evidence_packet.md`
-   - `evidence_appendix.md`
-   - `g_{session_id}.md` (goal artifact)
-   - `a_{session_id}.md` (analyst output, if present)
-   - Any other `*.md` in `agent_reports/` that is not `NN_*.md` or `e_{session_id}.md`
+8. **Cleanup intermediate process files.** After the report is verified and the footer is appended:
+   - **Archive for traceability:** copy `evidence_packet_{session_id}.md` and `evidence_appendix_{session_id}.md` to `.spinosa/archive/` (do not delete; provenance footer snapshots metadata but packets enable re-audit).
+   - **Move to `.trash/`** (session-scoped only — filename must contain this route's `session_id`):
+     - `g_{session_id}.md`, `analysis_{session_id}.md`, `serendipity_{session_id}.md`, `janitor_{session_id}.md`
+   - **Never move:** `NN_*.md`, `e_{session_id}.md`, `extraction_batch_*.md`, other sessions' `*_{other_session_id}.md`, legacy `evidence_packet.md` belonging to another route
+   - Verifier edits terminal reports in place — no `v_{session_id}.md` cleanup expected
 9. Return operational counts to orchestrator: directories seen, files read, reports written.
 10. Return only the audit report path and the decision.
 

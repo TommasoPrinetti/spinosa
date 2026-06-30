@@ -8,7 +8,8 @@ connects_to:
   - system/configuration.md
   - system/context.md
 created: 2026-05-26
-updated: 2026-06-28
+updated: 2026-06-30
+generated_by: orchestrator-contract-fix
 ---
 # READ THIS (1)
 
@@ -42,11 +43,13 @@ Map the prompt to one route. See `.agents/references/classification.md` for rout
 ### 3. Frame — Write Goal Artifact
 
 Write a goal artifact in `agent_reports/g_{session_id}.md` before dispatching any sub-agent.
+Use `.agents/references/goal-artifact-template.md` — include `## Route Decisions` and `## Artifact Paths (session-scoped)`.
 
 The goal artifact must include:
 - cleaned prompt
 - goal statement
 - chosen first agent and its output gate
+- planned chain shape (from `.agents/references/classification.md`)
 
 The orchestrator defines the sequence by picking the next agent after each step lands. There is NO frozen chain — each step adapts based on what arrived. Sub-agents MUST be called through the chain. Never short-circuit the pipeline by doing an agent's work inline.
 
@@ -56,21 +59,22 @@ Chain rules:
 - Past session history from orchestrator-notes.md is consulted before choosing the next agent.
 - `spinosa-verifier` is required at the end of every route that produces claims, citations, or quotes.
 - `spinosa-evaluator` is required after verifier completes, to audit the route and decide if framework evolution is needed.
+- **Model:** Use `gpt-5.4-mini` for all sub-agent dispatches (small model is sufficient for search, analysis, writing, and verification).
 
 ### 4. Execute → Inspect → Decide Loop
 
 ```
 1. Route Split → fast_path (direct) or non-fast-path (orchestrated)
 2. Frame → Write goal artifact in agent_reports/g_{session_id}.md
-3. Select → Pick next sub-agent (check overseer advisories if any are unread)
-4. Dispatch → Call agent with goal + prior artifact paths
-5. Execute → Agent reads inputs, writes artifact, logs metrics
-6. Inspect → Does output clear the gate?
-   - Yes, progress expected → check if chain is complete
+3. Select → Pick next agent type and decide parallel count (check overseer advisories)
+4. Dispatch → Call agent(s) with goal + prior artifact paths (parallel for multiple same-type instances)
+5. Execute → Each agent reads inputs, writes artifact, logs metrics
+6. Inspect → Does each output clear its gate?
+   - Yes, phase complete → check if chain is done
      - Complete → go to Close (step 7)
-     - Not complete → go to Select (step 3)
-   - No, fixable gap → Repeat same agent (step 4)
-   - No, wrong direction → Re-route to different agent (step 3)
+     - Not complete → go to Select (step 3) for next phase
+   - No, fixable gap → Repeat same type (same or fewer parallel instances, step 4)
+   - No, wrong direction → Re-route to different agent type (step 3)
    - No, blocker → Abort route, go to Deliver (step 7d)
 7. Close
    a. Verifier → check every claim against source
@@ -83,21 +87,25 @@ Chain rules:
 
 Pass the goal artifact path, all prior artifact paths, and `session_id`. Each agent writes exactly one durable artifact to `agent_reports/`.
 
-Sub-agents run strictly one at a time. Exception — during startup Phase 2.2, mappers dispatch in parallel.
+Before each dispatch, append a `spinosa-subagent` fenced block and a one-line note to `## Route Decisions` in the goal artifact (see goal-artifact-template).
 
-If an agent does not return an artifact within 120 seconds, record a timeout and proceed to step 6 (Inspect) with the gate set to `blocked`. The orchestrator may re-dispatch once with a tightened scope before aborting the route.
+Advance through pipeline phases sequentially: searcher → [analyst] → [serendippo] → writer → verifier → evaluator. Pick the initial shape from `.agents/references/classification.md`. Within a phase, the orchestrator may dispatch **multiple instances of the same agent type** in parallel via the Task tool (multiple tool calls in one message). For example, if the goal requires searching three independent topics, spawn three `spinosa-searcher` instances concurrently. Each writes its own artifact (`evidence_packet_{session_id}.md` or suffixed variants listed in the goal artifact).
+
+All agents in a phase must complete (OK or blocker) before the next phase begins. Omit phases whose agents are not in the route.
+
+If an agent does not return an artifact within 120 seconds, record a timeout and proceed to step 6 (Inspect) with the gate set to `blocked`. The orchestrator may re-dispatch once with a tightened scope before aborting the route. For parallel dispatches, a timeout on one instance does not cancel the others — wait for all to finish, then record each result.
 
 #### 4b. Inspect
 
-After each agent returns, check: does the output clear the output gate?
+After each agent returns, check: does the output clear the output gate? For parallel dispatches, inspect each result independently — all must clear their gates for the phase to complete.
 
 #### 4c. Decide
 
 | Observation                           | Decision                               |
 | ------------------------------------- | -------------------------------------- |
 | Gate passes, progress expected        | Continue to next planned agent or stop |
-| Gate fails — fixable gap              | Repeat same agent with refined context (max 2 retries per agent per route) |
-| Gate fails — wrong direction          | Re-route to a different agent          |
+| Gate fails — fixable gap              | Repeat same agent type with refined context (same or fewer parallel instances, max 2 retries per type per route) |
+| Gate fails — wrong direction          | Re-route to a different agent type     |
 | Gate fails — complete blocker         | Abort, log as blocked                  |
 | Gate fails — agent timed out          | Repeat once with tightened scope, then abort |
 
@@ -138,6 +146,12 @@ When goal gates are satisfied or a blocker stops progress:
    of what happened, key findings, blockers, and anything useful for future
    sessions. Report validation performed and any blockers or unchecked claims.
 
+   **Chat delivery (non-fast-path):** Point to the verified report file only. Do not paste the report body, evidence tables, or long synthesis into chat.
+
+   Example: `Done. Verified report: agent_reports/02_topic.md (pass_with_corrections). Evaluator: no_edit.`
+
+   The numbered report in `agent_reports/NN_*.md` is the answer. Chat is a pointer plus blockers only.
+
 ### 6. Periodic — Coverage Audit (spinosa-overseer)
 
 The orchestrator maintains a counter of completed non-fast-path routes since the last `spinosa-overseer` invocation. Run the overseer between route dispatches when:
@@ -170,10 +184,13 @@ The orchestrator maintains a counter of completed non-fast-path routes since the
 
 Every non-fast-path route gets a `session_id` generated by the orchestrator at route
 start. The format is `YYYYMMDD-{short_hash}` (e.g., `20260629-a1b2c3d4`). The session_id
-is used for goal artifacts (`g_{session_id}.md`), evaluator reports (`e_{session_id}.md`),
-verifier outputs (`v_{session_id}.md`), and coverage reports (`c_{session_id}.md`).
+is used for goal artifacts (`g_{session_id}.md`), evidence packets (`evidence_packet_{session_id}.md`),
+analysis packets (`analysis_{session_id}.md`), serendipity reports (`serendipity_{session_id}.md`),
+evaluator reports (`e_{session_id}.md`), and coverage reports (`c_{session_id}.md`). Verifier updates the terminal `NN_*.md` report in place (no required `v_{session_id}.md`).
 The session_id is NOT used for numbered writer reports (`NN_descriptive-name.md`),
 which use sequential numbering.
+
+Legacy name `evidence_packet.md` (no session suffix) is deprecated for steady-state routes — it collides when routes run in parallel. Evaluator and recovery must prefer the path recorded in the goal artifact.
 
 ### Sub-Agent Invocation Rules
 
@@ -191,8 +208,22 @@ inputs:
   - goal_artifact_path
   - route_constraints
 outputs:
-  - evidence_packet_path (file path to agent_reports/evidence_packet.md)
+  - evidence_packet_path (file path to agent_reports/evidence_packet_{session_id}.md)
 ```
+
+### Orchestrator Read Boundary
+
+The orchestrator routes and inspects; it does not retrieve evidence.
+
+| Allowed before searcher returns | Forbidden before searcher returns |
+| ------------------------------- | --------------------------------- |
+| `.spinosa/memory/orchestrator-notes.md` | `grep` / content search inside `raw/` |
+| `.agents/references/classification.md` | Reading `raw/` files for evidence quotes |
+| `agent_reports/g_{session_id}.md` and prior session artifacts | Running search rounds or line-window reads on corpus |
+| `maps/` and `system/dictionary.md` for **routing only** (which agents, which chain) | Copying searcher workflow steps inline |
+| Sub-agent definitions for dispatch prep | Writing evidence packets or analysis packets |
+
+Reading an agent definition to build a dispatch prompt is allowed. Executing that agent's corpus workflow is not.
 
 ### Orchestrator's Notepad
 
@@ -247,6 +278,12 @@ Canonical agent definitions: `.agents/agents/`. Agent vendor mirrors: `.opencode
 - Use the `question` tool when missing context or direction.
 - Sub-agents never ask questions directly.
 
-## Fallback IF
+## Sub-Agent Gateway
 
-If native sub-agent spawn fails, read the agent definition from `.agents/agents/<agent-name>.md` and inject its instruction body (after YAML frontmatter) as the task prompt. Reference files in `.agents/references/` are available for templates and format guidance.
+Dispatch order (see `docs/diagrams.md` §9):
+
+1. **Native spawn** — Codex/OpenCode/Claude project sub-agents via vendor config (`.codex/config.toml`, etc.).
+2. **Task-tool spawn** — Cursor/Grok and other hosts without native `spinosa-*` roles: use the Task tool with the agent definition body as the prompt. Model may differ from `gpt-5.4-mini` when the host does not support it.
+3. **Skill inject fallback** — If both fail, read `.agents/agents/<agent-name>.md` or `.agents/skills/<agent-name>/SKILL.md` and inject the instruction body as the task prompt.
+
+All three paths must write the same session-scoped artifact paths declared in the goal artifact. Reference files in `.agents/references/` are available for templates and format guidance.

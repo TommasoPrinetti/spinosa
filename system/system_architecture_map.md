@@ -69,12 +69,12 @@ Answer report (agent_reports/NN_*.md)
 
 | Agent               | Role                  | Produces                                    |
 |---------------------|-----------------------|---------------------------------------------|
-| spinosa-searcher    | Evidence retrieval    | evidence_packet.md                          |
+| spinosa-searcher    | Evidence retrieval    | evidence_packet_{session_id}.md             |
 | spinosa-mapper      | Startup indexing      | extraction_batch_*.md, maps/, dictionary    |
-| spinosa-serendippo  | Hidden connections    | serendipity_report.md                       |
-| spinosa-analyst     | Contextual analysis   | analysis packet                             |
+| spinosa-serendippo  | Hidden connections    | serendipity_{session_id}.md                 |
+| spinosa-analyst     | Contextual analysis   | analysis_{session_id}.md                  |
 | spinosa-writer      | Report synthesis      | NN_descriptive-name.md                      |
-| spinosa-verifier    | Claim verification    | verified artifact (badges added)            |
+| spinosa-verifier    | Claim verification    | in-place on `NN_*.md` (status + corrections) |
 | spinosa-evaluator   | Route audit           | e_{session_id}.md                           |
 | spinosa-evolver     | Framework evolution   | changed files summary                       |
 | spinosa-janitor     | Hygiene audit         | cleanup artifact                            |

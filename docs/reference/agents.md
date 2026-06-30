@@ -40,7 +40,7 @@ The chain is chosen per request and adapted after each step.
 |---|---|
 | Evidence-grounded answer | Goal Artifact → Searcher → Writer → Verifier → Evaluator |
 | Evidence-grounded answer with broader context | Goal Artifact → Searcher → Analyst → Writer → Verifier → Evaluator |
-| Hidden-connection exploration | Goal Artifact → Searcher → Serendippo → Writer → Verifier → Evaluator |
+| Hidden-connection exploration | Goal Artifact → Searcher → Analyst → Serendippo → Writer → Verifier → Evaluator |
 | Re-indexing or extraction maintenance | Goal Artifact → Mapper → Searcher → Writer → Verifier → Evaluator |
 | Cleanup audit | Goal Artifact → Janitor → Verifier → Evaluator |
 
@@ -54,7 +54,7 @@ The Searcher is the evidence hunter. It:
 3. Searches your document folder for matching passages
 4. Writes an evidence packet with quotes, file paths, and confidence levels
 
-**What it produces:** `agent_reports/evidence_packet.md` — a file with evidence quotes organized by source.
+**What it produces:** `agent_reports/evidence_packet_{session_id}.md` — a file with evidence quotes organized by source.
 
 ### Analyst
 
@@ -102,7 +102,10 @@ The Verifier is the quality gate. It runs at the end of every route that produce
 | Pattern | Produced By | Description |
 |---|---|---|
 | `agent_reports/g_{session_id}.md` | Orchestrator | Goal artifact for a non-fast-path route |
-| `agent_reports/v_{session_id}.md` | Verifier | Verified artifact output |
+| `agent_reports/evidence_packet_{session_id}.md` | Searcher | Evidence packet for the route |
+| `agent_reports/analysis_{session_id}.md` | Analyst | Contextual analysis packet |
+| `agent_reports/serendipity_{session_id}.md` | Serendippo | Hidden-connections report |
+| Terminal `NN_*.md` | Verifier | In-place verification (`status`, corrections on report) |
 | `agent_reports/e_{session_id}.md` | Evaluator | Route audit report |
 | `agent_reports/c_{session_id}.md` | Overseer | Coverage report with Orchestrator Advisories |
 
@@ -186,6 +189,18 @@ Evolver runs only if an edit is recommended
 
 The orchestrator maintains session notes in `.spinosa/memory/orchestrator-notes.md`. This includes session summaries, key findings, blockers, and anything useful for future work. No structured event logging — the orchestrator writes what it needs based on the user request.
 
+## Sub-agent gateway
+
+Three dispatch paths (see `docs/diagrams.md` §9):
+
+| Path | When | Host examples |
+|------|------|---------------|
+| **Native spawn** | Vendor exposes `spinosa-*` sub-agents | Codex (`.codex/config.toml`), OpenCode, Claude Code |
+| **Task-tool spawn** | No native role; inject agent definition as Task prompt | Cursor, Grok |
+| **Skill inject** | Native and Task both unavailable | Any host with Agent Skills |
+
+All paths write the same session-scoped artifact filenames declared in the goal artifact.
+
 ## Skills (fallback mode)
 
-If the orchestrator can't dispatch a native agent, it reads a fallback skill file — a SKILL.md containing the same instructions in a self-contained format. Skills mirror the agents they back up and live in `.agents/skills/`.
+If native spawn is unavailable, the orchestrator uses Task-tool spawn or reads a fallback skill file — a SKILL.md containing the same instructions in a self-contained format. Skills mirror the agents they back up and live in `.agents/skills/`.

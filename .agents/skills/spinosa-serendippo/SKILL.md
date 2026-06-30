@@ -54,12 +54,11 @@ For each connection found:
 
 ### Phase 4: Report
 
-Write a serendipity report to `agent_reports/` with sequential numbering:
+**Steady-state routes:** Write to `agent_reports/serendipity_{session_id}.md` (read `session_id` from the goal artifact).
 
-1. Check `agent_reports/` for existing `NN_*.md` files
-2. Find the highest number, increment by 1
-3. Format: `NN_serendipity-report.md` (e.g., `00_serendipity-report.md`, `01_serendipity-report.md`)
-4. Return operational counts to orchestrator: directories seen, maps read, raw matches, files read, reports written.
+**Startup indexing only:** May use `agent_reports/serendipity_report.md` or numbered `NN_serendipity-report.md` when no session-scoped goal artifact exists.
+
+Return operational counts to orchestrator: directories seen, maps read, raw matches, files read, reports written.
 
 Template:
 
