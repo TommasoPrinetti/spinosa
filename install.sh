@@ -41,7 +41,7 @@ set -euo pipefail
 # CONFIGURATION
 # ══════════════════════════════════════════════════════════════════════════════
 
-PINNED_VERSION="0.6.3"
+PINNED_VERSION="0.6.4"
 VERSION="${VERSION:-$PINNED_VERSION}"
 DRY_RUN=0
 VERIFY_ONLY=0
@@ -93,14 +93,17 @@ flush_pending_input() {
   [ -r /dev/tty ] || return 0
   command -v stty >/dev/null 2>&1 || return 0
 
+  # Non-blocking: only flush if data is actually pending
+  read -t 0 < /dev/tty 2>/dev/null || return 0
+
   local old_stty ch
   old_stty="$(stty -g < /dev/tty 2>/dev/null)" || return 0
-  if ! stty -icanon -echo min 0 time 0 < /dev/tty 2>/dev/null; then
+  if ! stty -icanon -echo min 0 time 1 < /dev/tty 2>/dev/null; then
     stty "$old_stty" < /dev/tty 2>/dev/null || true
     return 0
   fi
 
-  while IFS= read -r -n 1 -s ch < /dev/tty 2>/dev/null; do
+  while IFS= read -r ch < /dev/tty 2>/dev/null; do
     [ -n "$ch" ] || break
   done
   stty "$old_stty" < /dev/tty 2>/dev/null || true
