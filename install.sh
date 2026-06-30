@@ -2,6 +2,8 @@
 # shellcheck shell=bash
 # ── install.sh — Spinosa Framework Installer (auto-re-execs with bash) ──────
 
+PINNED_VERSION="0.6.6"
+
 if [ -z "${BASH_VERSION-}" ]; then
   if command -v bash >/dev/null 2>&1; then
     if [ -n "${0-}" ] && [ -f "${0-}" ]; then
@@ -14,8 +16,8 @@ if [ -z "${BASH_VERSION-}" ]; then
     echo "" >&2
     echo "  This installer must be run under bash." >&2
     echo "  Please use one of the following:" >&2
-    echo "    curl -fsSL https://github.com/TommasoPrinetti/spinosa/releases/download/v0.6.2/install.sh | bash" >&2
-    echo "    bash <(curl -fsSL https://github.com/TommasoPrinetti/spinosa/releases/download/v0.6.2/install.sh)" >&2
+    echo "    curl -fsSL https://github.com/TommasoPrinetti/spinosa/releases/download/v${PINNED_VERSION}/install.sh | bash" >&2
+    echo "    bash <(curl -fsSL https://github.com/TommasoPrinetti/spinosa/releases/download/v${PINNED_VERSION}/install.sh)" >&2
     echo "    curl -fsSL ... -o install.sh && bash install.sh" >&2
     echo "" >&2
     exit 1
@@ -41,7 +43,6 @@ set -euo pipefail
 # CONFIGURATION
 # ══════════════════════════════════════════════════════════════════════════════
 
-PINNED_VERSION="0.6.6"
 VERSION="${VERSION:-$PINNED_VERSION}"
 DRY_RUN=0
 VERIFY_ONLY=0
@@ -440,7 +441,7 @@ compare_versions() {
 get_installed_version() {
   if [ -d "${SPINOSA_HOME}/versions" ]; then
     # shellcheck disable=SC2012
-    ls -1 "${SPINOSA_HOME}/versions" 2>/dev/null | sort -t. -k1,1n -k2,2n -k3,3n | tail -1 || true
+    ls -1 "${SPINOSA_HOME}/versions" 2>/dev/null | sort -V | tail -1 || true
   fi
 }
 
