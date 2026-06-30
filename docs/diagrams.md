@@ -22,8 +22,8 @@ flowchart TB
         CLI --> FS[Framework-files.tsv scaffold]
         CLI --> SRC[Source scan + classify]
         SRC --> MD[Markdown-native\n.txt .csv .json .ts]
-        SRC --> MKD[MarkItDown TS\n.docx .pptx .xlsx .html]
-        SRC --> OCR[PaddleOCR JS\nscanned PDF .jpg .png]
+        SRC --> MKD[MarkItDown Python\n.docx .pptx .xlsx .html]
+        SRC --> OCR[RapidOCR Python\nscanned PDF .jpg .png]
         SRC --> SKIP[Audio/video skipped]
         MD & MKD & OCR --> RAW[raw/ corpus .md]
         CLI --> CFG[system/context.md\nsetup_status: cli_started]
@@ -245,8 +245,8 @@ flowchart LR
     SRC[Source file] --> CLASS{Classify}
     CLASS -->|.md| NATIVE[Native markdown\ncopy + YAML header]
     CLASS -->|.txt .csv .json .ts .py .yaml| MD_CONV[Markdown-convertible\nrenamed to .md]
-    CLASS -->|.docx .pptx .xlsx .html .epub| MKD2[MarkItDown TS\n→ .md]
-    CLASS -->|scanned PDF .jpg .png| OCR2[PaddleOCR JS\n→ .md]
+    CLASS -->|.docx .pptx .xlsx .html .epub| MKD2[MarkItDown Python\n→ .md]
+    CLASS -->|scanned PDF .jpg .png| OCR2[RapidOCR Python\n→ .md]
     CLASS -->|.mp4 .mov .mp3 .wav| SKIP2[Skipped\nby default]
     CLASS -->|.DS_Store ._*| IGNORE[Ignored]
 

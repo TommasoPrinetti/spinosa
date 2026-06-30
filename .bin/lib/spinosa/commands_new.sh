@@ -283,15 +283,12 @@ if [[ -f "$workspace_path/.bin/sync-agents.sh" ]]; then
 fi
 
 # Create empty user-state directories with .gitkeep
-  for dir in raw maps logs agent_reports .trash; do
-    mkdir -p "$workspace_path/$dir"
-    touch "$workspace_path/$dir/.gitkeep"
-  done
-  if [[ ! -f "$workspace_path/logs/session_metrics.tsv" ]]; then
-    printf 'date\tsession_id\tagent\troute\toperation\tquery_label\tdirs_seen\tmaps_read\traw_matches\traw_files_read\treports_written\toutput_path\n' > "$workspace_path/logs/session_metrics.tsv"
-  fi
+for dir in raw maps logs agent_reports .trash; do
+  mkdir -p "$workspace_path/$dir"
+  touch "$workspace_path/$dir/.gitkeep"
+done
 
-  # ── Step 5: Write workspace metadata ────────────────────────────────────
+# ── Step 5: Write workspace metadata ────────────────────────────────────
   cat > "$workspace_path/.spinosa/workspace" << EOF
 workspace_version: 1
 framework_version: ${source_framework_version}
