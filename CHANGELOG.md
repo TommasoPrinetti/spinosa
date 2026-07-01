@@ -8,6 +8,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- `spinosa update` on cloud storage: files whose framework content hasn't changed between versions are now detected via local hash comparison and skipped entirely — no cloud I/O, no timeout wait.
+- Progress bar now renders before the cloud hash operation, so the spinner animates during the 30s hashing wait instead of staying frozen.
+
 ## [0.8.0-beta.3] — 2026-07-01
 
 ### Added

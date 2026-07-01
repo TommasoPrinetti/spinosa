@@ -769,6 +769,21 @@ cmd_update() {
             continue
           fi
 
+          # ── fast path: framework file unchanged since last sync ─────
+          new_hash="$(sha256_file "$src" 2>/dev/null || echo "")"
+          if [[ -n "$new_hash" && "$new_hash" == "$orig_hash" ]]; then
+            render_update_manifest_progress "$manifest_idx" "$manifest_total" "$path" "unchanged"
+            skipped=$((skipped + 1))
+            continue
+          fi
+
+          # ── render progress before cloud I/O ────────────────────────
+          if [[ "$dry_run" -eq 1 ]]; then
+            render_update_manifest_progress "$manifest_idx" "$manifest_total" "$path" "preview update"
+          else
+            render_update_manifest_progress "$manifest_idx" "$manifest_total" "$path" "updating"
+          fi
+
           SPINOSA_LAST_COPY_FAIL_REASON=""
           current_hash="$(sha256_file "$dst" 2>/dev/null || echo "missing")"
           if [[ "$current_hash" == "missing" ]] && cloud_io_timed_out; then
@@ -781,11 +796,9 @@ cmd_update() {
           if [[ "$current_hash" == "$orig_hash" ]]; then
             # Unmodified → replace
             if [[ "$dry_run" -eq 1 ]]; then
-              render_update_manifest_progress "$manifest_idx" "$manifest_total" "$path" "preview update"
               updated=$((updated + 1))
               update_changed_paths+=("$path")
             else
-              render_update_manifest_progress "$manifest_idx" "$manifest_total" "$path" "updating"
               if [[ -d "$src" ]]; then
                 mkdir -p "$dst" && update_sync_dir "$src" "$dst" "$path" && updated=$((updated + 1)) && update_changed_paths+=("$path") || { clear_progress_line; safe_copy_warn_failure "sync" "$path" "$dst"; copy_failed=$((copy_failed + 1)); }
               elif [[ -f "$src" ]]; then
@@ -810,7 +823,7 @@ cmd_update() {
             fi
           else
             # Customized — inject new framework content as comments if different
-            new_hash="$(sha256_file "$src" 2>/dev/null || echo "")"
+            # new_hash already computed above
             if [[ "$current_hash" == "$new_hash" ]]; then
               render_update_manifest_progress "$manifest_idx" "$manifest_total" "$path" "unchanged"
               skipped=$((skipped + 1))
