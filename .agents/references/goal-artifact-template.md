@@ -48,7 +48,7 @@ status: in_progress
 | Evidence | `agent_reports/evidence_packet_{session_id}.md` (parallel: `evidence_packet_{session_id}_{slug}.md`) |
 | Analysis | `agent_reports/analysis_{session_id}.md` (if analyst runs) |
 | Serendipity | `agent_reports/serendipity_{session_id}.md` (if serendippo runs) |
-| Report | `agent_reports/NN_{topic-slug}.md` — slug = plain-language topic (see [[.agents/references/artifact-naming.md]]) |
+| Report | `agent_reports/NN_{topic-slug}.md` — slug = plain-language topic (see `artifact-naming.md`) |
 | Verifier | In-place edit on terminal `NN_*.md` (`status` + corrections); optional audit log only if goal lists one |
 | Evaluator | `agent_reports/e_{session_id}.md` |
 

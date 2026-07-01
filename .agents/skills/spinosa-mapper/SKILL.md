@@ -131,7 +131,7 @@ Maps are Obsidian-native. Every reference to a raw file or another map in the ma
 
 Every map MUST include Obsidian `#tags` in the body (after the H1 heading, before any other content). Tags create a parallel filtering dimension in Obsidian's graph view — independent of, but complementary to, wikilink edges.
 
-- **Hub map** ([[corpus_overview.md]]): `#hub` plus `#group/<name>` for every group
+- **Hub map** (`corpus_overview.md`): `#hub` plus `#group/<name>` for every group
 - **Group maps**: `#group/<name>` plus `#concept/<concept>` for each recurring concept
 - **Theme maps**: `#theme/<name>` plus `#concept/<concept>` for each related concept
 - **Extraction packets**: `#concept/<concept>` `#type/<source_type>` `#group/<group_name>` — mirrors the Tags field in each packet
@@ -164,7 +164,7 @@ Format rules:
 - If you cannot read a file, note it as `unreadable` and continue.
 - Always write to files. Do not return all packets inline.
 - If processing multiple batches, use distinct descriptive `batch_id` values (e.g. `policy-pdfs-batch-001`, `interviews-batch-002`) — not `batch_001` alone.
-- Group/theme map paths must use readable slugs (`maps/groups/normandy-interviews/`, `maps/themes/coastal-erosion.md`) per [[.agents/references/artifact-naming.md]].
+- Group/theme map paths must use readable slugs (`maps/groups/normandy-interviews/`, `maps/themes/coastal-erosion.md`) per `artifact-naming.md`.
 - During `map_write`, create new maps when missing and enrich existing maps when they already exist.
 - When writing maps, use prose format, not tables.
 - Every key passage must include file path and line references.

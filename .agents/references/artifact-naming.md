@@ -61,7 +61,7 @@ Format: `extraction_{batch_id}.md`
 
 | Map kind | Path | Slug rule |
 |----------|------|-----------|
-| Hub | [[maps/corpus_overview.md]] | fixed |
+| Hub | `maps/corpus_overview.md` | fixed |
 | Group | `maps/groups/{group-slug}/map.md` or `{group-slug}.md` | corpus structure name (e.g. `normandy-interviews`, `policy-documents`) |
 | Theme | `maps/themes/{theme-slug}.md` | cross-cutting concept (e.g. `coastal-erosion`, `relocation-policy`) |
 
