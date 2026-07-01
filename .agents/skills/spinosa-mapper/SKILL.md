@@ -14,17 +14,17 @@ You are Spinosa's mapping agent. Your job is to read raw files in batch, extract
 ## Prerequisites
 
 - Workspace is initialized (`setup_status: workspace_started`).
-- `system/dictionary.md`, `raw/`, and `maps/` are available.
+- [[system/dictionary.md]], `raw/`, and `maps/` are available.
 - The orchestrator has provided a file list and route constraints.
 
 ## Workflow
 
 ### Phase 1 — Extraction batches (`map_extract`)
 
-1. Receive a **descriptive** `batch_id` (e.g., `normandy-interviews-batch-001`) and a file list from the orchestrator — see `.agents/references/artifact-naming.md`. Never use bare `batch_001` or `temp`.
+1. Receive a **descriptive** `batch_id` (e.g., `normandy-interviews-batch-001`) and a file list from the orchestrator — see [[.agents/references/artifact-naming.md]]. Never use bare `batch_001` or `temp`.
 2. Parse the file list from the task instruction. No intermediate batch list file.
 3. Check idempotency: if `agent_reports/extraction_{batch_id}.md` already exists and has a valid frontmatter with `files_processed > 0`, skip extraction and return the existing path.
-4. Read `system/dictionary.md` to learn canonical terms, names, and concepts.
+4. Read [[system/dictionary.md]] to learn canonical terms, names, and concepts.
 5. Read each file in your batch completely. If a file is unreadable or corrupt, skip it, mark it as `unreadable` in the output, and continue.
 6. For each file, extract content-grounded fragments (see below).
 7. Write extraction packets to `agent_reports/extraction_{batch_id}.md` and return the path. Set YAML `scope:` to the batch corpus slice.
@@ -33,7 +33,7 @@ You are Spinosa's mapping agent. Your job is to read raw files in batch, extract
 
 1. When instructed during startup Phase 2.4 or deep index maintenance, read all extraction batches from `agent_reports/extraction_batch_*.md`.
 2. Identify the natural groups in the corpus from accumulated summaries.
-3. Write or update the structural overview map at `maps/corpus_overview.md` or an equivalent root-level overview map.
+3. Write or update the structural overview map at [[maps/corpus_overview.md]] or an equivalent root-level overview map.
 4. Create new group maps when they do not exist and enrich existing ones when the structure is already present.
 5. Identify cross-cutting themes and write or enrich theme maps.
 6. Verify every file in the extraction checkpoint appears in at least one group map.
@@ -108,7 +108,7 @@ Extraction written to agent_reports/extraction_{batch_id}.md
 
 When map writing is requested, `maps/` is the primary output:
 
-1. Root structural overview at `maps/corpus_overview.md` or an equivalent root-level overview map.
+1. Root structural overview at [[maps/corpus_overview.md]] or an equivalent root-level overview map.
 2. Group maps under subdirectories named for the organizing principle.
 3. Theme maps for cross-cutting concepts.
 4. Enrichment updates to existing maps when a rerun expands retrieval coverage.
@@ -144,7 +144,7 @@ Format rules:
 
 ### Hub Map Rules
 
-- `corpus_overview.md` (Level 0) is the central hub of the Obsidian graph. It MUST contain wikilinks to every group map and theme map.
+- [[corpus_overview.md]] (Level 0) is the central hub of the Obsidian graph. It MUST contain wikilinks to every group map and theme map.
 - Every group map MUST contain a wikilink back to `[[corpus_overview]]`.
 - Theme maps MUST link to relevant group maps via wikilinks.
 - Group maps SHOULD link to related group maps when cross-references exist.

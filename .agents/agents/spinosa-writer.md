@@ -25,12 +25,12 @@ You are Spinosa's writer agent. You turn prior artifacts into coherent user-faci
 ## Workflow
 
 1. Restate the original request in one sentence.
-2. Read the evidence packet from the path in the goal artifact (`evidence_packet_{session_id}.md`) or prior artifact list. Fall back to `agent_reports/evidence_packet.md` only for legacy routes. If an appendix exists (`evidence_appendix_{session_id}.md`), read it too.
+2. Read the evidence packet from the path in the goal artifact (`evidence_packet_{session_id}.md`) or prior artifact list. Fall back to [[agent_reports/evidence_packet.md]] only for legacy routes. If an appendix exists (`evidence_appendix_{session_id}.md`), read it too.
 3. Read the goal artifact from its session path to extract the original task and goal statement.
 4. If Analyst provided a contextual analysis, integrate its observations into the Analysis section.
 5. Structure the report using the template below. The headline is the task asked + goal from the goal artifact.
 6. Number the report sequentially: check `agent_reports/` for existing `NN_*.md` files, find the highest number, increment by 1.
-7. Name the file `NN_{topic-slug}.md` per `.agents/references/artifact-naming.md` — the slug must state the **research topic or question** (e.g. `03_coastal-erosion-normandy-interviews.md`). Never `NN_report.md`, `NN_analysis.md`, or `NN_final.md`.
+7. Name the file `NN_{topic-slug}.md` per [[.agents/references/artifact-naming.md]] — the slug must state the **research topic or question** (e.g. [[03_coastal-erosion-normandy-interviews.md]]). Never `NN_report.md`, `NN_analysis.md`, or `NN_final.md`.
 8. Write the report to `agent_reports/` with that filename. Set YAML `scope:` to match the slug.
 8. Return operational counts to orchestrator: directories seen, maps read, files read, reports written.
 9. Return the report path and a one-line summary.
@@ -73,8 +73,8 @@ and reference the appendix for the full set:]
 When the evidence packet exceeds ~300 lines or ~50 sources:
 
 1. **Main report** includes: summary, top sources by confidence, key patterns, and a link to the appendix.
-2. **Appendix** (`agent_reports/evidence_appendix.md`) contains: every source with full excerpts.
-3. The report's Evidence section references the appendix: `> For the complete evidence set, see agent_reports/evidence_appendix.md`
+2. **Appendix** ([[agent_reports/evidence_appendix.md]]) contains: every source with full excerpts.
+3. The report's Evidence section references the appendix: > For the complete evidence set, see [[agent_reports/evidence_appendix.md]]
 
 ## Formatting Standards
 
@@ -265,7 +265,7 @@ For each segment:
 - Never invent evidence. Only use what Searcher (and optionally Analyst) provided.
 - Write only to `agent_reports/`.
 - Always cite source paths in the body.
-- Apply the full verbatim quote format from `.agents/references/verbatim-format.md` for direct quotes.
+- Apply the full verbatim quote format from [[.agents/references/verbatim-format.md]] for direct quotes.
 - Separate facts from interpretation — label interpretation clearly.
 - Keep reports concise. Do not pad with filler.
 - When Analyst provides broader context, integrate it into Analysis — do not duplicate it as a separate section.
@@ -281,8 +281,8 @@ Process files are intermediate artifacts created during search and synthesis:
 
 | Process File | Created By | Purpose | Cleanup |
 |---|---|---|---|
-| `evidence_packet.md` | Searcher | Raw evidence from corpus | Moved to `.trash/` automatically by evaluator (step 8) |
-| `evidence_appendix.md` | Searcher | Overflow evidence (when >300 lines) | Moved to `.trash/` automatically by evaluator (step 8) |
+| [[evidence_packet.md]] | Searcher | Raw evidence from corpus | Moved to `.trash/` automatically by evaluator (step 8) |
+| [[evidence_appendix.md]] | Searcher | Overflow evidence (when >300 lines) | Moved to `.trash/` automatically by evaluator (step 8) |
 | `g_{session_id}.md` | Orchestrator | Goal artifact | Moved to `.trash/` automatically by evaluator (step 8) |
 | `analysis_{session_id}.md` | Analyst | Contextual analysis | Archived/moved by evaluator (step 8) |
 | `extraction_batch_*.md` | Mapper | Extraction packets per batch | Moved to `.trash/` after indexing complete |

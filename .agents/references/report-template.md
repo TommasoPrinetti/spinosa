@@ -2,7 +2,7 @@
 
 ## File Naming Convention
 
-**Full rules:** `.agents/references/artifact-naming.md`
+**Full rules:** [[.agents/references/artifact-naming.md]]
 
 Reports are numbered sequentially based on existing files in `agent_reports/`:
 
@@ -13,9 +13,9 @@ Reports are numbered sequentially based on existing files in `agent_reports/`:
 5. Format: `NN_{topic-slug}.md` — the slug must name the **research topic or question**, not the file type
 
 **Good examples:**
-- `00_startup-indexing-report.md`
-- `01_coastal-erosion-normandy-interviews.md`
-- `02_fisheries-policy-source-comparison.md`
+- [[00_startup-indexing-report.md]]
+- [[01_coastal-erosion-normandy-interviews.md]]
+- [[02_fisheries-policy-source-comparison.md]]
 
 **Forbidden slugs (alone):** `report`, `analysis`, `final`, `output`, `temp`, `result`, `draft`
 
@@ -58,7 +58,7 @@ For large evidence sets (>50 sources), include the top 10-20 here and link to th
 
 When evidence exceeds ~300 lines or ~50 sources, create a separate appendix file:
 
-**File:** `agent_reports/evidence_appendix.md`
+**File:** [[agent_reports/evidence_appendix.md]]
 
 ```markdown
 ---

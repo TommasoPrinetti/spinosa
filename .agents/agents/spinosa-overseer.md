@@ -27,9 +27,9 @@ You are Spinosa's coverage audit agent. You load the `agent-interception` skill 
 ## Prerequisites
 
 - Workspace is initialized (`setup_status: workspace_started`).
-- `.spinosa/memory/orchestrator-notes.md` exists with session notes.
-- `system/configuration.md` has `stale_after_days` threshold (default: 30).
-- `system/dictionary.md` exists for canonical term reference.
+- [[.spinosa/memory/orchestrator-notes.md]] exists with session notes.
+- [[system/configuration.md]] has `stale_after_days` threshold (default: 30).
+- [[system/dictionary.md]] exists for canonical term reference.
 - `maps/` and `raw/` directories exist.
 - `agent-interception` skill is available at `.agents/skills/agent-interception/`.
 - Codex JSONL rollouts exist at `~/.codex/sessions/` OR OpenCode export is available.
@@ -47,7 +47,7 @@ Check `~/.codex/sessions/` for JSONL rollouts and check if OpenCode export is av
 2. Codex rollouts by date range (last `stale_after_days` days)
 3. OpenCode export if Codex logs unavailable
 
-Use the discovery commands from `agent-interception/references/source-discovery.md`.
+Use the discovery commands from [[agent-interception/references/source-discovery.md]].
 
 **0b. Extract normalized events**
 
@@ -105,9 +105,9 @@ This produces a `file_coverage` structure:
 
 ### Phase 1: Collect
 
-1. Read `system/configuration.md` for `stale_after_days` and active corpus path.
-2. Read `system/dictionary.md` to extract all canonical names, places, organizations, and concepts.
-3. Read `.spinosa/memory/orchestrator-notes.md` for session summaries, key findings, and blockers.
+1. Read [[system/configuration.md]] for `stale_after_days` and active corpus path.
+2. Read [[system/dictionary.md]] to extract all canonical names, places, organizations, and concepts.
+3. Read [[.spinosa/memory/orchestrator-notes.md]] for session summaries, key findings, and blockers.
 4. List all files in `maps/` to see what navigation structures exist.
 5. List top-level directories in `raw/` to see what corpus categories exist with file counts.
 6. List all reports in `agent_reports/` with their dates.
@@ -118,7 +118,7 @@ This produces a `file_coverage` structure:
 Compute the following matrices, using BOTH orchestrator-notes.md session history AND Phase-0 session log analysis:
 
 **Topic coverage:**
-- For each canonical concept in the dictionary, search session prompts in `.spinosa/memory/orchestrator-notes.md` for matching keywords and aliases.
+- For each canonical concept in the dictionary, search session prompts in [[.spinosa/memory/orchestrator-notes.md]] for matching keywords and aliases.
 - Also search the session log search_keywords from Phase 0c for concept matches.
 - Concepts with zero matches from both sources are marked `not_covered`.
 - For covered concepts, if `now - last_date > stale_after_days`, mark `stale`.
@@ -167,7 +167,7 @@ For each gap, construct a structured recommendation:
 
 ### Phase 5: Report
 
-Write a structured coverage report to `agent_reports/c_{session_id}.md`. Set YAML `scope:` to the audit period or corpus slice covered (`.agents/references/artifact-naming.md`) so the file is identifiable from outside.
+Write a structured coverage report to `agent_reports/c_{session_id}.md`. Set YAML `scope:` to the audit period or corpus slice covered ([[.agents/references/artifact-naming.md]]) so the file is identifiable from outside.
 
 Template:
 

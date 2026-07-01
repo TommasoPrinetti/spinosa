@@ -27,7 +27,7 @@ Find serendipitous connections between concepts across the raw corpus. Your job 
 
 ### Phase 1: Orient
 
-1. Read `system/dictionary.md` to understand the current vocabulary.
+1. Read [[system/dictionary.md]] to understand the current vocabulary.
 2. Read `maps/` — start with the structural overview, then group maps, then theme maps. Identify which groups are under-connected and which concepts lack cross-cutting threads. Track every map you access.
 4. Identify gaps: which concepts are under-connected? Which files are isolated? Cross-reference with graph query results.
 
@@ -54,7 +54,7 @@ For each connection found:
 
 ### Phase 4: Report
 
-**Steady-state routes:** Write to `agent_reports/serendipity_{session_id}.md` (read `session_id` from the goal artifact). YAML `scope:` and title must name the connection theme (`.agents/references/artifact-naming.md`).
+**Steady-state routes:** Write to `agent_reports/serendipity_{session_id}.md` (read `session_id` from the goal artifact). YAML `scope:` and title must name the connection theme ([[.agents/references/artifact-naming.md]]).
 
 **Startup indexing only:** Use `NN_startup-serendipity-{theme-slug}.md` (e.g. `02_startup-serendipity-cross-theme-links.md`) — not `serendipity_report.md` or bare `NN_serendipity-report.md`.
 
