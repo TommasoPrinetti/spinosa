@@ -167,7 +167,7 @@ cmd_upgrade() {
       --help|-h)
         printf '  %s\n' "Usage: spinosa upgrade [options]"
         printf '    %s\n' "  --version X.Y.Z   Upgrade to specific version (default: latest on channel)"
-        printf '    %s\n' "  --channel NAME    Release channel: stable (default) or dev (prereleases)"
+        printf '    %s\n' "  --channel NAME    Release channel: stable (default) or beta (prereleases)"
         printf '    %s\n' "  --yes             Skip confirmation prompt"
         printf '    %s\n' "  --reinstall       Reinstall current version"
         printf '    %s\n' "  --help            Show this help"
@@ -178,9 +178,10 @@ cmd_upgrade() {
     esac
   done
   case "$channel" in
-    stable|dev) ;;
-    *) die "Unknown release channel: ${channel} (use stable or dev)" ;;
+    stable|beta|dev) ;;
+    *) die "Unknown release channel: ${channel} (use stable or beta)" ;;
   esac
+  [[ "$channel" == "dev" ]] && channel="beta"
 
   title "Upgrade"
 
@@ -239,9 +240,9 @@ cmd_upgrade() {
   local installer="${tmpdir}/install-spinosa.sh"
 
   spinner_start "Downloading installer v${resolved_version} (${channel})"
-  if [[ "$channel" == "dev" && "$target_version" == "latest" ]]; then
+  if [[ "$channel" == "beta" && "$target_version" == "latest" ]]; then
     curl -fsSL "$installer_url" -o "$installer" 2>/dev/null \
-      || { spinner_stop; die "Could not download dev installer from ${installer_url}. Publish a prerelease first."; }
+      || { spinner_stop; die "Could not download beta installer from ${installer_url}. Publish a prerelease first."; }
   else
     curl -fsSL "https://github.com/${SPINOSA_RELEASE_REPO}/releases/download/v${resolved_version}/install.sh" -o "$installer" 2>/dev/null \
       || { spinner_stop; die "Could not download release installer for v${resolved_version}. Aborting rather than falling back to an unpinned branch."; }
@@ -260,11 +261,7 @@ cmd_upgrade() {
   spinosa_log INFO "upgrade installer=${installer} args=${upgrade_args[*]}"
   if ! bash "$installer" "${upgrade_args[@]}"; then
     spinosa_log ERROR "installer exited non-zero"
-    if [[ -x "${SPINOSA_HOME}/bin/spinosa" ]]; then
-      warn "Installer reported failure but CLI is present — continuing (see $(spinosa_log_file))"
-    else
-      die "Installer failed. See $(spinosa_log_file)"
-    fi
+    die "Installer failed. Existing CLI may still be present, but workspace update was not run. See $(spinosa_log_file)"
   fi
 
   rm -f "$SPINOSA_VERSION_CACHE" 2>/dev/null || true
@@ -272,6 +269,11 @@ cmd_upgrade() {
 
   # Re-resolve framework root so post-upgrade operations see the new version
   FRAMEWORK_ROOT="$(resolve_framework_root)"
+  local post_install_version
+  post_install_version="$(framework_version "$FRAMEWORK_ROOT")"
+  if [[ "$post_install_version" != "$resolved_version" ]]; then
+    die "Installer completed but active framework is v${post_install_version:-unknown}; expected v${resolved_version}. Aborting workspace update."
+  fi
 
   # Libraries were sourced at process start (pre-upgrade). Workspace update must
   # run under the new framework on disk — re-exec or migrate/cloud fixes are skipped.
@@ -483,7 +485,7 @@ sync_dir_contents() {
     while IFS= read -r -d '' item; do
       local rel="${item#"$dst_real"/}"
       [[ -e "$src_real/$rel" ]] || cloud_rm_rf "$item" 2>/dev/null || true
-    done < <(find -P "$dst_real" -mindepth 1 -maxdepth 1 -print0 2>/dev/null)
+    done < <(find -P "$dst_real" -depth -mindepth 1 -print0 2>/dev/null)
   fi
   safe_copy_tree "$src_real" "$dst"
 }
@@ -492,7 +494,17 @@ sync_dir_contents() {
 # Returns: 0 = equal, 1 = first > second, 2 = first < second
 
 compare_versions() {
-  local a="${1%%-*}" b="${2%%-*}"
+  local original_a="$1" original_b="$2"
+  local a="${original_a%%-*}" b="${original_b%%-*}"
+  local apre="" bpre=""
+  if [[ "$original_a" == *-* ]]; then
+    apre="${original_a#*-}"
+    apre="${apre%%+*}"
+  fi
+  if [[ "$original_b" == *-* ]]; then
+    bpre="${original_b#*-}"
+    bpre="${bpre%%+*}"
+  fi
   a="${a%%+*}" b="${b%%+*}"
   local IFS=.
   set -f
@@ -512,6 +524,36 @@ compare_versions() {
     if (( an > bn )); then return 1; fi
     if (( an < bn )); then return 2; fi
   done
+  if [[ -z "$apre" && -n "$bpre" ]]; then return 1; fi
+  if [[ -n "$apre" && -z "$bpre" ]]; then return 2; fi
+  if [[ -n "$apre" && -n "$bpre" && "$apre" != "$bpre" ]]; then
+    set -f
+    set -- $apre
+    set +f
+    local ap=("$@")
+    set -f
+    set -- $bpre
+    set +f
+    local bp=("$@")
+    max=${#ap[@]}; [[ "${#bp[@]}" -gt "$max" ]] && max="${#bp[@]}"
+    for ((i=0; i<max; i++)); do
+      local ai="${ap[$i]:-}" bi="${bp[$i]:-}"
+      [[ "$ai" == "$bi" ]] && continue
+      [[ -z "$ai" ]] && return 2
+      [[ -z "$bi" ]] && return 1
+      if [[ "$ai" =~ ^[0-9]+$ && "$bi" =~ ^[0-9]+$ ]]; then
+        if (( 10#$ai > 10#$bi )); then return 1; fi
+        if (( 10#$ai < 10#$bi )); then return 2; fi
+      elif [[ "$ai" =~ ^[0-9]+$ ]]; then
+        return 2
+      elif [[ "$bi" =~ ^[0-9]+$ ]]; then
+        return 1
+      else
+        [[ "$ai" > "$bi" ]] && return 1
+        [[ "$ai" < "$bi" ]] && return 2
+      fi
+    done
+  fi
   return 0
 }
 
@@ -899,8 +941,12 @@ cmd_update() {
 
   # ── clean macOS metadata ─────────────────────────────────────────────────
   if [[ "$dry_run" -ne 1 ]]; then
-    find "$workspace_path" -name ".DS_Store" -delete 2>/dev/null || true
-    find "$workspace_path" -name "._*" -delete 2>/dev/null || true
+    if is_cloud_storage_path "$workspace_path"; then
+      note "Skipped recursive macOS metadata cleanup on cloud storage."
+    else
+      find "$workspace_path" -name ".DS_Store" -delete 2>/dev/null || true
+      find "$workspace_path" -name "._*" -delete 2>/dev/null || true
+    fi
   fi
 
   # ── sync agent mirrors ───────────────────────────────────────────────────
@@ -1077,7 +1123,7 @@ cmd_doctor() {
   if declare -F spinosa_list_incomplete_versions >/dev/null 2>&1; then
     while IFS= read -r incomplete; do
       [[ -n "$incomplete" ]] || continue
-      warn "Incomplete install detected: versions/${incomplete} — run: curl -fsSL https://github.com/TommasoPrinetti/spinosa/releases/latest/download/install.sh | bash"
+      warn "Incomplete install detected: versions/${incomplete} — run: curl -fsSL https://github.com/TommasoPrinetti/spinosa/releases/download/stable/install.sh | bash"
       total_issues=$((total_issues + 1))
     done < <(spinosa_list_incomplete_versions)
   fi
@@ -1165,11 +1211,11 @@ auto_upgrade_check() {
     skip_until="$(sed -n '3p' "$cache_file" 2>/dev/null || echo 0)"
 
     if [[ -n "$cached_latest" ]]; then
-      local lower
-      lower="$(printf '%s\n%s\n' "$installed_version" "$cached_latest" | sort -V | head -1)"
-      if [[ "$lower" == "$cached_latest" || "$lower" == "$installed_version" && "$installed_version" == "$cached_latest" ]]; then
+      local cache_cmp=0
+      compare_versions "$installed_version" "$cached_latest" || cache_cmp=$?
+      if [[ "$cache_cmp" -ne 2 ]]; then
         # installed >= cached latest — cache is stale, clear it and proceed silently
-        if [[ "$installed_version" != "$cached_latest" ]]; then
+        if [[ "$cache_cmp" -eq 1 ]]; then
           rm -f "$cache_file" 2>/dev/null || true
         elif [[ "$now" -lt "$skip_until" ]]; then
           return 0
@@ -1188,7 +1234,9 @@ auto_upgrade_check() {
 
   printf '%s\n%s\n0\n' "$now" "$latest" > "$cache_file"
 
-  [[ "$latest" != "$installed_version" ]] || return 0
+  local latest_cmp=0
+  compare_versions "$latest" "$installed_version" || latest_cmp=$?
+  [[ "$latest_cmp" -eq 1 ]] || return 0
 
   printf '\n  %sSpinosa v%s is installed. -----> v%s is available. ✨%s\n\n' "${BOLD}" "$installed_version" "$latest" "${RESET}"
   if confirm "Upgrade now?" "y"; then

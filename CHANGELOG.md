@@ -8,13 +8,22 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.8.0-beta.2] — 2026-07-01
+
+### Fixed
+
+- Auto-upgrade no longer offers stable when an installed beta is already newer than the stable channel.
+- `spinosa update` progress now keeps the active file line animated during long cloud copy/hash operations.
+- Ctrl-C during timed cloud I/O cancels the active child process promptly instead of waiting through retries/timeouts.
+- Version comparison now handles prereleases (`0.8.0-beta.1` is newer than `0.7.7`, older than `0.8.0`).
+
 ## [0.8.0-beta.1] — 2026-07-01
 
 ### Added
 
-- Release channels: stable (`publish-release.sh`) vs dev/beta (`publish-dev-release.sh` GitHub prerelease)
-- `spinosa upgrade --channel dev` — tracks newest prerelease
-- GitHub install endpoints: `releases/latest/download/install.sh` (stable), `releases/download/dev/install.sh` (rolling beta)
+- Release channels: rolling stable (`releases/download/stable/install.sh`) and rolling beta (`releases/download/beta/install.sh`)
+- `spinosa upgrade --channel beta` — tracks newest beta prerelease (`--channel dev` remains a compatibility alias)
+- Stable and beta installs now use explicit rolling GitHub release tags instead of GitHub `latest` / `dev`
 - `.bin/lib/spinosa/release_channels.sh` — channel resolution helpers
 
 ## [0.7.7] — 2026-07-01

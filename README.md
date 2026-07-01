@@ -48,15 +48,15 @@ A corpus is the folder with your research materials (PDFs, Word docs, images, no
 ### 2. Install
 
 ```bash
-curl -fsSL https://github.com/TommasoPrinetti/spinosa/releases/latest/download/install.sh | bash
+curl -fsSL https://github.com/TommasoPrinetti/spinosa/releases/download/stable/install.sh | bash
 source ~/.zshrc   # macOS default; or: source ~/.spinosa/env.sh
 ```
 
-**Beta / dev channel** (GitHub prereleases — not stable `latest`):
+**Beta channel** (GitHub prereleases — not stable):
 
 ```bash
-curl -fsSL https://github.com/TommasoPrinetti/spinosa/releases/download/dev/install.sh | bash
-spinosa upgrade --channel dev --yes
+curl -fsSL https://github.com/TommasoPrinetti/spinosa/releases/download/beta/install.sh | bash
+spinosa upgrade --channel beta --yes
 ```
 
 If you use bash, reload with `source ~/.bash_profile` (macOS) or `source ~/.bashrc` (Linux). A new terminal window also works.
@@ -83,7 +83,7 @@ This is the full first-run flow from install to your first verified report.
 Spinosa needs the software itself and a folder with your documents.
 
 ```bash
-curl -fsSL https://github.com/TommasoPrinetti/spinosa/releases/latest/download/install.sh | bash
+curl -fsSL https://github.com/TommasoPrinetti/spinosa/releases/download/stable/install.sh | bash
 source ~/.zshrc   # or: source ~/.spinosa/env.sh — needed after curl|bash
 spinosa new
 ```

@@ -2,7 +2,7 @@
 # shellcheck shell=bash
 # ── install.sh — Spinosa Framework Installer (auto-re-execs with bash) ──────
 
-PINNED_VERSION="0.8.0-beta.1"
+PINNED_VERSION="0.8.0-beta.2"
 
 if [ -z "${BASH_VERSION-}" ]; then
   if command -v bash >/dev/null 2>&1; then
@@ -16,8 +16,8 @@ if [ -z "${BASH_VERSION-}" ]; then
     echo "" >&2
     echo "  This installer must be run under bash." >&2
     echo "  Please use one of the following:" >&2
-    echo "    curl -fsSL https://github.com/TommasoPrinetti/spinosa/releases/download/v${PINNED_VERSION}/install.sh | bash" >&2
-    echo "    bash <(curl -fsSL https://github.com/TommasoPrinetti/spinosa/releases/download/v${PINNED_VERSION}/install.sh)" >&2
+    echo "    curl -fsSL https://github.com/TommasoPrinetti/spinosa/releases/download/stable/install.sh | bash" >&2
+    echo "    bash <(curl -fsSL https://github.com/TommasoPrinetti/spinosa/releases/download/stable/install.sh)" >&2
     echo "    curl -fsSL ... -o install.sh && bash install.sh" >&2
     echo "" >&2
     exit 1
