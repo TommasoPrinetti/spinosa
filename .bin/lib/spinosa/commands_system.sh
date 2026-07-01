@@ -259,6 +259,14 @@ cmd_upgrade() {
   # Re-resolve framework root so post-upgrade operations see the new version
   FRAMEWORK_ROOT="$(resolve_framework_root)"
 
+  # Libraries were sourced at process start (pre-upgrade). Workspace update must
+  # run under the new framework on disk — re-exec or migrate/cloud fixes are skipped.
+  if [[ -z "${SPINOSA_POST_UPGRADE_REEXEC:-}" ]]; then
+    export SPINOSA_POST_UPGRADE_REEXEC=1
+    export SPINOSA_NO_UPGRADE_CHECK=1
+    exec "${SPINOSA_HOME}/bin/spinosa" __post_upgrade_workspaces
+  fi
+
   prompt_upgrade_workspaces
 }
 

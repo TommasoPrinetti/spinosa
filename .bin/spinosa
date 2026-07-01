@@ -179,7 +179,7 @@ while true; do
 done
 
 # ── Call auto-upgrade check before command screens render ──
-if [[ "${1:-}" != "upgrade" ]] && [[ "${1:-}" != "uninstall" ]] && [[ "${1:-}" != "doctor" ]] && [[ "${1:-}" != "version" ]] && [[ "${1:-}" != "--version" ]] && [[ "${1:-}" != "-v" ]]; then
+if [[ "${1:-}" != "upgrade" ]] && [[ "${1:-}" != "__post_upgrade_workspaces" ]] && [[ "${1:-}" != "uninstall" ]] && [[ "${1:-}" != "doctor" ]] && [[ "${1:-}" != "version" ]] && [[ "${1:-}" != "--version" ]] && [[ "${1:-}" != "-v" ]]; then
   auto_upgrade_check
 fi
 
@@ -191,6 +191,7 @@ case "${1:-}" in
   new)       shift; cmd_new "$@" ;;
   startup)   shift; cmd_startup "$@" ;;
   upgrade)   shift; cmd_upgrade "$@" ;;
+  __post_upgrade_workspaces) prompt_upgrade_workspaces ;;
   update)    shift; cmd_update "$@" ;;
   doctor)    shift; cmd_doctor "$@" ;;
   uninstall) shift; cmd_uninstall "$@" ;;

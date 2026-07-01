@@ -8,6 +8,13 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.7] — 2026-07-01
+
+### Fixed
+
+- `spinosa upgrade` re-execs after install so post-upgrade workspace update loads the new framework libraries (avoids stale in-memory update code on cloud workspaces)
+- `logs/` → `.logs/` migration skips bulk directory rename on cloud storage (Google Drive FUSE can hang on `mv`)
+
 ## [0.7.6] — 2026-07-01
 
 ### Fixed
