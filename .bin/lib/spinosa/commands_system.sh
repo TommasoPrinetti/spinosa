@@ -523,8 +523,8 @@ cmd_update() {
   if [[ -z "$workspace_version" ]]; then
     warn "Could not read workspace framework version."
   elif [[ "$installed_version" != "dev" && -n "$workspace_version" ]]; then
-    compare_versions "$installed_version" "$workspace_version"
-    local cmp=$?
+    local cmp=0
+    compare_versions "$installed_version" "$workspace_version" || cmp=$?
     if [[ "$cmp" -eq 2 ]]; then
       die "Installed framework v${installed_version} is OLDER than workspace v${workspace_version}. Run 'spinosa upgrade' first."
     fi
@@ -929,8 +929,8 @@ doctor_check_workspace() {
     warn "Could not read workspace framework_version"
     issues=$((issues + 1))
   elif [[ "$installed_version" != "dev" && -n "$ws_version" ]]; then
-    compare_versions "$installed_version" "$ws_version"
-    cmp=$?
+    local cmp=0
+    compare_versions "$installed_version" "$ws_version" || cmp=$?
     if [[ "$cmp" -eq 2 ]]; then
       warn "CLI v${installed_version} is older than workspace v${ws_version} — run: spinosa upgrade"
       issues=$((issues + 1))
