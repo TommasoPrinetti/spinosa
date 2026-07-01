@@ -88,6 +88,20 @@ if [[ -z "$CURRENT_BRANCH" ]]; then
   exit 1
 fi
 
+if [[ "$PRERELEASE" -eq 1 ]]; then
+  if [[ "$CURRENT_BRANCH" != "beta" ]]; then
+    echo "Error: beta/prerelease releases must be published from the 'beta' branch (current: ${CURRENT_BRANCH})"
+    echo "  Run: git checkout beta && git merge ${CURRENT_BRANCH}"
+    exit 1
+  fi
+else
+  if [[ "$CURRENT_BRANCH" != "stable" ]]; then
+    echo "Error: stable releases must be published from the 'stable' branch (current: ${CURRENT_BRANCH})"
+    echo "  Run: git checkout stable && git merge ${CURRENT_BRANCH}"
+    exit 1
+  fi
+fi
+
 PINNED="$(grep -m1 '^PINNED_VERSION=' install.sh | sed 's/^PINNED_VERSION="\(.*\)"/\1/')"
 if [[ "$PINNED" != "$VERSION" ]]; then
   echo "Error: install.sh PINNED_VERSION=${PINNED} does not match release version ${VERSION}"
