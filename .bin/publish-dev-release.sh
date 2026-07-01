@@ -19,4 +19,12 @@
 
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+CURRENT_BRANCH="$(git branch --show-current)"
+if [[ "$CURRENT_BRANCH" != "beta" ]]; then
+  echo "Error: beta releases must be published from the 'beta' branch (current: ${CURRENT_BRANCH})"
+  echo "  Run: git checkout beta && git merge ${CURRENT_BRANCH}"
+  exit 1
+fi
+
 exec bash "${SCRIPT_DIR}/publish-release.sh" "$@" --prerelease
