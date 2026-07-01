@@ -14,7 +14,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Release channels: stable (`publish-release.sh`) vs dev/beta (`publish-dev-release.sh` GitHub prerelease)
 - `spinosa upgrade --channel dev` — tracks newest prerelease
-- Website install redirects: `spinosa.dev/install` (stable), `spinosa.dev/install/dev` (beta)
+- GitHub install endpoints: `releases/latest/download/install.sh` (stable), `releases/download/dev/install.sh` (rolling beta)
 - `.bin/lib/spinosa/release_channels.sh` — channel resolution helpers
 
 ## [0.7.7] — 2026-07-01

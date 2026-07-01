@@ -132,7 +132,7 @@ Spinosa Framework ${TAG} (dev / beta)
 ## Install (dev channel — tracks newest beta)
 
 \`\`\`sh
-curl -fsSL https://spinosa.dev/install/dev | bash
+curl -fsSL https://github.com/TommasoPrinetti/spinosa/releases/download/dev/install.sh | bash
 \`\`\`
 
 ## Install (this exact version)
@@ -156,13 +156,7 @@ Spinosa Framework ${TAG}
 ## Install (stable — one command)
 
 \`\`\`sh
-curl -fsSL https://github.com/TommasoPrinetti/spinosa/releases/download/${TAG}/install.sh | bash
-\`\`\`
-
-Or via the website redirect:
-
-\`\`\`sh
-curl -fsSL https://spinosa.dev/install | bash
+curl -fsSL https://github.com/TommasoPrinetti/spinosa/releases/latest/download/install.sh | bash
 \`\`\`
 
 This installs the pinned stable version (${VERSION}). Zero dependencies.
@@ -213,10 +207,47 @@ else
   gh release create "$TAG" "${UPLOAD_ASSETS[@]}" "${RELEASE_ARGS[@]}"
 fi
 
+sync_dev_channel_release() {
+  local version="$1"
+  local dev_tag="dev"
+  local dev_body
+  dev_body="$(mktemp "${TMPDIR:-/tmp}/spinosa-dev-channel-notes.XXXXXX")"
+  cat > "$dev_body" << EOF
+Rolling dev channel — currently points at **v${version}**.
+
+\`\`\`sh
+curl -fsSL https://github.com/TommasoPrinetti/spinosa/releases/download/dev/install.sh | bash
+\`\`\`
+
+Updated automatically when you publish a dev prerelease (\`publish-dev-release.sh\`).
+EOF
+
+  echo ""
+  echo "Syncing rolling dev channel release (${dev_tag}) → v${version}"
+
+  if gh release view "$dev_tag" >/dev/null 2>&1; then
+    git tag -f "$dev_tag" "$CURRENT_SHA"
+    git push origin "$dev_tag" --force
+    gh release upload "$dev_tag" "${UPLOAD_ASSETS[@]}" --clobber
+    gh release edit "$dev_tag" --notes-file "$dev_body"
+  else
+    gh release create "$dev_tag" "${UPLOAD_ASSETS[@]}" \
+      --target "$CURRENT_SHA" \
+      --title "Spinosa dev channel (rolling)" \
+      --prerelease \
+      --notes-file "$dev_body"
+  fi
+  rm -f "$dev_body"
+}
+
+if [[ "$PRERELEASE" -eq 1 ]]; then
+  sync_dev_channel_release "$VERSION"
+fi
+
 echo ""
 if [[ "$PRERELEASE" -eq 1 ]]; then
   echo "Published dev prerelease ${TAG}"
-  echo "  Install: curl -fsSL https://spinosa.dev/install/dev | bash"
+  echo "  Install: curl -fsSL https://github.com/TommasoPrinetti/spinosa/releases/download/dev/install.sh | bash"
   echo "  Upgrade: spinosa upgrade --channel dev --yes"
 else
   echo "Published stable ${TAG}"

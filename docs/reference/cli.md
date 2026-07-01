@@ -58,8 +58,8 @@ spinosa upgrade --channel dev --yes      # beta latest
 spinosa upgrade --version 0.8.0-beta.1   # pin a specific tag
 ```
 
-Stable install URL: `https://spinosa.dev/install`  
-Dev install URL: `https://spinosa.dev/install/dev`
+Stable install URL: `https://github.com/TommasoPrinetti/spinosa/releases/latest/download/install.sh`  
+Dev install URL: `https://github.com/TommasoPrinetti/spinosa/releases/download/dev/install.sh`
 
 Set default channel for auto-upgrade prompts: `export SPINOSA_RELEASE_CHANNEL=dev` (auto prompts remain **stable-only**).
 
