@@ -8,8 +8,13 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+_(Nothing yet.)_
+
+## [0.7.3] — 2026-07-01
+
 ### Fixed
 
+- `spinosa` no longer crashes on macOS bash 3.2 when run with no arguments (`ORIGINAL_ARGS[@]: unbound variable` under `set -u`)
 - Installer only treats a version as "installed" after success (`versions/<ver>/.spinosa-install-complete` + `metadata/install.yaml`)
 - Partial/failed installs are removed on retry and no longer trigger false "already installed" upgrade prompts
 - `spinosa` CLI resolves only complete version dirs (ignores partial `versions/*` leftovers)

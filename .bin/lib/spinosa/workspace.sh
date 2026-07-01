@@ -619,8 +619,12 @@ require_workspace() {
       info "No new workspaces found"
     fi
     
-    # Re-prompt with updated list
-    exec "$0" "${ORIGINAL_ARGS[@]}"
+    # Re-prompt with updated list (bash 3.2 + set -u: guard empty ORIGINAL_ARGS)
+    if ((${#ORIGINAL_ARGS[@]} > 0)); then
+      exec "$0" "${ORIGINAL_ARGS[@]}"
+    else
+      exec "$0"
+    fi
   elif [[ "$choice" == "__enter__" ]]; then
     local manual_path
     manual_path="$(prompt_input "Workspace path")"
