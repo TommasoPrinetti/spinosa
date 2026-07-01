@@ -2,7 +2,7 @@
 # shellcheck shell=bash
 # ── install.sh — Spinosa Framework Installer (auto-re-execs with bash) ──────
 
-PINNED_VERSION="0.7.3"
+PINNED_VERSION="0.7.4"
 
 if [ -z "${BASH_VERSION-}" ]; then
   if command -v bash >/dev/null 2>&1; then
@@ -660,7 +660,7 @@ read_vendor_metadata_field() {
   local field="$1"
   local file="${SPINOSA_METADATA_DIR}/vendor.yaml"
   [[ -f "$file" ]] || return 1
-  awk -v k="$field" '$1 == k ":" { print $2; exit }' "$file"
+  awk -v k="$field" '$1 == k ":" { sub(/^[^:]*:[[:space:]]*/, ""); print; exit }' "$file"
 }
 
 write_vendor_metadata() {

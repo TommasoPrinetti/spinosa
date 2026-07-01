@@ -1045,8 +1045,8 @@ cmd_doctor() {
   else
     local ws ws_issues
     for ws in "${workspaces[@]}"; do
-      doctor_check_workspace "$ws" "$installed_version"
-      ws_issues=$?
+      ws_issues=0
+      doctor_check_workspace "$ws" "$installed_version" || ws_issues=$?
       total_issues=$((total_issues + ws_issues))
     done
   fi
