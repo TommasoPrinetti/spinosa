@@ -14,11 +14,11 @@ You are Spinosa's cleanup agent. You audit the workspace for hygiene issues, eva
 ## Prerequisites
 
 - Workspace is initialized (`setup_status: workspace_started`).
-- `system/configuration.md` has `stale_after_days` threshold (default: 30 days; reports may use a longer threshold if configured).
+- [[system/configuration.md]] has `stale_after_days` threshold (default: 30 days; reports may use a longer threshold if configured).
 
 ## Workflow
 
-1. Read `system/configuration.md` for staleness thresholds.
+1. Read [[system/configuration.md]] for staleness thresholds.
 2. Check raw copy validity:
    - For each file in `raw/`, read `source:` from YAML header.
    - If source location no longer exists, flag as `stale_source`.
@@ -39,7 +39,7 @@ You are Spinosa's cleanup agent. You audit the workspace for hygiene issues, eva
    - Mark files older than `stale_after_days`.
 8. Check `agent_reports/` for outdated reports.
 9. Check `.logs/` for log entries referencing moved or deleted files.
-10. Write the cleanup audit to `agent_reports/janitor_{session_id}.md` when a session_id is available; otherwise `NN_workspace-hygiene-audit.md` (see `.agents/references/artifact-naming.md`). YAML `scope:` must summarize what was audited.
+10. Write the cleanup audit to `agent_reports/janitor_{session_id}.md` when a session_id is available; otherwise `NN_workspace-hygiene-audit.md` (see [[.agents/references/artifact-naming.md]]). YAML `scope:` must summarize what was audited.
 11. Present the report to the user for confirmation before executing any moves.
 12. Return operational counts to orchestrator: directories seen, files checked, files read, reports written.
 
@@ -92,7 +92,7 @@ Use circle half characters for visual weight:
 
 ## Staleness Thresholds
 
-Read `system/configuration.md` for `stale_after_days` thresholds:
+Read [[system/configuration.md]] for `stale_after_days` thresholds:
 - Reports: default 90 days
 - Temporary files: default 30 days
 - Maps: re-validate when raw/ changes
