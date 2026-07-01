@@ -82,6 +82,13 @@ spinosa_log() {
 _spinosa_install_err_trap() {
   local exit_code=$? line=$1
   spinosa_log ERROR "aborted line=${line} exit=${exit_code} cmd=${BASH_COMMAND:-}"
+  if [ "${INSTALL_COMPLETED:-0}" -eq 0 ] && [ -n "${VERSION:-}" ]; then
+    if [ -d "${SPINOSA_HOME}/versions/${VERSION}" ] && ! version_install_complete "$VERSION"; then
+      spinosa_log WARN "ERR trap removing incomplete versions/${VERSION}"
+      rm -rf "${SPINOSA_HOME}/versions/${VERSION}" 2>/dev/null || true
+      note "Removed incomplete v${VERSION} — re-run install to finish"
+    fi
+  fi
   printf '\n  %s Install failed at line %s (exit %s). See %s\n\n' \
     "${R:-}✗${RESET:-}" "$line" "$exit_code" "$(spinosa_log_file)" >&2
   exit "$exit_code"
@@ -446,14 +453,91 @@ init_global_metadata() {
   done
 }
 
+SPINOSA_INSTALL_COMPLETE_STAMP=".spinosa-install-complete"
+INSTALL_COMPLETED=0
+
 write_install_metadata() {
   mkdir -p "$SPINOSA_METADATA_DIR"
   cat > "${SPINOSA_METADATA_DIR}/install.yaml" << EOF
 install_root: "${SPINOSA_HOME}"
 bin_dir: "${SPINOSA_BIN_DIR}"
 last_installed_version: "${VERSION}"
+install_complete: true
 updated: "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 EOF
+}
+
+read_last_installed_version() {
+  local file="${SPINOSA_METADATA_DIR}/install.yaml"
+  [ -f "$file" ] || return 1
+  awk '$1 == "last_installed_version:" { print $2; exit }' "$file"
+}
+
+version_dir_has_framework() {
+  local version="$1"
+  local fw_dir="${SPINOSA_HOME}/versions/${version}"
+  [ -d "$fw_dir" ] || return 1
+  find "$fw_dir" -maxdepth 1 -type d -name 'spinosa-framework-*' 2>/dev/null | grep -q .
+}
+
+version_install_complete() {
+  local version="$1"
+  [ -n "$version" ] || return 1
+  case "$version" in
+    .*|*/*) return 1 ;;
+  esac
+  version_dir_has_framework "$version" || return 1
+  if [ -f "${SPINOSA_HOME}/versions/${version}/${SPINOSA_INSTALL_COMPLETE_STAMP}" ]; then
+    return 0
+  fi
+  local last
+  last="$(read_last_installed_version 2>/dev/null || true)"
+  [ -n "$last" ] && [ "$last" = "$version" ]
+}
+
+list_complete_versions() {
+  local entry version
+  [ -d "${SPINOSA_HOME}/versions" ] || return 0
+  for entry in "${SPINOSA_HOME}/versions"/*; do
+    [ -e "$entry" ] || continue
+    version="$(basename "$entry")"
+    version_install_complete "$version" && printf '%s\n' "$version"
+  done | sort -V
+}
+
+reclaim_incomplete_version() {
+  local version="$1"
+  if [ -d "${SPINOSA_HOME}/versions/${version}" ] && ! version_install_complete "$version"; then
+    warn "Removing incomplete v${version} from a previous install attempt"
+    spinosa_log WARN "reclaim incomplete versions/${version}"
+    rm -rf "${SPINOSA_HOME}/versions/${version}"
+  fi
+}
+
+reclaim_all_incomplete_versions() {
+  local entry version
+  [ -d "${SPINOSA_HOME}/versions" ] || return 0
+  for entry in "${SPINOSA_HOME}/versions"/*; do
+    [ -e "$entry" ] || continue
+    version="$(basename "$entry")"
+    reclaim_incomplete_version "$version"
+  done
+}
+
+mark_version_install_complete() {
+  local version="$1"
+  local stamp="${SPINOSA_HOME}/versions/${version}/${SPINOSA_INSTALL_COMPLETE_STAMP}"
+  printf '%s %s\n' "$version" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$stamp"
+  write_install_metadata
+}
+
+install_install_state_lib() {
+  local fw_root="$1"
+  local src="${fw_root}/.bin/lib/spinosa/install_state.sh"
+  local dest="${SPINOSA_HOME}/lib/install_state.sh"
+  [ -f "$src" ] || return 0
+  mkdir -p "${SPINOSA_HOME}/lib"
+  cp "$src" "$dest"
 }
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -491,10 +575,7 @@ compare_versions() {
 }
 
 get_installed_version() {
-  if [ -d "${SPINOSA_HOME}/versions" ]; then
-    # shellcheck disable=SC2012
-    ls -1 "${SPINOSA_HOME}/versions" 2>/dev/null | sort -V | tail -1 || true
-  fi
+  list_complete_versions | tail -1
 }
 
 resolve_version() {
@@ -1406,6 +1487,9 @@ main() {
 
   printf '\n' >&2
 
+  reclaim_all_incomplete_versions
+  INSTALL_COMPLETED=0
+
   # Download framework archive + checksums
   local framework_dest="${tmpdir}/${archive_name}"
   download_and_verify \
@@ -1440,7 +1524,6 @@ main() {
   fi
 
   install_shims
-  write_install_metadata
 
   cleanup
   trap - EXIT INT TERM HUP
@@ -1454,6 +1537,11 @@ main() {
   echo ""
   divider
   printf '\n  %s%sSpinosa installed successfully!%s\n\n' "${BOLD}" "${G}" "${RESET}"
+
+  local fw_root="${SPINOSA_HOME}/versions/${VERSION}/spinosa-framework-${VERSION}"
+  mark_version_install_complete "$VERSION"
+  install_install_state_lib "$fw_root"
+  INSTALL_COMPLETED=1
   spinosa_log INFO "install complete version=${VERSION} home=${SPINOSA_HOME}"
   note "Install log: $(spinosa_log_file)"
   print_path_instructions

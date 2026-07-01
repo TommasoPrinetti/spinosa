@@ -8,7 +8,15 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-_(Nothing yet.)_
+### Fixed
+
+- Installer only treats a version as "installed" after success (`versions/<ver>/.spinosa-install-complete` + `metadata/install.yaml`)
+- Partial/failed installs are removed on retry and no longer trigger false "already installed" upgrade prompts
+- `spinosa` CLI resolves only complete version dirs (ignores partial `versions/*` leftovers)
+
+### Added
+
+- `spinosa doctor` warns when incomplete `versions/*` directories are present
 
 ## [0.7.2] — 2026-07-01
 
