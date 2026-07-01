@@ -860,6 +860,15 @@ render_progress_line() {
   fi
 }
 
+render_progress_line_standalone() {
+  local line="$1"
+  if [[ -t 2 && "${SPINOSA_PROGRESS_NEWLINES:-0}" != "1" ]]; then
+    printf '\033[1A\r\033[2K%s\n' "$line" >&2
+  else
+    printf '%s\n' "$line" >&2
+  fi
+}
+
 
 clear_progress_line() {
   SPINOSA_ACTIVE_PROGRESS_INDEX=""
@@ -902,6 +911,10 @@ render_active_update_progress() {
 render_copy_progress() {
   local processed="$1" total="$2" copied="$3" skipped="$4" current_file="${5:-}" action="${6:-copying}"
   local frame ratio counts fixed width file_width filled=0 bar="" i
+  SPINOSA_ACTIVE_PROGRESS_INDEX="$processed"
+  SPINOSA_ACTIVE_PROGRESS_TOTAL="$total"
+  SPINOSA_ACTIVE_PROGRESS_PATH="$current_file"
+  SPINOSA_ACTIVE_PROGRESS_ACTION="$action"
   frame="$(spinner_frame "$processed")"
   ratio="${processed}/${total}"
   counts="(${copied} copied, ${skipped} skipped)"

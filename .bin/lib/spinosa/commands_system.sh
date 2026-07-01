@@ -108,12 +108,16 @@ cmd_help() {
 
 fetch_release_notes() {
   local version="${1:-latest}"
-  local api_url
-  
+  local api_url tag
+
   if [[ "$version" == "latest" ]]; then
-    api_url="https://api.github.com/repos/TommasoPrinetti/spinosa/releases/latest"
+    api_url="https://api.github.com/repos/${SPINOSA_RELEASE_REPO}/releases/latest"
   else
-    api_url="https://api.github.com/repos/TommasoPrinetti/spinosa/releases/tags/v${version}"
+    tag="v${version}"
+    if is_prerelease_version "$version" 2>/dev/null; then
+      tag="${SPINOSA_BETA_CHANNEL_TAG:-beta}"
+    fi
+    api_url="https://api.github.com/repos/${SPINOSA_RELEASE_REPO}/releases/tags/${tag}"
   fi
   
   # Use Python for reliable JSON parsing
@@ -246,7 +250,7 @@ cmd_upgrade() {
     curl -fsSL "$installer_url" -o "$installer" 2>/dev/null \
       || { spinner_stop; die "Could not download beta installer from ${installer_url}. Publish a prerelease first."; }
   else
-    curl -fsSL "https://github.com/${SPINOSA_RELEASE_REPO}/releases/download/v${resolved_version}/install.sh" -o "$installer" 2>/dev/null \
+    curl -fsSL "$installer_url" -o "$installer" 2>/dev/null \
       || { spinner_stop; die "Could not download release installer for v${resolved_version}. Aborting rather than falling back to an unpinned branch."; }
   fi
   spinner_stop

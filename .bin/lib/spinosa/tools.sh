@@ -167,7 +167,11 @@ verify_downloaded_asset() {
 
 download_vendor_bundle_direct() {
   local version="$1" suffix="$PLATFORM"
-  local base_url="https://github.com/${SPINOSA_REPO}/releases/download/v${version}"
+  local tag="v${version}"
+  if is_prerelease_version "$version" 2>/dev/null; then
+    tag="${SPINOSA_BETA_CHANNEL_TAG:-beta}"
+  fi
+  local base_url="https://github.com/${SPINOSA_REPO}/releases/download/${tag}"
   local vendor_name="spinosa-vendor-${suffix}.tar.gz"
   local vendor_url="${base_url}/${vendor_name}"
   local tmpdir vendor_tmp checksums extract_tmp vendor_dest
