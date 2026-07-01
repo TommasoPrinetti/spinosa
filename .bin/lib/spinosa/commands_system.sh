@@ -292,6 +292,15 @@ prompt_upgrade_workspaces() {
   divider
   printf '\n'
   note "Workspace framework files can be updated to match the new version."
+  local _cloud_ws=0 _entry _path
+  for _entry in "${workspace_entries[@]}"; do
+    _path="${_entry%%|*}"
+    is_cloud_storage_path "$_path" && _cloud_ws=1 && break
+  done
+  if [[ "$_cloud_ws" -eq 1 ]]; then
+    warn "One or more workspaces are on cloud storage (Google Drive, Dropbox, OneDrive)."
+    note "Open the workspace folder locally and wait for sync to finish before updating."
+  fi
 
   MULTI_CHOOSE_EXCLUDE=""
   prompt_multi_choose "Select workspaces to update" "${options[@]}" || return 0
@@ -426,7 +435,7 @@ sync_dir_contents() {
       [[ -e "$src_real/$rel" ]] || rm -rf "$item" 2>/dev/null || true
     done < <(find "$dst_real" -mindepth 1 -maxdepth 1 -print0 2>/dev/null)
   fi
-  cp -a "$src"/. "$dst"/
+  safe_copy_tree "$src_real" "$dst"
 }
 
 # ── compare_versions ─────────────────────────────────────────────────────────
@@ -516,6 +525,11 @@ cmd_update() {
   fi
   echo ""
 
+  if is_cloud_storage_path "$workspace_path"; then
+    warn "Workspace is on cloud storage — ensure files are synced locally before updating."
+    note "Spinosa copies framework files one-by-one with retries; large updates may take several minutes."
+  fi
+
   # ── check workspace manifest exists ─────────────────────────────────────
   local manifest_has_entries=0
   if [[ -f "$ws_manifest" ]] && [[ $(awk 'NR>1' "$ws_manifest" 2>/dev/null | wc -l) -gt 0 ]]; then
@@ -544,7 +558,7 @@ cmd_update() {
   done < "$fw_manifest"
 
   # ── Phase 2: ADD + UPDATE from framework-files.tsv ────────────────────────
-  local updated=0 skipped=0 added=0 customized=0 removed=0 retired_found=0
+  local updated=0 skipped=0 added=0 customized=0 removed=0 retired_found=0 copy_failed=0
   local src dst policy current_hash orig_hash new_hash
 
   while IFS=$'\t' read -r path role policy; do
@@ -567,10 +581,10 @@ cmd_update() {
             added=$((added + 1))
           else
             if [[ -d "$src" ]]; then
-              mkdir -p "$dst" && sync_dir_contents "$src" "$dst" && added=$((added + 1)) || warn "Failed to add: ${path}"
+              mkdir -p "$dst" && sync_dir_contents "$src" "$dst" && added=$((added + 1)) || { warn "Failed to add: ${path}"; copy_failed=$((copy_failed + 1)); }
             elif [[ -f "$src" ]]; then
               mkdir -p "$(dirname "$dst")"
-              cp -a "$src" "$dst" 2>/dev/null && added=$((added + 1)) || warn "Failed to add: ${path}"
+              safe_copy "$src" "$dst" && added=$((added + 1)) || { warn "Failed to add: ${path}"; copy_failed=$((copy_failed + 1)); }
             fi
           fi
           continue
@@ -583,10 +597,10 @@ cmd_update() {
             updated=$((updated + 1))
           else
             if [[ -d "$src" ]]; then
-              mkdir -p "$dst" && sync_dir_contents "$src" "$dst" && updated=$((updated + 1)) || warn "Failed to sync: ${path}"
+              mkdir -p "$dst" && sync_dir_contents "$src" "$dst" && updated=$((updated + 1)) || { warn "Failed to sync: ${path}"; copy_failed=$((copy_failed + 1)); }
             elif [[ -f "$src" ]]; then
               mkdir -p "$(dirname "$dst")"
-              cp -a "$src" "$dst" 2>/dev/null && updated=$((updated + 1)) || warn "Failed to copy: ${path}"
+              safe_copy "$src" "$dst" && updated=$((updated + 1)) || { warn "Failed to copy: ${path}"; copy_failed=$((copy_failed + 1)); }
             fi
           fi
         else
@@ -601,7 +615,7 @@ cmd_update() {
                 updated=$((updated + 1))
               else
                 mkdir -p "$dst"
-                sync_dir_contents "$src" "$dst" && updated=$((updated + 1)) || warn "Failed to sync: ${path}"
+                sync_dir_contents "$src" "$dst" && updated=$((updated + 1)) || { warn "Failed to sync: ${path}"; copy_failed=$((copy_failed + 1)); }
               fi
             else
               skipped=$((skipped + 1))
@@ -618,10 +632,10 @@ cmd_update() {
               updated=$((updated + 1))
             else
               if [[ -d "$src" ]]; then
-                mkdir -p "$dst" && sync_dir_contents "$src" "$dst" && updated=$((updated + 1)) || warn "Failed to sync: ${path}"
+                mkdir -p "$dst" && sync_dir_contents "$src" "$dst" && updated=$((updated + 1)) || { warn "Failed to sync: ${path}"; copy_failed=$((copy_failed + 1)); }
               elif [[ -f "$src" ]]; then
                 mkdir -p "$(dirname "$dst")"
-                cp -a "$src" "$dst" 2>/dev/null && updated=$((updated + 1)) || warn "Failed to copy: ${path}"
+                safe_copy "$src" "$dst" && updated=$((updated + 1)) || { warn "Failed to copy: ${path}"; copy_failed=$((copy_failed + 1)); }
               fi
             fi
           elif [[ "$force" -eq 1 ]]; then
@@ -631,10 +645,10 @@ cmd_update() {
               updated=$((updated + 1))
             else
               if [[ -d "$src" ]]; then
-                mkdir -p "$dst" && sync_dir_contents "$src" "$dst" && updated=$((updated + 1)) || warn "Failed to sync: ${path}"
+                mkdir -p "$dst" && sync_dir_contents "$src" "$dst" && updated=$((updated + 1)) || { warn "Failed to sync: ${path}"; copy_failed=$((copy_failed + 1)); }
               elif [[ -f "$src" ]]; then
                 mkdir -p "$(dirname "$dst")"
-                cp -a "$src" "$dst" 2>/dev/null && updated=$((updated + 1)) || warn "Failed to copy: ${path}"
+                safe_copy "$src" "$dst" && updated=$((updated + 1)) || { warn "Failed to copy: ${path}"; copy_failed=$((copy_failed + 1)); }
               fi
             fi
           else
@@ -799,6 +813,17 @@ cmd_update() {
   if [[ "$retired_found" -gt 0 && "$dry_run" -ne 1 && "$has_changes" -eq 1 ]]; then
     note "Deprecated framework files cleaned up."
     echo ""
+  fi
+
+  if [[ "$copy_failed" -gt 0 && "$dry_run" -ne 1 ]]; then
+    warn "$(plural_count "$copy_failed" "framework file") could not be copied."
+    if is_cloud_storage_path "$workspace_path"; then
+      note "Cloud storage timeout — open the workspace in Finder, wait for sync, then run: spinosa update --yes"
+    else
+      note "Re-run: spinosa update --yes"
+    fi
+    echo ""
+    return 1
   fi
 }
 
