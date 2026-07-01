@@ -93,10 +93,88 @@ is_cloud_storage_path() {
   return 1
 }
 
+# Set by safe_copy on failure (timeout, I/O, etc.)
+SPINOSA_LAST_COPY_FAIL_REASON=""
+
+safe_copy_timeout_sec_for() {
+  local path="$1"
+  if is_cloud_storage_path "$path"; then
+    printf '%s' "${SPINOSA_CLOUD_COPY_TIMEOUT_SEC:-60}"
+  else
+    printf '%s' "${SPINOSA_LOCAL_COPY_TIMEOUT_SEC:-30}"
+  fi
+}
+
+spinosa_run_with_timeout() {
+  local timeout_sec="$1"
+  shift
+  [[ "$timeout_sec" -gt 0 ]] 2>/dev/null || { "$@"; return $?; }
+
+  if command -v timeout >/dev/null 2>&1; then
+    timeout --kill-after=3 "$timeout_sec" "$@"
+    local rc=$?
+    if [[ "$rc" -eq 124 ]]; then
+      SPINOSA_LAST_COPY_FAIL_REASON="timed out after ${timeout_sec}s"
+    fi
+    return "$rc"
+  fi
+  if command -v gtimeout >/dev/null 2>&1; then
+    gtimeout --kill-after=3 "$timeout_sec" "$@"
+    local rc=$?
+    if [[ "$rc" -eq 124 ]]; then
+      SPINOSA_LAST_COPY_FAIL_REASON="timed out after ${timeout_sec}s"
+    fi
+    return "$rc"
+  fi
+
+  local cmd_pid watch_pid rc=0
+  "$@" &
+  cmd_pid=$!
+  (
+    sleep "$timeout_sec"
+    kill -TERM "$cmd_pid" 2>/dev/null || true
+    sleep 2
+    kill -KILL "$cmd_pid" 2>/dev/null || true
+  ) &
+  watch_pid=$!
+  if wait "$cmd_pid" 2>/dev/null; then
+    rc=0
+  else
+    rc=$?
+    if [[ "$rc" -eq 143 || "$rc" -eq 137 ]]; then
+      SPINOSA_LAST_COPY_FAIL_REASON="timed out after ${timeout_sec}s"
+      rc=124
+    fi
+  fi
+  kill "$watch_pid" 2>/dev/null || true
+  wait "$watch_pid" 2>/dev/null || true
+  return "$rc"
+}
+
+safe_copy_fail_message() {
+  local rel_path="$1" dst="$2"
+  local reason="${SPINOSA_LAST_COPY_FAIL_REASON:-I/O error}"
+  if is_cloud_storage_path "$dst"; then
+    printf 'Failed to copy: %s (%s — cloud storage destination may be offline, locked, or still syncing)' "$rel_path" "$reason"
+  else
+    printf 'Failed to copy: %s (%s)' "$rel_path" "$reason"
+  fi
+}
+
+safe_copy_warn_failure() {
+  local verb="$1" label="$2" dst="$3"
+  local reason="${SPINOSA_LAST_COPY_FAIL_REASON:-I/O error}"
+  if is_cloud_storage_path "$dst"; then
+    warn "Failed to ${verb}: ${label} (${reason} — cloud storage destination may be offline, locked, or still syncing)"
+  else
+    warn "Failed to ${verb}: ${label} (${reason})"
+  fi
+}
+
 safe_copy_retries_for() {
   local path="$1"
   if is_cloud_storage_path "$path"; then
-    printf '8'
+    printf '3'
   else
     printf '3'
   fi
@@ -114,10 +192,21 @@ safe_copy_delay_for() {
 copy_file_via_stream() {
   local src="$1" dst="$2"
   local tmp="${dst}.spinosa-part"
+  local timeout_sec
+  timeout_sec="$(safe_copy_timeout_sec_for "$dst")"
   mkdir -p "$(dirname "$dst")" 2>/dev/null || return 1
   rm -f "$tmp" 2>/dev/null || true
-  cat -- "$src" > "$tmp" 2>/dev/null || return 1
-  mv -f -- "$tmp" "$dst" 2>/dev/null || { rm -f "$tmp" 2>/dev/null || true; return 1; }
+  SPINOSA_LAST_COPY_FAIL_REASON=""
+  if ! spinosa_run_with_timeout "$timeout_sec" sh -c 'cat -- "$1" > "$2"' _ "$src" "$tmp"; then
+    rm -f "$tmp" 2>/dev/null || true
+    [[ -n "$SPINOSA_LAST_COPY_FAIL_REASON" ]] || SPINOSA_LAST_COPY_FAIL_REASON="stream read failed"
+    return 1
+  fi
+  if ! mv -f -- "$tmp" "$dst" 2>/dev/null; then
+    rm -f "$tmp" 2>/dev/null || true
+    SPINOSA_LAST_COPY_FAIL_REASON="could not finalize cloud copy"
+    return 1
+  fi
   return 0
 }
 
@@ -128,24 +217,29 @@ should_skip_copy_artifact() {
 
 safe_copy() {
   local src="$1" dst="$2"
-  local retries="${3:-}" delay i use_stream=0
+  local retries="${3:-}" delay i use_stream=0 timeout_sec last_reason=""
   [[ -n "$retries" ]] || retries="$(safe_copy_retries_for "$dst")"
   delay="$(safe_copy_delay_for "$dst")"
+  timeout_sec="$(safe_copy_timeout_sec_for "$dst")"
   if is_cloud_storage_path "$dst" && [[ -f "$src" ]]; then
     use_stream=1
   fi
   mkdir -p "$(dirname "$dst")" 2>/dev/null || true
   for ((i = 1; i <= retries; i++)); do
-    if cp -p -- "$src" "$dst" 2>/dev/null; then
+    SPINOSA_LAST_COPY_FAIL_REASON=""
+    if spinosa_run_with_timeout "$timeout_sec" cp -p -- "$src" "$dst" 2>/dev/null; then
       return 0
     fi
+    last_reason="${SPINOSA_LAST_COPY_FAIL_REASON:-cp failed}"
     if [[ "$use_stream" -eq 1 ]] && copy_file_via_stream "$src" "$dst"; then
       return 0
     fi
+    last_reason="${SPINOSA_LAST_COPY_FAIL_REASON:-$last_reason}"
     [[ "$i" -lt "$retries" ]] || break
     sleep "$delay"
     delay=$((delay * 2))
   done
+  SPINOSA_LAST_COPY_FAIL_REASON="$last_reason"
   return 1
 }
 
@@ -189,7 +283,7 @@ safe_copy_tree() {
         copied_files=$((copied_files + 1))
       else
         clear_progress_line
-        warn "Failed to copy: ${rel_path}"
+        warn "$(safe_copy_fail_message "$rel_path" "$dst")"
         failed=$((failed + 1))
       fi
     fi
@@ -209,7 +303,12 @@ copy_dir_contents() {
       die "Refusing to copy framework root as a directory; check .spinosa/framework-files.tsv for blank or unsafe paths."
     fi
   fi
-  safe_copy_tree "$src_real" "$dst" || die "Failed to copy directory: $src"
+  if ! safe_copy_tree "$src_real" "$dst"; then
+    if is_cloud_storage_path "$dst"; then
+      die "Failed to copy directory to cloud storage destination (${SPINOSA_LAST_COPY_FAIL_REASON:-one or more files failed}) — open the folder in Finder, wait for sync, then retry"
+    fi
+    die "Failed to copy directory: $src"
+  fi
 }
 
 

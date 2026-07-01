@@ -544,7 +544,8 @@ cmd_update() {
 
   if is_cloud_storage_path "$workspace_path"; then
     warn "Workspace is on cloud storage — ensure files are synced locally before updating."
-    note "Spinosa copies framework files one-by-one with retries; large updates may take several minutes."
+    note "Per-file copy timeout: ${SPINOSA_CLOUD_COPY_TIMEOUT_SEC:-60}s (set SPINOSA_CLOUD_COPY_TIMEOUT_SEC to override)."
+    note "Spinosa copies framework files one-by-one with retries; stalled cloud I/O fails instead of hanging."
   fi
 
   # ── check workspace manifest exists ─────────────────────────────────────
@@ -632,10 +633,10 @@ cmd_update() {
           else
             render_update_manifest_progress "$manifest_idx" "$manifest_total" "$path" "adding"
             if [[ -d "$src" ]]; then
-              mkdir -p "$dst" && update_sync_dir "$src" "$dst" "$path" && added=$((added + 1)) && update_changed_paths+=("$path") || { clear_progress_line; warn "Failed to add: ${path}"; copy_failed=$((copy_failed + 1)); }
+              mkdir -p "$dst" && update_sync_dir "$src" "$dst" "$path" && added=$((added + 1)) && update_changed_paths+=("$path") || { clear_progress_line; safe_copy_warn_failure "add" "$path" "$dst"; copy_failed=$((copy_failed + 1)); }
             elif [[ -f "$src" ]]; then
               mkdir -p "$(dirname "$dst")"
-              safe_copy "$src" "$dst" && added=$((added + 1)) && update_changed_paths+=("$path") || { clear_progress_line; warn "Failed to add: ${path}"; copy_failed=$((copy_failed + 1)); }
+              safe_copy "$src" "$dst" && added=$((added + 1)) && update_changed_paths+=("$path") || { clear_progress_line; safe_copy_warn_failure "add" "$path" "$dst"; copy_failed=$((copy_failed + 1)); }
             fi
           fi
           continue
@@ -650,10 +651,10 @@ cmd_update() {
           else
             render_update_manifest_progress "$manifest_idx" "$manifest_total" "$path" "updating"
             if [[ -d "$src" ]]; then
-              mkdir -p "$dst" && update_sync_dir "$src" "$dst" "$path" && updated=$((updated + 1)) && update_changed_paths+=("$path") || { clear_progress_line; warn "Failed to sync: ${path}"; copy_failed=$((copy_failed + 1)); }
+              mkdir -p "$dst" && update_sync_dir "$src" "$dst" "$path" && updated=$((updated + 1)) && update_changed_paths+=("$path") || { clear_progress_line; safe_copy_warn_failure "sync" "$path" "$dst"; copy_failed=$((copy_failed + 1)); }
             elif [[ -f "$src" ]]; then
               mkdir -p "$(dirname "$dst")"
-              safe_copy "$src" "$dst" && updated=$((updated + 1)) && update_changed_paths+=("$path") || { clear_progress_line; warn "Failed to copy: ${path}"; copy_failed=$((copy_failed + 1)); }
+              safe_copy "$src" "$dst" && updated=$((updated + 1)) && update_changed_paths+=("$path") || { clear_progress_line; safe_copy_warn_failure "copy" "$path" "$dst"; copy_failed=$((copy_failed + 1)); }
             fi
           fi
         else
@@ -670,7 +671,7 @@ cmd_update() {
               else
                 render_update_manifest_progress "$manifest_idx" "$manifest_total" "$path" "syncing"
                 mkdir -p "$dst"
-                update_sync_dir "$src" "$dst" "$path" && updated=$((updated + 1)) && update_changed_paths+=("$path") || { clear_progress_line; warn "Failed to sync: ${path}"; copy_failed=$((copy_failed + 1)); }
+                update_sync_dir "$src" "$dst" "$path" && updated=$((updated + 1)) && update_changed_paths+=("$path") || { clear_progress_line; safe_copy_warn_failure "sync" "$path" "$dst"; copy_failed=$((copy_failed + 1)); }
               fi
             else
               render_update_manifest_progress "$manifest_idx" "$manifest_total" "$path" "skipping"
@@ -690,10 +691,10 @@ cmd_update() {
             else
               render_update_manifest_progress "$manifest_idx" "$manifest_total" "$path" "updating"
               if [[ -d "$src" ]]; then
-                mkdir -p "$dst" && update_sync_dir "$src" "$dst" "$path" && updated=$((updated + 1)) && update_changed_paths+=("$path") || { clear_progress_line; warn "Failed to sync: ${path}"; copy_failed=$((copy_failed + 1)); }
+                mkdir -p "$dst" && update_sync_dir "$src" "$dst" "$path" && updated=$((updated + 1)) && update_changed_paths+=("$path") || { clear_progress_line; safe_copy_warn_failure "sync" "$path" "$dst"; copy_failed=$((copy_failed + 1)); }
               elif [[ -f "$src" ]]; then
                 mkdir -p "$(dirname "$dst")"
-                safe_copy "$src" "$dst" && updated=$((updated + 1)) && update_changed_paths+=("$path") || { clear_progress_line; warn "Failed to copy: ${path}"; copy_failed=$((copy_failed + 1)); }
+                safe_copy "$src" "$dst" && updated=$((updated + 1)) && update_changed_paths+=("$path") || { clear_progress_line; safe_copy_warn_failure "copy" "$path" "$dst"; copy_failed=$((copy_failed + 1)); }
               fi
             fi
           elif [[ "$force" -eq 1 ]]; then
@@ -705,10 +706,10 @@ cmd_update() {
             else
               render_update_manifest_progress "$manifest_idx" "$manifest_total" "$path" "force-updating"
               if [[ -d "$src" ]]; then
-                mkdir -p "$dst" && update_sync_dir "$src" "$dst" "$path" && updated=$((updated + 1)) && update_changed_paths+=("$path") || { clear_progress_line; warn "Failed to sync: ${path}"; copy_failed=$((copy_failed + 1)); }
+                mkdir -p "$dst" && update_sync_dir "$src" "$dst" "$path" && updated=$((updated + 1)) && update_changed_paths+=("$path") || { clear_progress_line; safe_copy_warn_failure "sync" "$path" "$dst"; copy_failed=$((copy_failed + 1)); }
               elif [[ -f "$src" ]]; then
                 mkdir -p "$(dirname "$dst")"
-                safe_copy "$src" "$dst" && updated=$((updated + 1)) && update_changed_paths+=("$path") || { clear_progress_line; warn "Failed to copy: ${path}"; copy_failed=$((copy_failed + 1)); }
+                safe_copy "$src" "$dst" && updated=$((updated + 1)) && update_changed_paths+=("$path") || { clear_progress_line; safe_copy_warn_failure "copy" "$path" "$dst"; copy_failed=$((copy_failed + 1)); }
               fi
             fi
           else
@@ -889,7 +890,8 @@ cmd_update() {
   if [[ "$copy_failed" -gt 0 && "$dry_run" -ne 1 ]]; then
     warn "$(plural_count "$copy_failed" "framework file") could not be copied."
     if is_cloud_storage_path "$workspace_path"; then
-      note "Cloud storage timeout — open the workspace in Finder, wait for sync, then run: spinosa update --yes"
+      note "Cloud storage copy failed or timed out — open the workspace in Finder, wait for Google Drive/Dropbox/OneDrive sync, then run: spinosa update --yes"
+      note "Override per-file timeout with: SPINOSA_CLOUD_COPY_TIMEOUT_SEC=120 spinosa update --yes"
     else
       note "Re-run: spinosa update --yes"
     fi

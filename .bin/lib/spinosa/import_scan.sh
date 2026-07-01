@@ -153,6 +153,10 @@ print_onboarding_preflight() {
 
   local _fn="tree_row"
   tree_row "Workspace" "writable" "${BOLD}${root##*/}${RESET}"
+  if is_cloud_storage_path "$root"; then
+    tree_sep
+    tree_row "Cloud destination" "per-file copy timeout ${SPINOSA_CLOUD_COPY_TIMEOUT_SEC:-60}s"
+  fi
   repair_vendor_tools
   if rapidocr_ocr_available; then
     tree_sep; tree_row "${M}RapidOCR${RESET}" "available" "scanned PDFs and images"
