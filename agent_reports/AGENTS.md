@@ -23,11 +23,11 @@ Synthesis reports, evidence packets, verification notes, checkpoints, and mainte
 - Verification failures are documented, not hidden.
 - Partial results must be labeled as such.
 - `spinosa-janitor` evaluates staleness by comparing `updated:` dates against current date — no tendency detection or structured needs analysis.
-- Older reports may cite legacy `logs/` paths — current operational traces are in `.logs/`; archived session records are in `.spinosa/archive/`. `spinosa update` migrates `logs/` → `.logs/` automatically.
+- Older reports may cite legacy [[logs/]] paths — current operational traces are in [[.logs/]]; archived session records are in [[.spinosa/archive/]]. `spinosa update` migrates [[logs/]] → [[.logs/]] automatically.
 
 ## Conventions
 
-- **Filenames must be understandable from outside** — follow `.agents/references/artifact-naming.md` (canonical rules).
+- **Filenames must be understandable from outside** — follow [[.agents/references/artifact-naming.md]] (canonical rules).
 - User-facing answers: `NN_{topic-slug}.md` (two-digit sequence + kebab-case topic). Example: `04_coastal-erosion-interviews.md`. Never `NN_report.md`, `NN_analysis.md`, `NN_final.md`.
 - Session intermediates: fixed prefixes (`g_`, `evidence_packet_`, `analysis_`, etc.) + `session_id`; put human context in YAML `scope:` and the title.
 - Report bodies are flavoured Markdown, well designed and tidy.

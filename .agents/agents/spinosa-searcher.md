@@ -29,7 +29,7 @@ You have two tools for finding evidence — use each for its correct purpose:
 
 ## Workflow
 
-1. Read `system/dictionary.md` to identify canonical terms and aliases for the topic.
+1. Read [[system/dictionary.md]] to identify canonical terms and aliases for the topic.
 2. Read `maps/` for navigation — start with the structural overview, then group maps to find which files are relevant to the query. Track every map you access. (Can skip if the graph already returned a precise file list.)
 3. If the query is complex (comparative "vs", "compare", "difference between", multiple "and" clauses), decompose it into 2-4 independent sub-queries. See Step 0 below.
 4. Apply the search strategy below for each sub-query.
@@ -87,7 +87,7 @@ Run at most 5 search rounds (`max_search_rounds = 5`). One round = one grep call
 
 ### Step 4: Explore sibling files
 
-When a match lands in a subfolder of `raw/` (e.g., `raw/nursing/judgment_models.md`), use glob to list all files in that folder. Unmapped sibling files may contain related evidence.
+When a match lands in a subfolder of `raw/` (e.g., [[raw/nursing/judgment_models.md]]), use glob to list all files in that folder. Unmapped sibling files may contain related evidence.
 
 ### Worked example
 
@@ -95,8 +95,8 @@ When a match lands in a subfolder of `raw/` (e.g., `raw/nursing/judgment_models.
 
 1. dictionary → canonical terms: geomagnetic reversal, paleomagnetism
 2. maps → group map for earth_science/ points to 3 relevant files
-3. search "geomagnetic reversal" → matches in earth_science/reversal.txt
-4. glob earth_science/ → discovers sibling file earth_science/paleomagnetism.txt (not yet mapped)
+3. search "geomagnetic reversal" → matches in [[earth_science/reversal.txt]]
+4. glob earth_science/ → discovers sibling file [[earth_science/paleomagnetism.txt]] (not yet mapped)
 5. search "paleomagnetism" → extracts passages
 6. Early-stop check: 2 high-confidence sources found → stop (sufficient_evidence)
 7. Write evidence packet with search_termination: sufficient_evidence
@@ -104,20 +104,20 @@ When a match lands in a subfolder of `raw/` (e.g., `raw/nursing/judgment_models.
 **Complex query example:** Compare video processing vs document processing in Mixpeek
 
 1. Decompose → sub-queries: "video processing capabilities", "document processing features"
-2. Sub-query 1: maps → engineering group → grep "video processing" → matches in video_pipeline.md
-3. Sub-query 2: maps → engineering group → grep "document processing" → matches in doc_pipeline.md
+2. Sub-query 1: maps → engineering group → grep "video processing" → matches in [[video_pipeline.md]]
+3. Sub-query 2: maps → engineering group → grep "document processing" → matches in [[doc_pipeline.md]]
 4. Merge into one evidence packet with decomposition: listing both sub-queries and their sources
 
 ## Output — Always Write to File
 
 Never return a large evidence list inline. Write results to a file and return the path.
 
-**Naming:** Session paths are fixed (`evidence_packet_{session_id}.md`). For parallel searcher instances, add a topic slug: `evidence_packet_{session_id}_{topic-slug}.md` (see `.agents/references/artifact-naming.md`). Set YAML `scope:` and the packet title to the query topic so the file is identifiable from outside.
+**Naming:** Session paths are fixed (`evidence_packet_{session_id}.md`). For parallel searcher instances, add a topic slug: `evidence_packet_{session_id}_{topic-slug}.md` (see [[.agents/references/artifact-naming.md]]). Set YAML `scope:` and the packet title to the query topic so the file is identifiable from outside.
 
 ### Step 1: Write the evidence packet
 
 Write to `agent_reports/evidence_packet_{session_id}.md` (read `session_id` from the goal artifact).
-Legacy `agent_reports/evidence_packet.md` is allowed only for startup or single-route workspaces — prefer session-scoped names.
+Legacy [[agent_reports/evidence_packet.md]] is allowed only for startup or single-route workspaces — prefer session-scoped names.
 
 ```markdown
 ---

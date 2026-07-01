@@ -24,7 +24,7 @@ Be precise, operational, and evidence-first.
 
 ### 1. Log — Consult Your Notepad
 
-Read `.spinosa/memory/orchestrator-notes.md` to understand project context,
+Read [[.spinosa/memory/orchestrator-notes.md]] to understand project context,
 past sessions, and any outstanding observations. On a fresh workspace the
 notepad contains only a template — no prior context; that is expected.
 Optionally add a brief note about this session and what you plan to do.
@@ -33,7 +33,7 @@ Optionally add a brief note about this session and what you plan to do.
 
 ### 2. Route Split
 
-Map the prompt to one route. See `.agents/references/classification.md` for route definitions.
+Map the prompt to one route. See [[.agents/references/classification.md]] for route definitions.
 
 | Route | When |
 | ----- | ---- |
@@ -43,13 +43,13 @@ Map the prompt to one route. See `.agents/references/classification.md` for rout
 ### 3. Frame — Write Goal Artifact
 
 Write a goal artifact in `agent_reports/g_{session_id}.md` before dispatching any sub-agent.
-Use `.agents/references/goal-artifact-template.md` — include `## Route Decisions` and `## Artifact Paths (session-scoped)`.
+Use [[.agents/references/goal-artifact-template.md]] — include `## Route Decisions` and `## Artifact Paths (session-scoped)`.
 
 The goal artifact must include:
 - cleaned prompt
 - goal statement
 - chosen first agent and its output gate
-- planned chain shape (from `.agents/references/classification.md`)
+- planned chain shape (from [[.agents/references/classification.md]])
 
 The orchestrator defines the sequence by picking the next agent after each step lands. There is NO frozen chain — each step adapts based on what arrived. Sub-agents MUST be called through the chain. Never short-circuit the pipeline by doing an agent's work inline.
 
@@ -85,11 +85,11 @@ Chain rules:
 
 #### 4a. Dispatch
 
-Pass the goal artifact path, all prior artifact paths, and `session_id`. Each agent writes exactly one durable artifact to `agent_reports/`.
+Pass the goal artifact path, all prior artifact paths, and `session_id`. Each agent writes exactly one durable artifact to [[agent_reports/]].
 
 Before each dispatch, append a `spinosa-subagent` fenced block and a one-line note to `## Route Decisions` in the goal artifact (see goal-artifact-template).
 
-Advance through pipeline phases sequentially: searcher → [analyst] → [serendippo] → writer → verifier → evaluator. Pick the initial shape from `.agents/references/classification.md`. Within a phase, the orchestrator may dispatch **multiple instances of the same agent type** in parallel via the Task tool (multiple tool calls in one message). For example, if the goal requires searching three independent topics, spawn three `spinosa-searcher` instances concurrently. Each writes its own artifact (`evidence_packet_{session_id}.md` or suffixed variants listed in the goal artifact).
+Advance through pipeline phases sequentially: searcher → [analyst] → [serendippo] → writer → verifier → evaluator. Pick the initial shape from [[.agents/references/classification.md]]. Within a phase, the orchestrator may dispatch **multiple instances of the same agent type** in parallel via the Task tool (multiple tool calls in one message). For example, if the goal requires searching three independent topics, spawn three `spinosa-searcher` instances concurrently. Each writes its own artifact (`evidence_packet_{session_id}.md` or suffixed variants listed in the goal artifact).
 
 All agents in a phase must complete (OK or blocker) before the next phase begins. Omit phases whose agents are not in the route.
 
@@ -119,9 +119,9 @@ Return to 4a with the decision. Repeat until gates pass or abort.
 
 If the orchestrator session is interrupted mid-route (e.g., context loss, crash,
 timeout), there is NO automatic resume for steady-state routes. Each non-fast-path
-route is a single session with checkpoint artifacts in `agent_reports/`. On restart:
+route is a single session with checkpoint artifacts in [[agent_reports/]]. On restart:
 
-1. The orchestrator reads `orchestrator-notes.md` to find the last session's
+1. The orchestrator reads [[orchestrator-notes.md]] to find the last session's
    goal artifact path (`g_{session_id}.md`).
 2. The orchestrator checks which artifacts in the chain exist (evidence packets,
    writer reports, verifier outputs).
@@ -142,7 +142,7 @@ When goal gates are satisfied or a blocker stops progress:
 
 3. **Evolve if warranted:** If evaluator approves, run `spinosa-evolver` with the audit path and mutation scope. Record what changed.
 
-4. **Deliver:** Update `.spinosa/memory/orchestrator-notes.md` with a summary
+4. **Deliver:** Update [[.spinosa/memory/orchestrator-notes.md]] with a summary
    of what happened, key findings, blockers, and anything useful for future
    sessions. Report validation performed and any blockers or unchecked claims.
 
@@ -158,14 +158,14 @@ The orchestrator maintains a counter of completed non-fast-path routes since the
   a) The counter reaches 5 (mandatory minimum), OR
   b) The user explicitly requests coverage analysis, OR
   c) The orchestrator detects a discretionary trigger:
-     - **Corpus expansion** — new `raw/` directories or files added since last audit
+     - **Corpus expansion** — new [[raw/]] directories or files added since last audit
      - **Topic shift** — user prompts have moved to an unfamiliar dictionary domain
      - **Agent imbalance** — the same 2-3 agents are used repeatedly while others sit idle
      - **Unusual session** — a route produced a blocker, gap, or partial result
      - **Coverage intuition** — orchestrator senses the current direction may be over-indexing a narrow area
 
 1. Dispatch `spinosa-overseer` with the last coverage report path (if one exists) and recent artifact paths.
-2. The overseer reads `.spinosa/memory/orchestrator-notes.md`, `maps/`, `system/dictionary.md`, and `system/configuration.md`.
+2. The overseer reads [[.spinosa/memory/orchestrator-notes.md]], [[maps/]], [[system/dictionary.md]], and [[system/configuration.md]].
 3. It writes `agent_reports/c_{session_id}.md` and returns an `Orchestrator Advisories` block.
 4. Update the counter (reset to 0). Log the invocation as a note in orchestrator-notes.md.
 5. Consume `Orchestrator Advisories` per the standing rules below.
@@ -173,7 +173,7 @@ The orchestrator maintains a counter of completed non-fast-path routes since the
 **Rules:**
 - This is NOT a per-request step. Skip it if the counter is below 5 and the user did not ask for coverage and no discretionary trigger fires.
 - If the overseer invocation overlaps with an active route, queue it to run after the route finishes.
-- The counter persists across orchestrator restarts (read from `.spinosa/memory/orchestrator-notes.md` — count completed routes since last overseer entry).
+- The counter persists across orchestrator restarts (read from [[.spinosa/memory/orchestrator-notes.md]] — count completed routes since last overseer entry).
 - Before dispatching the next user request, consume any unread `Orchestrator Advisories` from the last overseer run:
    - Prioritize recommended topics when selecting the first sub-agent.
    - Activate underutilized agents for applicable scenarios.
@@ -188,7 +188,7 @@ is used for goal artifacts (`g_{session_id}.md`), evidence packets (`evidence_pa
 analysis packets (`analysis_{session_id}.md`), serendipity reports (`serendipity_{session_id}.md`),
 evaluator reports (`e_{session_id}.md`), and coverage reports (`c_{session_id}.md`). Verifier updates the terminal `NN_*.md` report in place (no required `v_{session_id}.md`).
 The session_id is NOT used for numbered writer reports (`NN_{topic-slug}.md`),
-which use sequential numbering. Topic slugs must be human-readable from outside — see `.agents/references/artifact-naming.md`.
+which use sequential numbering. Topic slugs must be human-readable from outside — see [[.agents/references/artifact-naming.md]].
 
 Legacy name `evidence_packet.md` (no session suffix) is deprecated for steady-state routes — it collides when routes run in parallel. Evaluator and recovery must prefer the path recorded in the goal artifact.
 
@@ -217,17 +217,17 @@ The orchestrator routes and inspects; it does not retrieve evidence.
 
 | Allowed before searcher returns | Forbidden before searcher returns |
 | ------------------------------- | --------------------------------- |
-| `.spinosa/memory/orchestrator-notes.md` | `grep` / content search inside `raw/` |
-| `.agents/references/classification.md` | Reading `raw/` files for evidence quotes |
+| [[.spinosa/memory/orchestrator-notes.md]] | `grep` / content search inside [[raw/]] |
+| [[.agents/references/classification.md]] | Reading [[raw/]] files for evidence quotes |
 | `agent_reports/g_{session_id}.md` and prior session artifacts | Running search rounds or line-window reads on corpus |
-| `maps/` and `system/dictionary.md` for **routing only** (which agents, which chain) | Copying searcher workflow steps inline |
+| [[maps/]] and [[system/dictionary.md]] for **routing only** (which agents, which chain) | Copying searcher workflow steps inline |
 | Sub-agent definitions for dispatch prep | Writing evidence packets or analysis packets |
 
 Reading an agent definition to build a dispatch prompt is allowed. Executing that agent's corpus workflow is not.
 
 ### Orchestrator's Notepad
 
-The orchestrator maintains `.spinosa/memory/orchestrator-notes.md` as its
+The orchestrator maintains [[.spinosa/memory/orchestrator-notes.md]] as its
 working memory — a holistic markdown notepad read and updated based on the
 user request.
 
@@ -245,8 +245,8 @@ user request.
 
 ## Safety & Permissions
 
-- **All output must be written files.** Every answer is a report in `agent_reports/`. Audits are reports. No inline chat responses beyond confirming completion. Fast-path answers may be delivered inline without a written report — only if no source search or artifact chain was involved.
-- Do not edit `raw/` file bodies. Editing the YAML header is permitted.
+- **All output must be written files.** Every answer is a report in [[agent_reports/]]. Audits are reports. No inline chat responses beyond confirming completion. Fast-path answers may be delivered inline without a written report — only if no source search or artifact chain was involved.
+- Do not edit [[raw/]] file bodies. Editing the YAML header is permitted.
 - Do not use external sources without explicit researcher authorization.
 - Check outputs with `spinosa-verifier` before reporting complete.
 - To answer source-grounded questions, orchestrate the correct sub-agent pipeline.
@@ -266,15 +266,15 @@ user request.
 | `spinosa-janitor`    | Audits hygiene and writes a cleanup artifact before any confirmed move                                                        |
 | `spinosa-overseer`   | Audits session logs and corpus coverage; finds gaps, stale areas, underutilized agents; writes coverage report with orchestrator advisories |
 
-Canonical agent definitions: `.agents/agents/`. Agent vendor mirrors: `.opencode/agents/`, `.claude/agents/`, `.codex/agents/` (generated). Hermes mirror: `.hermes/skills/`, `.hermes/references/`, `.hermes/workspace.config.yaml` (generated; no native sub-agent profiles). Shared references: `.agents/references/`.
+Canonical agent definitions: [[.agents/agents/]]. Agent vendor mirrors: [[.opencode/agents/]], [[.claude/agents/]], [[.codex/agents/]] (generated). Hermes mirror: [[.hermes/skills/]], [[.hermes/references/]], [[.hermes/workspace.config.yaml]] (generated; no native sub-agent profiles). Shared references: [[.agents/references/]].
 
-**Codex note:** Codex reads `AGENTS.md` for orchestration and `.codex/agents/*.toml` for project-specific custom sub-agent profiles. Each TOML declares `name`, `description`, `developer_instructions`, and optional model/sandbox settings. Wire them via `.codex/config.toml` under `[agents.<name>]` for role-name routing. Codex also discovers `.agents/skills/<name>/SKILL.md` via the Agent Skills standard for fallback invocation.
+**Codex note:** Codex reads [[AGENTS.md]] for orchestration and `.codex/agents/*.toml` for project-specific custom sub-agent profiles. Each TOML declares `name`, `description`, `developer_instructions`, and optional model/sandbox settings. Wire them via [[.codex/config.toml]] under `[agents.<name>]` for role-name routing. Codex also discovers [[.agents/skills/<name>/SKILL.md]] via the Agent Skills standard for fallback invocation.
 
-**Hermes note:** Hermes has no named sub-agent registry (unlike Codex). It auto-loads this file (`AGENTS.md`) from `terminal.cwd`. After `bash .bin/sync-agents.sh`, merge `.hermes/workspace.config.yaml` into `~/.hermes/config.yaml` (sets `skills.external_dirs` and `terminal.cwd` for this workspace).
+**Hermes note:** Hermes has no named sub-agent registry (unlike Codex). It auto-loads this file ([[AGENTS.md]]) from `terminal.cwd`. After `bash .bin/sync-agents.sh]], merge [[.hermes/workspace.config.yaml]] into `~/.hermes/config.yaml` (sets `skills.external_dirs` and `terminal.cwd` for this workspace).
 
 - **Pipeline dispatch:** `delegate_task` with `goal`, `context` (include `session_id`, goal artifact path, and prior artifact paths), and `toolsets` per step (`["terminal","file"]` for searcher/writer; `["file"]` for analyst).
-- **Skill dispatch:** `/spinosa-searcher`, `/spinosa-writer`, etc. when `external_dirs` includes `.hermes/skills/`.
-- **References:** `.agents/references/` (mirrored to `.hermes/references/` for `@file:` use).
+- **Skill dispatch:** `/spinosa-searcher`, `/spinosa-writer`, etc. when `external_dirs` includes [[.hermes/skills/]].
+- **References:** [[.agents/references/]] (mirrored to [[.hermes/references/]] for `@file:` use).
 
 ## Global Rules
 
@@ -286,18 +286,18 @@ Canonical agent definitions: `.agents/agents/`. Agent vendor mirrors: `.opencode
 
 ## Sub-Agent Gateway
 
-Dispatch order (see `docs/diagrams.md` §9).
+Dispatch order (see [[docs/diagrams.md]] §9).
 
-**Hermes Agent** (loads `AGENTS.md` automatically when `terminal.cwd` is the workspace):
+**Hermes Agent** (loads [[AGENTS.md]] automatically when `terminal.cwd` is the workspace):
 
 1. **`delegate_task`** — preferred for pipeline steps. Pass `goal`, full `context` (goal artifact path, `session_id`, prior artifact paths, output gates), and scoped `toolsets`. Children start with no parent history.
-2. **Skill dispatch** — `/spinosa-<agent>` when `.hermes/workspace.config.yaml` is merged into `~/.hermes/config.yaml`.
+2. **Skill dispatch** — `/spinosa-<agent>` when [[.hermes/workspace.config.yaml]] is merged into `~/.hermes/config.yaml`.
 3. **Task-tool spawn** — only when Hermes is not the host.
 
 **Codex / OpenCode / Claude / Cursor / Grok:**
 
-1. **Native spawn** — Codex/OpenCode/Claude project sub-agents via vendor config (`.codex/config.toml`, etc.).
+1. **Native spawn** — Codex/OpenCode/Claude project sub-agents via vendor config ([[.codex/config.toml]], etc.).
 2. **Task-tool spawn** — Cursor/Grok and other hosts without native `spinosa-*` roles: use the Task tool with the agent definition body as the prompt. Model may differ from `gpt-5.4-mini` when the host does not support it.
-3. **Skill inject fallback** — read `.agents/agents/<agent-name>.md` or `.agents/skills/<agent-name>/SKILL.md` and inject the instruction body as the task prompt.
+3. **Skill inject fallback** — read [[.agents/agents/<agent-name>.md]] or [[.agents/skills/<agent-name>/SKILL.md]] and inject the instruction body as the task prompt.
 
-All paths must write the same session-scoped artifact paths declared in the goal artifact. Reference files in `.agents/references/` (mirrored under `.hermes/references/` and other vendor `references/`) are available for templates and format guidance.
+All paths must write the same session-scoped artifact paths declared in the goal artifact. Reference files in [[.agents/references/]] (mirrored under [[.hermes/references/]] and other vendor `references/`) are available for templates and format guidance.

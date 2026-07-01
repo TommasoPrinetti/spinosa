@@ -50,7 +50,7 @@ Appended to the verified report by the Evaluator. Renders the search pathway fro
 
 ## Evaluator workflow
 
-1. Read `evidence_packet_{session_id}.md` from the goal artifact or chain trace — check `agent_reports/` first, then fall back to `.trash/`. Legacy fallback: `evidence_packet.md`
+1. Read `evidence_packet_{session_id}.md` from the goal artifact or chain trace — check `agent_reports/` first, then fall back to `.trash/`. Legacy fallback: [[evidence_packet.md]]
 2. Extract all available fields from YAML frontmatter
 3. Render the footer block using this template
 4. Append to the end of the verified report (after Sources section)
