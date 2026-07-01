@@ -160,7 +160,12 @@ for spinosa_lib in "${SPINOSA_LIBS[@]}"; do
   source "$spinosa_lib_path"
 done
 
-spinosa_log_init "cli" "${ORIGINAL_ARGS[@]}"
+# bash 3.2 + set -u: "${ORIGINAL_ARGS[@]}" is an error when argv is empty
+if ((${#ORIGINAL_ARGS[@]} > 0)); then
+  spinosa_log_init "cli" "${ORIGINAL_ARGS[@]}"
+else
+  spinosa_log_init "cli"
+fi
 spinosa_log_enable_err_trap
 
 # ── Pre-parse global flags ──────────────────────────────────
