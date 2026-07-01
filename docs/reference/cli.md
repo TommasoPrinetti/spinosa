@@ -43,7 +43,42 @@ spinosa add --workspace ~/Research/project-spinosa --dir ~/Downloads/new-batch
 
 ### `spinosa upgrade`
 
-Upgrade the CLI to the latest release. Downloads and verifies checksums automatically.
+Upgrade the **globally installed CLI** to the latest release. Downloads and verifies checksums automatically.
+
+This updates `~/.spinosa/` (framework runtime, vendor Python tools). It does **not** update files inside your workspace folders.
+
+After upgrading, Spinosa offers to run `spinosa update` on registered workspaces. Accept that step unless you intentionally keep an older workspace framework.
+
+### `spinosa update`
+
+Sync **workspace framework files** to match the installed CLI version.
+
+- Reads `.spinosa/framework-files.tsv` policies (`replace_if_unmodified`, `always_replace`, `never_replace`)
+- Preserves customized files (or injects commented diffs) unless you pass `--force`
+- Regenerates vendor mirrors via `.bin/sync-agents.sh` (`.opencode/`, `.claude/`, `.codex/`, `.hermes/skills/`, etc.)
+- Blocked if installed CLI is **older** than the workspace declares — run `spinosa upgrade` first
+
+Examples:
+
+```bash
+spinosa update --yes                     # current directory workspace
+spinosa update --yes ~/path/to/workspace-spinosa
+spinosa update --dry-run                 # preview changes
+spinosa update --force --yes             # overwrite customized framework files
+```
+
+**Hermes users:** after update, merge `.hermes/workspace.config.yaml` into `~/.hermes/config.yaml` (see [Integrations](#integrations) below).
+
+### `spinosa doctor`
+
+Read-only health check: CLI version, workspace skew, document tools, cloud-storage paths, Hermes config drift.
+
+```bash
+spinosa doctor
+spinosa doctor --workspace ~/path/to/workspace-spinosa
+```
+
+Exits with code `1` if any critical issue is found (version skew, missing tools).
 
 ### `spinosa uninstall`
 
@@ -52,6 +87,39 @@ Remove Spinosa runtime files from the system. Your workspace folders stay in pla
 ### `spinosa help`
 
 Show the help message.
+
+## Upgrade lifecycle
+
+Spinosa has **three layers**. Use the right command for each:
+
+| Layer | Command | What changes |
+|-------|---------|--------------|
+| Global CLI | `spinosa upgrade` | `~/.spinosa/versions/`, `~/.spinosa/bin/spinosa`, vendor Python tools |
+| Workspace framework | `spinosa update` | `AGENTS.md`, `.agents/`, `.bin/`, `docs/`, maps templates, etc. |
+| Vendor integration | automatic on `update` + manual Hermes merge | `.opencode/`, `.claude/`, `.codex/`, `.hermes/skills/`; merge `workspace.config.yaml` → `~/.hermes/config.yaml` |
+
+Typical flow after a new release:
+
+```bash
+spinosa upgrade          # 1. CLI
+spinosa update --yes     # 2. each workspace (or accept the post-upgrade prompt)
+# 3. Hermes: merge .hermes/workspace.config.yaml into ~/.hermes/config.yaml
+spinosa doctor           # 4. verify
+```
+
+Run `spinosa doctor` anytime to see whether CLI and workspace versions match.
+
+## Integrations
+
+Spinosa does **not** upgrade OpenCode, Hermes, Codex, or Claude Code for you. It regenerates **project-local** config from `.agents/` when you run `spinosa update`.
+
+| Tool | Spinosa manages | You manage |
+|------|-----------------|------------|
+| **OpenCode** | `.opencode/agents/`, `.opencode/skills/` (generated) | OpenCode CLI install & version |
+| **Hermes** | `.hermes/skills/`, `.hermes/workspace.config.yaml` (generated) | Merge into `~/.hermes/config.yaml`; Hermes CLI version |
+| **Codex / Claude** | `.codex/`, `.claude/` mirrors (generated) | Vendor CLI install & version |
+
+Workspaces on **Google Drive, Dropbox, or OneDrive** may time out during `spinosa update`. Open the folder locally, wait for sync, then retry.
 
 ## How files are classified
 

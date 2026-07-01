@@ -149,7 +149,7 @@ while true; do
 done
 
 # ── Call auto-upgrade check before command screens render ──
-if [[ "${1:-}" != "upgrade" ]] && [[ "${1:-}" != "uninstall" ]] && [[ "${1:-}" != "version" ]] && [[ "${1:-}" != "--version" ]] && [[ "${1:-}" != "-v" ]]; then
+if [[ "${1:-}" != "upgrade" ]] && [[ "${1:-}" != "uninstall" ]] && [[ "${1:-}" != "doctor" ]] && [[ "${1:-}" != "version" ]] && [[ "${1:-}" != "--version" ]] && [[ "${1:-}" != "-v" ]]; then
   auto_upgrade_check
 fi
 
@@ -162,6 +162,7 @@ case "${1:-}" in
   startup)   shift; cmd_startup "$@" ;;
   upgrade)   shift; cmd_upgrade "$@" ;;
   update)    shift; cmd_update "$@" ;;
+  doctor)    shift; cmd_doctor "$@" ;;
   uninstall) shift; cmd_uninstall "$@" ;;
   version|--version|-v) printf 'spinosa %s\n' "$(framework_version "$FRAMEWORK_ROOT")"; exit 0 ;;
   help|-h|--help) cmd_help ;;

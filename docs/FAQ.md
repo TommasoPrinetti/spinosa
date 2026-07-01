@@ -42,7 +42,17 @@ Yes. Ask the same question again, or refine it. Each question is a new dispatch.
 ## Maintenance
 
 **How do I update Spinosa?**
-Run `spinosa upgrade` to download and install the latest release. Your workspace data (configuration, context, dictionary, logs) is preserved.
+
+Two commands — different scopes:
+
+1. **`spinosa upgrade`** — updates the **CLI** (global install under `~/.spinosa/`). Your workspace folders are not modified.
+2. **`spinosa update`** — updates **framework files inside a workspace** (agents, docs templates, `.bin/`, vendor mirrors). Your `system/context.md`, `dictionary.md`, and `raw/` corpus are preserved per manifest policy.
+
+After upgrading the CLI, run `spinosa update` on each workspace (Spinosa prompts you after upgrade). Then run **`spinosa doctor`** to check version alignment.
+
+**Hermes:** after `spinosa update`, merge `.hermes/workspace.config.yaml` into `~/.hermes/config.yaml`.
+
+**Cloud storage:** if your workspace is on Google Drive or similar, ensure files are synced locally before `spinosa update`.
 
 **How do I clean up old files?**
 Run the Janitor agent. It scans for stale files, broken links, and outdated reports, then presents a cleanup proposal. You confirm before anything moves to `.trash/`.
