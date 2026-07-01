@@ -137,6 +137,7 @@ SPINOSA_LIBS=(
   install_state
   ui
   core
+  release_channels
   handoff
   import
   import_scan
