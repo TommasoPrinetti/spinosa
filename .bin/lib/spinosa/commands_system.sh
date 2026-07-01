@@ -435,9 +435,6 @@ sync_dir_contents() {
   src_real="$(cd "$src" 2>/dev/null && pwd -P)" || { warn "Cannot sync missing directory: $src"; return 1; }
   dst_real="$(cd "$dst" 2>/dev/null && pwd -P)" || dst_real=""
   mkdir -p "$dst"
-  if is_cloud_storage_path "$dst"; then
-    note "Cloud storage destination — copying files individually with retries"
-  fi
   if [[ -n "$dst_real" ]]; then
     # Remove items in dst that don't exist in src
     while IFS= read -r -d '' item; do
@@ -550,14 +547,35 @@ cmd_update() {
     warn "No manifest.tsv or no entries — treating replace_if_unmodified as modified"
   fi
 
+  local manifest_total=0 manifest_idx=0
+  while IFS=$'\t' read -r _path _role _policy; do
+    is_framework_manifest_entry "$_path" "$_role" || continue
+    case "${_policy:-replace_if_unmodified}" in
+      never_replace|exclude_from_update) ;;
+      *) manifest_total=$((manifest_total + 1)) ;;
+    esac
+  done < "$fw_manifest"
+
   # ── confirm ──────────────────────────────────────────────────────────────
   if [[ "$auto_yes" -ne 1 ]]; then
-    note "Syncs framework-managed files to match the installed version"
+    if [[ -n "$workspace_version" && "$installed_version" != "dev" && -n "$installed_version" ]]; then
+      note "Framework ${workspace_version} → ${installed_version} · ${manifest_total} paths"
+    else
+      note "Sync ${manifest_total} framework paths to v${installed_version}"
+    fi
+    note "Updates agents, docs, and CLI scripts; preserves raw/, system/context.md, and customized files"
     if ! confirm "Update framework files in this workspace?" "y"; then
       info "Update cancelled."
       return 0
     fi
   fi
+
+  if [[ "$dry_run" -eq 1 ]]; then
+    info "Dry-run — previewing ${manifest_total} framework paths"
+  else
+    info "Applying framework sync (${manifest_total} paths)…"
+  fi
+  echo ""
 
   # ── Phase 1: build framework file set ─────────────────────────────────────
   local processed_list
@@ -570,6 +588,16 @@ cmd_update() {
   # ── Phase 2: ADD + UPDATE from framework-files.tsv ────────────────────────
   local updated=0 skipped=0 added=0 customized=0 removed=0 retired_found=0 copy_failed=0
   local src dst policy current_hash orig_hash new_hash
+  local -a update_changed_paths=()
+
+  update_sync_dir() {
+    local src_path="$1" dst_path="$2" label="$3"
+    SPINOSA_SYNC_LABEL="$label"
+    sync_dir_contents "$src_path" "$dst_path"
+    local rc=$?
+    unset SPINOSA_SYNC_LABEL
+    return "$rc"
+  }
 
   while IFS=$'\t' read -r path role policy; do
     is_framework_manifest_entry "$path" "$role" || continue
@@ -584,17 +612,20 @@ cmd_update() {
         ;;
 
       *)
+        manifest_idx=$((manifest_idx + 1))
         # File doesn't exist in workspace → ADD
         if [[ ! -e "$dst" ]]; then
           if [[ "$dry_run" -eq 1 ]]; then
-            info "[dry-run] would add: ${path}"
+            render_update_manifest_progress "$manifest_idx" "$manifest_total" "$path" "preview add"
             added=$((added + 1))
+            update_changed_paths+=("$path")
           else
+            render_update_manifest_progress "$manifest_idx" "$manifest_total" "$path" "adding"
             if [[ -d "$src" ]]; then
-              mkdir -p "$dst" && sync_dir_contents "$src" "$dst" && added=$((added + 1)) || { warn "Failed to add: ${path}"; copy_failed=$((copy_failed + 1)); }
+              mkdir -p "$dst" && update_sync_dir "$src" "$dst" "$path" && added=$((added + 1)) && update_changed_paths+=("$path") || { clear_progress_line; warn "Failed to add: ${path}"; copy_failed=$((copy_failed + 1)); }
             elif [[ -f "$src" ]]; then
               mkdir -p "$(dirname "$dst")"
-              safe_copy "$src" "$dst" && added=$((added + 1)) || { warn "Failed to add: ${path}"; copy_failed=$((copy_failed + 1)); }
+              safe_copy "$src" "$dst" && added=$((added + 1)) && update_changed_paths+=("$path") || { clear_progress_line; warn "Failed to add: ${path}"; copy_failed=$((copy_failed + 1)); }
             fi
           fi
           continue
@@ -603,14 +634,16 @@ cmd_update() {
         # File exists → UPDATE
         if [[ "$policy" == "always_replace" ]]; then
           if [[ "$dry_run" -eq 1 ]]; then
-            info "[dry-run] would replace: ${path}"
+            render_update_manifest_progress "$manifest_idx" "$manifest_total" "$path" "preview replace"
             updated=$((updated + 1))
+            update_changed_paths+=("$path")
           else
+            render_update_manifest_progress "$manifest_idx" "$manifest_total" "$path" "updating"
             if [[ -d "$src" ]]; then
-              mkdir -p "$dst" && sync_dir_contents "$src" "$dst" && updated=$((updated + 1)) || { warn "Failed to sync: ${path}"; copy_failed=$((copy_failed + 1)); }
+              mkdir -p "$dst" && update_sync_dir "$src" "$dst" "$path" && updated=$((updated + 1)) && update_changed_paths+=("$path") || { clear_progress_line; warn "Failed to sync: ${path}"; copy_failed=$((copy_failed + 1)); }
             elif [[ -f "$src" ]]; then
               mkdir -p "$(dirname "$dst")"
-              safe_copy "$src" "$dst" && updated=$((updated + 1)) || { warn "Failed to copy: ${path}"; copy_failed=$((copy_failed + 1)); }
+              safe_copy "$src" "$dst" && updated=$((updated + 1)) && update_changed_paths+=("$path") || { clear_progress_line; warn "Failed to copy: ${path}"; copy_failed=$((copy_failed + 1)); }
             fi
           fi
         else
@@ -621,13 +654,16 @@ cmd_update() {
             # No checksum baseline — conservative: sync dirs, skip files
             if [[ -d "$src" ]]; then
               if [[ "$dry_run" -eq 1 ]]; then
-                info "[dry-run] would sync directory: ${path}"
+                render_update_manifest_progress "$manifest_idx" "$manifest_total" "$path" "preview sync"
                 updated=$((updated + 1))
+                update_changed_paths+=("$path")
               else
+                render_update_manifest_progress "$manifest_idx" "$manifest_total" "$path" "syncing"
                 mkdir -p "$dst"
-                sync_dir_contents "$src" "$dst" && updated=$((updated + 1)) || { warn "Failed to sync: ${path}"; copy_failed=$((copy_failed + 1)); }
+                update_sync_dir "$src" "$dst" "$path" && updated=$((updated + 1)) && update_changed_paths+=("$path") || { clear_progress_line; warn "Failed to sync: ${path}"; copy_failed=$((copy_failed + 1)); }
               fi
             else
+              render_update_manifest_progress "$manifest_idx" "$manifest_total" "$path" "skipping"
               skipped=$((skipped + 1))
             fi
             continue
@@ -638,43 +674,52 @@ cmd_update() {
           if [[ "$current_hash" == "$orig_hash" ]]; then
             # Unmodified → replace
             if [[ "$dry_run" -eq 1 ]]; then
-              info "[dry-run] would replace (unmodified): ${path}"
+              render_update_manifest_progress "$manifest_idx" "$manifest_total" "$path" "preview update"
               updated=$((updated + 1))
+              update_changed_paths+=("$path")
             else
+              render_update_manifest_progress "$manifest_idx" "$manifest_total" "$path" "updating"
               if [[ -d "$src" ]]; then
-                mkdir -p "$dst" && sync_dir_contents "$src" "$dst" && updated=$((updated + 1)) || { warn "Failed to sync: ${path}"; copy_failed=$((copy_failed + 1)); }
+                mkdir -p "$dst" && update_sync_dir "$src" "$dst" "$path" && updated=$((updated + 1)) && update_changed_paths+=("$path") || { clear_progress_line; warn "Failed to sync: ${path}"; copy_failed=$((copy_failed + 1)); }
               elif [[ -f "$src" ]]; then
                 mkdir -p "$(dirname "$dst")"
-                safe_copy "$src" "$dst" && updated=$((updated + 1)) || { warn "Failed to copy: ${path}"; copy_failed=$((copy_failed + 1)); }
+                safe_copy "$src" "$dst" && updated=$((updated + 1)) && update_changed_paths+=("$path") || { clear_progress_line; warn "Failed to copy: ${path}"; copy_failed=$((copy_failed + 1)); }
               fi
             fi
           elif [[ "$force" -eq 1 ]]; then
             # Force override
             if [[ "$dry_run" -eq 1 ]]; then
-              info "[dry-run] would force-override: ${path}"
+              render_update_manifest_progress "$manifest_idx" "$manifest_total" "$path" "preview force"
               updated=$((updated + 1))
+              update_changed_paths+=("$path")
             else
+              render_update_manifest_progress "$manifest_idx" "$manifest_total" "$path" "force-updating"
               if [[ -d "$src" ]]; then
-                mkdir -p "$dst" && sync_dir_contents "$src" "$dst" && updated=$((updated + 1)) || { warn "Failed to sync: ${path}"; copy_failed=$((copy_failed + 1)); }
+                mkdir -p "$dst" && update_sync_dir "$src" "$dst" "$path" && updated=$((updated + 1)) && update_changed_paths+=("$path") || { clear_progress_line; warn "Failed to sync: ${path}"; copy_failed=$((copy_failed + 1)); }
               elif [[ -f "$src" ]]; then
                 mkdir -p "$(dirname "$dst")"
-                safe_copy "$src" "$dst" && updated=$((updated + 1)) || { warn "Failed to copy: ${path}"; copy_failed=$((copy_failed + 1)); }
+                safe_copy "$src" "$dst" && updated=$((updated + 1)) && update_changed_paths+=("$path") || { clear_progress_line; warn "Failed to copy: ${path}"; copy_failed=$((copy_failed + 1)); }
               fi
             fi
           else
             # Customized — inject new framework content as comments if different
             new_hash="$(sha256_file "$src" 2>/dev/null || echo "")"
             if [[ "$current_hash" == "$new_hash" ]]; then
+              render_update_manifest_progress "$manifest_idx" "$manifest_total" "$path" "unchanged"
               skipped=$((skipped + 1))
             elif [[ -f "$src" ]]; then
               if [[ "$dry_run" -eq 1 ]]; then
-                info "[dry-run] would inject comment into customized: ${path}"
+                render_update_manifest_progress "$manifest_idx" "$manifest_total" "$path" "preview inject"
                 customized=$((customized + 1))
+                update_changed_paths+=("$path")
               else
+                render_update_manifest_progress "$manifest_idx" "$manifest_total" "$path" "injecting"
                 inject_framework_diff "$dst" "$src" "$path"
                 customized=$((customized + 1))
+                update_changed_paths+=("$path")
               fi
             else
+              render_update_manifest_progress "$manifest_idx" "$manifest_total" "$path" "skipping"
               skipped=$((skipped + 1))
             fi
           fi
@@ -682,6 +727,8 @@ cmd_update() {
         ;;
     esac
   done < "$fw_manifest"
+
+  clear_progress_line
 
   # ── Phase 3: REMOVE files no longer in framework TSV ──────────────────────
   if [[ "$manifest_has_entries" -eq 1 ]]; then
@@ -812,6 +859,10 @@ cmd_update() {
     for ((i = 0; i < ${#rows[@]}; i++)); do
       [[ "$i" -eq "$last_idx" ]] && tree_row_last "${rows[$i]}" || tree_row "${rows[$i]}"
     done
+    if [[ ${#update_changed_paths[@]} -gt 0 ]]; then
+      echo ""
+      print_path_list "Changed paths" "${update_changed_paths[@]}"
+    fi
   fi
 
   echo ""
