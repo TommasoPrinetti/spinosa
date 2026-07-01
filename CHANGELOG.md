@@ -10,6 +10,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 _(Nothing yet.)_
 
+## [0.7.1] — 2026-07-01
+
+### Fixed
+
+- `spinosa update` no longer aborts under `set -e` when CLI is newer than workspace (normal upgrade path)
+
 ## [0.7.0] — 2026-07-01
 
 ### Added
