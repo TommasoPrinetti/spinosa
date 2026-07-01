@@ -2,7 +2,7 @@
 # shellcheck shell=bash
 # ── install.sh — Spinosa Framework Installer (auto-re-execs with bash) ──────
 
-PINNED_VERSION="0.8.0-beta.3"
+PINNED_VERSION="0.8.0-beta.4"
 
 if [ -z "${BASH_VERSION-}" ]; then
   if command -v bash >/dev/null 2>&1; then

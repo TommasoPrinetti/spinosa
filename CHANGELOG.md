@@ -8,6 +8,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.8.0-beta.4] — 2026-07-01
+
 ### Fixed
 
 - `spinosa update` on cloud storage: files whose framework content hasn't changed between versions are now detected via local hash comparison and skipped entirely — no cloud I/O, no timeout wait.
