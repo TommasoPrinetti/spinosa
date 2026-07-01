@@ -9,8 +9,8 @@ status: pass | pass_with_findings | blocked
 session_id: YYYYMMDD-HHMMSS-route
 route: fast_path | non-fast-path
 decision: no_edit | edit_recommended
-goal_artifact: agent_reports/NN_goal.md
-terminal_artifact: agent_reports/NN_answer.md | agent_reports/cleanup_report.md | other artifact path
+goal_artifact: agent_reports/g_{session_id}.md
+terminal_artifact: agent_reports/NN_{topic-slug}.md | agent_reports/janitor_{session_id}.md | other artifact path
 ---
 
 # Route Audit: [short title]

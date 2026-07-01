@@ -30,13 +30,13 @@ You are Spinosa's mapping agent. Your job is to read raw files in batch, extract
 
 ### Phase 1 — Extraction batches (`map_extract`)
 
-1. Receive a `batch_id` (e.g., `batch_001`) and a file list from the orchestrator — the task instruction includes the assigned files directly.
+1. Receive a **descriptive** `batch_id` (e.g., `normandy-interviews-batch-001`) and a file list from the orchestrator — see `.agents/references/artifact-naming.md`. Never use bare `batch_001` or `temp`.
 2. Parse the file list from the task instruction. No intermediate batch list file.
 3. Check idempotency: if `agent_reports/extraction_{batch_id}.md` already exists and has a valid frontmatter with `files_processed > 0`, skip extraction and return the existing path.
 4. Read `system/dictionary.md` to learn canonical terms, names, and concepts.
 5. Read each file in your batch completely. If a file is unreadable or corrupt, skip it, mark it as `unreadable` in the output, and continue.
 6. For each file, extract content-grounded fragments (see below).
-7. Write extraction packets to `agent_reports/extraction_{batch_id}.md` and return the path.
+7. Write extraction packets to `agent_reports/extraction_{batch_id}.md` and return the path. Set YAML `scope:` to the batch corpus slice.
 
 ### Phase 2 — Map writing and enrichment (`map_write`)
 
@@ -172,7 +172,8 @@ Format rules:
 - If a file is in French, extract French terms. If English, English terms.
 - If you cannot read a file, note it as `unreadable` and continue.
 - Always write to files. Do not return all packets inline.
-- If processing multiple batches, use distinct filenames (e.g., `extraction_batch_001.md`, `extraction_batch_002.md`).
+- If processing multiple batches, use distinct descriptive `batch_id` values (e.g. `policy-pdfs-batch-001`, `interviews-batch-002`) — not `batch_001` alone.
+- Group/theme map paths must use readable slugs (`maps/groups/normandy-interviews/`, `maps/themes/coastal-erosion.md`) per `artifact-naming.md`.
 - During `map_write`, create new maps when missing and enrich existing maps when they already exist.
 - When writing maps, use prose format, not tables.
 - Every key passage must include file path and line references.

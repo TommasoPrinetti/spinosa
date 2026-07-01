@@ -167,7 +167,7 @@ For each gap, construct a structured recommendation:
 
 ### Phase 5: Report
 
-Write a structured coverage report to `agent_reports/c_{session_id}.md`.
+Write a structured coverage report to `agent_reports/c_{session_id}.md`. Set YAML `scope:` to the audit period or corpus slice covered (`.agents/references/artifact-naming.md`) so the file is identifiable from outside.
 
 Template:
 

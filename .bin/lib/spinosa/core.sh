@@ -26,13 +26,37 @@ expand_home() {
 # ── checksum helper ─────────────────────────────────────────────────────────
 
 sha256_file() {
+  local file="$1"
+  [[ -f "$file" ]] || return 1
+  if is_cloud_storage_path "$file"; then
+    local timeout_sec="${SPINOSA_CLOUD_HASH_TIMEOUT_SEC:-30}"
+    if command -v sha256sum >/dev/null 2>&1; then
+      spinosa_run_with_timeout "$timeout_sec" sh -c 'sha256sum -- "$1" | awk "{print \$1}"' _ "$file"
+      return $?
+    fi
+    if command -v shasum >/dev/null 2>&1; then
+      spinosa_run_with_timeout "$timeout_sec" sh -c 'shasum -a 256 -- "$1" | awk "{print \$1}"' _ "$file"
+      return $?
+    fi
+    return 1
+  fi
   if command -v sha256sum >/dev/null 2>&1; then
-    sha256sum "$1" | awk '{print $1}'
+    sha256sum "$file" | awk '{print $1}'
   elif command -v shasum >/dev/null 2>&1; then
-    shasum -a 256 "$1" | awk '{print $1}'
+    shasum -a 256 "$file" | awk '{print $1}'
   else
     return 1
   fi
+}
+
+cloud_rm_rf() {
+  local target="$1"
+  [[ -e "$target" ]] || return 0
+  if is_cloud_storage_path "$target"; then
+    spinosa_run_with_timeout "$(safe_copy_timeout_sec_for "$target")" rm -rf -- "$target"
+    return $?
+  fi
+  rm -rf -- "$target"
 }
 
 
@@ -202,17 +226,31 @@ copy_file_via_stream() {
     [[ -n "$SPINOSA_LAST_COPY_FAIL_REASON" ]] || SPINOSA_LAST_COPY_FAIL_REASON="stream read failed"
     return 1
   fi
-  if ! mv -f -- "$tmp" "$dst" 2>/dev/null; then
+  SPINOSA_LAST_COPY_FAIL_REASON=""
+  if ! spinosa_run_with_timeout "$timeout_sec" mv -f -- "$tmp" "$dst"; then
     rm -f "$tmp" 2>/dev/null || true
-    SPINOSA_LAST_COPY_FAIL_REASON="could not finalize cloud copy"
+    [[ -n "$SPINOSA_LAST_COPY_FAIL_REASON" ]] || SPINOSA_LAST_COPY_FAIL_REASON="could not finalize cloud copy"
     return 1
   fi
   return 0
 }
 
+is_retired_framework_path() {
+  local rel="$1"
+  local manifest="${FRAMEWORK_ROOT:-}/.spinosa/retired-framework-files.tsv"
+  [[ -n "$rel" && -f "$manifest" ]] || return 1
+  awk -F '\t' -v p="$rel" '$1 == p { found = 1 } END { exit(found ? 0 : 1) }' "$manifest"
+}
+
+cloud_io_timed_out() {
+  [[ "${SPINOSA_LAST_COPY_FAIL_REASON:-}" == *"timed out"* ]]
+}
+
 should_skip_copy_artifact() {
   local rel="$1"
-  [[ "$rel" == ".DS_Store" || "$rel" == "._"* || "$rel" == */.DS_Store || "$rel" == */._* ]]
+  [[ "$rel" == ".DS_Store" || "$rel" == "._"* || "$rel" == */.DS_Store || "$rel" == */._* ]] && return 0
+  is_retired_framework_path "$rel" && return 0
+  return 1
 }
 
 safe_copy() {
@@ -227,12 +265,15 @@ safe_copy() {
   mkdir -p "$(dirname "$dst")" 2>/dev/null || true
   for ((i = 1; i <= retries; i++)); do
     SPINOSA_LAST_COPY_FAIL_REASON=""
-    if spinosa_run_with_timeout "$timeout_sec" cp -p -- "$src" "$dst" 2>/dev/null; then
+    if [[ "$use_stream" -eq 1 ]]; then
+      if copy_file_via_stream "$src" "$dst"; then
+        return 0
+      fi
+      last_reason="${SPINOSA_LAST_COPY_FAIL_REASON:-stream copy failed}"
+    elif spinosa_run_with_timeout "$timeout_sec" cp -p -- "$src" "$dst" 2>/dev/null; then
       return 0
-    fi
-    last_reason="${SPINOSA_LAST_COPY_FAIL_REASON:-cp failed}"
-    if [[ "$use_stream" -eq 1 ]] && copy_file_via_stream "$src" "$dst"; then
-      return 0
+    else
+      last_reason="${SPINOSA_LAST_COPY_FAIL_REASON:-cp failed}"
     fi
     last_reason="${SPINOSA_LAST_COPY_FAIL_REASON:-$last_reason}"
     [[ "$i" -lt "$retries" ]] || break

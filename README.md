@@ -221,7 +221,7 @@ spinosa doctor               # 3. Verify everything aligns
 
 After `spinosa update`, Hermes users should merge `.hermes/workspace.config.yaml` into `~/.hermes/config.yaml`.
 
-See [CLI reference — Upgrade lifecycle](docs/reference/cli.md#upgrade-lifecycle) and [CHANGELOG.md](CHANGELOG.md).
+See [CLI reference — Upgrade lifecycle](docs/reference/cli.md#upgrade-lifecycle).
 
 ## Next Steps
 

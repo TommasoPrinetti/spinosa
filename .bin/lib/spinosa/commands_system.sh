@@ -400,7 +400,8 @@ inject_framework_diff() {
   esac
 
   # Build a blank-line-delimited injection block
-  local sep
+  local sep block_file
+  block_file="$(mktemp "${TMPDIR:-/tmp}/spinosa-inject.XXXXXX")" || return 1
   sep="$(printf '═%.0s' $(seq 1 60))"
   {
     printf '\n'
@@ -429,7 +430,19 @@ inject_framework_diff() {
       printf '\n'
       printf '%s%s%s\n' "$comment_open" "${sep}" "$comment_close"
     fi
-  } >> "$dst"
+  } > "$block_file"
+
+  if is_cloud_storage_path "$dst"; then
+    local timeout_sec="${SPINOSA_CLOUD_COPY_TIMEOUT_SEC:-60}"
+    if ! spinosa_run_with_timeout "$timeout_sec" sh -c 'cat -- "$1" >> "$2"' _ "$block_file" "$dst"; then
+      warn "Customized: ${rel_path} (injection timed out on cloud storage — merge manually from framework)"
+      rm -f "$block_file" 2>/dev/null || true
+      return 1
+    fi
+  else
+    cat "$block_file" >> "$dst"
+  fi
+  rm -f "$block_file" 2>/dev/null || true
   printf '  %s %s\n' "${Y}✎${RESET}" "Injected new framework content into customized: ${rel_path}"
 }
 
@@ -443,11 +456,11 @@ sync_dir_contents() {
   src_real="$(cd "$src" 2>/dev/null && pwd -P)" || { warn "Cannot sync missing directory: $src"; return 1; }
   dst_real="$(cd "$dst" 2>/dev/null && pwd -P)" || dst_real=""
   mkdir -p "$dst"
-  if [[ -n "$dst_real" ]]; then
-    # Remove items in dst that don't exist in src
+  # Cloud destinations: skip find/rm prune (can hang on Drive/Dropbox FUSE).
+  if [[ -n "$dst_real" ]] && ! is_cloud_storage_path "$dst"; then
     while IFS= read -r -d '' item; do
       local rel="${item#"$dst_real"/}"
-      [[ -e "$src_real/$rel" ]] || rm -rf "$item" 2>/dev/null || true
+      [[ -e "$src_real/$rel" ]] || cloud_rm_rf "$item" 2>/dev/null || true
     done < <(find -P "$dst_real" -mindepth 1 -maxdepth 1 -print0 2>/dev/null)
   fi
   safe_copy_tree "$src_real" "$dst"
@@ -544,8 +557,9 @@ cmd_update() {
 
   if is_cloud_storage_path "$workspace_path"; then
     warn "Workspace is on cloud storage — ensure files are synced locally before updating."
-    note "Per-file copy timeout: ${SPINOSA_CLOUD_COPY_TIMEOUT_SEC:-60}s (set SPINOSA_CLOUD_COPY_TIMEOUT_SEC to override)."
+    note "Per-file copy timeout: ${SPINOSA_CLOUD_COPY_TIMEOUT_SEC:-60}s; hash timeout: ${SPINOSA_CLOUD_HASH_TIMEOUT_SEC:-30}s."
     note "Spinosa copies framework files one-by-one with retries; stalled cloud I/O fails instead of hanging."
+    note "Tail $(spinosa_log_file) to see the current path if the spinner appears frozen."
   fi
 
   # ── check workspace manifest exists ─────────────────────────────────────
@@ -585,8 +599,14 @@ cmd_update() {
     info "Dry-run — previewing ${manifest_total} framework paths"
   else
     info "Applying framework sync (${manifest_total} paths)…"
+    if is_cloud_storage_path "$workspace_path"; then
+      note "If progress stalls, tail $(spinosa_log_file) in another terminal for the current path."
+    fi
   fi
   echo ""
+
+  # ── Phase 0: migrate legacy logs/ → .logs/ ───────────────────────────────
+  migrate_workspace_logs_dir "$workspace_path" "$dry_run"
 
   # ── Phase 1: build framework file set ─────────────────────────────────────
   local processed_list
@@ -616,6 +636,9 @@ cmd_update() {
 
     src="${FRAMEWORK_ROOT}/${path}"
     dst="${workspace_path}/${path}"
+    if [[ "$dry_run" -ne 1 ]]; then
+      spinosa_log INFO "update path=${path} policy=${policy}"
+    fi
 
     case "$policy" in
       never_replace|exclude_from_update)
@@ -680,7 +703,14 @@ cmd_update() {
             continue
           fi
 
+          SPINOSA_LAST_COPY_FAIL_REASON=""
           current_hash="$(sha256_file "$dst" 2>/dev/null || echo "missing")"
+          if [[ "$current_hash" == "missing" ]] && cloud_io_timed_out; then
+            clear_progress_line
+            safe_copy_warn_failure "hash" "$path" "$dst"
+            copy_failed=$((copy_failed + 1))
+            continue
+          fi
 
           if [[ "$current_hash" == "$orig_hash" ]]; then
             # Unmodified → replace
@@ -725,9 +755,12 @@ cmd_update() {
                 update_changed_paths+=("$path")
               else
                 render_update_manifest_progress "$manifest_idx" "$manifest_total" "$path" "injecting"
-                inject_framework_diff "$dst" "$src" "$path"
-                customized=$((customized + 1))
-                update_changed_paths+=("$path")
+                if inject_framework_diff "$dst" "$src" "$path"; then
+                  customized=$((customized + 1))
+                  update_changed_paths+=("$path")
+                else
+                  copy_failed=$((copy_failed + 1))
+                fi
               fi
             else
               render_update_manifest_progress "$manifest_idx" "$manifest_total" "$path" "skipping"
@@ -750,14 +783,20 @@ cmd_update() {
       local target="${workspace_path}/${m_path}"
       [[ -e "$target" ]] || continue
 
+      SPINOSA_LAST_COPY_FAIL_REASON=""
       current_hash="$(sha256_file "$target" 2>/dev/null || echo "missing")"
+      if [[ "$current_hash" == "missing" ]] && cloud_io_timed_out; then
+        warn "Hash timed out — skipped remove: ${m_path}"
+        skipped=$((skipped + 1))
+        continue
+      fi
 
       if [[ "$current_hash" == "$m_hash" || "$force" -eq 1 ]]; then
         if [[ "$dry_run" -eq 1 ]]; then
           info "[dry-run] would remove (no longer in framework): ${m_path}"
           removed=$((removed + 1))
         else
-          rm -rf "$target" 2>/dev/null && removed=$((removed + 1)) || warn "Failed to remove: ${m_path}"
+          cloud_rm_rf "$target" 2>/dev/null && removed=$((removed + 1)) || warn "Failed to remove: ${m_path}"
         fi
       else
         warn "Customized file no longer in framework — skipped: ${m_path}"
@@ -777,14 +816,20 @@ cmd_update() {
       # Check safety: remove if unmodified or forced
       local r_hash
       r_hash="$(manifest_hash "$ws_manifest" "$r_path")"
+      SPINOSA_LAST_COPY_FAIL_REASON=""
       current_hash="$(sha256_file "$target" 2>/dev/null || echo "missing")"
+      if [[ "$current_hash" == "missing" ]] && cloud_io_timed_out; then
+        warn "Hash timed out — skipped retired remove: ${r_path}"
+        skipped=$((skipped + 1))
+        continue
+      fi
 
       if [[ -z "$r_hash" || "$current_hash" == "$r_hash" || "$force" -eq 1 ]]; then
         if [[ "$dry_run" -eq 1 ]]; then
           info "[dry-run] would remove retired: ${r_path} (${r_reason})"
           removed=$((removed + 1))
         else
-          rm -rf "$target" 2>/dev/null && removed=$((removed + 1)) || warn "Failed to remove retired: ${r_path}"
+          cloud_rm_rf "$target" 2>/dev/null && removed=$((removed + 1)) || warn "Failed to remove retired: ${r_path}"
         fi
       else
         warn "Customized retired file — skipped: ${r_path}"
@@ -795,6 +840,13 @@ cmd_update() {
   fi
 
   rm -f "$processed_list" 2>/dev/null || true
+
+  # ── Phase 5: finalize legacy logs/ → .logs/ (second pass after retired cleanup) ─
+  if [[ "$dry_run" -eq 1 ]]; then
+    info "[dry-run] would finalize legacy logs/ cleanup"
+  else
+    finalize_legacy_logs_dir "$workspace_path" || true
+  fi
 
   # ── regenerate manifest.tsv ──────────────────────────────────────────────
   if [[ "$dry_run" -ne 1 ]]; then

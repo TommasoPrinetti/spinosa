@@ -62,9 +62,9 @@ For each connection found:
 
 ### Phase 4: Report
 
-**Steady-state routes:** Write to `agent_reports/serendipity_{session_id}.md` (read `session_id` from the goal artifact).
+**Steady-state routes:** Write to `agent_reports/serendipity_{session_id}.md` (read `session_id` from the goal artifact). YAML `scope:` and title must name the connection theme (`.agents/references/artifact-naming.md`).
 
-**Startup indexing only:** May use `agent_reports/serendipity_report.md` or numbered `NN_serendipity-report.md` when no session-scoped goal artifact exists.
+**Startup indexing only:** Use `NN_startup-serendipity-{theme-slug}.md` (e.g. `02_startup-serendipity-cross-theme-links.md`) — not `serendipity_report.md` or bare `NN_serendipity-report.md`.
 
 Return operational counts to orchestrator: directories seen, maps read, raw matches, files read, reports written.
 

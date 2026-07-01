@@ -26,7 +26,7 @@ Before Phase 1 dispatch, write `agent_reports/g_{session_id}.md` using `.agents/
 - `system/dictionary.md` contains the master dictionary
 - `system/workspace_index.md` records total raw files, extraction coverage, maps, and known gaps
 - `maps/` contains the navigation maps needed to retrieve the corpus
-- `agent_reports/` contains a startup report with validation and retrieval-test results
+- `agent_reports/` contains a startup report with validation and retrieval-test results — filename `00_startup-indexing-report.md` or `NN_startup-indexing-{corpus-slug}.md` per `.agents/references/artifact-naming.md` (never `00_report.md`)
 - Every non-skipped raw file is accounted for, or the startup report names the blocker
 
 ## Hard rules

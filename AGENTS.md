@@ -187,8 +187,8 @@ start. The format is `YYYYMMDD-{short_hash}` (e.g., `20260629-a1b2c3d4`). The se
 is used for goal artifacts (`g_{session_id}.md`), evidence packets (`evidence_packet_{session_id}.md`),
 analysis packets (`analysis_{session_id}.md`), serendipity reports (`serendipity_{session_id}.md`),
 evaluator reports (`e_{session_id}.md`), and coverage reports (`c_{session_id}.md`). Verifier updates the terminal `NN_*.md` report in place (no required `v_{session_id}.md`).
-The session_id is NOT used for numbered writer reports (`NN_descriptive-name.md`),
-which use sequential numbering.
+The session_id is NOT used for numbered writer reports (`NN_{topic-slug}.md`),
+which use sequential numbering. Topic slugs must be human-readable from outside — see `.agents/references/artifact-naming.md`.
 
 Legacy name `evidence_packet.md` (no session suffix) is deprecated for steady-state routes — it collides when routes run in parallel. Evaluator and recovery must prefer the path recorded in the goal artifact.
 

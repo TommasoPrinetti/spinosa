@@ -1,7 +1,6 @@
 path	role	update_policy
 AGENTS.md	framework	always_replace
 README.md	framework	replace_if_unmodified
-CHANGELOG.md	framework	replace_if_unmodified
 LICENSE	framework	replace_if_unmodified
 .gitignore	framework	replace_if_unmodified
 .editorconfig	framework	replace_if_unmodified
@@ -17,7 +16,6 @@ startup-prompt.md	framework	replace_if_unmodified
 .bin/lib/markitdown-cli.py	framework	replace_if_unmodified
 .bin/lib/rapidocr-cli.py	framework	replace_if_unmodified
 .bin/sync-agents.sh	framework	replace_if_unmodified
-install.sh	framework	replace_if_unmodified
 .agents/	framework	replace_if_unmodified
 docs/	framework	replace_if_unmodified
 system/yaml_header_template.md	framework	replace_if_unmodified
@@ -32,8 +30,8 @@ raw/.gitkeep	framework	replace_if_unmodified
 maps/AGENTS.md	framework	replace_if_unmodified
 maps/map_template.md	framework	replace_if_unmodified
 maps/.gitkeep	framework	replace_if_unmodified
-logs/AGENTS.md	framework	replace_if_unmodified
-logs/.gitkeep	framework	replace_if_unmodified
+.logs/AGENTS.md	framework	replace_if_unmodified
+.logs/.gitkeep	framework	replace_if_unmodified
 .spinosa/memory/	user_state	never_replace
 .spinosa/archive/	user_state	never_replace
 .spinosa/memory/AGENTS.md	framework	replace_if_unmodified

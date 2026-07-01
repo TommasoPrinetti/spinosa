@@ -79,7 +79,8 @@ grep -rl '"model":"o4-mini"' ~/.codex/sessions/2026/**/**/*.jsonl | head -5
 The existing Spinosa session metrics may contain summary-level evidence:
 
 ```
-logs/session_metrics.tsv  # Compact per-agent operation records
+.logs/session_metrics.tsv              # Legacy workspace location (pre-v0.7.6)
+.spinosa/archive/session_metrics_*.tsv  # Archived after memory migration
 ```
 
 Columns include: `date`, `session_id`, `agent`, `route`, `operation`, `query_label`, `dirs_seen`, `maps_read`, `raw_matches`, `raw_files_read`, `reports_written`, `output_path`.
@@ -92,7 +93,7 @@ This is useful for mapping session IDs to agent names and operations, but does n
 
 | When | Check first | Fallback |
 |------|-------------|----------|
-| Spinosa project | `logs/session_metrics.tsv` for session IDs, then Codex rollouts | OpenCode export |
+| Spinosa project | `.logs/session_metrics.tsv` or `.spinosa/archive/session_metrics_*.tsv`, then Codex rollouts | OpenCode export |
 | Recent session | `ls -t ~/.codex/sessions/**/**/*.jsonl \| head -1` | `opencode export --last 1` |
 | Date-specific | Codex `~/.codex/sessions/YYYY/MM/DD/` | OpenCode `--last N` |
 | Generic / unknown | Ask user for session ID or date range | Scan Codex rollouts by recency |

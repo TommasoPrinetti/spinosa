@@ -108,6 +108,12 @@ while IFS=$'\t' read -r path role _policy; do
   fi
 done < "$MANIFEST"
 
+# Drop maintainer-only paths that still live under shipped directories (e.g. docs/).
+if [[ -f "${FRAMEWORK_DIR}/docs/reference/testsuite.md" ]]; then
+  rm -f "${FRAMEWORK_DIR}/docs/reference/testsuite.md"
+  echo "  Stripped maintainer-only: docs/reference/testsuite.md"
+fi
+
 echo "  Copied: $copied_count paths"
 echo "  Excluded: $excluded_count user/generated paths"
 
@@ -193,6 +199,11 @@ if [[ $bad_files -gt 0 ]]; then
   echo ""
   echo "Aborted: $bad_files exclusion violations found."
   exit 1
+fi
+
+if [[ -f "${FRAMEWORK_DIR}/docs/reference/testsuite.md" ]]; then
+  echo "  ERROR: maintainer-only testsuite.md must not ship in framework bundle"
+  bad_files=$((bad_files + 1))
 fi
 
 echo "  All exclusions OK"

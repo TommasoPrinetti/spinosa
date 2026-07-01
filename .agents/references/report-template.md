@@ -2,18 +2,22 @@
 
 ## File Naming Convention
 
+**Full rules:** `.agents/references/artifact-naming.md`
+
 Reports are numbered sequentially based on existing files in `agent_reports/`:
 
 1. List all `NN_*.md` files in `agent_reports/`
 2. Extract the number prefix from each file
 3. Find the highest number
 4. Increment by 1 for the new report
-5. Format: `NN_descriptive-name.md`
+5. Format: `NN_{topic-slug}.md` — the slug must name the **research topic or question**, not the file type
 
-**Examples:**
-- `00_startup-report.md`
-- `01_evidence-analysis.md`
-- `02_serendipity-discovery.md`
+**Good examples:**
+- `00_startup-indexing-report.md`
+- `01_coastal-erosion-normandy-interviews.md`
+- `02_fisheries-policy-source-comparison.md`
+
+**Forbidden slugs (alone):** `report`, `analysis`, `final`, `output`, `temp`, `result`, `draft`
 
 If no numbered files exist, start with `00_`.
 
