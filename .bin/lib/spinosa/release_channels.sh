@@ -91,7 +91,7 @@ install_url_for_channel() {
       ;;
     beta|dev)
       if [[ -n "$version" && "$version" != "latest" ]]; then
-        printf 'https://github.com/%s/releases/download/v%s/install.sh' "$SPINOSA_RELEASE_REPO" "$version"
+        printf 'https://github.com/%s/releases/download/%s/install.sh' "$SPINOSA_RELEASE_REPO" "$SPINOSA_BETA_CHANNEL_TAG"
       else
         printf '%s' "$SPINOSA_BETA_INSTALL_URL"
       fi

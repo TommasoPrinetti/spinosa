@@ -3,6 +3,7 @@
 # ── install.sh — Spinosa Framework Installer (auto-re-execs with bash) ──────
 
 PINNED_VERSION="0.8.0-beta.4"
+PINNED_TAG="beta"
 
 if [ -z "${BASH_VERSION-}" ]; then
   if command -v bash >/dev/null 2>&1; then
@@ -545,7 +546,8 @@ install_install_state_lib() {
 # ══════════════════════════════════════════════════════════════════════════════
 
 compare_versions() {
-  local a="${1%%-*}" b="${2%%-*}"
+  local original_a="$1" original_b="$2"
+  local a="${original_a%%-*}" b="${original_b%%-*}"
   a="${a%%+*}" b="${b%%+*}"
   local IFS=.
   set -f
@@ -571,6 +573,47 @@ compare_versions() {
       return 2
     fi
   done
+  local apre="" bpre=""
+  if [[ "$original_a" == *-* ]]; then
+    apre="${original_a#*-}"
+    apre="${apre%%+*}"
+  fi
+  if [[ "$original_b" == *-* ]]; then
+    bpre="${original_b#*-}"
+    bpre="${bpre%%+*}"
+  fi
+  if [ -z "$apre" ] && [ -n "$bpre" ]; then return 1; fi
+  if [ -n "$apre" ] && [ -z "$bpre" ]; then return 2; fi
+  if [ -n "$apre" ] && [ -n "$bpre" ] && [ "$apre" != "$bpre" ]; then
+    set -f
+    # shellcheck disable=SC2086
+    set -- $apre
+    set +f
+    local ap=("$@")
+    set -f
+    # shellcheck disable=SC2086
+    set -- $bpre
+    set +f
+    local bp=("$@")
+    max=${#ap[@]}; [ "${#bp[@]}" -gt "$max" ] && max="${#bp[@]}"
+    for ((i=0; i<max; i++)); do
+      local ai="${ap[$i]:-}" bi="${bp[$i]:-}"
+      [ "$ai" = "$bi" ] && continue
+      [ -z "$ai" ] && return 2
+      [ -z "$bi" ] && return 1
+      if [[ "$ai" =~ ^[0-9]+$ && "$bi" =~ ^[0-9]+$ ]]; then
+        if [ "$ai" -gt "$bi" ]; then return 1; fi
+        if [ "$ai" -lt "$bi" ]; then return 2; fi
+      elif [[ "$ai" =~ ^[0-9]+$ ]]; then
+        return 2
+      elif [[ "$bi" =~ ^[0-9]+$ ]]; then
+        return 1
+      else
+        [ "$ai" '>' "$bi" ] && return 1
+        [ "$ai" '<' "$bi" ] && return 2
+      fi
+    done
+  fi
   return 0
 }
 
@@ -596,7 +639,7 @@ check_release_age() {
   [ -n "$min_days" ] || return 0
   [ "$min_days" -gt 0 ] 2>/dev/null || die "--min-days must be a positive integer (got: $min_days)"
 
-  local api_url="https://api.github.com/repos/${REPO}/releases/tags/v${version}"
+  local api_url="https://api.github.com/repos/${REPO}/releases/tags/${PINNED_TAG}"
   local published_at
   published_at="$(curl -fsSL --max-time 30 "$api_url" 2>/dev/null | grep '"published_at":' | head -1 | sed 's/.*"published_at": "\([^"]*\)".*/\1/')" || true
 
@@ -1467,7 +1510,7 @@ main() {
   resolve_version
   check_release_age "$VERSION" "$MIN_DAYS"
 
-  local base_url="https://github.com/${REPO}/releases/download/v${VERSION}"
+  local base_url="https://github.com/${REPO}/releases/download/${PINNED_TAG}"
   local archive_name="spinosa-framework-${VERSION}.tar.gz"
 
   info "Version: ${VERSION}"
