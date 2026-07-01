@@ -2,7 +2,8 @@
 # Release channel resolution — stable (GitHub latest) vs dev (GitHub prereleases).
 
 SPINOSA_STABLE_INSTALL_URL="${SPINOSA_STABLE_INSTALL_URL:-https://github.com/TommasoPrinetti/spinosa/releases/latest/download/install.sh}"
-SPINOSA_DEV_INSTALL_URL="${SPINOSA_DEV_INSTALL_URL:-https://spinosa.dev/install/dev}"
+SPINOSA_DEV_INSTALL_URL="${SPINOSA_DEV_INSTALL_URL:-https://github.com/TommasoPrinetti/spinosa/releases/download/dev/install.sh}"
+SPINOSA_DEV_CHANNEL_TAG="${SPINOSA_DEV_CHANNEL_TAG:-dev}"
 SPINOSA_RELEASE_REPO="${SPINOSA_RELEASE_REPO:-TommasoPrinetti/spinosa}"
 
 spinosa_release_channel() {
@@ -29,30 +30,15 @@ resolve_latest_stable_version() {
 }
 
 resolve_latest_dev_version() {
-  local resolved json
+  local resolved installer
   if ! command -v curl >/dev/null 2>&1; then
     die "curl is required to resolve latest dev release. Use --version X.Y.Z-beta.N instead."
   fi
-  json="$(curl -fsSL --connect-timeout 10 --max-time 20 \
-    "https://api.github.com/repos/${SPINOSA_RELEASE_REPO}/releases?per_page=30" 2>/dev/null || true)"
-  [[ -n "$json" ]] || die "Could not fetch dev releases from GitHub."
-  if command -v python3 >/dev/null 2>&1; then
-    resolved="$(printf '%s' "$json" | python3 -c '
-import json, sys
-data = json.load(sys.stdin)
-for r in data:
-    if r.get("prerelease") and not r.get("draft"):
-        print(r["tag_name"].lstrip("v"))
-        break
-' 2>/dev/null || true)"
-  else
-    resolved="$(printf '%s' "$json" | awk '
-      BEGIN { tag="" }
-      /"tag_name":/ { gsub(/.*"tag_name": "/, ""); gsub(/".*/, ""); tag=$0 }
-      /"prerelease": true/ { if (tag != "") { gsub(/^v/, "", tag); print tag; exit } }
-    ')"
-  fi
-  [[ -n "$resolved" ]] || die "No dev (prerelease) publish found. Publish with: bash .bin/publish-dev-release.sh X.Y.Z-beta.N"
+  installer="$(curl -fsSL --connect-timeout 10 --max-time 20 \
+    "${SPINOSA_DEV_INSTALL_URL}" 2>/dev/null || true)"
+  [[ -n "$installer" ]] || die "Could not fetch dev channel installer (${SPINOSA_DEV_INSTALL_URL}). Publish with: bash .bin/publish-dev-release.sh X.Y.Z-beta.N"
+  resolved="$(printf '%s' "$installer" | grep -m1 '^PINNED_VERSION=' | sed 's/^PINNED_VERSION="\(.*\)"/\1/' || true)"
+  [[ -n "$resolved" ]] || die "Dev channel installer missing PINNED_VERSION. Re-publish with: bash .bin/publish-dev-release.sh X.Y.Z-beta.N"
   printf '%s' "$resolved"
 }
 

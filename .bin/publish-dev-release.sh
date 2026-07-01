@@ -10,7 +10,7 @@
 #   3. Run testsuite Phase A (minimum)
 #
 # Install (curl):
-#   curl -fsSL https://spinosa.dev/install/dev | bash
+#   curl -fsSL https://github.com/TommasoPrinetti/spinosa/releases/download/dev/install.sh | bash
 #   # or tag-specific:
 #   curl -fsSL https://github.com/TommasoPrinetti/spinosa/releases/download/v0.8.0-beta.1/install.sh | bash
 #
