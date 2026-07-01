@@ -8,6 +8,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Cloud workspace `spinosa update` / copy no longer hangs indefinitely on Google Drive, Dropbox, or OneDrive — per-file timeout (default 60s) with explicit failure reason
+
 ## [0.7.4] — 2026-07-01
 
 ### Fixed

@@ -24,4 +24,15 @@ safe_copy_tree "$tmpdir/src" "$tmpdir/dst" || { echo "FAIL safe_copy_tree"; exit
 [[ "$(cat "$tmpdir/dst/a.txt")" == "alpha" ]] || { echo "FAIL a.txt content"; exit 1; }
 [[ -L "$tmpdir/dst/link.txt" ]] || { echo "FAIL symlink copy"; exit 1; }
 
+SPINOSA_LOCAL_COPY_TIMEOUT_SEC=1
+SPINOSA_LAST_COPY_FAIL_REASON=""
+if spinosa_run_with_timeout 1 sleep 5; then
+  echo "FAIL expected timeout"
+  exit 1
+fi
+[[ "$SPINOSA_LAST_COPY_FAIL_REASON" == *"timed out"* ]] || {
+  echo "FAIL timeout reason: ${SPINOSA_LAST_COPY_FAIL_REASON}"
+  exit 1
+}
+
 printf 'safe copy tests passed\n'
