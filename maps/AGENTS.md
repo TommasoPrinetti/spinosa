@@ -39,6 +39,16 @@ updated: 2026-06-04
 - **Verification**: map content is self-correcting through agent use, not through dedicated verifier gate.
 - **Force update:** `spinosa-mapper` can be executed to enlarge, enrich and update the maps
 
+## File naming (required)
+
+Follow `.agents/references/artifact-naming.md`. Map paths must read clearly in Finder:
+
+- Hub: `corpus_overview.md` (fixed)
+- Groups: `maps/groups/{group-slug}/` — slug from corpus structure (e.g. `normandy-interviews`, not `group1`)
+- Themes: `maps/themes/{theme-slug}.md` — cross-cutting concept (e.g. `relocation-policy`)
+
+A researcher browsing `maps/` should recognize each folder and file without opening it.
+
 ## Validation
 
 - Each map entry links to an existing raw copy.

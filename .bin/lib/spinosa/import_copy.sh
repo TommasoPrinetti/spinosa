@@ -175,7 +175,7 @@ copy_source() {
         printf '\n\n'
         info "${G}MarkItDown${RESET} Processing ${#md_files[@]} files with MarkItDown..."
         local _md_log
-        _md_log="$dest_dir/../logs/markitdown-processed.ndjson"
+        _md_log="$dest_dir/../.logs/markitdown-processed.ndjson"
         mkdir -p "$(dirname "$_md_log")"
         local _md_debug
         _md_debug="${_md_log%.ndjson}.debug"
@@ -431,7 +431,7 @@ copy_source() {
         printf '\n\n'
         info "${M}OCR${RESET} Processing ${#ocr_files[@]} scanned images and PDFs with RapidOCR..."
         local _ocr_log
-        _ocr_log="$dest_dir/../logs/ocr-processed.ndjson"
+        _ocr_log="$dest_dir/../.logs/ocr-processed.ndjson"
         mkdir -p "$(dirname "$_ocr_log")"
         local _ocr_debug
         _ocr_debug="${_ocr_log%.ndjson}.debug"

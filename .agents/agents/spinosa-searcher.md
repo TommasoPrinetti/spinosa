@@ -112,6 +112,8 @@ When a match lands in a subfolder of `raw/` (e.g., `raw/nursing/judgment_models.
 
 Never return a large evidence list inline. Write results to a file and return the path.
 
+**Naming:** Session paths are fixed (`evidence_packet_{session_id}.md`). For parallel searcher instances, add a topic slug: `evidence_packet_{session_id}_{topic-slug}.md` (see `.agents/references/artifact-naming.md`). Set YAML `scope:` and the packet title to the query topic so the file is identifiable from outside.
+
 ### Step 1: Write the evidence packet
 
 Write to `agent_reports/evidence_packet_{session_id}.md` (read `session_id` from the goal artifact).

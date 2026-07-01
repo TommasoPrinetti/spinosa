@@ -29,6 +29,7 @@ You are Spinosa's verification agent. You trace every claim to its source, confi
    - `unresolved` — source cannot be opened or path is missing.
 4. Apply corrections directly to the target artifact in `agent_reports/`.
 5. Update artifact `status` from `draft` to `pass`, `pass_with_corrections`, or `partial` when status frontmatter exists.
+6. If the target is a numbered report (`NN_*.md`) with a vague slug (`report`, `analysis`, `final`), rename to a topic slug per `.agents/references/artifact-naming.md` only when the orchestrator or goal artifact authorizes renames — otherwise fix `scope:` and title in place.
 6. Update the Navigation Dashboard Status line when present:
    - `○ pending` → `✓ verified` if status is `pass`
    - `○ pending` → `⚠ corrections` if status is `pass_with_corrections`

@@ -9,7 +9,7 @@ COPY_VERIFY_STILL_MISSING_COUNT=0
 
 onboarding_log_path_for() {
   local root="$1"
-  printf '%s/logs/onboarding.log' "$root"
+  printf '%s/.logs/onboarding.log' "$root"
 }
 
 onboarding_log_init() {
@@ -244,7 +244,7 @@ verify_and_recover_import() {
       info "Import verification: ${missing} missing, ${recovered} recovered (${COPY_VERIFY_RECOVERED_RETRY_COUNT} reprocessed, ${COPY_VERIFY_RECOVERED_COPY_COUNT} copied)"
     fi
     if [[ "$still_missing" -gt 0 ]]; then
-      warn "Import verification: ${still_missing} file(s) still missing in raw/ — see logs/onboarding.log"
+      warn "Import verification: ${still_missing} file(s) still missing in raw/ — see .logs/onboarding.log"
     fi
   fi
 
@@ -296,7 +296,7 @@ assert_import_delivered() {
       "excluded=${excluded_label}" \
       "still_missing=${still_missing}"
     warn "Only ${imported} of ${expected} selected file(s) reached raw/ — ${still_missing} still missing."
-    note "See logs/onboarding.log for per-file details."
+    note "See .logs/onboarding.log for per-file details."
     return 1
   fi
 
@@ -313,6 +313,6 @@ assert_import_delivered() {
   elif [[ "${SCAN_OCR_CONVERTIBLE_COUNT:-0}" -gt 0 && "${SCAN_OCR_CHOICE:-no}" != "yes" ]]; then
     note "Scanned PDFs and images in this corpus need RapidOCR."
   fi
-  note "See logs/onboarding.log for details."
+  note "See .logs/onboarding.log for details."
   return 1
 }

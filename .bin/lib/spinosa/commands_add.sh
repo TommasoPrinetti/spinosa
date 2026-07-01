@@ -226,7 +226,7 @@ cmd_add() {
           ADD_TOTAL_COUNT=1
         else
           remove_converted_output "$dest_file"
-          local _md_log="$workspace_path/logs/markitdown-processed.ndjson"
+          local _md_log="$workspace_path/.logs/markitdown-processed.ndjson"
           mkdir -p "$(dirname "$_md_log")"
           local _md_bin="" _md_python="" _md_script=""
           _md_bin="$(markitdown_bin)" || _md_bin=""
@@ -283,7 +283,7 @@ cmd_add() {
           ADD_TOTAL_COUNT=1
         else
           remove_converted_output "$dest_file"
-          local _ocr_log="$workspace_path/logs/ocr-processed.ndjson"
+          local _ocr_log="$workspace_path/.logs/ocr-processed.ndjson"
           mkdir -p "$(dirname "$_ocr_log")"
           local _ocr_bin
           _ocr_bin="$(rapidocr_ocr_bin)" || die "OCR binary not found."
@@ -393,7 +393,7 @@ add_timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)
 - Post-import recovered (reprocess): ${COPY_VERIFY_RECOVERED_RETRY_COUNT:-0}
 - Post-import recovered (source copy): ${COPY_VERIFY_RECOVERED_COPY_COUNT:-0}
 - Post-import still missing: ${COPY_VERIFY_STILL_MISSING_COUNT:-0}
-- Import trace log: logs/onboarding.log
+- Import trace log: .logs/onboarding.log
 
 ## Post-Add Status
 - Post-add action: re-mapper prompt generated

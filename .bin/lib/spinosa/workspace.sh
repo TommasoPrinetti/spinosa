@@ -29,7 +29,7 @@ connects_to:
   - AGENTS.md
   - system/configuration.md
   - system/startup.md
-  - logs/user_requests.md
+  - .logs/user_requests.md
 ---
 
 # Information
@@ -202,7 +202,7 @@ updated: $TODAY
 - Post-import recovered (reprocess): ${COPY_VERIFY_RECOVERED_RETRY_COUNT:-0}
 - Post-import recovered (source copy): ${COPY_VERIFY_RECOVERED_COPY_COUNT:-0}
 - Post-import still missing: ${COPY_VERIFY_STILL_MISSING_COUNT:-0}
-- Onboarding trace log: logs/onboarding.log
+- Onboarding trace log: .logs/onboarding.log
 
 ## Handoff
 - Preferred CLI: ${preferred_cli}
@@ -644,5 +644,147 @@ require_workspace() {
 
 
 
+
+# Move one legacy logs/ item to .logs/ — mv first, safe_copy fallback, then drop source.
+migrate_legacy_logs_item() {
+  local src_item="$1" dst_item="$2" timeout_sec="$3"
+  [[ -e "$src_item" ]] || return 0
+  mkdir -p "$(dirname "$dst_item")" 2>/dev/null || true
+  if [[ -e "$dst_item" ]]; then
+    cloud_rm_rf "$src_item" 2>/dev/null || true
+    return 0
+  fi
+  if spinosa_run_with_timeout "$timeout_sec" mv "$src_item" "$dst_item" 2>/dev/null; then
+    return 0
+  fi
+  if safe_copy "$src_item" "$dst_item"; then
+    cloud_rm_rf "$src_item" 2>/dev/null || true
+    return 0
+  fi
+  return 1
+}
+
+# True when logs/ contains only retired framework stubs (or nothing).
+logs_dir_only_framework_leftovers() {
+  local old="$1"
+  local item base leftover=0
+  shopt -s dotglob nullglob
+  for item in "$old"/*; do
+    [[ -e "$item" ]] || continue
+    base="$(basename "$item")"
+    case "$base" in
+      AGENTS.md|.gitkeep) ;;
+      *) leftover=1 ;;
+    esac
+  done
+  [[ "$leftover" -eq 0 ]]
+}
+
+# Copy pre-memory-migration session files into .spinosa/archive/ if not already archived.
+archive_legacy_logs_memory_files() {
+  local root="$1"
+  local archive="${root}/.spinosa/archive"
+  local stamp src dest
+  stamp="$(date +%Y%m%d)"
+  mkdir -p "$archive" 2>/dev/null || true
+  for src in "${root}/.logs/session_metrics.tsv" "${root}/.logs/user_requests.md"; do
+    [[ -f "$src" ]] || continue
+    case "$src" in
+      */session_metrics.tsv) dest="${archive}/session_metrics_${stamp}.tsv" ;;
+      *) dest="${archive}/user_requests_${stamp}.md" ;;
+    esac
+    [[ -f "$dest" ]] && continue
+    if safe_copy "$src" "$dest"; then
+      spinosa_log INFO "archived legacy $(basename "$src") → ${dest#"$root"/}"
+    fi
+  done
+}
+
+# Migrate legacy workspace logs/ → hidden .logs/ (framework v0.7.6+).
+migrate_workspace_logs_dir() {
+  local root="$1"
+  local dry_run="${2:-0}"
+  local old="${root}/logs"
+  local new="${root}/.logs"
+  local timeout_sec item base migrated=0 failed=0
+
+  [[ -d "$old" ]] || return 0
+
+  if [[ "$dry_run" -eq 1 ]]; then
+    info "[dry-run] would migrate logs/ → .logs/"
+    return 0
+  fi
+
+  timeout_sec="$(safe_copy_timeout_sec_for "$root")"
+  spinosa_log INFO "migrate logs/ → .logs/ workspace=${root}"
+
+  # Bulk rename only when .logs/ does not exist — otherwise mv would nest logs/ inside .logs/logs/.
+  if [[ ! -e "$new" ]]; then
+    if spinosa_run_with_timeout "$timeout_sec" mv "$old" "$new" 2>/dev/null; then
+      ok "Migrated logs/ → .logs/"
+      archive_legacy_logs_memory_files "$root"
+      return 0
+    fi
+    spinosa_log WARN "logs/ bulk rename failed (${SPINOSA_LAST_COPY_FAIL_REASON:-I/O}) — falling back to per-file copy"
+  fi
+
+  mkdir -p "$new" 2>/dev/null || true
+
+  shopt -s dotglob nullglob
+  for item in "$old"/*; do
+    [[ -e "$item" ]] || continue
+    base="$(basename "$item")"
+    if migrate_legacy_logs_item "$item" "$new/$base" "$timeout_sec"; then
+      migrated=$((migrated + 1))
+      spinosa_log INFO "migrated logs/${base} → .logs/${base}"
+    else
+      failed=$((failed + 1))
+      warn "logs/ migration: could not move ${base} (${SPINOSA_LAST_COPY_FAIL_REASON:-I/O})"
+    fi
+  done
+
+  archive_legacy_logs_memory_files "$root"
+
+  if [[ "$failed" -eq 0 ]]; then
+    if logs_dir_only_framework_leftovers "$old"; then
+      cloud_rm_rf "$old" 2>/dev/null || true
+    else
+      rmdir "$old" 2>/dev/null || true
+    fi
+    if [[ -d "$old" ]]; then
+      warn "Legacy logs/ still present — re-run update after cloud sync or move workspace locally"
+    elif [[ "$migrated" -gt 0 ]]; then
+      ok "Merged logs/ into .logs/ (${migrated} item(s))"
+    fi
+    return 0
+  fi
+
+  warn "logs/ migration incomplete (${failed} item(s) remain in logs/)"
+  return 1
+}
+
+# Second-pass cleanup after framework sync + retired file removal.
+finalize_legacy_logs_dir() {
+  local root="$1"
+  local old="${root}/logs"
+  local failed=0
+
+  [[ -d "$old" ]] || return 0
+
+  spinosa_log INFO "finalize legacy logs/ cleanup workspace=${root}"
+  migrate_workspace_logs_dir "$root" 0 || failed=1
+
+  if [[ -d "$old" ]] && logs_dir_only_framework_leftovers "$old"; then
+    cloud_rm_rf "$old" 2>/dev/null || true
+    spinosa_log INFO "removed empty legacy logs/ directory"
+  fi
+
+  if [[ -d "$old" ]]; then
+    warn "Legacy logs/ directory remains — open in Finder, wait for sync, then run: spinosa update --yes"
+    return 1
+  fi
+
+  [[ "$failed" -eq 0 ]]
+}
 
 # Fetch release notes from GitHub API

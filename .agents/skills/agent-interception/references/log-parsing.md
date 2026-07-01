@@ -222,9 +222,11 @@ jq -c '
 
 ## Spinosa metrics TSV
 
-The existing `logs/session_metrics.tsv` contains per-agent summaries. Parse with:
+Legacy per-agent summaries may live in `.logs/session_metrics.tsv` (post-v0.7.6) or `.spinosa/archive/session_metrics_*.tsv` (pre-memory migration). Parse with:
 
 ```bash
-# Extract agent operations for a session
-awk -F'\t' -v session="20260626-113623" '$2 ~ session' logs/session_metrics.tsv
+# Extract agent operations for a session (try .logs first, then archive)
+metrics=".logs/session_metrics.tsv"
+[[ -f "$metrics" ]] || metrics="$(ls -t .spinosa/archive/session_metrics_*.tsv 2>/dev/null | head -1)"
+awk -F'\t' -v session="20260626-113623" '$2 ~ session' "$metrics"
 ```

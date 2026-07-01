@@ -94,8 +94,11 @@ User state (per workspace — never_replace):
   .spinosa/memory/  orchestrator-notes.md
   .trash/         archived intermediates
 
+Operational (hidden):
+  .logs/          import/conversion traces (onboarding.log, NDJSON)
+
 Archive (pre-memory-migration):
-  logs/           frozen historical files — no longer written to
+  .spinosa/archive/  frozen session records migrated from legacy logs/
 ```
 
 ## Setup Lifecycle

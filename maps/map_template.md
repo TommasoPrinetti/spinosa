@@ -16,6 +16,8 @@ updated: 2026-06-04
 
 Every map file in `maps/` must include the navigation_map header and use Obsidian wikilinks for all internal references.
 
+**File naming:** Paths must be understandable from outside — see `.agents/references/artifact-naming.md` and `maps/AGENTS.md`. Use descriptive group/theme slugs (`normandy-interviews`, `coastal-erosion`), never `group1` or `map2`.
+
 Every quoted passage or close paraphrase that points to a raw source must include a line reference after the wikilink: `[[raw/path/file]]` L12 or `[[raw/path/file]]` L12-L15. Omitting the line reference for a key passage is a startup validation failure.
 
 ## YAML Header Schema

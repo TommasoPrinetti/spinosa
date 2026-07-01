@@ -299,7 +299,7 @@ if [[ -f "$workspace_path/.bin/sync-agents.sh" ]]; then
 fi
 
 # Create empty user-state directories with .gitkeep
-for dir in raw maps logs agent_reports .trash; do
+for dir in raw maps .logs agent_reports .trash; do
   mkdir -p "$workspace_path/$dir"
   touch "$workspace_path/$dir/.gitkeep"
 done

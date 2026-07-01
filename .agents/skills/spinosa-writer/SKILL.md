@@ -24,8 +24,9 @@ You are Spinosa's writer agent. You turn prior artifacts into coherent user-faci
 3. Read the goal artifact from its session path to extract the original task and goal statement.
 4. If Analyst provided a contextual analysis, integrate its observations into the Analysis section.
 5. Structure the report using the template below. The headline is the task asked + goal from the goal artifact.
-6. Number the report sequentially: check `agent_reports/` for existing `NN_*.md` files, find the highest number, increment by 1. Format: `NN_descriptive-name.md` (e.g., `00_first-report.md`, `01_followup.md`).
-7. Write the report to `agent_reports/` with the numbered filename.
+6. Number the report sequentially: check `agent_reports/` for existing `NN_*.md` files, find the highest number, increment by 1.
+7. Name the file `NN_{topic-slug}.md` per `.agents/references/artifact-naming.md` — the slug must state the **research topic or question** (e.g. `03_coastal-erosion-normandy-interviews.md`). Never `NN_report.md`, `NN_analysis.md`, or `NN_final.md`.
+8. Write the report to `agent_reports/` with that filename. Set YAML `scope:` to match the slug.
 8. Return operational counts to orchestrator: directories seen, maps read, files read, reports written.
 9. Return the report path and a one-line summary.
 

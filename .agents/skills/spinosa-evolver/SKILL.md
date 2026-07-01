@@ -27,7 +27,7 @@ You are Spinosa's framework evolution agent. You apply narrowly targeted control
    - behavior-defining docs under `system/`
 3. Apply the smallest change that addresses the finding for future requests.
 4. Do not touch the current route's answer report or source corpus.
-5. Write an evolution report to `agent_reports/` that records:
+5. Write an evolution report to `agent_reports/evolution_{session_id}.md` (or `NN_framework-evolution-{short-slug}.md` if no session_id — see `.agents/references/artifact-naming.md`) that records:
    - the triggering audit
    - files changed
    - what was changed

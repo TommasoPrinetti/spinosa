@@ -11,7 +11,7 @@ your-workspace/
   maps/             Navigation maps — an automatic table of contents
   system/           Configuration, context, dictionary, index
   agent_reports/    All answers and reports
-  logs/             A trail of every request and agent activity
+  .logs/            Hidden import and conversion traces (CLI-written)
   .agents/          Agent definitions and fallback skill files
   .bin/             CLI scripts
   .trash/           Archived old files
@@ -27,7 +27,7 @@ your-workspace/
 | `maps/` | Navigation maps built during startup. Think of them as a smart index — they say "these 5 files are about coastal erosion, these 3 are about farming practices, and here are the key passages." Uses Obsidian wikilinks (`[[filename]]`) so you can browse connections visually if you open the workspace in Obsidian. |
 | `system/` | Your workspace settings. `context.md` stores project scope and research vocabulary. `configuration.md` stores operating settings. `dictionary.md` is the master vocabulary list. |
 | `agent_reports/` | All agent output. Numbered files like `00_startup-report.md` are final results. Session-scoped files like `evidence_packet_{session_id}.md` are intermediate work files the evaluator moves to `.trash/` after the route closes. |
-| `logs/` | Historical archives from before the memory migration (2026-06-28). Current session memory at `.spinosa/memory/`. |
+| `.logs/` | Hidden operational traces: `onboarding.log`, conversion NDJSON. Pre-memory-migration session records may remain here or in `.spinosa/archive/`. Current session memory is at `.spinosa/memory/`. |
 | `.agents/agents/` | Definitions of the 10 agents. Each is a `.md` file with permissions, workflow, and output format. |
 | `.agents/skills/` | Fallback instructions for each agent, used when native dispatch isn't available. |
 | `.bin/` | CLI scripts and conversion engines. |

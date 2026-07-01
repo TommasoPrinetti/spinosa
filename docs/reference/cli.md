@@ -2,7 +2,7 @@
 
 The `spinosa` CLI manages workspace creation, validation, and upgrades.
 
-**Pre-release testing:** [testsuite.md](testsuite.md) — full gate before marking a version releaseable.
+**Maintainers:** pre-release testing lives in the framework repo at `docs/reference/testsuite.md` (not shipped to user workspaces).
 
 ## Commands
 

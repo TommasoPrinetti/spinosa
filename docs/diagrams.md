@@ -174,7 +174,7 @@ flowchart TB
     end
 
     subgraph Logs ["Historical archive"]
-        LOGS[logs/\npre-migration artifacts]
+        LOGS[.logs/\nimport traces]
     end
 
     FRAMEWORK_MANIFEST -.->|scaffold| UserState

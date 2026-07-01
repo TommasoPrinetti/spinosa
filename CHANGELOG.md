@@ -8,6 +8,24 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.6] — 2026-07-01
+
+### Fixed
+
+- `spinosa update` on cloud workspaces no longer hangs indefinitely on checksum, directory prune, migration `mv`, or injection append — timeouts on `sha256_file` (cloud), skip `find`/`rm` prune on cloud dirs, stream-first cloud copies
+- Hash timeouts no longer mis-classify cloud files as "customized" during update (counted as copy failures instead)
+- Legacy `logs/` migration: per-file `safe_copy` fallback after `mv` timeout, Phase 5 finalize pass, auto-archive `session_metrics.tsv` / `user_requests.md` to `.spinosa/archive/`, remove empty `logs/` after retired cleanup
+- `docs/reference/testsuite.md` stripped from release bundle and skipped during `docs/` directory copy (retired manifest alone was insufficient)
+- Agent-interception skill and `agent_reports/AGENTS.md` updated for `.logs/` / `.spinosa/archive/` paths
+- Update logs each manifest path to `~/.spinosa/logs/spinosa.log` so stalled sync shows the current file when the UI spinner freezes
+
+### Changed
+
+- Workspace clutter cleanup: `logs/` → hidden `.logs/` (with `spinosa update` migration from legacy `logs/`)
+- `CHANGELOG.md`, workspace `install.sh`, and `docs/reference/testsuite.md` no longer shipped to user workspaces (repo/maintainer only)
+- GitHub release `install.sh` asset unchanged (`curl | bash`)
+- Artifact naming: `.agents/references/artifact-naming.md`; directory `AGENTS.md`, write-capable agents, templates, and `startup-prompt.md` require human-readable filenames (topic slugs — not `report.md`, `analysis.md`, `batch_001`)
+
 ## [0.7.5] — 2026-07-01
 
 ### Fixed
