@@ -1376,8 +1376,10 @@ print_path_instructions() {
 
   info "Run Spinosa with: spinosa"
 
-  if command -v spinosa >/dev/null 2>&1; then
+  if "${SPINOSA_BIN_DIR}/spinosa" help >/dev/null 2>&1; then
     ok "Command 'spinosa' is ready in this install session"
+  elif command -v spinosa >/dev/null 2>&1; then
+    warn "Command 'spinosa' is on PATH but not runnable — run: ${reload_hint}"
   else
     warn "Command 'spinosa' is still not on PATH in this session"
     note "Run: ${reload_hint}"
@@ -1407,7 +1409,10 @@ print_banner() {
 
 run_basic_test() {
   info "Running basic test..."
+  local test_err
+  test_err="$("${SPINOSA_BIN_DIR}/spinosa" help 2>&1 >/dev/null)" || true
   if ! "${SPINOSA_BIN_DIR}/spinosa" help >/dev/null 2>&1; then
+    spinosa_log WARN "basic test stderr: ${test_err:-<empty>}"
     warn "Basic test failed — shim at ${SPINOSA_BIN_DIR}/spinosa is not runnable."
     return 1
   fi
@@ -1525,6 +1530,11 @@ main() {
 
   install_shims
 
+  local fw_root="${SPINOSA_HOME}/versions/${VERSION}/spinosa-framework-${VERSION}"
+  mark_version_install_complete "$VERSION"
+  install_install_state_lib "$fw_root"
+  INSTALL_COMPLETED=1
+
   cleanup
   trap - EXIT INT TERM HUP
 
@@ -1538,10 +1548,6 @@ main() {
   divider
   printf '\n  %s%sSpinosa installed successfully!%s\n\n' "${BOLD}" "${G}" "${RESET}"
 
-  local fw_root="${SPINOSA_HOME}/versions/${VERSION}/spinosa-framework-${VERSION}"
-  mark_version_install_complete "$VERSION"
-  install_install_state_lib "$fw_root"
-  INSTALL_COMPLETED=1
   spinosa_log INFO "install complete version=${VERSION} home=${SPINOSA_HOME}"
   note "Install log: $(spinosa_log_file)"
   print_path_instructions

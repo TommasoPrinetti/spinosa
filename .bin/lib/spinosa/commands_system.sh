@@ -472,8 +472,10 @@ compare_versions() {
   max=${#av[@]}; [[ "${#bv[@]}" -gt "$max" ]] && max="${#bv[@]}"
   for ((i=0; i<max; i++)); do
     local an="${av[$i]:-0}" bn="${bv[$i]:-0}"
-    if [[ "$an" -gt "$bn" ]]; then return 1; fi
-    if [[ "$an" -lt "$bn" ]]; then return 2; fi
+    an="${an//[^0-9]/}"; an="${an:-0}"
+    bn="${bn//[^0-9]/}"; bn="${bn:-0}"
+    if (( an > bn )); then return 1; fi
+    if (( an < bn )); then return 2; fi
   done
   return 0
 }
@@ -936,6 +938,8 @@ doctor_check_workspace() {
   if [[ -z "$ws_version" ]]; then
     warn "Could not read workspace framework_version"
     issues=$((issues + 1))
+  elif [[ "$ws_version" == "dev" ]]; then
+    note "Workspace framework_version is dev (non-release checkout) — version skew check skipped"
   elif [[ "$installed_version" != "dev" && -n "$ws_version" ]]; then
     local cmp=0
     compare_versions "$installed_version" "$ws_version" || cmp=$?
