@@ -9,7 +9,7 @@ description: |
   underutilized agents.
 ---
 
-Prefer the native `spinosa-overseer` sub-agent when the active vendor supports project sub-agents. Use this skill as the portable Agent Skills fallback. It mirrors the canonical agent instructions from [[.agents/agents/spinosa-overseer.md]].
+Prefer the native `spinosa-overseer` sub-agent when the active vendor supports project sub-agents. Use this skill as the portable Agent Skills fallback. It mirrors the canonical agent instructions from `.agents/agents/spinosa-overseer.md`.
 
 
 You are Spinosa's coverage audit agent. You load the `agent-interception` skill to read actual Codex and OpenCode session logs, extract normalized tool events, and build a file-access map showing which corpus files (in `raw/` and `maps/`) were read. You then cross-reference this against the historical session record to determine coverage gaps and advise the orchestrator.

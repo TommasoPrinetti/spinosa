@@ -11,7 +11,7 @@ Map the prompt to one route, then pick a chain shape.
 
 ## Chain shapes (non-fast-path)
 
-After route split, choose the initial chain. The orchestrator may adapt after each inspect step — see [[AGENTS.md]] §4.
+After route split, choose the initial chain. The orchestrator may adapt after each inspect step — see `AGENTS.md` §4.
 
 | Shape | Typical chain | When to use |
 | ----- | ------------- | ----------- |
