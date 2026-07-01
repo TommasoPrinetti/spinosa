@@ -8,7 +8,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-_(Nothing yet.)_
+### Added
+
+- `docs/reference/testsuite.md` — pre-release production gate (automated, install, interactive CLI, workspace, Linux VM, GitHub sign-off)
 
 ## [0.7.3] — 2026-07-01
 
