@@ -317,6 +317,11 @@ ensure_global_metadata() {
       mv "$legacy" "$current" 2>/dev/null || cp "$legacy" "$current" 2>/dev/null || true
     fi
   done
+  if [[ ! -f "$SPINOSA_CONFIG" ]]; then
+    cat > "$SPINOSA_CONFIG" << EOF
+release_channel: stable
+EOF
+  fi
 }
 
 # Load config from ~/.spinosa/config.yaml

@@ -8,6 +8,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Config-switchable release channel: set `release_channel: beta|stable` in `~/.spinosa/metadata/config.yaml`. Auto-upgrade and `spinosa upgrade` respect the persisted preference. Running `spinosa upgrade --channel beta` (or `--channel stable`) saves the choice to config — no manual file editing required.
+
 ## [0.8.0-beta.2] — 2026-07-01
 
 ### Fixed

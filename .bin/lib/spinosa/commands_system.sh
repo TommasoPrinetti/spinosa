@@ -156,12 +156,13 @@ cmd_upgrade() {
   local target_version="latest"
   local auto_yes=0
   local reinstall=0
+  local explicit_channel=0
   local channel
   channel="$(spinosa_release_channel)"
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --version) target_version="$2"; shift 2 ;;
-      --channel) channel="$2"; shift 2 ;;
+      --channel) channel="$2"; explicit_channel=1; shift 2 ;;
       --yes|-y) auto_yes=1; shift ;;
       --reinstall) reinstall=1; shift ;;
       --help|-h)
@@ -182,6 +183,7 @@ cmd_upgrade() {
     *) die "Unknown release channel: ${channel} (use stable or beta)" ;;
   esac
   [[ "$channel" == "dev" ]] && channel="beta"
+  [[ "$explicit_channel" -eq 1 ]] && set_release_channel "$channel"
 
   title "Upgrade"
 
@@ -1200,39 +1202,40 @@ auto_upgrade_check() {
   [[ "$installed_version" != "dev" ]] || return 0
 
   ensure_global_metadata
-  local cache_file="$SPINOSA_VERSION_CACHE"
+  local channel
+  channel="$(spinosa_release_channel)"
+  local cache_file="${SPINOSA_VERSION_CACHE}_${channel}"
   local now
   now="$(date +%s)"
 
   # ── offline check: if installed >= cached latest, clear stale cache ──
   if [[ -f "$cache_file" ]]; then
-    local cached_latest skip_until
+    local cached_latest skip_until cached_channel
     cached_latest="$(sed -n '2p' "$cache_file" 2>/dev/null || echo "")"
     skip_until="$(sed -n '3p' "$cache_file" 2>/dev/null || echo 0)"
+    cached_channel="$(sed -n '4p' "$cache_file" 2>/dev/null || echo "")"
 
-    if [[ -n "$cached_latest" ]]; then
+    if [[ -n "$cached_latest" && "$cached_channel" == "$channel" ]]; then
       local cache_cmp=0
       compare_versions "$installed_version" "$cached_latest" || cache_cmp=$?
       if [[ "$cache_cmp" -ne 2 ]]; then
-        # installed >= cached latest — cache is stale, clear it and proceed silently
         if [[ "$cache_cmp" -eq 1 ]]; then
           rm -f "$cache_file" 2>/dev/null || true
         elif [[ "$now" -lt "$skip_until" ]]; then
           return 0
         fi
       fi
+    else
+      rm -f "$cache_file" 2>/dev/null || true
     fi
   fi
 
   local latest
   if ! command -v curl >/dev/null 2>&1; then return 0; fi
-  local channel
-  channel="$(spinosa_release_channel)"
-  [[ "$channel" == "stable" ]] || return 0
-  latest="$(resolve_latest_stable_version 2>/dev/null || true)"
+  latest="$(resolve_release_version_for_channel "$channel" 2>/dev/null || true)"
   [[ -n "$latest" ]] || return 0
 
-  printf '%s\n%s\n0\n' "$now" "$latest" > "$cache_file"
+  printf '%s\n%s\n0\n%s\n' "$now" "$latest" "$channel" > "$cache_file"
 
   local latest_cmp=0
   compare_versions "$latest" "$installed_version" || latest_cmp=$?
@@ -1243,7 +1246,7 @@ auto_upgrade_check() {
     info "Running upgrade..."
     cmd_upgrade --version "$latest" --yes
   else
-    printf '%s\n%s\n%d\n' "$now" "$latest" "$(( now + 604800 ))" > "$cache_file"
+    printf '%s\n%s\n%d\n%s\n' "$now" "$latest" "$(( now + 604800 ))" "$channel" > "$cache_file"
     info "Upgrade skipped. You can upgrade anytime with: spinosa upgrade"
   fi
 }

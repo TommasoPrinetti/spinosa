@@ -9,14 +9,40 @@ SPINOSA_BETA_CHANNEL_TAG="${SPINOSA_BETA_CHANNEL_TAG:-beta}"
 SPINOSA_RELEASE_REPO="${SPINOSA_RELEASE_REPO:-TommasoPrinetti/spinosa}"
 
 spinosa_release_channel() {
-  local ch="${SPINOSA_RELEASE_CHANNEL:-stable}"
+  local ch
+  if [[ -n "${SPINOSA_RELEASE_CHANNEL:-}" ]]; then
+    ch="$SPINOSA_RELEASE_CHANNEL"
+  else
+    ch="$(grep -m1 '^release_channel:' "${SPINOSA_HOME:-$HOME/.spinosa}/metadata/config.yaml" 2>/dev/null | awk '{print $2}')"
+    ch="${ch:-stable}"
+  fi
   case "$ch" in
     stable|beta) printf '%s' "$ch" ;;
     dev) printf 'beta' ;;
-    *)
-      die "Invalid SPINOSA_RELEASE_CHANNEL=${ch} (use stable or beta)"
-      ;;
+    *) die "Invalid release channel: ${ch} (use stable or beta)" ;;
   esac
+}
+
+set_release_channel() {
+  local ch="$1"
+  local config_dir="${SPINOSA_METADATA_DIR:-${SPINOSA_HOME:-$HOME/.spinosa}/metadata}"
+  local config="${config_dir}/config.yaml"
+  mkdir -p "$config_dir" 2>/dev/null || return 1
+  if [[ ! -f "$config" ]]; then
+    cat > "$config" << EOF
+release_channel: ${ch}
+EOF
+    return 0
+  fi
+  if grep -q '^release_channel:' "$config" 2>/dev/null; then
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+      sed -i '' "s/^release_channel:.*/release_channel: ${ch}/" "$config"
+    else
+      sed -i "s/^release_channel:.*/release_channel: ${ch}/" "$config"
+    fi
+  else
+    printf '\nrelease_channel: %s\n' "$ch" >> "$config"
+  fi
 }
 
 resolve_pinned_version_from_installer() {
