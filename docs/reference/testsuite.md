@@ -130,6 +130,8 @@ bash .bin/test-install-vendor-reuse.sh
 
 **Working tree:** `git status --porcelain` must be empty before publish (see RELEASE_GUIDE).
 
+**Manifest rule:** `.spinosa/framework-files.tsv` lists only files delivered to user workspaces on install/update. Maintainer scripts (`.bin/test-*.sh`, packaging tools, etc.) live in the git repo only — do not add them to the manifest.
+
 ---
 
 ## Phase B — Install tests (blocking)
