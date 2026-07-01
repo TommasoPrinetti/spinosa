@@ -243,7 +243,15 @@ cmd_upgrade() {
     upgrade_args+=("--reinstall")
   fi
 
-  bash "$installer" "${upgrade_args[@]}" || die "Installer failed."
+  spinosa_log INFO "upgrade installer=${installer} args=${upgrade_args[*]}"
+  if ! bash "$installer" "${upgrade_args[@]}"; then
+    spinosa_log ERROR "installer exited non-zero"
+    if [[ -x "${SPINOSA_HOME}/bin/spinosa" ]]; then
+      warn "Installer reported failure but CLI is present — continuing (see $(spinosa_log_file))"
+    else
+      die "Installer failed. See $(spinosa_log_file)"
+    fi
+  fi
 
   rm -f "$SPINOSA_VERSION_CACHE" 2>/dev/null || true
   rm -rf "$tmpdir"

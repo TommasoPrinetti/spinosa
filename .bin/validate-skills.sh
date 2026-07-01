@@ -13,6 +13,10 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SPINOSA_LOG_COMPONENT="validate-skills"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/lib/spinosa/logging_bootstrap.sh" "$@"
+
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 SKILLS_DIR="${REPO_ROOT}/.agents/skills"
 

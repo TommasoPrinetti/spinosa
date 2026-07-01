@@ -10,6 +10,20 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 _(Nothing yet.)_
 
+## [0.7.2] — 2026-07-01
+
+### Fixed
+
+- Installer no longer exits silently on macOS after vendor checksum (bash 3.2 + `set -u` chained `local` in `vendor_python_for_dir`)
+- `prompt_upgrade()` no longer aborts under `set -e` when versions differ (same class as v0.7.1 `spinosa update` fix)
+- Basic test failure no longer aborts install before success banner
+- `spinosa upgrade` no longer reports hard failure when installer exits non-zero but CLI is present
+
+### Added
+
+- Unified bash logging to `~/.spinosa/logs/spinosa.log` (installer, CLI, upgrade, and `.bin/` scripts)
+- ERR trap in installer — failures show line number and log path instead of silent exit
+
 ## [0.7.1] — 2026-07-01
 
 ### Fixed

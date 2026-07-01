@@ -113,6 +113,7 @@ SPINOSA_BANNER_PRINTED=0
 # ── sourced libraries ───────────────────────────────────────────────────────
 SPINOSA_LIB_DIR="${FRAMEWORK_ROOT}/.bin/lib/spinosa"
 SPINOSA_LIBS=(
+  logging
   ui
   core
   handoff
@@ -137,6 +138,9 @@ for spinosa_lib in "${SPINOSA_LIBS[@]}"; do
   # shellcheck source=/dev/null
   source "$spinosa_lib_path"
 done
+
+spinosa_log_init "cli" "${ORIGINAL_ARGS[@]}"
+spinosa_log_enable_err_trap
 
 # ── Pre-parse global flags ──────────────────────────────────
 while true; do

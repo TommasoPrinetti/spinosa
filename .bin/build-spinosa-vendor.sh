@@ -22,6 +22,9 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SPINOSA_LOG_COMPONENT="build-spinosa-vendor"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/lib/spinosa/logging_bootstrap.sh" "$@"
 FRAMEWORK_ROOT="$(dirname "$SCRIPT_DIR")"
 VENDOR_BASE="${FRAMEWORK_ROOT}/.bin/lib/vendor"
 MARKITDOWN_CLI="${FRAMEWORK_ROOT}/.bin/lib/markitdown-cli.py"

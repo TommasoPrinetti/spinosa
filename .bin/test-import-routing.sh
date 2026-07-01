@@ -2,7 +2,10 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+SPINOSA_LOG_COMPONENT="test-import-routing"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/lib/spinosa/logging_bootstrap.sh" "$@"
+REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 CONVERTER="${REPO_ROOT}/.bin/lib/markitdown-cli.py"
 
 tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/spinosa-import-routing.XXXXXX")"

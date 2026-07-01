@@ -2,6 +2,11 @@
 set -euo pipefail
 shopt -s nullglob
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SPINOSA_LOG_COMPONENT="check-startup"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/lib/spinosa/logging_bootstrap.sh" "$@"
+
 # ── ANSI colors (zero dependencies) ──────────────────────────────────────────
 if [[ "${NO_COLOR:-}" == "1" ]] || [[ ! -t 1 ]]; then
   R="" G="" Y="" BOLD="" RESET=""
