@@ -5,10 +5,7 @@ CHANGELOG.md	framework	replace_if_unmodified
 LICENSE	framework	replace_if_unmodified
 .gitignore	framework	replace_if_unmodified
 .editorconfig	framework	replace_if_unmodified
-.bin/check-doc-contract.sh	framework	replace_if_unmodified
 .bin/check-startup.sh	framework	replace_if_unmodified
-.bin/validate-skills.sh	framework	replace_if_unmodified
-.bin/package-release.sh	framework	replace_if_unmodified
 startup-prompt.md	framework	replace_if_unmodified
 .bin/AGENTS.md	framework	replace_if_unmodified
 .bin/lib/metrics.sh	framework	replace_if_unmodified
@@ -17,15 +14,8 @@ startup-prompt.md	framework	replace_if_unmodified
 .bin/startup-prompt.md	framework	replace_if_unmodified
 .bin/spinosa	framework	replace_if_unmodified
 .bin/lib/spinosa/	framework	replace_if_unmodified
-.bin/build-spinosa-vendor.sh	framework	replace_if_unmodified
 .bin/lib/markitdown-cli.py	framework	replace_if_unmodified
 .bin/lib/rapidocr-cli.py	framework	replace_if_unmodified
-.bin/test-import-routing.sh	framework	replace_if_unmodified
-.bin/test-onboarding-verify.sh	framework	replace_if_unmodified
-.bin/test-doctor.sh	framework	replace_if_unmodified
-.bin/test-pdf-classifier.sh	framework	replace_if_unmodified
-.bin/test-install-vendor-reuse.sh	framework	replace_if_unmodified
-.bin/test-new-test-vault.sh	framework	replace_if_unmodified
 .bin/sync-agents.sh	framework	replace_if_unmodified
 install.sh	framework	replace_if_unmodified
 .agents/	framework	replace_if_unmodified

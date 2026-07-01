@@ -20,8 +20,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - `docs/reference/testsuite.md` — pre-release production gate (automated, install, CLI, workspace, Linux VM, GitHub sign-off)
-- `.bin/test-new-test-vault.sh` — `spinosa new` integration gate against `TEST-VAULT` (`subset` / `mixed` / `full` scopes)
+- `.bin/test-new-test-vault.sh` — maintainer-only `spinosa new` gate against `TEST-VAULT` (repo/testsuite; not shipped to user workspaces)
 - Testsuite automation rule: `--launch copy` for non-interactive `spinosa new` (no OpenCode terminal spawn)
+
+### Changed
+
+- Maintainer-only scripts (`.bin/test-*.sh`, `package-release.sh`, `build-spinosa-vendor.sh`, `validate-skills.sh`, `check-doc-contract.sh`) removed from `framework-files.tsv`; listed in `retired-framework-files.tsv` so `spinosa update` drops them from workspaces
 
 ## [0.7.3] — 2026-07-01
 
