@@ -6,15 +6,20 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 **Release policy:** versions are published only with explicit maintainer approval.
 
-## [Unreleased] — targeting v0.7.0
+## [Unreleased]
+
+_(Nothing yet.)_
+
+## [0.7.0] — 2026-07-01
 
 ### Added
 
+- `spinosa doctor` — health check for CLI/workspace version skew, document tools, cloud paths, Hermes config drift
 - `spinosa update` progress — per-path manifest progress, per-file copy bar for large dirs, changed-path summary
 - `spinosa new` converter progress — unified MarkItDown/OCR bar, 1s spinner/elapsed refresh while converting
-- `spinosa doctor` — health check for CLI/workspace version skew, document tools, cloud paths, Hermes config drift
 - CLI reference: upgrade lifecycle, `spinosa update`, integrations section
 - Post-upgrade integration checklist (Hermes merge reminder)
+- `CHANGELOG.md` and `.bin/test-doctor.sh` shipped via framework manifest
 
 ### Changed
 
