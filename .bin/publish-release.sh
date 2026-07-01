@@ -225,6 +225,8 @@ EOF
   echo ""
   echo "Syncing rolling dev channel release (${dev_tag}) → v${version}"
 
+  git push origin "$CURRENT_BRANCH" >/dev/null 2>&1 || git push origin "$CURRENT_BRANCH"
+
   if gh release view "$dev_tag" >/dev/null 2>&1; then
     git tag -f "$dev_tag" "$CURRENT_SHA"
     git push origin "$dev_tag" --force
@@ -232,10 +234,16 @@ EOF
     gh release edit "$dev_tag" --notes-file "$dev_body"
   else
     gh release create "$dev_tag" "${UPLOAD_ASSETS[@]}" \
-      --target "$CURRENT_SHA" \
+      --target "$CURRENT_BRANCH" \
       --title "Spinosa dev channel (rolling)" \
       --prerelease \
       --notes-file "$dev_body"
+    git fetch origin "refs/tags/${dev_tag}:refs/tags/${dev_tag}" >/dev/null 2>&1 || true
+    if ! git rev-parse -q --verify "refs/tags/${dev_tag}^{commit}" >/dev/null 2>&1 \
+      || [[ "$(git rev-parse "refs/tags/${dev_tag}^{commit}")" != "$CURRENT_SHA" ]]; then
+      git tag -f "$dev_tag" "$CURRENT_SHA"
+      git push origin "$dev_tag" --force
+    fi
   fi
   rm -f "$dev_body"
 }
