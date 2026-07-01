@@ -393,7 +393,7 @@ add_timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)
 - Post-import recovered (reprocess): ${COPY_VERIFY_RECOVERED_RETRY_COUNT:-0}
 - Post-import recovered (source copy): ${COPY_VERIFY_RECOVERED_COPY_COUNT:-0}
 - Post-import still missing: ${COPY_VERIFY_STILL_MISSING_COUNT:-0}
-- Import trace log: logs/onboarding.lgo
+- Import trace log: logs/onboarding.log
 
 ## Post-Add Status
 - Post-add action: re-mapper prompt generated
