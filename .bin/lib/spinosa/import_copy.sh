@@ -1,6 +1,8 @@
 # shellcheck shell=bash
 # Raw copy and conversion pipeline.
 
+CONVERTER_FIFO_POLL_SEC=1
+
 # ── Cold frontmatter injection ──────────────────────────────────────────
 # Injects frontmatter fields derivable from the file itself (no LLM).
 # If the file already has frontmatter, merges missing cold fields into it
@@ -275,18 +277,18 @@ copy_source() {
             local _md_pid=$!
             spinosa_debug_md "MarkItDown batch spawned — pid=$_md_pid, reading fifo..."
 
-            local _md_read_exit=0 _md_wait_status=0 _md_idle_ticks=0
+            local _md_read_exit=0 _md_wait_status=0 _md_elapsed_sec=0
             exec 3<"$_md_fifo"
             while true; do
-              if IFS= read -r -t 5 -u 3 _line; then
-                _md_idle_ticks=0
+              if IFS= read -r -t "$CONVERTER_FIFO_POLL_SEC" -u 3 _line; then
+                _md_elapsed_sec=0
               else
                 _md_read_exit=$?
                 if kill -0 "$_md_pid" 2>/dev/null; then
                   if [[ -n "$_md_current_rel" ]]; then
                     local _md_active_idx=$((md_idx < md_total ? md_idx + 1 : md_total))
-                    _md_idle_ticks=$((_md_idle_ticks + 1))
-                    render_converter_wait "MarkItDown" "$_md_active_idx" "$md_total" "$md_converted" "$md_skipped" "$_md_current_rel" "$((_md_idle_ticks * 5))" "$G" "$_md_current_ext"
+                    _md_elapsed_sec=$((_md_elapsed_sec + CONVERTER_FIFO_POLL_SEC))
+                    render_converter_progress "MarkItDown" "$_md_active_idx" "$md_total" "$md_converted" "$md_skipped" "$_md_current_rel" "$_md_page" "$_md_elapsed_sec" "$_md_elapsed_sec" "$G" "$_md_current_ext"
                   fi
                   continue
                 fi
@@ -300,20 +302,20 @@ copy_source() {
                   _md_current_ext="$(file_ext "$_md_current_rel")"
                   spinner_stop >&2 2>/dev/null || true
                   _md_page=""
-                  _md_idle_ticks=0
+                  _md_elapsed_sec=0
                   spinosa_debug_md "BEGIN $_md_current_rel"
                   local _md_active_idx=$((md_idx < md_total ? md_idx + 1 : md_total))
                   render_converter_progress "MarkItDown" "$_md_active_idx" "$md_total" "$md_converted" "$md_skipped" "$_md_current_rel" "" "$md_idx" 0 "$G" "$_md_current_ext"
                   ;;
                 PROGRESS)
                   _md_page="${_line#PROGRESS$'\t'}"
-                  _md_idle_ticks=0
+                  _md_elapsed_sec=0
                   local _md_active_idx=$((md_idx < md_total ? md_idx + 1 : md_total))
                   render_converter_progress "MarkItDown" "$_md_active_idx" "$md_total" "$md_converted" "$md_skipped" "$_md_current_rel" "$_md_page" "$md_idx" 0 "$G" "$_md_current_ext"
                   ;;
                 END)
                   md_idx=$((md_idx + 1))
-                  _md_idle_ticks=0
+                  _md_elapsed_sec=0
                   local _md_rest="${_line#END$'\t'}"
                   local _md_end_status="${_md_rest%%$'\t'*}"
                   _md_rest="${_md_rest#"$_md_end_status"$'\t'}"
@@ -506,18 +508,18 @@ copy_source() {
             local _ocr_pid=$!
             spinosa_debug "Batch process spawned — pid=$_ocr_pid, reading fifo..."
 
-            local _ocr_read_exit=0 _ocr_wait_status=0 _ocr_idle_ticks=0
+            local _ocr_read_exit=0 _ocr_wait_status=0 _ocr_elapsed_sec=0
             exec 4<"$_ocr_fifo"
             while true; do
-              if IFS= read -r -t 5 -u 4 _line; then
-                _ocr_idle_ticks=0
+              if IFS= read -r -t "$CONVERTER_FIFO_POLL_SEC" -u 4 _line; then
+                _ocr_elapsed_sec=0
               else
                 _ocr_read_exit=$?
                 if kill -0 "$_ocr_pid" 2>/dev/null; then
                   if [[ -n "$_current_rel" ]]; then
                     local _ocr_active_idx=$((ocr_idx < ocr_total ? ocr_idx + 1 : ocr_total))
-                    _ocr_idle_ticks=$((_ocr_idle_ticks + 1))
-                    render_converter_wait "OCR" "$_ocr_active_idx" "$ocr_total" "$ocr_converted" "$ocr_skipped" "$_current_rel" "$((_ocr_idle_ticks * 5))" "$M" "$_ocr_current_ext"
+                    _ocr_elapsed_sec=$((_ocr_elapsed_sec + CONVERTER_FIFO_POLL_SEC))
+                    render_converter_progress "OCR" "$_ocr_active_idx" "$ocr_total" "$ocr_converted" "$ocr_skipped" "$_current_rel" "$_ocr_page" "$_ocr_elapsed_sec" "$_ocr_elapsed_sec" "$M" "$_ocr_current_ext"
                   fi
                   continue
                 fi
@@ -532,7 +534,7 @@ copy_source() {
                   spinner_stop >&2 2>/dev/null || true
                   _ocr_page=""
                   _ocr_page_counter=0
-                  _ocr_idle_ticks=0
+                  _ocr_elapsed_sec=0
                   spinosa_debug "BEGIN $_current_rel"
                   local _ocr_active_idx=$((ocr_idx < ocr_total ? ocr_idx + 1 : ocr_total))
                   render_converter_progress "OCR" "$_ocr_active_idx" "$ocr_total" "$ocr_converted" "$ocr_skipped" "$_current_rel" "" "$_ocr_page_counter" 0 "$M" "$_ocr_current_ext"
@@ -540,13 +542,13 @@ copy_source() {
                 PROGRESS)
                   _ocr_page="${_line#PROGRESS$'\t'}"
                   _ocr_page_counter=$((_ocr_page_counter + 1))
-                  _ocr_idle_ticks=0
+                  _ocr_elapsed_sec=0
                   local _ocr_active_idx=$((ocr_idx < ocr_total ? ocr_idx + 1 : ocr_total))
                   render_converter_progress "OCR" "$_ocr_active_idx" "$ocr_total" "$ocr_converted" "$ocr_skipped" "$_current_rel" "$_ocr_page" "$_ocr_page_counter" 0 "$M" "$_ocr_current_ext"
                   ;;
                 END)
                   ocr_idx=$((ocr_idx + 1))
-                  _ocr_idle_ticks=0
+                  _ocr_elapsed_sec=0
                   local _rest="${_line#END$'\t'}"
                   local _end_status="${_rest%%$'\t'*}"
                   _rest="${_rest#"$_end_status"$'\t'}"

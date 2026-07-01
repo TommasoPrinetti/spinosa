@@ -11,7 +11,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - `spinosa update` progress — per-path manifest progress, per-file copy bar for large dirs, changed-path summary
-- `spinosa new` converter progress — unified MarkItDown/OCR bar, clearer path + elapsed time (replaces `waiting Ns`)
+- `spinosa new` converter progress — unified MarkItDown/OCR bar, 1s spinner/elapsed refresh while converting
 - `spinosa doctor` — health check for CLI/workspace version skew, document tools, cloud paths, Hermes config drift
 - CLI reference: upgrade lifecycle, `spinosa update`, integrations section
 - Post-upgrade integration checklist (Hermes merge reminder)
