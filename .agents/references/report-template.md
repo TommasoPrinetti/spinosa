@@ -42,7 +42,7 @@ template_version: 2
 [Quotes and source references using verbatim format.
 For large evidence sets (>50 sources), include the top 10-20 here and link to the appendix:]
 
-> For the complete evidence set, see `agent_reports/evidence_appendix.md`
+> For the complete evidence set, see [[agent_reports/evidence_appendix.md]]
 
 ## Analysis
 [Interpretation, patterns, connections — include Analyst's broader context here]

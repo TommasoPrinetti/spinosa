@@ -56,7 +56,7 @@ scope: [one-line description]
 For large evidence sets, include the top 10-20 most relevant sources here
 and reference the appendix for the full set:]
 
-> For the complete evidence set, see `agent_reports/evidence_appendix.md`
+> For the complete evidence set, see [[agent_reports/evidence_appendix.md]]
 
 ## Analysis
 [Interpretation, patterns, connections — include Analyst's broader context here]

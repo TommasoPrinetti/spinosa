@@ -23,7 +23,7 @@ You are Spinosa's cleanup agent. You audit the workspace for hygiene issues, eva
 ## Prerequisites
 
 - Workspace is initialized (`setup_status: workspace_started`).
-- `system/configuration.md` has `stale_after_days` threshold (default: 30 days; reports may use a longer threshold if configured).
+- [[system/configuration.md]] has `stale_after_days` threshold (default: 30 days; reports may use a longer threshold if configured).
 
 ## Workflow
 
@@ -101,7 +101,7 @@ Use circle half characters for visual weight:
 
 ## Staleness Thresholds
 
-Read `system/configuration.md` for `stale_after_days` thresholds:
+Read [[system/configuration.md]] for `stale_after_days` thresholds:
 - Reports: default 90 days
 - Temporary files: default 30 days
 - Maps: re-validate when raw/ changes

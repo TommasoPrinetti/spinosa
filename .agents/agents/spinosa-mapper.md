@@ -33,7 +33,7 @@ You are Spinosa's mapping agent. Your job is to read raw files in batch, extract
 1. Receive a **descriptive** `batch_id` (e.g., `normandy-interviews-batch-001`) and a file list from the orchestrator — see [[.agents/references/artifact-naming.md]]. Never use bare `batch_001` or `temp`.
 2. Parse the file list from the task instruction. No intermediate batch list file.
 3. Check idempotency: if `agent_reports/extraction_{batch_id}.md` already exists and has a valid frontmatter with `files_processed > 0`, skip extraction and return the existing path.
-4. Read `system/dictionary.md` to learn canonical terms, names, and concepts.
+4. Read [[system/dictionary.md]] to learn canonical terms, names, and concepts.
 5. Read each file in your batch completely. If a file is unreadable or corrupt, skip it, mark it as `unreadable` in the output, and continue.
 6. For each file, extract content-grounded fragments (see below).
 7. Write extraction packets to `agent_reports/extraction_{batch_id}.md` and return the path. Set YAML `scope:` to the batch corpus slice.
@@ -140,7 +140,7 @@ Maps are Obsidian-native. Every reference to a raw file or another map in the ma
 
 Every map MUST include Obsidian `#tags` in the body (after the H1 heading, before any other content). Tags create a parallel filtering dimension in Obsidian's graph view — independent of, but complementary to, wikilink edges.
 
-- **Hub map** (`corpus_overview.md`): `#hub` plus `#group/<name>` for every group
+- **Hub map** ([[corpus_overview.md]]): `#hub` plus `#group/<name>` for every group
 - **Group maps**: `#group/<name>` plus `#concept/<concept>` for each recurring concept
 - **Theme maps**: `#theme/<name>` plus `#concept/<concept>` for each related concept
 - **Extraction packets**: `#concept/<concept>` `#type/<source_type>` `#group/<group_name>` — mirrors the Tags field in each packet
@@ -153,7 +153,7 @@ Format rules:
 
 ### Hub Map Rules
 
-- `corpus_overview.md` (Level 0) is the central hub of the Obsidian graph. It MUST contain wikilinks to every group map and theme map.
+- [[corpus_overview.md]] (Level 0) is the central hub of the Obsidian graph. It MUST contain wikilinks to every group map and theme map.
 - Every group map MUST contain a wikilink back to `[[corpus_overview]]`.
 - Theme maps MUST link to relevant group maps via wikilinks.
 - Group maps SHOULD link to related group maps when cross-references exist.
@@ -173,7 +173,7 @@ Format rules:
 - If you cannot read a file, note it as `unreadable` and continue.
 - Always write to files. Do not return all packets inline.
 - If processing multiple batches, use distinct descriptive `batch_id` values (e.g. `policy-pdfs-batch-001`, `interviews-batch-002`) — not `batch_001` alone.
-- Group/theme map paths must use readable slugs ([[maps/groups/normandy-interviews/]], [[maps/themes/coastal-erosion.md]]) per `artifact-naming.md`.
+- Group/theme map paths must use readable slugs ([[maps/groups/normandy-interviews/]], [[maps/themes/coastal-erosion.md]]) per [[.agents/references/artifact-naming.md]].
 - During `map_write`, create new maps when missing and enrich existing maps when they already exist.
 - When writing maps, use prose format, not tables.
 - Every key passage must include file path and line references.
