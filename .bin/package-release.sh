@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SPINOSA_LOG_COMPONENT="package-release"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/lib/spinosa/logging_bootstrap.sh" "$@"
+
 # ── package-release.sh — Build framework release bundle ─────────────────────
 # Usage: bash .bin/package-release.sh <version>
 #

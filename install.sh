@@ -2,7 +2,7 @@
 # shellcheck shell=bash
 # ── install.sh — Spinosa Framework Installer (auto-re-execs with bash) ──────
 
-PINNED_VERSION="0.7.1"
+PINNED_VERSION="0.7.2"
 
 if [ -z "${BASH_VERSION-}" ]; then
   if command -v bash >/dev/null 2>&1; then
@@ -40,6 +40,56 @@ fi
 set -euo pipefail
 
 # ══════════════════════════════════════════════════════════════════════════════
+# UNIFIED LOGGING (${SPINOSA_HOME}/logs/spinosa.log)
+# Self-contained here — install.sh cannot source framework libs before install.
+# ══════════════════════════════════════════════════════════════════════════════
+
+spinosa_log_file() {
+  if [ -n "${SPINOSA_LOG_FILE:-}" ]; then
+    printf '%s\n' "$SPINOSA_LOG_FILE"
+    return 0
+  fi
+  printf '%s/logs/spinosa.log\n' "${SPINOSA_HOME:-$HOME/.spinosa}"
+}
+
+spinosa_log_init() {
+  local component="${1:-install}"
+  shift || true
+  local log_file
+  log_file="$(spinosa_log_file)"
+  mkdir -p "$(dirname "$log_file")" 2>/dev/null || return 0
+  {
+    printf '\n---\n'
+    printf '%s component=%s pid=%s ppid=%s shell=%s cwd=%s' \
+      "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+      "$component" "$$" "$PPID" "${BASH_VERSION:-sh}" "$PWD"
+    if [ $# -gt 0 ]; then
+      printf ' argv=%q' "$@"
+    fi
+    printf '\n'
+  } >> "$log_file" 2>/dev/null || true
+}
+
+spinosa_log() {
+  local level="$1"
+  shift || true
+  local log_file
+  log_file="$(spinosa_log_file)"
+  mkdir -p "$(dirname "$log_file")" 2>/dev/null || return 0
+  printf '%s level=%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$level" "$*" >> "$log_file" 2>/dev/null || true
+}
+
+_spinosa_install_err_trap() {
+  local exit_code=$? line=$1
+  spinosa_log ERROR "aborted line=${line} exit=${exit_code} cmd=${BASH_COMMAND:-}"
+  printf '\n  %s Install failed at line %s (exit %s). See %s\n\n' \
+    "${R:-}✗${RESET:-}" "$line" "$exit_code" "$(spinosa_log_file)" >&2
+  exit "$exit_code"
+}
+
+trap '_spinosa_install_err_trap $LINENO' ERR
+
+# ══════════════════════════════════════════════════════════════════════════════
 # CONFIGURATION
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -69,12 +119,12 @@ else
   G='' Y='' R='' DIM='' BOLD='' U='' RESET=''
 fi
 
-info()  { printf '  %s %s\n' "${DIM}→${RESET}" "$1"; }
-ok()    { printf '  %s %s\n' "${G}✦${RESET}" "$1"; }
-warn()  { printf '  %s %s\n' "${Y}⚠${RESET}" "$1" >&2; }
-note()  { printf '  %s↳%s %s\n' "${DIM}" "${RESET}" "$1"; }
-fail()  { printf '  %s%s✗%s %s%s\n' "${R}${BOLD}" "${U}" "$(printf '\033[24m')" "$1" "${RESET}" >&2; }
-die()   { printf '\n  %s %s\n\n' "${R}✗${RESET}" "$1" >&2; exit 1; }
+info()  { spinosa_log INFO "$1"; printf '  %s %s\n' "${DIM}→${RESET}" "$1"; }
+ok()    { spinosa_log INFO "$1"; printf '  %s %s\n' "${G}✦${RESET}" "$1"; }
+warn()  { spinosa_log WARN "$1"; printf '  %s %s\n' "${Y}⚠${RESET}" "$1" >&2; }
+note()  { spinosa_log INFO "$1"; printf '  %s↳%s %s\n' "${DIM}" "${RESET}" "$1"; }
+fail()  { spinosa_log ERROR "$1"; printf '  %s%s✗%s %s%s\n' "${R}${BOLD}" "${U}" "$(printf '\033[24m')" "$1" "${RESET}" >&2; }
+die()   { spinosa_log ERROR "$1"; printf '\n  %s %s\n\n' "${R}✗${RESET}" "$1" >&2; exit 1; }
 divider() { printf '%s\n' "${DIM}$(printf '%.0s─' {1..78})${RESET}"; }
 
 read_from_tty() {
@@ -429,9 +479,11 @@ compare_versions() {
   [ "${#bv[@]}" -gt "$max" ] && max="${#bv[@]}"
   for ((i=0; i<max; i++)); do
     local an="${av[$i]:-0}" bn="${bv[$i]:-0}"
-    if [ "$an" -gt "$bn" ]; then
+    an="${an//[^0-9]/}"; an="${an:-0}"
+    bn="${bn//[^0-9]/}"; bn="${bn:-0}"
+    if (( an > bn )); then
       return 1
-    elif [ "$an" -lt "$bn" ]; then
+    elif (( an < bn )); then
       return 2
     fi
   done
@@ -514,7 +566,8 @@ vendor_tarball_sha_from_checksums() {
 }
 
 vendor_python_for_dir() {
-  local vendor_dir="$1" python_bin="${vendor_dir}/python/bin/python3"
+  local vendor_dir="$1"
+  local python_bin="${vendor_dir}/python/bin/python3"
   if [[ ! -x "$python_bin" ]]; then
     python_bin="${vendor_dir}/Python.framework/Versions/Current/bin/python3"
   fi
@@ -736,8 +789,8 @@ smoke_check_vendor_tools() {
 prompt_upgrade() {
   local installed="$1" target="$2"
 
-  compare_versions "$target" "$installed"
-  local cmp=$?
+  local cmp=0
+  compare_versions "$target" "$installed" || cmp=$?
 
   if [ "$cmp" -eq 0 ]; then
     if [ "$REINSTALL" -eq 1 ]; then
@@ -993,10 +1046,14 @@ install_vendor_bundles() {
   chmod +x "${spinosa_vendor_dest}/markitdown-cli" 2>/dev/null || true
   spinner_stop
 
+  info "Installing vendor Python packages..."
+  spinosa_log INFO "vendor_dir=${spinosa_vendor_dest}"
+
   local spinosa_python
-  spinosa_python="$(vendor_python_for_dir "$spinosa_vendor_dest" 2>/dev/null || true)"
+  spinosa_python="$(vendor_python_for_dir "$spinosa_vendor_dest" || true)"
 
   if [[ -n "$spinosa_python" ]]; then
+    spinosa_log INFO "vendor_python=${spinosa_python}"
     if install_vendor_python_packages "$spinosa_python"; then
       spinner_stop "MarkItDown + RapidOCR + PDF tools installed"
       spinner_start "Verifying RapidOCR import"
@@ -1301,6 +1358,9 @@ maybe_launch_dashboard() {
 main() {
   local lockdir="${SPINOSA_HOME}/versions/.lock.${$}-${VERSION}"
 
+  spinosa_log_init "install.sh" "$0" "$@"
+  spinosa_log INFO "version=${VERSION} home=${SPINOSA_HOME} bin=${SPINOSA_BIN_DIR}"
+
   init_global_metadata
 
   # Stale lock check: if lock dir is older than 30 min, reclaim it
@@ -1389,11 +1449,13 @@ main() {
   write_spinosa_env_file
   setup_shell_path
   activate_spinosa_path_for_session
-  run_basic_test
+  run_basic_test || true
 
   echo ""
   divider
   printf '\n  %s%sSpinosa installed successfully!%s\n\n' "${BOLD}" "${G}" "${RESET}"
+  spinosa_log INFO "install complete version=${VERSION} home=${SPINOSA_HOME}"
+  note "Install log: $(spinosa_log_file)"
   print_path_instructions
   echo ""
   maybe_launch_dashboard

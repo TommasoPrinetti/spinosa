@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SPINOSA_LOG_COMPONENT="publish-release"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/lib/spinosa/logging_bootstrap.sh" "$@"
+
 # Publish a Spinosa framework release from the current checkout.
 # Requires: git, gh, and a clean working tree.
 
@@ -32,7 +37,6 @@ while [[ $# -gt 0 ]]; do
 done
 
 TAG="v${VERSION}"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 DIST="${REPO_ROOT}/dist/v${VERSION}"
 ARCHIVE="${DIST}/spinosa-framework-${VERSION}.tar.gz"

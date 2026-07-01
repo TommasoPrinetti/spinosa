@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SPINOSA_LOG_COMPONENT="test-safe-copy"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/lib/spinosa/logging_bootstrap.sh" "$@"
+REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 SPINOSA_LIB_DIR="$REPO_ROOT/.bin/lib/spinosa"
 # shellcheck source=/dev/null
 source "$SPINOSA_LIB_DIR/core.sh"

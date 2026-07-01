@@ -30,13 +30,13 @@ title()     {
   printf '\n  %s%s%s\n\n' "${BOLD}${C}" "$1" "${RESET}"
 }
 
-info()      { printf '  %s %s\n' "${DIM}→${RESET}" "$1"; }
+info()      { spinosa_log INFO "$1"; printf '  %s %s\n' "${DIM}→${RESET}" "$1"; }
 
-ok()        { printf '  %s %s\n' "${G}✦${RESET}" "$1"; }
+ok()        { spinosa_log INFO "$1"; printf '  %s %s\n' "${G}✦${RESET}" "$1"; }
 
-warn()      { printf '  %s %s\n' "${Y}⚠${RESET}" "$1" >&2; }
+warn()      { spinosa_log WARN "$1"; printf '  %s %s\n' "${Y}⚠${RESET}" "$1" >&2; }
 
-note()      { printf '  %s↳%s %s\n' "${DIM}" "${RESET}" "$1"; }
+note()      { spinosa_log INFO "$1"; printf '  %s↳%s %s\n' "${DIM}" "${RESET}" "$1"; }
 
 tree_row() {
   local label="$1"
@@ -72,7 +72,7 @@ else
   note_cactus() { printf '  %s⚠️%s %s\n' "${DIM}" "${RESET}" "$1"; }
 fi
 
-die()       { printf '\n  %s %s\n\n' "${R}✗${RESET}" "$1" >&2; exit 1; }
+die()       { spinosa_log ERROR "$1"; printf '\n  %s %s\n\n' "${R}✗${RESET}" "$1" >&2; exit 1; }
 
 print_step() {
   printf '\n'

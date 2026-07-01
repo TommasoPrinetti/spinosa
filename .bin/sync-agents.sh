@@ -30,6 +30,9 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SPINOSA_LOG_COMPONENT="sync-agents"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/lib/spinosa/logging_bootstrap.sh" "$@"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 
 if [[ -f "$REPO_ROOT/.bin/lib/spinosa/core.sh" ]]; then
