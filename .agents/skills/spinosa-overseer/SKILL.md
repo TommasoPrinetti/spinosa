@@ -108,7 +108,7 @@ This produces a `file_coverage` structure:
 Compute the following matrices, using BOTH orchestrator-notes.md session history AND Phase-0 session log analysis:
 
 **Topic coverage:**
-- For each canonical concept in the dictionary, search session prompts in `.spinosa/memory/orchestrator-notes.md` for matching keywords and aliases.
+- For each canonical concept in the dictionary, search session prompts in [[.spinosa/memory/orchestrator-notes.md]] for matching keywords and aliases.
 - Also search the session log search_keywords from Phase 0c for concept matches.
 - Concepts with zero matches from both sources are marked `not_covered`.
 - For covered concepts, if `now - last_date > stale_after_days`, mark `stale`.
@@ -157,7 +157,7 @@ For each gap, construct a structured recommendation:
 
 ### Phase 5: Report
 
-Write a structured coverage report to `agent_reports/c_{session_id}.md`. Set YAML `scope:` to the audit period or corpus slice covered (`.agents/references/artifact-naming.md`) so the file is identifiable from outside.
+Write a structured coverage report to `agent_reports/c_{session_id}.md`. Set YAML `scope:` to the audit period or corpus slice covered ([[.agents/references/artifact-naming.md]]) so the file is identifiable from outside.
 
 Template:
 
