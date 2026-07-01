@@ -152,9 +152,22 @@ safe_copy() {
 safe_copy_tree() {
   local src="$1" dst="$2"
   local src_real retries failed=0 src_item rel_path dst_item link_target
+  local total_files=0 processed_files=0 copied_files=0 show_file_progress=0
+  local sync_label="${SPINOSA_SYNC_LABEL:-}"
+  local progress_action="copying"
+  [[ -n "$sync_label" ]] && progress_action="syncing ${sync_label}"
   src_real="$(cd "$src" 2>/dev/null && pwd -P)" || return 1
   mkdir -p "$dst" || return 1
   retries="$(safe_copy_retries_for "$dst")"
+  while IFS= read -r -d '' src_item; do
+    [[ -f "$src_item" ]] || continue
+    rel_path="${src_item#$src_real/}"
+    should_skip_copy_artifact "$rel_path" && continue
+    total_files=$((total_files + 1))
+  done < <(find -P "$src_real" -type f -print0 2>/dev/null)
+  if [[ "$total_files" -gt 4 && ( -t 2 || "${SPINOSA_PROGRESS_NEWLINES:-0}" == "1" ) ]]; then
+    show_file_progress=1
+  fi
   while IFS= read -r -d '' src_item; do
     rel_path="${src_item#$src_real/}"
     [[ -n "$rel_path" ]] || continue
@@ -168,12 +181,20 @@ safe_copy_tree() {
     elif [[ -d "$src_item" ]]; then
       mkdir -p "$dst_item" || failed=$((failed + 1))
     elif [[ -f "$src_item" ]]; then
-      if ! safe_copy "$src_item" "$dst_item" "$retries"; then
+      processed_files=$((processed_files + 1))
+      if [[ "$show_file_progress" -eq 1 ]]; then
+        render_copy_progress "$processed_files" "$total_files" "$copied_files" "$failed" "$rel_path" "$progress_action"
+      fi
+      if safe_copy "$src_item" "$dst_item" "$retries"; then
+        copied_files=$((copied_files + 1))
+      else
+        clear_progress_line
         warn "Failed to copy: ${rel_path}"
         failed=$((failed + 1))
       fi
     fi
   done < <(find -P "$src_real" -print0 2>/dev/null)
+  [[ "$show_file_progress" -eq 1 ]] && clear_progress_line
   [[ "$failed" -eq 0 ]]
 }
 

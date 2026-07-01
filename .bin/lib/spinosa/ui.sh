@@ -861,6 +861,24 @@ render_progress_line() {
 }
 
 
+clear_progress_line() {
+  [[ -t 2 ]] && printf '\r\033[2K' >&2 || true
+}
+
+
+render_update_manifest_progress() {
+  local index="$1" total="$2" path="$3" action="${4:-syncing}"
+  local frame ratio label label_width fixed
+  frame="$(spinner_frame "$index")"
+  ratio="${index}/${total}"
+  fixed=$((10 + 1 + ${#action} + 1 + ${#ratio} + 3))
+  label_width=$((COLS - fixed))
+  (( label_width < 12 )) && label_width=12
+  label="$(truncate_display_path "$path" "$label_width")"
+  render_progress_line "  ${C}${frame}${RESET} ${action} ${ratio} ${DIM}—${RESET} ${label}"
+}
+
+
 render_copy_progress() {
   local processed="$1" total="$2" copied="$3" skipped="$4" current_file="${5:-}" action="${6:-copying}"
   local frame ratio counts fixed width file_width filled=0 bar="" i
