@@ -18,7 +18,7 @@ cmd_startup() {
       --help|-h)
         printf '  %s\n' "Usage: spinosa startup [options]"
         printf '    %s\n' "  --workspace, -w  Path to existing Spinosa workspace"
-        printf '    %s\n' "  --cli            Preferred LLM CLI (opencode, gemini, qwen, claude_code, codex, kilo, other)"
+        printf '    %s\n' "  --cli            Preferred LLM CLI (opencode, gemini, qwen, claude_code, codex, hermes, kilo, other)"
         printf '    %s\n' "  --launch         Launch method (copy, run)"
         printf '    %s\n' "  --no-color       Disable colored output"
         return 0

@@ -53,7 +53,7 @@ Run the Janitor agent. It scans for stale files, broken links, and outdated repo
 ## Troubleshooting
 
 **Command not found: spinosa**
-Make sure `~/.spinosa/bin` is on your PATH, or re-run the install script.
+The CLI shim lives in `~/.local/bin` by default. The installer adds it to your shell config and writes `~/.spinosa/env.sh`. After `curl | bash`, reload your shell (`source ~/.zshrc` on macOS, or `source ~/.spinosa/env.sh`) or open a new terminal — the pipe runs install in a subshell, so your parent shell does not inherit PATH. If needed: `export PATH="$HOME/.local/bin:$PATH"` or re-run the install script.
 
 **The LLM tool can't find my workspace**
 Make sure you ran the startup prompt that `spinosa new` printed. The prompt includes the workspace path. If you closed the terminal, re-run with the workspace folder as the argument.

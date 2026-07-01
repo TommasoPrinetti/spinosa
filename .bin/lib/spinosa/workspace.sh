@@ -198,6 +198,11 @@ updated: $TODAY
 - OCR (RapidOCR) converted: ${COPY_OCR_CONVERTED_COUNT:-0}
 - OCR (RapidOCR) skipped: ${COPY_OCR_SKIPPED_COUNT:-0}
 - OCR mode: ${ocr_mode}
+- Post-import verification missing: ${COPY_VERIFY_MISSING_COUNT:-0}
+- Post-import recovered (reprocess): ${COPY_VERIFY_RECOVERED_RETRY_COUNT:-0}
+- Post-import recovered (source copy): ${COPY_VERIFY_RECOVERED_COPY_COUNT:-0}
+- Post-import still missing: ${COPY_VERIFY_STILL_MISSING_COUNT:-0}
+- Onboarding trace log: logs/onboarding.lgo
 
 ## Handoff
 - Preferred CLI: ${preferred_cli}

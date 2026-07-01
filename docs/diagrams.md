@@ -156,7 +156,8 @@ flowchart TB
         CLI_BIN[.bin/spinosa\nCLI entry point]
         SRC[.bin/lib/spinosa/\nShell CLI library]
         DEF[.agents/agents/\n10 agent definitions]
-        MIRRORS[.opencode/ .claude/ .codex/\nvendor agent mirrors]
+        MIRRORS[.opencode/ .claude/ .codex/\nvendor agent + skill mirrors]
+        HERMES[.hermes/\nskills + references mirror]
         REF[.agents/references/\ntemplates + classification]
         FILES[.spinosa/framework-files.tsv\nfile manifest]
     end
@@ -178,7 +179,8 @@ flowchart TB
 
     FRAMEWORK_MANIFEST -.->|scaffold| UserState
     DEF -.->|dispatch| REPORTS
-    AGENTS -.->|governs| ORCH[Orchestrator]
+    HERMES -.->|fallback skills| ORCH[Orchestrator]
+    AGENTS -.->|governs| ORCH
 ```
 
 ---
@@ -289,7 +291,10 @@ flowchart TB
     TASK --> INJECT2[Inject .agents/agents/name.md\nas Task prompt]
     INJECT2 --> ARTIFACT
 
-    TRY -->|Fails| FALLBACK[Read fallback\n.agents/agents/name.md\nor SKILL.md]
+    TRY -->|Hermes host| HERMES_D[delegate_task or\n/spinosa-agent skill]
+    HERMES_D --> ARTIFACT
+
+    TRY -->|Fails| FALLBACK[Read fallback\n.agents/agents/name.md\nor .hermes/skills/*/SKILL.md]
     FALLBACK --> INJECT[Inject instruction body]
     INJECT --> FALLBACK_SPAWN[Sub-agent via\nvendor tool]
     FALLBACK_SPAWN --> ARTIFACT

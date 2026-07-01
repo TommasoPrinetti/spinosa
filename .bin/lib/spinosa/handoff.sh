@@ -11,6 +11,7 @@ preferred_cli_name() {
     qwen) echo "Qwen" ;;
     opencode) echo "OpenCode" ;;
     opencode_desktop) echo "OpenCode Desktop" ;;
+    hermes) echo "Hermes Agent" ;;
     kilo) echo "Kilo" ;;
     other) echo "Other" ;;
     *) echo "$1" ;;
@@ -68,6 +69,9 @@ build_launch_command() {
       local encoded_prompt
       encoded_prompt="$(printf '%s' "$prompt" | python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.stdin.read(), safe=""))' 2>/dev/null || printf '%s' "$prompt" | sed 's/ /%20/g; s/"/%22/g')"
       printf 'open "claude://code/new?q=%s&folder=%s"\n' "$encoded_prompt" "$root_cmd"
+      ;;
+    hermes)
+      printf 'cd %s && hermes chat\n' "$root_cmd"
       ;;
     kilo)
       printf 'cd %s && kilo "$(cat <<'\''SPINOSA_STARTUP_PROMPT'\''\n' "$root_cmd"
@@ -188,6 +192,20 @@ run_cli_with_prompt() {
         ok "Prompt copied to clipboard — open Claude Code Desktop and paste it."
       fi
       ;;
+    hermes)
+      command -v hermes >/dev/null 2>&1 || { warn "hermes was not found on PATH."; return 1; }
+      if [[ ! -f "$root/.hermes/workspace.config.yaml" ]]; then
+        warn "Missing $root/.hermes/workspace.config.yaml — run: bash $root/.bin/sync-agents.sh"
+      fi
+      local _ltmp_hm
+      _ltmp_hm="$(mktemp /tmp/spinosa-launch.XXXXXX.sh)"
+      printf '#!/bin/bash\ntrap '\''rm -f "$0"'\'' EXIT\ncd %s && hermes chat\n' \
+        "$(printf '%q' "$root")" > "$_ltmp_hm"
+      chmod +x "$_ltmp_hm"
+      copy_to_clipboard "$prompt"
+      _launch_in_terminal "$_ltmp_hm"
+      ok "Opened Hermes in this workspace; startup prompt copied to clipboard."
+      ;;
 	    kilo)
 	      command -v kilo >/dev/null 2>&1 || { warn "kilo was not found on PATH."; return 1; }
 	      local _ptmp_kl _ltmp_kl
@@ -236,6 +254,7 @@ detect_llm_clis() {
   command -v codex >/dev/null 2>&1 && clis+=("Codex")
   command -v gemini >/dev/null 2>&1 && clis+=("Gemini")
   command -v opencode >/dev/null 2>&1 && clis+=("OpenCode")
+  command -v hermes >/dev/null 2>&1 && clis+=("Hermes Agent")
   command -v qwen >/dev/null 2>&1 && clis+=("Qwen")
   command -v kilo >/dev/null 2>&1 && clis+=("Kilo")
   if [[ ${#clis[@]} -eq 0 ]]; then

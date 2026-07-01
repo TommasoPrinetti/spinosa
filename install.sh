@@ -2,7 +2,7 @@
 # shellcheck shell=bash
 # ── install.sh — Spinosa Framework Installer (auto-re-execs with bash) ──────
 
-PINNED_VERSION="0.6.6"
+PINNED_VERSION="0.6.7"
 
 if [ -z "${BASH_VERSION-}" ]; then
   if command -v bash >/dev/null 2>&1; then
@@ -908,45 +908,182 @@ SHIM_EOF
 
 }
 
-setup_shell_path() {
-  if [[ "${NO_MODIFY_PATH:-false}" != "true" ]]; then
-    local current_shell
-    current_shell="$(basename "${SHELL:-/bin/sh}")"
-    local candidates=()
+SPINOSA_ENV_FILE=""
+SPINOSA_PATH_CONFIG_FILE=""
 
-    case "$current_shell" in
-      fish) candidates=("$HOME/.config/fish/config.fish") ;;
-      zsh)  candidates=("${ZDOTDIR:-$HOME}/.zshrc" "${ZDOTDIR:-$HOME}/.zshenv") ;;
-      bash) candidates=("$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.profile") ;;
-      *)    candidates=("$HOME/.profile") ;;
-    esac
+write_spinosa_env_file() {
+  SPINOSA_ENV_FILE="${SPINOSA_HOME}/env.sh"
+  mkdir -p "$SPINOSA_HOME"
+  cat > "$SPINOSA_ENV_FILE" << EOF
+# Spinosa CLI environment — managed by install.sh
+export SPINOSA_BIN_DIR="${SPINOSA_BIN_DIR}"
+export PATH="${SPINOSA_BIN_DIR}:\$PATH"
+EOF
+}
 
-    local config_file=""
-    for cf in "${candidates[@]}"; do
-      if [[ -f "$cf" ]]; then config_file="$cf"; break; fi
-    done
-
-    local path_line=""
-    case "$current_shell" in
-      fish) path_line="fish_add_path $SPINOSA_BIN_DIR" ;;
-      *)    path_line="export PATH=\"$SPINOSA_BIN_DIR:\$PATH\"" ;;
-    esac
-
-    if [[ -n "$config_file" ]]; then
-      if [[ -w "$config_file" ]]; then
-        if ! grep -Fxq "$path_line" "$config_file" 2>/dev/null; then
-          printf '\n# Spinosa\n%s\n' "$path_line" >> "$config_file"
-          ok "Added ${SPINOSA_BIN_DIR} to ${config_file}"
-        fi
+shell_path_default_config() {
+  local current_shell="$1"
+  case "$current_shell" in
+    fish) printf '%s\n' "$HOME/.config/fish/config.fish" ;;
+    zsh)  printf '%s\n' "${ZDOTDIR:-$HOME}/.zshrc" ;;
+    bash)
+      if [[ "$(uname -s)" == "Darwin" ]]; then
+        printf '%s\n' "$HOME/.bash_profile"
       else
-        info "Cannot write to ${config_file} — add it manually:"
-        info "  ${path_line}"
+        printf '%s\n' "$HOME/.bashrc"
       fi
-    else
-      info "No shell config found for ${current_shell}."
-      info "Add this to your shell config:"
-      info "  ${path_line}"
+      ;;
+    *) printf '%s\n' "$HOME/.profile" ;;
+  esac
+}
+
+spinosa_path_block_present() {
+  local config_file="$1"
+  [[ -f "$config_file" ]] || return 1
+  grep -q '# Spinosa' "$config_file" 2>/dev/null || return 1
+  grep -Eq '\.spinosa/env\.sh|fish_add_path|SPINOSA_BIN_DIR' "$config_file" 2>/dev/null
+}
+
+spinosa_path_source_line() {
+  local current_shell="$1"
+  case "$current_shell" in
+    fish) printf 'fish_add_path %s\n' "$SPINOSA_BIN_DIR" ;;
+    *)
+      printf '[[ -f "${SPINOSA_HOME:-$HOME/.spinosa}/env.sh" ]] && . "${SPINOSA_HOME:-$HOME/.spinosa}/env.sh"\n'
+      ;;
+  esac
+}
+
+activate_spinosa_path_for_session() {
+  if [[ -f "${SPINOSA_HOME}/env.sh" ]]; then
+    # shellcheck source=/dev/null
+    . "${SPINOSA_HOME}/env.sh"
+    ok "Activated Spinosa PATH from ${SPINOSA_HOME}/env.sh"
+  else
+    export SPINOSA_BIN_DIR="${SPINOSA_BIN_DIR}"
+    export PATH="${SPINOSA_BIN_DIR}:$PATH"
+    ok "Activated Spinosa PATH for this install session"
+  fi
+  hash -r 2>/dev/null || true
+}
+
+setup_shell_path() {
+  [[ "${NO_MODIFY_PATH:-false}" == "true" ]] && return 0
+
+  local current_shell config_file default_config candidate path_line wrote=0
+  current_shell="$(basename "${SHELL:-/bin/sh}")"
+  path_line="$(spinosa_path_source_line "$current_shell")"
+  default_config="$(shell_path_default_config "$current_shell")"
+  config_file=""
+
+  case "$current_shell" in
+    fish) candidates=("$HOME/.config/fish/config.fish") ;;
+    zsh)
+      if [[ "$(uname -s)" == "Darwin" ]]; then
+        candidates=("${ZDOTDIR:-$HOME}/.zshrc" "${ZDOTDIR:-$HOME}/.zprofile" "${ZDOTDIR:-$HOME}/.zshenv")
+      else
+        candidates=("${ZDOTDIR:-$HOME}/.zshrc" "${ZDOTDIR:-$HOME}/.zshenv")
+      fi
+      ;;
+    bash)
+      if [[ "$(uname -s)" == "Darwin" ]]; then
+        candidates=("$HOME/.bash_profile" "$HOME/.bashrc" "$HOME/.profile")
+      else
+        candidates=("$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.profile")
+      fi
+      ;;
+    *) candidates=("$HOME/.profile") ;;
+  esac
+
+  for candidate in "${candidates[@]}"; do
+    if spinosa_path_block_present "$candidate"; then
+      config_file="$candidate"
+      ok "Spinosa PATH already configured in ${candidate}"
+      break
     fi
+  done
+
+  if [[ -z "$config_file" ]]; then
+    for candidate in "${candidates[@]}"; do
+      if [[ -f "$candidate" ]]; then
+        config_file="$candidate"
+        break
+      fi
+    done
+  fi
+
+  if [[ -z "$config_file" ]]; then
+    config_file="$default_config"
+    mkdir -p "$(dirname "$config_file")"
+    : > "$config_file"
+    ok "Created shell config: ${config_file}"
+  fi
+
+  if [[ -w "$config_file" ]]; then
+    if ! spinosa_path_block_present "$config_file"; then
+      {
+        printf '\n# Spinosa\n'
+        printf '%s' "$path_line"
+      } >> "$config_file"
+      ok "Added ${SPINOSA_BIN_DIR} to ${config_file}"
+      wrote=1
+    fi
+    SPINOSA_PATH_CONFIG_FILE="$config_file"
+  else
+    warn "Cannot write to ${config_file} — add this manually:"
+    note "${path_line}"
+  fi
+
+  if [[ "$wrote" -eq 1 && "$current_shell" == "zsh" && "$(uname -s)" == "Darwin" \
+        && "$config_file" != "${ZDOTDIR:-$HOME}/.zprofile" \
+        && -f "${ZDOTDIR:-$HOME}/.zprofile" ]] \
+      && ! spinosa_path_block_present "${ZDOTDIR:-$HOME}/.zprofile"; then
+    {
+      printf '\n# Spinosa\n'
+      printf '%s' "$path_line"
+    } >> "${ZDOTDIR:-$HOME}/.zprofile"
+    note "Also added PATH to ${ZDOTDIR:-$HOME}/.zprofile (macOS login shells)"
+  fi
+}
+
+install_stdin_is_piped() {
+  [[ ! -t 0 ]]
+}
+
+shell_reload_hint() {
+  local env_file="${1:-${SPINOSA_ENV_FILE:-${SPINOSA_HOME}/env.sh}}"
+  if [[ -n "${SPINOSA_PATH_CONFIG_FILE:-}" ]]; then
+    printf 'source %s' "${SPINOSA_PATH_CONFIG_FILE}"
+  elif [[ -f "$env_file" ]]; then
+    printf 'source %s' "$env_file"
+  else
+    printf 'export PATH="%s:$PATH"' "${SPINOSA_BIN_DIR}"
+  fi
+}
+
+print_path_instructions() {
+  local fallback_bin="$SPINOSA_BIN_DIR" env_file="${SPINOSA_ENV_FILE:-${SPINOSA_HOME}/env.sh}"
+  local reload_hint
+  reload_hint="$(shell_reload_hint "$env_file")"
+  [[ "$fallback_bin" == "$HOME/.local/bin" ]] && fallback_bin='$HOME/.local/bin'
+
+  info "Run Spinosa with: spinosa"
+
+  if command -v spinosa >/dev/null 2>&1; then
+    ok "Command 'spinosa' is ready in this install session"
+  else
+    warn "Command 'spinosa' is still not on PATH in this session"
+    note "Run: ${reload_hint}"
+  fi
+
+  if install_stdin_is_piped; then
+    note "Pipe install (curl|bash) — your interactive shell still needs PATH"
+    note "In your terminal, run: ${reload_hint}"
+    note "Or open a new terminal window"
+  elif [[ -n "${SPINOSA_PATH_CONFIG_FILE:-}" || -f "$env_file" ]]; then
+    note "In new terminals: ${reload_hint}"
+  else
+    note "If needed: export PATH=\"${fallback_bin}:\$PATH\""
   fi
 }
 
@@ -963,24 +1100,28 @@ print_banner() {
 
 run_basic_test() {
   info "Running basic test..."
-  if "${SPINOSA_BIN_DIR}/spinosa" help >/dev/null 2>&1; then
-    ok "Basic test passed"
+  if ! "${SPINOSA_BIN_DIR}/spinosa" help >/dev/null 2>&1; then
+    warn "Basic test failed — shim at ${SPINOSA_BIN_DIR}/spinosa is not runnable."
+    return 1
+  fi
+  if command -v spinosa >/dev/null 2>&1; then
+    ok "Basic test passed (spinosa on PATH)"
   else
-    warn "Basic test failed. spinosa may need a PATH update."
+    ok "Basic test passed (shim works; reload shell for PATH)"
   fi
 }
 
 maybe_launch_dashboard() {
-  local fallback_bin="$SPINOSA_BIN_DIR"
-  [[ "$fallback_bin" == "$HOME/.local/bin" ]] && fallback_bin='$HOME/.local/bin'
-  info "Run Spinosa with: spinosa"
-  info "If 'spinosa' is not found, run: export PATH=\"${fallback_bin}:\$PATH\""
+  local spinosa_cmd="${SPINOSA_BIN_DIR}/spinosa"
+  if command -v spinosa >/dev/null 2>&1; then
+    spinosa_cmd="spinosa"
+  fi
 
   if [[ "$LAUNCH_DASHBOARD" == "1" ]] || { [[ "$LAUNCH_DASHBOARD" == "auto" ]] && [[ -t 0 && -r /dev/tty ]]; }; then
     info "Launching Spinosa dashboard..."
     flush_pending_input
     sleep 1
-    SPINOSA_NO_UPGRADE_CHECK=1 exec "${SPINOSA_BIN_DIR}/spinosa" </dev/tty || warn "Dashboard launch skipped — run 'spinosa' to start it manually"
+    SPINOSA_NO_UPGRADE_CHECK=1 exec "$spinosa_cmd" </dev/tty || warn "Dashboard launch skipped — run 'spinosa' to start it manually"
   fi
 }
 
@@ -1076,15 +1217,16 @@ main() {
   trap - EXIT INT TERM HUP
 
   echo ""
-  run_basic_test
+  write_spinosa_env_file
   setup_shell_path
-
-  # Export PATH for current session so `spinosa` resolves immediately
-  export PATH="$SPINOSA_BIN_DIR:$PATH"
+  activate_spinosa_path_for_session
+  run_basic_test
 
   echo ""
   divider
   printf '\n  %s%sSpinosa installed successfully!%s\n\n' "${BOLD}" "${G}" "${RESET}"
+  print_path_instructions
+  echo ""
   maybe_launch_dashboard
   return 0
 }
