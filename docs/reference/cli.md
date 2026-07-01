@@ -2,6 +2,8 @@
 
 The `spinosa` CLI manages workspace creation, validation, and upgrades.
 
+**Pre-release testing:** [testsuite.md](testsuite.md) — full gate before marking a version releaseable.
+
 ## Commands
 
 ### `spinosa new`

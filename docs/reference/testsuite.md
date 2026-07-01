@@ -1,0 +1,436 @@
+# Spinosa Pre-Release Test Suite
+
+Production-grade gate before marking a version **releaseable**. Run this on every release candidate (patch, minor, or major). Do not publish until every **blocking** item passes.
+
+**Related docs:** [CLI reference](cli.md), [RELEASE_GUIDE.md](../../RELEASE_GUIDE.md) (packaging/publish steps).
+
+---
+
+## Release gate overview
+
+```mermaid
+flowchart LR
+  auto[Phase_A_Automated]
+  install[Phase_B_Install]
+  cli[Phase_C_CLI]
+  interactive[Phase_D_Interactive]
+  workspace[Phase_E_Workspace]
+  linux[Phase_F_Linux_VM]
+  github[Phase_G_GitHub]
+  signoff[Sign_off]
+
+  auto --> install --> cli --> interactive --> workspace
+  workspace --> linux --> github --> signoff
+```
+
+| Phase | Where | Blocking? | Typical time |
+|-------|--------|-----------|--------------|
+| A — Automated | Dev machine | Yes | 2–5 min |
+| B — Install | Clean macOS + optional Linux | Yes | 5–15 min |
+| C — CLI (non-interactive) | Installed CLI | Yes | 5–10 min |
+| D — Interactive terminal | Real TTY (macOS) | Yes | 15–30 min |
+| E — Workspace integration | Real workspace + corpus | Yes | 10–20 min |
+| F — Linux VM | Fresh Ubuntu VM | Yes for 1.0; recommended always | 30–60 min |
+| G — GitHub assets | After publish | Yes | 2 min |
+
+---
+
+## Prerequisites
+
+### Machines
+
+| Target | Why |
+|--------|-----|
+| **macOS arm64** (primary) | Default user platform; system **bash 3.2** — must pass |
+| **macOS amd64** (optional) | Intel Mac regressions |
+| **Linux amd64 or arm64 VM** | Cross-platform vendor Python, paths, glibc |
+
+### Shell
+
+- Use **system bash**, not only Homebrew bash: `/bin/bash --version` should show 3.2 on macOS.
+- Tests must pass under `set -u` behavior (macOS default bash in installer/CLI).
+
+### Test corpus
+
+Keep a small local corpus (or use `TEST-VAULT`):
+
+```text
+test-corpus/
+  readme.md
+  notes.txt
+  sample.pdf          # optional — MarkItDown
+  scan.jpg            # optional — RapidOCR
+```
+
+### Environment flags (automation)
+
+```bash
+export SPINOSA_NO_UPGRADE_CHECK=1   # avoid network upgrade prompt during tests
+export NO_COLOR=1                   # readable logs
+export RLWRAP_EXEC=1                # skip rlwrap re-exec in scripts
+```
+
+---
+
+## Phase A — Automated gate (blocking)
+
+Run from repo root **before** `publish-release.sh`:
+
+```bash
+cd /path/to/spinosa-main
+
+# Syntax
+bash -n install.sh
+bash -n .bin/spinosa
+bash -n .bin/package-release.sh
+bash -n .bin/publish-release.sh
+bash -n .bin/build-spinosa-vendor.sh
+
+# Contract / hygiene
+bash .bin/check-startup.sh
+bash .bin/check-doc-contract.sh
+bash .bin/validate-skills.sh
+
+# Unit-style bash tests
+bash .bin/test-doctor.sh
+bash .bin/test-safe-copy.sh
+bash .bin/test-import-routing.sh
+bash .bin/test-onboarding-verify.sh
+bash .bin/test-pdf-classifier.sh
+bash .bin/test-install-vendor-reuse.sh
+```
+
+**Pass criteria:** every command exits 0; no `FAIL` in output.
+
+**Working tree:** `git status --porcelain` must be empty before publish (see RELEASE_GUIDE).
+
+---
+
+## Phase B — Install tests (blocking)
+
+### B1. Clean uninstall (optional baseline)
+
+```bash
+spinosa uninstall --yes 2>/dev/null || true
+rm -rf ~/.spinosa
+rm -f ~/.local/bin/spinosa
+```
+
+### B2. Fresh install — piped (matches user docs)
+
+```bash
+curl -fsSL https://github.com/TommasoPrinetti/spinosa/releases/download/vX.Y.Z/install.sh | bash
+```
+
+Use **published** `install.sh` for the candidate version (or local `bash install.sh` only for pre-publish dev builds).
+
+**Pass criteria:**
+
+| Check | Command / observation |
+|-------|----------------------|
+| Success banner | `Spinosa installed successfully!` |
+| Basic test | `✦ Basic test passed` — **not** a warning |
+| Completion stamp | `ls ~/.spinosa/versions/X.Y.Z/.spinosa-install-complete` |
+| Metadata | `grep install_complete ~/.spinosa/metadata/install.yaml` |
+| Log | `grep "install complete" ~/.spinosa/logs/spinosa.log` |
+| Version | `spinosa version` → `spinosa X.Y.Z` |
+| Plain CLI | `spinosa` → dashboard, no bash errors |
+
+### B3. Fresh install — non-interactive
+
+```bash
+curl -fsSL .../install.sh | bash -s -- --yes --no-launch
+```
+
+Same pass criteria as B2. Confirms piped install without TTY prompts.
+
+### B4. Upgrade path (existing install)
+
+With vX.Y.(Z-1) installed:
+
+```bash
+curl -fsSL .../releases/latest/download/install.sh | bash
+# Answer Y to upgrade, or:
+bash install.sh --upgrade --yes
+```
+
+**Pass criteria:** ends on success banner; `spinosa version` shows X.Y.Z; no silent mid-install exit.
+
+### B5. Reinstall same version
+
+```bash
+bash install.sh --reinstall --yes
+```
+
+**Pass criteria:** success; vendor reuse message acceptable; CLI still works.
+
+### B6. Install failure hygiene (regression)
+
+Simulate abort then retry (optional, after a deliberate broken build is fixed):
+
+- Partial `versions/*` without `.spinosa-install-complete` must **not** count as installed on retry.
+- Retry should offer **Install** not false **Upgrade** when only a partial dir existed.
+
+---
+
+## Phase C — CLI non-interactive (blocking)
+
+Run with **installed** CLI after Phase B. Reload PATH:
+
+```bash
+source ~/.spinosa/env.sh   # or source ~/.zshrc
+```
+
+| Command | Invocation | Pass criteria |
+|---------|------------|---------------|
+| `version` | `spinosa version` | Prints `spinosa X.Y.Z` |
+| `help` | `spinosa help` | Exit 0; no library errors |
+| `doctor` | `spinosa doctor` | Exit 0 or 1 with **warnings only** — never bash traceback / `unbound variable` |
+| `doctor` (workspace) | `spinosa doctor -w "$WORKSPACE"` | Shows CLI vs workspace version; cloud/Hermes advisories OK |
+| `upgrade` | `spinosa upgrade --yes` | "Already on latest" when current; or successful upgrade |
+| `update` preview | `cd "$WORKSPACE" && spinosa update --dry-run --yes` | Lists changed paths; exit 0 |
+| `uninstall` dry | `spinosa uninstall --help` | Help only — do not uninstall during standard gate |
+
+### C1. `spinosa new` (non-TTY)
+
+**Requires flags** — interactive file-type menu needs a TTY:
+
+```bash
+CORPUS=/tmp/spinosa-release-corpus
+rm -rf "$CORPUS" "${CORPUS}-spinosa"*
+mkdir -p "$CORPUS"
+echo "hello" > "$CORPUS/a.txt"
+echo "# md" > "$CORPUS/b.md"
+
+spinosa new "$CORPUS" --extensions md,txt --cli opencode --no-color
+```
+
+**Pass criteria:**
+
+- Exit 0
+- `${CORPUS}-spinosa/.spinosa/workspace` exists
+- `framework_version` matches installed CLI version (not `dev`)
+- `raw/` contains imported files
+- `grep "install complete"` not required here — workspace onboarding completes without `Cannot read from terminal`
+
+---
+
+## Phase D — Interactive terminal (blocking)
+
+Use a **real terminal** (iTerm, Terminal.app, not piped CI). `export SPINOSA_NO_UPGRADE_CHECK=1` optional.
+
+### D1. Dashboard
+
+```bash
+spinosa
+```
+
+| Step | Action | Pass |
+|------|--------|------|
+| Menu renders | Arrow keys move selection | No garbled ANSI |
+| Quit | Esc or Quit | Clean exit |
+| Doctor | Select Doctor → Enter | Runs without crash |
+| Help | Select Help | Shows usage |
+
+### D2. `spinosa new` (full interactive)
+
+```bash
+spinosa new
+```
+
+| Step | Action | Pass |
+|------|--------|------|
+| Corpus path | Enter path to test corpus | Accepts directory |
+| Scan summary | Review batch counts | Numbers sane |
+| File-type menu | Space toggles, Enter proceeds | No `Cannot read from terminal` |
+| Completion | Workspace ready message | `setup_status` progresses; summary written |
+
+### D3. `spinosa add` (if workspace exists)
+
+```bash
+cd /path/to/workspace-spinosa
+spinosa add --file /path/to/new-file.txt
+```
+
+Pass: file lands in `raw/` or conversion path; no hard crash.
+
+### D4. `spinosa update` (interactive confirm)
+
+```bash
+cd /path/to/workspace-spinosa
+spinosa update
+```
+
+Confirm when prompted (or use `--yes` after preview in Phase C).
+
+Pass: framework files sync; `framework_version` in `.spinosa/workspace` matches CLI.
+
+---
+
+## Phase E — Workspace integration (blocking)
+
+Use at least one **real** long-lived workspace (e.g. ROOTVAULT on Google Drive).
+
+```bash
+export WORKSPACE="/path/to/EVOLUTION - ROOTVAULT-spinosa"
+spinosa doctor --workspace "$WORKSPACE"
+spinosa update --dry-run --yes --workspace "$WORKSPACE"
+# After review:
+spinosa update --yes --workspace "$WORKSPACE"
+```
+
+**Pass criteria:**
+
+| Check | Expected |
+|-------|----------|
+| Doctor | Warns if workspace behind CLI; no crash on `framework_version: dev` workspaces |
+| Dry-run | Shows version range (e.g. `0.7.1 → 0.7.3`) and file count |
+| Apply update | `framework_version` bumped in `.spinosa/workspace` |
+| `sync-agents` | `.hermes/skills/`, `.codex/agents/` present after update |
+| Cloud path | Doctor cloud warning acceptable; update completes or documents known Drive limits |
+
+### E1. Hermes (if used)
+
+After update:
+
+```bash
+# Merge advisory from doctor
+diff ~/.hermes/config.yaml "$WORKSPACE/.hermes/workspace.config.yaml"
+```
+
+Manual merge required — document in release notes if template changed.
+
+---
+
+## Phase F — Linux VM (blocking for 1.0)
+
+See RELEASE_GUIDE §9. Summary:
+
+1. `curl | bash` install on Ubuntu 22.04+ (amd64 or arm64)
+2. `spinosa version` / `spinosa doctor`
+3. At least one `spinosa new` with TEST-VAULT subset
+4. Edge matrix: PDF-only, JPG-only, empty dir, unicode filenames (RELEASE_GUIDE table)
+
+**Linux-specific:** if RapidOCR fails import, install `libgl1` and re-run doctor.
+
+---
+
+## Phase G — GitHub release (blocking, post-publish)
+
+```bash
+curl -sL "https://api.github.com/repos/TommasoPrinetti/spinosa/releases/tags/vX.Y.Z" | \
+  python3 -c "import json,sys; r=json.load(sys.stdin); [print(a['name'], a['state'], a['size']) for a in r['assets']]"
+```
+
+**Seven assets**, all `uploaded`:
+
+- `spinosa-framework-X.Y.Z.tar.gz`
+- `install.sh`
+- `checksums.txt`
+- `spinosa-vendor-darwin-arm64.tar.gz`
+- `spinosa-vendor-darwin-amd64.tar.gz`
+- `spinosa-vendor-linux-amd64.tar.gz`
+- `spinosa-vendor-linux-arm64.tar.gz`
+
+### G1. Latest pointer smoke test
+
+```bash
+curl -fsSL https://github.com/TommasoPrinetti/spinosa/releases/latest/download/install.sh | head -6 | grep PINNED_VERSION
+```
+
+Must show `PINNED_VERSION="X.Y.Z"` for the release you just shipped.
+
+---
+
+## Logging verification
+
+After any install or failed install:
+
+```bash
+tail -50 ~/.spinosa/logs/spinosa.log
+grep level=ERROR ~/.spinosa/logs/spinosa.log | tail -20
+```
+
+| Scenario | Expected log |
+|----------|----------------|
+| Success | `install complete version=X.Y.Z` |
+| Failure | `level=ERROR` with line number; not silent exit |
+| CLI | `component=cli` session lines |
+
+---
+
+## Platform gotchas (must not regress)
+
+| Issue | Platform | Test |
+|-------|----------|------|
+| Chained `local` + `set -u` | macOS bash 3.2 | Fresh `curl \| bash` install |
+| Empty `argv` + `set -u` | macOS bash 3.2 | `spinosa` with no args |
+| `compare_versions` non-numeric | any | `spinosa doctor` on `framework_version: dev` workspace |
+| Completion stamp ordering | install | Basic test passes **during** install |
+| Partial `versions/*` | install retry | Incomplete dirs cleaned; no false upgrade prompt |
+| Non-TTY `spinosa new` | CI/automation | Use `--extensions`; expect menu failure without it |
+| Piped install PATH | `curl \| bash` | Instructions mention `source ~/.zshrc` |
+
+---
+
+## Sign-off checklist
+
+Copy into release commit message or tag notes:
+
+```markdown
+## Release vX.Y.Z — test sign-off
+
+- [ ] Phase A automated — all scripts pass
+- [ ] Phase B install — clean + piped + basic test passed
+- [ ] Phase C CLI — version, help, doctor, upgrade, update dry-run, new --extensions
+- [ ] Phase D interactive — dashboard, new (full menu)
+- [ ] Phase E workspace — doctor + update on real workspace
+- [ ] Phase F Linux VM — install + new (or N/A with reason)
+- [ ] Phase G GitHub — 7 assets uploaded; latest PINNED_VERSION correct
+- [ ] CHANGELOG.md updated
+- [ ] No open P0/P1 bugs for this version
+
+Tester: ________
+Date: ________
+Machine(s): ________
+```
+
+---
+
+## When to block release
+
+**Do not publish** if any of these occur:
+
+- Install exits without success banner or `install complete` log line
+- `spinosa` or `spinosa help` throws bash errors on macOS system bash
+- `spinosa doctor` crashes (unbound variable, missing library path)
+- Basic test fails on fresh install
+- `spinosa new --extensions …` fails on small corpus
+- Published `install.sh` PINNED_VERSION ≠ tagged version
+- Any Phase A script fails
+
+Warnings (cloud storage, Hermes merge, workspace behind CLI) are **not** blockers if documented and update path works.
+
+---
+
+## Maintainer quick reference
+
+| Script | Purpose |
+|--------|---------|
+| `.bin/check-startup.sh` | Startup template / workspace surface |
+| `.bin/check-doc-contract.sh` | Docs don't regress routing model |
+| `.bin/validate-skills.sh` | Agent skills structure |
+| `.bin/test-doctor.sh` | Doctor command unit test |
+| `.bin/test-safe-copy.sh` | Cloud-safe copy helpers |
+| `.bin/test-import-routing.sh` | Import routing |
+| `.bin/test-onboarding-verify.sh` | Onboarding verification |
+| `.bin/test-pdf-classifier.sh` | PDF classification |
+| `.bin/test-install-vendor-reuse.sh` | Vendor reuse logic |
+
+**Publish command** (only after full sign-off):
+
+```bash
+bash .bin/publish-release.sh X.Y.Z
+```
+
+**User must explicitly approve** version bump and publish in chat before running publish.
