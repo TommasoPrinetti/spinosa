@@ -96,10 +96,29 @@ is_cloud_storage_path() {
 safe_copy_retries_for() {
   local path="$1"
   if is_cloud_storage_path "$path"; then
-    printf '5'
+    printf '8'
   else
     printf '3'
   fi
+}
+
+safe_copy_delay_for() {
+  local path="$1"
+  if is_cloud_storage_path "$path"; then
+    printf '4'
+  else
+    printf '2'
+  fi
+}
+
+copy_file_via_stream() {
+  local src="$1" dst="$2"
+  local tmp="${dst}.spinosa-part"
+  mkdir -p "$(dirname "$dst")" 2>/dev/null || return 1
+  rm -f "$tmp" 2>/dev/null || true
+  cat -- "$src" > "$tmp" 2>/dev/null || return 1
+  mv -f -- "$tmp" "$dst" 2>/dev/null || { rm -f "$tmp" 2>/dev/null || true; return 1; }
+  return 0
 }
 
 should_skip_copy_artifact() {
@@ -109,12 +128,18 @@ should_skip_copy_artifact() {
 
 safe_copy() {
   local src="$1" dst="$2"
-  local retries="${3:-}"
-  local delay=2 i
+  local retries="${3:-}" delay i use_stream=0
   [[ -n "$retries" ]] || retries="$(safe_copy_retries_for "$dst")"
+  delay="$(safe_copy_delay_for "$dst")"
+  if is_cloud_storage_path "$dst" && [[ -f "$src" ]]; then
+    use_stream=1
+  fi
   mkdir -p "$(dirname "$dst")" 2>/dev/null || true
   for ((i = 1; i <= retries; i++)); do
     if cp -p -- "$src" "$dst" 2>/dev/null; then
+      return 0
+    fi
+    if [[ "$use_stream" -eq 1 ]] && copy_file_via_stream "$src" "$dst"; then
       return 0
     fi
     [[ "$i" -lt "$retries" ]] || break
@@ -126,7 +151,7 @@ safe_copy() {
 
 safe_copy_tree() {
   local src="$1" dst="$2"
-  local src_real retries src_item rel_path dst_item link_target
+  local src_real retries failed=0 src_item rel_path dst_item link_target
   src_real="$(cd "$src" 2>/dev/null && pwd -P)" || return 1
   mkdir -p "$dst" || return 1
   retries="$(safe_copy_retries_for "$dst")"
@@ -136,17 +161,20 @@ safe_copy_tree() {
     should_skip_copy_artifact "$rel_path" && continue
     dst_item="$dst/$rel_path"
     if [[ -L "$src_item" ]]; then
-      mkdir -p "$(dirname "$dst_item")" || return 1
+      mkdir -p "$(dirname "$dst_item")" || { failed=$((failed + 1)); continue; }
       link_target="$(readlink "$src_item")"
       rm -f "$dst_item" 2>/dev/null || true
-      ln -sfn "$link_target" "$dst_item" 2>/dev/null || return 1
+      ln -sfn "$link_target" "$dst_item" 2>/dev/null || failed=$((failed + 1))
     elif [[ -d "$src_item" ]]; then
-      mkdir -p "$dst_item" || return 1
+      mkdir -p "$dst_item" || failed=$((failed + 1))
     elif [[ -f "$src_item" ]]; then
-      safe_copy "$src_item" "$dst_item" "$retries" || return 1
+      if ! safe_copy "$src_item" "$dst_item" "$retries"; then
+        warn "Failed to copy: ${rel_path}"
+        failed=$((failed + 1))
+      fi
     fi
-  done < <(find "$src_real" -print0 2>/dev/null)
-  return 0
+  done < <(find -P "$src_real" -print0 2>/dev/null)
+  [[ "$failed" -eq 0 ]]
 }
 
 copy_dir_contents() {

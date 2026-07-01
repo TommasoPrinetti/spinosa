@@ -32,6 +32,30 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 
+if [[ -f "$REPO_ROOT/.bin/lib/spinosa/core.sh" ]]; then
+  # shellcheck source=/dev/null
+  source "$REPO_ROOT/.bin/lib/spinosa/core.sh"
+  warn() { printf '  ⚠ %s\n' "$1" >&2; }
+fi
+
+copy_tree_or_die() {
+  local src="$1" dst="$2"
+  if declare -F safe_copy_tree >/dev/null 2>&1; then
+    safe_copy_tree "$src" "$dst" || return 1
+    return 0
+  fi
+  cp -R "$src" "$dst"
+}
+
+copy_file_or_die() {
+  local src="$1" dst="$2"
+  if declare -F safe_copy >/dev/null 2>&1; then
+    safe_copy "$src" "$dst" || return 1
+    return 0
+  fi
+  cp -p "$src" "$dst"
+}
+
 echo "=== Spinosa Agent Sync ==="
 echo "Source: $REPO_ROOT/.agents/agents/"
 echo ""
@@ -223,7 +247,7 @@ for platform in .opencode .claude .codex .hermes; do
     mkdir -p "$dest"
     for skill_dir in "$SKILLS_DIR"/*; do
         [ -d "$skill_dir" ] || continue
-        cp -R "$skill_dir" "$dest/"
+        copy_tree_or_die "$skill_dir" "$dest/$(basename "$skill_dir")"
     done
     count=$(find "$dest" -mindepth 2 -maxdepth 2 -name "SKILL.md" | wc -l | tr -d ' ')
     echo "  $platform/skills/ → $count skills"
@@ -240,7 +264,11 @@ for platform in .opencode .claude .codex .hermes; do
     rm -rf "$dest"
     if [[ -d "$REPO_ROOT/.agents/references" ]]; then
         mkdir -p "$dest"
-        cp "$REPO_ROOT/.agents/references/"*.md "$dest/"
+        local ref_file
+        for ref_file in "$REPO_ROOT/.agents/references/"*.md; do
+          [[ -f "$ref_file" ]] || continue
+          copy_file_or_die "$ref_file" "$dest/$(basename "$ref_file")"
+        done
         count=$(find "$dest" -name "*.md" | wc -l | tr -d ' ')
         echo "  $platform/references/ → $count files"
     fi
@@ -271,7 +299,7 @@ echo "  .hermes/workspace.config.yaml → merge into ~/.hermes/config.yaml"
 # ── Sync CLAUDE.md ──────────────────────────────────────────────────
 echo ""
 echo "--- Syncing CLAUDE.md ---"
-cp "$REPO_ROOT/AGENTS.md" "$REPO_ROOT/CLAUDE.md"
+copy_file_or_die "$REPO_ROOT/AGENTS.md" "$REPO_ROOT/CLAUDE.md"
 today="$(date +%Y-%m-%d)"
 # Update updated date and add provenance fields in the frontmatter block
 sed -i.bak \

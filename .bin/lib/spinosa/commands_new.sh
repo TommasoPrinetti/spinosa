@@ -285,7 +285,7 @@ cmd_new() {
 	      copy_dir_contents "$src" "$dst"
     elif [[ -f "$src" ]]; then
       mkdir -p "$(dirname "$dst")"
-      cp -a "$src" "$dst"
+      safe_copy "$src" "$dst"
     fi
 done < "${FRAMEWORK_ROOT}/.spinosa/framework-files.tsv"
 
