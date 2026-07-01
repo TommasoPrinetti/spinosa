@@ -453,6 +453,42 @@ selected_import_extensions_label() {
   join_by ", " "${labels[@]}"
 }
 
+corpus_importable_count() {
+  local total=0 i
+  for i in "${!IMPORT_BATCH_COUNTS[@]}"; do
+    total=$((total + IMPORT_BATCH_COUNTS[$i]))
+  done
+  printf '%d' "$total"
+}
+
+enabled_import_batches_label() {
+  local labels=() i ext count
+  for i in "${!IMPORT_BATCH_EXTENSIONS[@]}"; do
+    ext="${IMPORT_BATCH_EXTENSIONS[$i]}"
+    count="${IMPORT_BATCH_COUNTS[$i]}"
+    import_extension_selected "$ext" && labels+=(".${ext}:${count}")
+  done
+  if [[ ${#labels[@]} -eq 0 ]]; then
+    printf 'none'
+  else
+    join_by "," "${labels[@]}"
+  fi
+}
+
+excluded_import_batches_label() {
+  local labels=() i ext count
+  for i in "${!IMPORT_BATCH_EXTENSIONS[@]}"; do
+    ext="${IMPORT_BATCH_EXTENSIONS[$i]}"
+    count="${IMPORT_BATCH_COUNTS[$i]}"
+    import_extension_selected "$ext" || labels+=(".${ext}:${count}")
+  done
+  if [[ ${#labels[@]} -eq 0 ]]; then
+    printf 'none'
+  else
+    join_by "," "${labels[@]}"
+  fi
+}
+
 parse_selected_extensions_from_flag() {
   local flag_extensions="$1" raw=() ext
   SELECTED_IMPORT_EXTENSIONS=()

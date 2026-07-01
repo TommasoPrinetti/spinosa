@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# Onboarding import trace (.lgo) and post-copy verification with recovery.
+# Onboarding import trace (onboarding.log) and post-copy verification with recovery.
 
 ONBOARDING_LOG_PATH=""
 COPY_VERIFY_MISSING_COUNT=0
@@ -9,7 +9,7 @@ COPY_VERIFY_STILL_MISSING_COUNT=0
 
 onboarding_log_path_for() {
   local root="$1"
-  printf '%s/logs/onboarding.lgo' "$root"
+  printf '%s/logs/onboarding.log' "$root"
 }
 
 onboarding_log_init() {
@@ -44,6 +44,9 @@ onboarding_log_import_options() {
   [[ -n "$source_path" ]] && is_cloud_storage_path "$source_path" && cloud="yes"
   onboarding_log_event "options" "configured" \
     "selected_extensions=${ext_label}" \
+    "enabled=$(enabled_import_batches_label 2>/dev/null || echo none)" \
+    "excluded=$(excluded_import_batches_label 2>/dev/null || echo none)" \
+    "corpus_importable_total=$(corpus_importable_count 2>/dev/null || echo 0)" \
     "flag_extensions=${flag_extensions:-}" \
     "markitdown=${SCAN_MARKITDOWN_CHOICE:-no}" \
     "ocr=${SCAN_OCR_CHOICE:-no}" \
@@ -241,7 +244,7 @@ verify_and_recover_import() {
       info "Import verification: ${missing} missing, ${recovered} recovered (${COPY_VERIFY_RECOVERED_RETRY_COUNT} reprocessed, ${COPY_VERIFY_RECOVERED_COPY_COUNT} copied)"
     fi
     if [[ "$still_missing" -gt 0 ]]; then
-      warn "Import verification: ${still_missing} file(s) still missing in raw/ — see logs/onboarding.lgo"
+      warn "Import verification: ${still_missing} file(s) still missing in raw/ — see logs/onboarding.log"
     fi
   fi
 
@@ -272,25 +275,44 @@ assert_import_delivered() {
   local expected
   expected="$(selected_import_count 2>/dev/null || echo 0)"
 
+  local corpus_total excluded_label
+  corpus_total="$(corpus_importable_count 2>/dev/null || echo 0)"
+  excluded_label="$(excluded_import_batches_label 2>/dev/null || echo none)"
+
   if [[ "$imported" -gt 0 && "$still_missing" -eq 0 ]]; then
-    onboarding_log_event "import" "delivered" "imported=${imported}" "expected=${expected}"
+    onboarding_log_event "import" "delivered" \
+      "imported=${imported}" \
+      "expected=${expected}" \
+      "corpus_importable_total=${corpus_total}" \
+      "excluded=${excluded_label}"
     return 0
   fi
 
   if [[ "$imported" -gt 0 && "$still_missing" -gt 0 ]]; then
-    onboarding_log_event "import" "partial" "imported=${imported}" "expected=${expected}" "still_missing=${still_missing}"
+    onboarding_log_event "import" "partial" \
+      "imported=${imported}" \
+      "expected=${expected}" \
+      "corpus_importable_total=${corpus_total}" \
+      "excluded=${excluded_label}" \
+      "still_missing=${still_missing}"
     warn "Only ${imported} of ${expected} selected file(s) reached raw/ — ${still_missing} still missing."
-    note "See logs/onboarding.lgo for per-file details."
+    note "See logs/onboarding.log for per-file details."
     return 1
   fi
 
-  onboarding_log_event "import" "blocked" "reason=zero_delivered" "expected=${expected}" "failed=${failed}" "still_missing=${still_missing}"
+  onboarding_log_event "import" "blocked" \
+    "reason=zero_delivered" \
+    "expected=${expected}" \
+    "corpus_importable_total=${corpus_total}" \
+    "excluded=${excluded_label}" \
+    "failed=${failed}" \
+    "still_missing=${still_missing}"
   warn "No files were imported into raw/ (${expected} were selected)."
   if [[ "$failed" -gt 0 ]]; then
     note "Copy failures (${failed}) — ensure cloud files are synced locally, then retry."
   elif [[ "${SCAN_OCR_CONVERTIBLE_COUNT:-0}" -gt 0 && "${SCAN_OCR_CHOICE:-no}" != "yes" ]]; then
     note "Scanned PDFs and images in this corpus need RapidOCR."
   fi
-  note "See logs/onboarding.lgo for details."
+  note "See logs/onboarding.log for details."
   return 1
 }

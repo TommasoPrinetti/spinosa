@@ -202,7 +202,7 @@ updated: $TODAY
 - Post-import recovered (reprocess): ${COPY_VERIFY_RECOVERED_RETRY_COUNT:-0}
 - Post-import recovered (source copy): ${COPY_VERIFY_RECOVERED_COPY_COUNT:-0}
 - Post-import still missing: ${COPY_VERIFY_STILL_MISSING_COUNT:-0}
-- Onboarding trace log: logs/onboarding.lgo
+- Onboarding trace log: logs/onboarding.log
 
 ## Handoff
 - Preferred CLI: ${preferred_cli}
