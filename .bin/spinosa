@@ -84,13 +84,33 @@ resolve_framework_root() {
     return
   fi
 
-  # Installed mode: find latest version
+  # Installed mode: find latest *complete* version (ignore partial install dirs)
   if [[ -d "${SPINOSA_HOME}/versions" ]]; then
-      local latest_version
-      if sort -V /dev/null 2>/dev/null; then
-        latest_version="$(ls -1 "${SPINOSA_HOME}/versions" 2>/dev/null | sort -V | tail -1)"
-      else
-        latest_version="$(ls -1 "${SPINOSA_HOME}/versions" 2>/dev/null | sort -t. -k1,1n -k2,2n -k3,3n | tail -1)"
+      local latest_version="" v _meta_last
+      if [[ -f "${SPINOSA_HOME}/lib/install_state.sh" ]]; then
+        # shellcheck source=/dev/null
+        source "${SPINOSA_HOME}/lib/install_state.sh"
+        latest_version="$(spinosa_latest_complete_version)"
+      fi
+      if [[ -z "$latest_version" ]]; then
+        _meta_last=""
+        [[ -f "${SPINOSA_HOME}/metadata/install.yaml" ]] && \
+          _meta_last="$(awk '$1 == "last_installed_version:" { print $2; exit }' "${SPINOSA_HOME}/metadata/install.yaml")"
+        if sort -V /dev/null 2>/dev/null; then
+          for v in $(ls -1 "${SPINOSA_HOME}/versions" 2>/dev/null | grep -E '^[0-9]' | sort -V); do
+            if [[ -f "${SPINOSA_HOME}/versions/${v}/.spinosa-install-complete" ]] \
+                || [[ "$v" == "$_meta_last" ]]; then
+              latest_version="$v"
+            fi
+          done
+        else
+          for v in $(ls -1 "${SPINOSA_HOME}/versions" 2>/dev/null | grep -E '^[0-9]' | sort -t. -k1,1n -k2,2n -k3,3n); do
+            if [[ -f "${SPINOSA_HOME}/versions/${v}/.spinosa-install-complete" ]] \
+                || [[ "$v" == "$_meta_last" ]]; then
+              latest_version="$v"
+            fi
+          done
+        fi
       fi
     if [[ -n "$latest_version" ]]; then
       local fw_dir="${SPINOSA_HOME}/versions/${latest_version}"
@@ -114,6 +134,7 @@ SPINOSA_BANNER_PRINTED=0
 SPINOSA_LIB_DIR="${FRAMEWORK_ROOT}/.bin/lib/spinosa"
 SPINOSA_LIBS=(
   logging
+  install_state
   ui
   core
   handoff

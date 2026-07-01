@@ -989,10 +989,18 @@ cmd_doctor() {
 
   title "Doctor"
 
-  local installed_version total_issues=0
+  local installed_version total_issues=0 incomplete
   installed_version="$(framework_version "$FRAMEWORK_ROOT")"
   tree_sep
   tree_row "CLI framework" "v${installed_version}"
+
+  if declare -F spinosa_list_incomplete_versions >/dev/null 2>&1; then
+    while IFS= read -r incomplete; do
+      [[ -n "$incomplete" ]] || continue
+      warn "Incomplete install detected: versions/${incomplete} — run: curl -fsSL https://github.com/TommasoPrinetti/spinosa/releases/latest/download/install.sh | bash"
+      total_issues=$((total_issues + 1))
+    done < <(spinosa_list_incomplete_versions)
+  fi
 
   if markitdown_available; then
     ok "MarkItDown available"
