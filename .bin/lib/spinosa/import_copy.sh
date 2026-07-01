@@ -1,20 +1,6 @@
 # shellcheck shell=bash
 # Raw copy and conversion pipeline.
 
-safe_copy() {
-  local src="$1" dst="$2"
-  local retries="${3:-3}" delay=2 i
-  for ((i = 1; i <= retries; i++)); do
-    if cp -- "$src" "$dst" 2>/dev/null; then
-      return 0
-    fi
-    [[ "$i" -lt "$retries" ]] || break
-    sleep "$delay"
-    delay=$((delay * 2))
-  done
-  return 1
-}
-
 # ── Cold frontmatter injection ──────────────────────────────────────────
 # Injects frontmatter fields derivable from the file itself (no LLM).
 # If the file already has frontmatter, merges missing cold fields into it
@@ -102,14 +88,6 @@ copy_direct_raw_file() {
   processed=$((processed + 1))
   copy_processed=$((copy_processed + 1))
   render_copy_progress "$copy_processed" "$total_files" "$copied" "$skipped" "$rel_path" "direct-copied"
-}
-
-is_cloud_storage_path() {
-  local path="$1"
-  case "$path" in
-    */Library/CloudStorage/*|*.dropbox*|*Dropbox*|*OneDrive*) return 0 ;;
-  esac
-  return 1
 }
 
 copy_source() {

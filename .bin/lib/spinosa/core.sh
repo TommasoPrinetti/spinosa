@@ -85,6 +85,70 @@ safe_untar() {
 }
 
 
+is_cloud_storage_path() {
+  local path="$1"
+  case "$path" in
+    */Library/CloudStorage/*|*.dropbox*|*Dropbox*|*OneDrive*) return 0 ;;
+  esac
+  return 1
+}
+
+safe_copy_retries_for() {
+  local path="$1"
+  if is_cloud_storage_path "$path"; then
+    printf '5'
+  else
+    printf '3'
+  fi
+}
+
+should_skip_copy_artifact() {
+  local rel="$1"
+  [[ "$rel" == ".DS_Store" || "$rel" == "._"* || "$rel" == */.DS_Store || "$rel" == */._* ]]
+}
+
+safe_copy() {
+  local src="$1" dst="$2"
+  local retries="${3:-}"
+  local delay=2 i
+  [[ -n "$retries" ]] || retries="$(safe_copy_retries_for "$dst")"
+  mkdir -p "$(dirname "$dst")" 2>/dev/null || true
+  for ((i = 1; i <= retries; i++)); do
+    if cp -p -- "$src" "$dst" 2>/dev/null; then
+      return 0
+    fi
+    [[ "$i" -lt "$retries" ]] || break
+    sleep "$delay"
+    delay=$((delay * 2))
+  done
+  return 1
+}
+
+safe_copy_tree() {
+  local src="$1" dst="$2"
+  local src_real retries src_item rel_path dst_item link_target
+  src_real="$(cd "$src" 2>/dev/null && pwd -P)" || return 1
+  mkdir -p "$dst" || return 1
+  retries="$(safe_copy_retries_for "$dst")"
+  while IFS= read -r -d '' src_item; do
+    rel_path="${src_item#$src_real/}"
+    [[ -n "$rel_path" ]] || continue
+    should_skip_copy_artifact "$rel_path" && continue
+    dst_item="$dst/$rel_path"
+    if [[ -L "$src_item" ]]; then
+      mkdir -p "$(dirname "$dst_item")" || return 1
+      link_target="$(readlink "$src_item")"
+      rm -f "$dst_item" 2>/dev/null || true
+      ln -sfn "$link_target" "$dst_item" 2>/dev/null || return 1
+    elif [[ -d "$src_item" ]]; then
+      mkdir -p "$dst_item" || return 1
+    elif [[ -f "$src_item" ]]; then
+      safe_copy "$src_item" "$dst_item" "$retries" || return 1
+    fi
+  done < <(find "$src_real" -print0 2>/dev/null)
+  return 0
+}
+
 copy_dir_contents() {
   local src="$1" dst="$2"
   local src_real="" framework_real=""
@@ -96,7 +160,7 @@ copy_dir_contents() {
       die "Refusing to copy framework root as a directory; check .spinosa/framework-files.tsv for blank or unsafe paths."
     fi
   fi
-  cp -a "$src"/. "$dst"/
+  safe_copy_tree "$src_real" "$dst" || die "Failed to copy directory: $src"
 }
 
 
