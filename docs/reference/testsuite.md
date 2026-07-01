@@ -50,16 +50,40 @@ flowchart LR
 - Use **system bash**, not only Homebrew bash: `/bin/bash --version` should show 3.2 on macOS.
 - Tests must pass under `set -u` behavior (macOS default bash in installer/CLI).
 
-### Test corpus
+### Test corpus — TEST-VAULT
 
-Keep a small local corpus (or use `TEST-VAULT`):
+**Canonical path (macOS maintainer machine):**
 
 ```text
-test-corpus/
-  readme.md
-  notes.txt
-  sample.pdf          # optional — MarkItDown
-  scan.jpg            # optional — RapidOCR
+/Users/tommasoprinetti/Downloads/TEST-VAULT/
+  generic-files/              # pdf, csv, docx — fast MarkItDown/structured gate
+  Ex2-harvesting-tasks/       # md, jpg, mp3/mp4, transcriptions — multimodal gate
+```
+
+Override with `SPINOSA_TEST_VAULT` (Linux VM: rsync to `/tmp/TEST-VAULT` first; see Phase F).
+
+| Scope | Path under TEST-VAULT | ~Files | Engines exercised |
+|-------|----------------------|--------|-------------------|
+| `subset` (default gate) | `generic-files/` | 7 | PDF, CSV, DOCX |
+| `mixed` | `Ex2-harvesting-tasks/` | ~130 | MD, JPG/OCR, JSON, skips A/V |
+| `full` | entire vault | ~144 | All importable types |
+
+**Quick smoke** (2 files, no TEST-VAULT required) — Phase C1 below.
+
+**Automated TEST-VAULT gate** — Phase C2:
+
+```bash
+export SPINOSA_NO_UPGRADE_CHECK=1 NO_COLOR=1 RLWRAP_EXEC=1
+# Installed CLI with vendor tools (Phase B), or dev tree + SPINOSA_HOME:
+# export SPINOSA_HOME=~/.spinosa
+bash .bin/test-new-test-vault.sh
+```
+
+Optional broader scopes before a major release:
+
+```bash
+SPINOSA_TEST_VAULT_SCOPE=mixed bash .bin/test-new-test-vault.sh
+SPINOSA_TEST_VAULT_SCOPE=full  bash .bin/test-new-test-vault.sh   # slow (OCR on ~65 JPGs)
 ```
 
 ### Environment flags (automation)
@@ -69,6 +93,8 @@ export SPINOSA_NO_UPGRADE_CHECK=1   # avoid network upgrade prompt during tests
 export NO_COLOR=1                   # readable logs
 export RLWRAP_EXEC=1                # skip rlwrap re-exec in scripts
 ```
+
+**Automation rule:** never let `spinosa new` open an LLM CLI (OpenCode, Codex, etc.). Always pass `--launch copy` (or `--cli other --launch copy`) so onboarding only copies the startup prompt — no new terminal window.
 
 ---
 
@@ -191,27 +217,70 @@ source ~/.spinosa/env.sh   # or source ~/.zshrc
 | `update` preview | `cd "$WORKSPACE" && spinosa update --dry-run --yes` | Lists changed paths; exit 0 |
 | `uninstall` dry | `spinosa uninstall --help` | Help only — do not uninstall during standard gate |
 
-### C1. `spinosa new` (non-TTY)
+### C1. `spinosa new` — minimal smoke (non-TTY)
 
 **Requires flags** — interactive file-type menu needs a TTY:
 
 ```bash
 CORPUS=/tmp/spinosa-release-corpus
-rm -rf "$CORPUS" "${CORPUS}-spinosa"*
+rm -rf "$CORPUS"
+rm -rf "${CORPUS}-spinosa" 2>/dev/null || true
 mkdir -p "$CORPUS"
 echo "hello" > "$CORPUS/a.txt"
 echo "# md" > "$CORPUS/b.md"
 
-spinosa new "$CORPUS" --extensions md,txt --cli opencode --no-color
+spinosa new "$CORPUS" --extensions md,txt --cli other --launch copy --no-color
 ```
 
 **Pass criteria:**
 
 - Exit 0
 - `${CORPUS}-spinosa/.spinosa/workspace` exists
-- `framework_version` matches installed CLI version (not `dev`)
+- `framework_version` matches installed CLI version (not `dev` on installed CLI)
 - `raw/` contains imported files
-- `grep "install complete"` not required here — workspace onboarding completes without `Cannot read from terminal`
+- No LLM CLI launched (no `Opened OpenCode` / new terminal) — `--launch copy` is required
+- Workspace onboarding completes without `Cannot read from terminal`
+
+### C2. `spinosa new` — TEST-VAULT integration (blocking)
+
+Uses the canonical corpus at `SPINOSA_TEST_VAULT` (default: `/Users/tommasoprinetti/Downloads/TEST-VAULT`).
+
+**Prerequisites:** Phase B install complete; `spinosa doctor` shows MarkItDown + RapidOCR available (vendor on PATH).
+
+```bash
+cd /path/to/spinosa-main
+export SPINOSA_NO_UPGRADE_CHECK=1 NO_COLOR=1 RLWRAP_EXEC=1
+source ~/.spinosa/env.sh 2>/dev/null || true
+export SPINOSA_HOME="${SPINOSA_HOME:-$HOME/.spinosa}"
+export PATH="${SPINOSA_HOME}/bin:${HOME}/.local/bin:${PATH}"
+
+# Default: generic-files subset (pdf, csv, docx)
+bash .bin/test-new-test-vault.sh
+```
+
+**Pass criteria:**
+
+- Script exits 0; prints `test-new-test-vault passed`
+- `setup_status: cli_started` in generated workspace
+- `raw/` contains at least 3 files for `subset` scope
+- No `Opened OpenCode` / LLM terminal launch in log
+
+**Manual / release-candidate scopes** (same script):
+
+| `SPINOSA_TEST_VAULT_SCOPE` | When |
+|----------------------------|------|
+| `mixed` | Before minor releases — multimodal under `Ex2-harvesting-tasks/` |
+| `full` | Before major releases — entire vault incl. all JPG OCR |
+
+**Direct invocation** (equivalent to subset script, for debugging):
+
+```bash
+TEST_VAULT="${SPINOSA_TEST_VAULT:-/Users/tommasoprinetti/Downloads/TEST-VAULT}"
+CORPUS=/tmp/spinosa-test-vault-generic
+rm -rf "$CORPUS" "${CORPUS}-spinosa" 2>/dev/null || true
+rsync -a --exclude '.DS_Store' --exclude '._*' "${TEST_VAULT}/generic-files/" "$CORPUS/"
+spinosa new "$CORPUS" --extensions pdf,csv,docx --cli other --launch copy --no-color
+```
 
 ---
 
@@ -308,8 +377,10 @@ See RELEASE_GUIDE §9. Summary:
 
 1. `curl | bash` install on Ubuntu 22.04+ (amd64 or arm64)
 2. `spinosa version` / `spinosa doctor`
-3. At least one `spinosa new` with TEST-VAULT subset
-4. Edge matrix: PDF-only, JPG-only, empty dir, unicode filenames (RELEASE_GUIDE table)
+3. Copy TEST-VAULT: `rsync -avz mac-host:/Users/tommasoprinetti/Downloads/TEST-VAULT/ /tmp/TEST-VAULT/`
+4. Run `SPINOSA_TEST_VAULT=/tmp/TEST-VAULT bash .bin/test-new-test-vault.sh` (subset gate)
+5. Optional: `SPINOSA_TEST_VAULT_SCOPE=mixed|full` on VM before major releases
+6. Edge matrix: PDF-only, JPG-only, empty dir, unicode filenames — build subsets under `/tmp/TEST-VAULT/` (see RELEASE_GUIDE §9c); always pass `--cli other --launch copy`
 
 **Linux-specific:** if RapidOCR fails import, install `libgl1` and re-run doctor.
 
@@ -368,7 +439,8 @@ grep level=ERROR ~/.spinosa/logs/spinosa.log | tail -20
 | `compare_versions` non-numeric | any | `spinosa doctor` on `framework_version: dev` workspace |
 | Completion stamp ordering | install | Basic test passes **during** install |
 | Partial `versions/*` | install retry | Incomplete dirs cleaned; no false upgrade prompt |
-| Non-TTY `spinosa new` | CI/automation | Use `--extensions`; expect menu failure without it |
+| Non-TTY `spinosa new` | CI/automation | Use `--extensions` + `--launch copy`; expect menu failure without `--extensions` |
+| LLM CLI auto-launch | CI/automation | `--cli opencode` without `--launch copy` opens a terminal — use `--launch copy` in testsuite |
 | Piped install PATH | `curl \| bash` | Instructions mention `source ~/.zshrc` |
 
 ---
@@ -382,7 +454,7 @@ Copy into release commit message or tag notes:
 
 - [ ] Phase A automated — all scripts pass
 - [ ] Phase B install — clean + piped + basic test passed
-- [ ] Phase C CLI — version, help, doctor, upgrade, update dry-run, new --extensions
+- [ ] Phase C CLI — version, help, doctor, upgrade, update dry-run, C1 smoke + C2 TEST-VAULT (`test-new-test-vault.sh`)
 - [ ] Phase D interactive — dashboard, new (full menu)
 - [ ] Phase E workspace — doctor + update on real workspace
 - [ ] Phase F Linux VM — install + new (or N/A with reason)
@@ -405,7 +477,7 @@ Machine(s): ________
 - `spinosa` or `spinosa help` throws bash errors on macOS system bash
 - `spinosa doctor` crashes (unbound variable, missing library path)
 - Basic test fails on fresh install
-- `spinosa new --extensions …` fails on small corpus
+- `spinosa new --extensions …` fails on small corpus or TEST-VAULT subset (`test-new-test-vault.sh`)
 - Published `install.sh` PINNED_VERSION ≠ tagged version
 - Any Phase A script fails
 
@@ -426,6 +498,7 @@ Warnings (cloud storage, Hermes merge, workspace behind CLI) are **not** blocker
 | `.bin/test-onboarding-verify.sh` | Onboarding verification |
 | `.bin/test-pdf-classifier.sh` | PDF classification |
 | `.bin/test-install-vendor-reuse.sh` | Vendor reuse logic |
+| `.bin/test-new-test-vault.sh` | `spinosa new` against TEST-VAULT (`subset` / `mixed` / `full`) |
 
 **Publish command** (only after full sign-off):
 

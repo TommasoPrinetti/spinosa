@@ -15,10 +15,12 @@ export SPINOSA_METADATA_DIR="${SPINOSA_HOME}/metadata"
 export REINSTALL=0
 
 # Load vendor reuse helpers from install.sh without executing main().
-# shellcheck disable=SC1090
-source <(
-  sed -n '348,367p;499,646p' "$REPO_ROOT/install.sh"
-)
+# Line range: VENDOR_PIP_* constants through vendor_bundle_can_reuse (keep in sync with install.sh).
+_vendor_fragment="$(mktemp "${TMPDIR:-/tmp}/spinosa-vendor-fragment.XXXXXX")"
+sed -n '631,779p' "$REPO_ROOT/install.sh" > "$_vendor_fragment"
+# shellcheck source=/dev/null
+source "$_vendor_fragment"
+rm -f "$_vendor_fragment"
 
 mkdir -p "$tmpdir/checksums"
 cat > "$tmpdir/checksums/checksums.txt" << 'EOF'

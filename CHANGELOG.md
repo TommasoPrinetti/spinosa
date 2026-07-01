@@ -8,9 +8,20 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.4] — 2026-07-01
+
+### Fixed
+
+- `spinosa doctor` no longer exits with warning count (e.g. 3) under `set -e` — completes with normal summary and exit 1
+- `read_vendor_metadata_field` reads full YAML values (vendor `pip_fingerprint` with spaced ONNX versions)
+- Install marks version complete before basic test so `spinosa version` resolves during install smoke check
+- Phase A tests: `test-import-routing.sh` frontmatter assertions; `test-install-vendor-reuse.sh` install.sh extract
+
 ### Added
 
-- `docs/reference/testsuite.md` — pre-release production gate (automated, install, interactive CLI, workspace, Linux VM, GitHub sign-off)
+- `docs/reference/testsuite.md` — pre-release production gate (automated, install, CLI, workspace, Linux VM, GitHub sign-off)
+- `.bin/test-new-test-vault.sh` — `spinosa new` integration gate against `TEST-VAULT` (`subset` / `mixed` / `full` scopes)
+- Testsuite automation rule: `--launch copy` for non-interactive `spinosa new` (no OpenCode terminal spawn)
 
 ## [0.7.3] — 2026-07-01
 

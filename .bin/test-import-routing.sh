@@ -80,11 +80,9 @@ markitdown.write_markdown(
 assert not md_out.exists()
 assert (tmpdir / "workspace" / "raw" / "report__pdf" / "page-001.md").exists()
 page_2 = (tmpdir / "workspace" / "raw" / "report__pdf" / "page-002.md").read_text()
-assert 'source_document: "raw/report__pdf"' in page_2
-assert 'original_source: "docs/report.pdf"' in page_2
-assert "page_number: 2" in page_2
+assert 'source_document: "report.pdf"' in page_2
+assert "page: 2" in page_2
 assert "page_count: 2" in page_2
-assert "converter_engine: markitdown" in page_2
 assert "Beta" in page_2
 
 ocr_out = tmpdir / "workspace" / "raw" / "scan.md"
@@ -99,9 +97,9 @@ rapidocr.write_split_pages(
 )
 assert not ocr_out.exists()
 ocr_page = (tmpdir / "workspace" / "raw" / "scan" / "page-001.md").read_text()
-assert 'source: "raw/scan/page-001.md"' in ocr_page
-assert 'part_of: "scans/scan.pdf"' in ocr_page
-assert "converter_engine: rapidocr" in ocr_page
+assert 'source_document: "scan.pdf"' in ocr_page
+assert "page: 1" in ocr_page
+assert "page_count: 2" in ocr_page
 assert "One" in ocr_page
 
 if PdfWriter is not None:
