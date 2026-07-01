@@ -24,8 +24,8 @@ if [[ -z "${1:-}" ]]; then
 fi
 
 VERSION="$1"
-if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-  echo "Error: invalid version: $VERSION (use X.Y.Z)"
+if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
+  echo "Error: invalid version: $VERSION (use X.Y.Z or X.Y.Z-beta.N)"
   exit 1
 fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

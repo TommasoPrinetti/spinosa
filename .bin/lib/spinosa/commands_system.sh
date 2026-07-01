@@ -156,23 +156,31 @@ cmd_upgrade() {
   local target_version="latest"
   local auto_yes=0
   local reinstall=0
+  local channel
+  channel="$(spinosa_release_channel)"
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --version) target_version="$2"; shift 2 ;;
+      --channel) channel="$2"; shift 2 ;;
       --yes|-y) auto_yes=1; shift ;;
       --reinstall) reinstall=1; shift ;;
       --help|-h)
         printf '  %s\n' "Usage: spinosa upgrade [options]"
-        printf '    %s\n' "  --version X.Y.Z   Upgrade to specific version (default: latest)"
+        printf '    %s\n' "  --version X.Y.Z   Upgrade to specific version (default: latest on channel)"
+        printf '    %s\n' "  --channel NAME    Release channel: stable (default) or dev (prereleases)"
         printf '    %s\n' "  --yes             Skip confirmation prompt"
         printf '    %s\n' "  --reinstall       Reinstall current version"
         printf '    %s\n' "  --help            Show this help"
         return 0
         ;;
-      -*) die "Unknown upgrade option: $1. Valid: --version, --yes, --reinstall, --help" ;;
+      -*) die "Unknown upgrade option: $1. Valid: --version, --channel, --yes, --reinstall, --help" ;;
       *) shift ;;
     esac
   done
+  case "$channel" in
+    stable|dev) ;;
+    *) die "Unknown release channel: ${channel} (use stable or dev)" ;;
+  esac
 
   title "Upgrade"
 
@@ -180,14 +188,15 @@ cmd_upgrade() {
   # SPINOSA_REPO env var is intentionally NOT used — self-upgrade
   # must always point to the canonical upstream to prevent supply-chain attacks
   # via compromised environment variables.
-  local resolved_version
+  local resolved_version installer_url
   if [[ -n "$target_version" && "$target_version" != "latest" ]]; then
     resolved_version="$target_version"
+    installer_url="$(install_url_for_channel "$channel" "$resolved_version")"
   else
-    spinner_start "Resolving latest version"
-    resolved_version="$(curl -fsSL "https://api.github.com/repos/TommasoPrinetti/spinosa/releases/latest" 2>/dev/null \
-      | grep '"tag_name"' | sed 's/.*"v//;s/".*//' || echo "")"
+    spinner_start "Resolving latest ${channel} version"
+    resolved_version="$(resolve_release_version_for_channel "$channel")"
     spinner_stop
+    installer_url="$(install_url_for_channel "$channel" "latest")"
   fi
 
   # ── check if already on this version ──────────────────────────────────
@@ -229,11 +238,16 @@ cmd_upgrade() {
   tmpdir="$(mktemp -d)"
   local installer="${tmpdir}/install-spinosa.sh"
 
-  spinner_start "Downloading installer v${resolved_version}"
-	  curl -fsSL "https://github.com/TommasoPrinetti/spinosa/releases/download/v${resolved_version}/install.sh" -o "$installer" 2>/dev/null \
-	    || { spinner_stop; die "Could not download release installer for v${resolved_version}. Aborting rather than falling back to an unpinned branch."; }
-	  spinner_stop
-	  ok "Installer downloaded"
+  spinner_start "Downloading installer v${resolved_version} (${channel})"
+  if [[ "$channel" == "dev" && "$target_version" == "latest" ]]; then
+    curl -fsSL "$installer_url" -o "$installer" 2>/dev/null \
+      || { spinner_stop; die "Could not download dev installer from ${installer_url}. Publish a prerelease first."; }
+  else
+    curl -fsSL "https://github.com/${SPINOSA_RELEASE_REPO}/releases/download/v${resolved_version}/install.sh" -o "$installer" 2>/dev/null \
+      || { spinner_stop; die "Could not download release installer for v${resolved_version}. Aborting rather than falling back to an unpinned branch."; }
+  fi
+  spinner_stop
+  ok "Installer downloaded (${channel})"
 
   local upgrade_args=("--upgrade" "--version" "$resolved_version" "--no-launch")
   if [[ "$auto_yes" -eq 1 ]]; then
@@ -1166,8 +1180,10 @@ auto_upgrade_check() {
 
   local latest
   if ! command -v curl >/dev/null 2>&1; then return 0; fi
-  latest="$(curl -fsSL --connect-timeout 5 --max-time 15 "https://api.github.com/repos/TommasoPrinetti/spinosa/releases/latest" 2>/dev/null \
-    | grep '"tag_name"' | sed 's/.*"v//;s/".*//')"
+  local channel
+  channel="$(spinosa_release_channel)"
+  [[ "$channel" == "stable" ]] || return 0
+  latest="$(resolve_latest_stable_version 2>/dev/null || true)"
   [[ -n "$latest" ]] || return 0
 
   printf '%s\n%s\n0\n' "$now" "$latest" > "$cache_file"

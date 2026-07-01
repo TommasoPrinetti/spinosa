@@ -8,6 +8,15 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.8.0-beta.1] — 2026-07-01
+
+### Added
+
+- Release channels: stable (`publish-release.sh`) vs dev/beta (`publish-dev-release.sh` GitHub prerelease)
+- `spinosa upgrade --channel dev` — tracks newest prerelease
+- Website install redirects: `spinosa.dev/install` (stable), `spinosa.dev/install/dev` (beta)
+- `.bin/lib/spinosa/release_channels.sh` — channel resolution helpers
+
 ## [0.7.7] — 2026-07-01
 
 ### Fixed

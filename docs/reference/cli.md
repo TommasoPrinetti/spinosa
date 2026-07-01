@@ -45,7 +45,23 @@ spinosa add --workspace ~/Research/project-spinosa --dir ~/Downloads/new-batch
 
 ### `spinosa upgrade`
 
-Upgrade the **globally installed CLI** to the latest release. Downloads and verifies checksums automatically.
+Upgrade the **globally installed CLI** to the latest release on a channel. Downloads and verifies checksums automatically.
+
+| Channel | Default? | Resolves to |
+| ------- | -------- | ----------- |
+| `stable` | yes | GitHub `releases/latest` (non-prerelease) |
+| `dev` | no | Newest GitHub prerelease (`X.Y.Z-beta.N`) |
+
+```bash
+spinosa upgrade --yes                    # stable latest
+spinosa upgrade --channel dev --yes      # beta latest
+spinosa upgrade --version 0.8.0-beta.1   # pin a specific tag
+```
+
+Stable install URL: `https://spinosa.dev/install`  
+Dev install URL: `https://spinosa.dev/install/dev`
+
+Set default channel for auto-upgrade prompts: `export SPINOSA_RELEASE_CHANNEL=dev` (auto prompts remain **stable-only**).
 
 This updates `~/.spinosa/` (framework runtime, vendor Python tools). It does **not** update files inside your workspace folders.
 
