@@ -270,7 +270,7 @@ Canonical agent definitions: [[.agents/agents/]]. Agent vendor mirrors: [[.openc
 
 **Codex note:** Codex reads [[AGENTS.md]] for orchestration and `.codex/agents/*.toml` for project-specific custom sub-agent profiles. Each TOML declares `name`, `description`, `developer_instructions`, and optional model/sandbox settings. Wire them via [[.codex/config.toml]] under `[agents.<name>]` for role-name routing. Codex also discovers [[.agents/skills/<name>/SKILL.md]] via the Agent Skills standard for fallback invocation.
 
-**Hermes note:** Hermes has no named sub-agent registry (unlike Codex). It auto-loads this file ([[AGENTS.md]]) from `terminal.cwd`. After `bash .bin/sync-agents.sh]], merge [[.hermes/workspace.config.yaml]] into `~/.hermes/config.yaml` (sets `skills.external_dirs` and `terminal.cwd` for this workspace).
+**Hermes note:** Hermes has no named sub-agent registry (unlike Codex). It auto-loads this file ([[AGENTS.md]]) from `terminal.cwd`. After `bash .bin/sync-agents.sh`, merge [[.hermes/workspace.config.yaml]] into `~/.hermes/config.yaml` (sets `skills.external_dirs` and `terminal.cwd` for this workspace).
 
 - **Pipeline dispatch:** `delegate_task` with `goal`, `context` (include `session_id`, goal artifact path, and prior artifact paths), and `toolsets` per step (`["terminal","file"]` for searcher/writer; `["file"]` for analyst).
 - **Skill dispatch:** `/spinosa-searcher`, `/spinosa-writer`, etc. when `external_dirs` includes [[.hermes/skills/]].
