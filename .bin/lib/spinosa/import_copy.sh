@@ -218,13 +218,13 @@ copy_source() {
               "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
               "$rel_path" \
               "$(dirname "$rel_path")/${_md_out}" >> "$_md_log"
-            render_ocr_progress "$md_idx" "$md_total" "$md_converted" "$md_skipped" "$rel_path" "" ""
+            render_converter_progress "MarkItDown" "$md_idx" "$md_total" "$md_converted" "$md_skipped" "$rel_path" "" "$md_idx" 0 "$G" "$(file_ext "$rel_path")"
           else
             if [[ -z "$_md_bin" ]] && ! is_structured_fallback_ext "$_md_out_ext"; then
               md_skipped=$((md_skipped + 1))
               md_idx=$((md_idx + 1))
               warn "MarkItDown is not available for $(basename "$rel_path"), skipping"
-              render_ocr_progress "$md_idx" "$md_total" "$md_converted" "$md_skipped" "$rel_path" "" ""
+              render_converter_progress "MarkItDown" "$md_idx" "$md_total" "$md_converted" "$md_skipped" "$rel_path" "" "$md_idx" 0 "$G" "$(file_ext "$rel_path")"
             else
               _md_process_src+=("$src_file")
               _md_process_rel+=("$rel_path")
@@ -298,19 +298,18 @@ copy_source() {
                 BEGIN)
                   _md_current_rel="${_line#BEGIN$'\t'}"
                   _md_current_ext="$(file_ext "$_md_current_rel")"
-                  [[ -n "$_md_current_ext" ]] && _md_current_ext=" [.${_md_current_ext}]" || _md_current_ext=""
                   spinner_stop >&2 2>/dev/null || true
                   _md_page=""
                   _md_idle_ticks=0
                   spinosa_debug_md "BEGIN $_md_current_rel"
                   local _md_active_idx=$((md_idx < md_total ? md_idx + 1 : md_total))
-                  render_ocr_progress "$_md_active_idx" "$md_total" "$md_converted" "$md_skipped" "$_md_current_rel" "" "$md_idx" "$_md_current_ext"
+                  render_converter_progress "MarkItDown" "$_md_active_idx" "$md_total" "$md_converted" "$md_skipped" "$_md_current_rel" "" "$md_idx" 0 "$G" "$_md_current_ext"
                   ;;
                 PROGRESS)
                   _md_page="${_line#PROGRESS$'\t'}"
                   _md_idle_ticks=0
                   local _md_active_idx=$((md_idx < md_total ? md_idx + 1 : md_total))
-                  render_ocr_progress "$_md_active_idx" "$md_total" "$md_converted" "$md_skipped" "$_md_current_rel" "$_md_page" "$md_idx" "$_md_current_ext"
+                  render_converter_progress "MarkItDown" "$_md_active_idx" "$md_total" "$md_converted" "$md_skipped" "$_md_current_rel" "$_md_page" "$md_idx" 0 "$G" "$_md_current_ext"
                   ;;
                 END)
                   md_idx=$((md_idx + 1))
@@ -361,7 +360,7 @@ copy_source() {
                       "${_md_page:-}" \
                       "$_md_end_dur" >> "$_md_log"
                   fi
-                  render_ocr_progress "$md_idx" "$md_total" "$md_converted" "$md_skipped" "$_md_current_rel" "$_md_page" "$md_idx" "$_md_current_ext"
+                  render_converter_progress "MarkItDown" "$md_idx" "$md_total" "$md_converted" "$md_skipped" "$_md_current_rel" "$_md_page" "$md_idx" 0 "$G" "$_md_current_ext"
                   _md_page=""
                   ;;
                 *)
@@ -383,13 +382,13 @@ copy_source() {
             for _r in "${_md_process_rel[@]}"; do
               md_idx=$((md_idx + 1))
               md_skipped=$((md_skipped + 1))
-              render_ocr_progress "$md_idx" "$md_total" "$md_converted" "$md_skipped" "$_r" "" "" ""
+              render_converter_progress "MarkItDown" "$md_idx" "$md_total" "$md_converted" "$md_skipped" "$_r" "" "$md_idx" 0 "$G" "$(file_ext "$_r")"
             done
           else
             for _r in "${_md_process_rel[@]}"; do
               md_idx=$((md_idx + 1))
               md_skipped=$((md_skipped + 1))
-              render_ocr_progress "$md_idx" "$md_total" "$md_converted" "$md_skipped" "$_r" "" "" ""
+              render_converter_progress "MarkItDown" "$md_idx" "$md_total" "$md_converted" "$md_skipped" "$_r" "" "$md_idx" 0 "$G" "$(file_ext "$_r")"
             done
           fi
           # Restore outer INT/TERM traps
@@ -464,7 +463,7 @@ copy_source() {
               "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
               "$rel_path" \
               "$(dirname "$rel_path")/${md_name}.md" >> "$_ocr_log"
-            render_ocr_progress "$ocr_idx" "$ocr_total" "$ocr_converted" "$ocr_skipped" "$rel_path" "" ""
+            render_converter_progress "OCR" "$ocr_idx" "$ocr_total" "$ocr_converted" "$ocr_skipped" "$rel_path" "" "$ocr_idx" 0 "$M" "$(file_ext "$rel_path")"
           else
             _ocr_process_src+=("$src_file")
             _ocr_process_rel+=("$rel_path")
@@ -530,21 +529,20 @@ copy_source() {
                 BEGIN)
                   _current_rel="${_line#BEGIN$'\t'}"
                   _ocr_current_ext="$(file_ext "$_current_rel")"
-                  [[ -n "$_ocr_current_ext" ]] && _ocr_current_ext=" [.${_ocr_current_ext}]" || _ocr_current_ext=""
                   spinner_stop >&2 2>/dev/null || true
                   _ocr_page=""
                   _ocr_page_counter=0
                   _ocr_idle_ticks=0
                   spinosa_debug "BEGIN $_current_rel"
                   local _ocr_active_idx=$((ocr_idx < ocr_total ? ocr_idx + 1 : ocr_total))
-                  render_ocr_progress "$_ocr_active_idx" "$ocr_total" "$ocr_converted" "$ocr_skipped" "$_current_rel" "" "$ocr_idx" "$_ocr_current_ext"
+                  render_converter_progress "OCR" "$_ocr_active_idx" "$ocr_total" "$ocr_converted" "$ocr_skipped" "$_current_rel" "" "$_ocr_page_counter" 0 "$M" "$_ocr_current_ext"
                   ;;
                 PROGRESS)
                   _ocr_page="${_line#PROGRESS$'\t'}"
                   _ocr_page_counter=$((_ocr_page_counter + 1))
                   _ocr_idle_ticks=0
                   local _ocr_active_idx=$((ocr_idx < ocr_total ? ocr_idx + 1 : ocr_total))
-                  render_ocr_progress "$_ocr_active_idx" "$ocr_total" "$ocr_converted" "$ocr_skipped" "$_current_rel" "$_ocr_page" "$_ocr_page_counter" "$_ocr_current_ext"
+                  render_converter_progress "OCR" "$_ocr_active_idx" "$ocr_total" "$ocr_converted" "$ocr_skipped" "$_current_rel" "$_ocr_page" "$_ocr_page_counter" 0 "$M" "$_ocr_current_ext"
                   ;;
                 END)
                   ocr_idx=$((ocr_idx + 1))
@@ -587,7 +585,7 @@ copy_source() {
                       "${_ocr_page:-}" \
                       "$_end_dur" >> "$_ocr_log"
                   fi
-                  render_ocr_progress "$ocr_idx" "$ocr_total" "$ocr_converted" "$ocr_skipped" "$_current_rel" "$_ocr_page" "$_ocr_page_counter" "$_ocr_current_ext"
+                  render_converter_progress "OCR" "$ocr_idx" "$ocr_total" "$ocr_converted" "$ocr_skipped" "$_current_rel" "$_ocr_page" "$_ocr_page_counter" 0 "$M" "$_ocr_current_ext"
                   _ocr_page=""
                   _ocr_current_ext=""
                   ;;
@@ -609,13 +607,13 @@ copy_source() {
             for _r in "${_ocr_process_rel[@]}"; do
               ocr_idx=$((ocr_idx + 1))
               ocr_skipped=$((ocr_skipped + 1))
-              render_ocr_progress "$ocr_idx" "$ocr_total" "$ocr_converted" "$ocr_skipped" "$_r" "" ""
+              render_converter_progress "OCR" "$ocr_idx" "$ocr_total" "$ocr_converted" "$ocr_skipped" "$_r" "" "$ocr_idx" 0 "$M" "$(file_ext "$_r")"
             done
           else
             for _r in "${_ocr_process_rel[@]}"; do
               ocr_idx=$((ocr_idx + 1))
               ocr_skipped=$((ocr_skipped + 1))
-              render_ocr_progress "$ocr_idx" "$ocr_total" "$ocr_converted" "$ocr_skipped" "$_r" "" ""
+              render_converter_progress "OCR" "$ocr_idx" "$ocr_total" "$ocr_converted" "$ocr_skipped" "$_r" "" "$ocr_idx" 0 "$M" "$(file_ext "$_r")"
             done
           fi
           # Restore outer INT/TERM traps instead of clearing

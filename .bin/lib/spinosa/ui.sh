@@ -902,43 +902,71 @@ render_copy_progress() {
 }
 
 
-render_ocr_progress() {
-  local processed="$1" total="$2" converted="$3" skipped="$4" current_file="${5:-}" page_info="${6:-}" ext_tag="${8:-}"
-  local frame ratio counts label fixed width label_width filled=0 bar="" i
-  frame="$(spinner_frame "${7:-$processed}")"
-  ratio="${processed}/${total}"
-  counts="(${converted} converted, ${skipped} skipped)"
-  width=$((COLS > 100 ? 20 : 12))
-  local page_label=""
-  [[ -n "$page_info" ]] && page_label=" (page ${page_info})"
-  fixed=$((10 + ${#ratio} + ${#counts}))
-  label_width=$((COLS - fixed - width - 1))
-  if (( label_width < 12 )); then
-    width=8
-    label_width=$((COLS - fixed - width - 1))
+converter_progress_ext_suffix() {
+  local current_file="$1" file_ext="${2:-}"
+  local base_name base_ext
+  [[ -n "$file_ext" ]] || return 0
+  file_ext="${file_ext# \[\.}"
+  file_ext="${file_ext%\]}"
+  file_ext="${file_ext#.}"
+  [[ -n "$file_ext" ]] || return 0
+  base_name="$(basename "$current_file")"
+  base_ext="${base_name##*.}"
+  [[ "$base_ext" == "$file_ext" ]] && return 0
+  printf '%s.%s%s' "${DIM}" "$file_ext" "${RESET}"
+}
+
+
+render_converter_progress() {
+  local engine="$1" index="$2" total="$3" converted="$4" skipped="$5"
+  local current_file="${6:-}" page_info="${7:-}" spin_seed="${8:-$index}"
+  local elapsed_sec="${9:-0}" color="${10:-$G}" file_ext="${11:-}"
+  local frame ratio counts bar="" width filled=0 i label label_width fixed
+  local page_suffix="" elapsed_suffix="" ext_suffix="" engine_part=""
+
+  frame="$(spinner_frame "$spin_seed")"
+  ratio="${index}/${total}"
+  counts="${DIM}(${converted} ok, ${skipped} skip)${RESET}"
+  width=$((COLS > 100 ? 16 : 10))
+
+  [[ -n "$page_info" ]] && page_suffix=" ${DIM}p.${page_info}${RESET}"
+  if [[ "$elapsed_sec" -gt 0 ]]; then
+    elapsed_suffix=" ${DIM}· ${elapsed_sec}s${RESET}"
   fi
-  (( label_width < 8 )) && label_width=8
-  [[ "$total" -gt 0 ]] && filled=$((processed * width / total))
+  ext_suffix="$(converter_progress_ext_suffix "$current_file" "$file_ext")"
+  [[ -n "$ext_suffix" ]] && ext_suffix=" ${ext_suffix}"
+
+  if [[ -n "$engine" ]]; then
+    engine_part="${color}${engine}${RESET} "
+  fi
+
+  [[ "$total" -gt 0 ]] && filled=$((index * width / total))
   for ((i = 0; i < width; i++)); do
     if (( i < filled )); then bar+="█"; else bar+="░"; fi
   done
-  label="$(truncate_display_path "${current_file}${ext_tag}${page_label}" "$label_width")"
-  render_progress_line "  ${M}${frame}${RESET} ${M}[${bar}]${RESET} ${ratio} ${label} ${counts}"
+
+  fixed=$((12 + ${#engine} + width + 6 + ${#ratio} + 24))
+  label_width=$((COLS - fixed))
+  if (( label_width < 14 )); then
+    width=8
+    fixed=$((12 + ${#engine} + width + 6 + ${#ratio} + 24))
+    label_width=$((COLS - fixed))
+  fi
+  (( label_width < 10 )) && label_width=10
+  label="$(truncate_display_path "$current_file" "$label_width")"
+
+  render_progress_line "  ${color}${frame}${RESET} ${engine_part}${color}[${bar}]${RESET} ${ratio} ${label}${ext_suffix}${page_suffix}${elapsed_suffix} ${counts}"
+}
+
+
+render_ocr_progress() {
+  render_converter_progress "" "$1" "$2" "$3" "$4" "${5:-}" "${6:-}" "${7:-$1}" 0 "${M}" "${8:-}"
 }
 
 
 render_converter_wait() {
-  local engine="$1" processed="$2" total="$3" converted="$4" skipped="$5" current_file="${6:-}" elapsed="$7" color="${8:-$M}" ext_tag="${9:-}"
-  local frame ratio counts wait label fixed label_width
-  frame="$(spinner_frame "$elapsed")"
-  ratio="${processed}/${total}"
-  counts="(${converted} converted, ${skipped} skipped)"
-  wait="waiting ${elapsed}s"
-  fixed=$((2 + 1 + 1 + ${#engine} + 1 + ${#ratio} + 1 + 1 + ${#wait} + 1 + ${#counts}))
-  label_width=$((COLS - fixed - 1))
-  (( label_width < 8 )) && label_width=8
-  label="$(truncate_display_path "${current_file}${ext_tag}" "$label_width")"
-  render_progress_line "  ${color}${frame}${RESET} ${engine} ${ratio} ${label} ${wait} ${counts}"
+  local elapsed="${7:-0}"
+  render_converter_progress "$1" "$2" "$3" "$4" "$5" "${6:-}" "" "$elapsed" "$elapsed" "${8:-$G}" "${9:-}"
 }
 
 # ── Cloud-aware file copy ─────────────────────────────────────────
