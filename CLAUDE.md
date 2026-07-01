@@ -8,9 +8,9 @@ connects_to:
   - system/configuration.md
   - system/context.md
 created: 2026-05-26
-updated: 2026-06-30
+updated: 2026-07-01
 generated_by: sync-agents
-generated_at: 2026-06-30
+generated_at: 2026-07-01
 processing_status: auto_generated
 generated_by: orchestrator-contract-fix
 ---
@@ -269,9 +269,15 @@ user request.
 | `spinosa-janitor`    | Audits hygiene and writes a cleanup artifact before any confirmed move                                                        |
 | `spinosa-overseer`   | Audits session logs and corpus coverage; finds gaps, stale areas, underutilized agents; writes coverage report with orchestrator advisories |
 
-Canonical agent definitions: `.agents/agents/`. Agent vendor mirrors: `.opencode/agents/`, `.claude/agents/`, `.codex/agents/` (generated). Reference mirror: `.hermes/references/` (generated). Shared references: `.agents/references/`.
+Canonical agent definitions: `.agents/agents/`. Agent vendor mirrors: `.opencode/agents/`, `.claude/agents/`, `.codex/agents/` (generated). Hermes mirror: `.hermes/skills/`, `.hermes/references/`, `.hermes/workspace.config.yaml` (generated; no native sub-agent profiles). Shared references: `.agents/references/`.
 
 **Codex note:** Codex reads `AGENTS.md` for orchestration and `.codex/agents/*.toml` for project-specific custom sub-agent profiles. Each TOML declares `name`, `description`, `developer_instructions`, and optional model/sandbox settings. Wire them via `.codex/config.toml` under `[agents.<name>]` for role-name routing. Codex also discovers `.agents/skills/<name>/SKILL.md` via the Agent Skills standard for fallback invocation.
+
+**Hermes note:** Hermes has no named sub-agent registry (unlike Codex). It auto-loads this file (`AGENTS.md`) from `terminal.cwd`. After `bash .bin/sync-agents.sh`, merge `.hermes/workspace.config.yaml` into `~/.hermes/config.yaml` (sets `skills.external_dirs` and `terminal.cwd` for this workspace).
+
+- **Pipeline dispatch:** `delegate_task` with `goal`, `context` (include `session_id`, goal artifact path, and prior artifact paths), and `toolsets` per step (`["terminal","file"]` for searcher/writer; `["file"]` for analyst).
+- **Skill dispatch:** `/spinosa-searcher`, `/spinosa-writer`, etc. when `external_dirs` includes `.hermes/skills/`.
+- **References:** `.agents/references/` (mirrored to `.hermes/references/` for `@file:` use).
 
 ## Global Rules
 
@@ -283,10 +289,18 @@ Canonical agent definitions: `.agents/agents/`. Agent vendor mirrors: `.opencode
 
 ## Sub-Agent Gateway
 
-Dispatch order (see `docs/diagrams.md` §9):
+Dispatch order (see `docs/diagrams.md` §9).
+
+**Hermes Agent** (loads `AGENTS.md` automatically when `terminal.cwd` is the workspace):
+
+1. **`delegate_task`** — preferred for pipeline steps. Pass `goal`, full `context` (goal artifact path, `session_id`, prior artifact paths, output gates), and scoped `toolsets`. Children start with no parent history.
+2. **Skill dispatch** — `/spinosa-<agent>` when `.hermes/workspace.config.yaml` is merged into `~/.hermes/config.yaml`.
+3. **Task-tool spawn** — only when Hermes is not the host.
+
+**Codex / OpenCode / Claude / Cursor / Grok:**
 
 1. **Native spawn** — Codex/OpenCode/Claude project sub-agents via vendor config (`.codex/config.toml`, etc.).
 2. **Task-tool spawn** — Cursor/Grok and other hosts without native `spinosa-*` roles: use the Task tool with the agent definition body as the prompt. Model may differ from `gpt-5.4-mini` when the host does not support it.
-3. **Skill inject fallback** — If both fail, read `.agents/agents/<agent-name>.md` or `.agents/skills/<agent-name>/SKILL.md` and inject the instruction body as the task prompt.
+3. **Skill inject fallback** — read `.agents/agents/<agent-name>.md` or `.agents/skills/<agent-name>/SKILL.md` and inject the instruction body as the task prompt.
 
-All three paths must write the same session-scoped artifact paths declared in the goal artifact. Reference files in `.agents/references/` are available for templates and format guidance.
+All paths must write the same session-scoped artifact paths declared in the goal artifact. Reference files in `.agents/references/` (mirrored under `.hermes/references/` and other vendor `references/`) are available for templates and format guidance.

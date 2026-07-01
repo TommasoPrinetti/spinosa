@@ -197,10 +197,10 @@ Three dispatch paths (see `docs/diagrams.md` §9):
 |------|------|---------------|
 | **Native spawn** | Vendor exposes `spinosa-*` sub-agents | Codex (`.codex/config.toml`), OpenCode, Claude Code |
 | **Task-tool spawn** | No native role; inject agent definition as Task prompt | Cursor, Grok |
-| **Skill inject** | Native and Task both unavailable | Any host with Agent Skills |
+| **Skill inject** | Native and Task both unavailable | Hermes (`delegate_task` or `/spinosa-*` via `.hermes/workspace.config.yaml`), any host with Agent Skills |
 
 All paths write the same session-scoped artifact filenames declared in the goal artifact.
 
 ## Skills (fallback mode)
 
-If native spawn is unavailable, the orchestrator uses Task-tool spawn or reads a fallback skill file — a SKILL.md containing the same instructions in a self-contained format. Skills mirror the agents they back up and live in `.agents/skills/`.
+If native spawn is unavailable, the orchestrator uses Task-tool spawn or reads a fallback skill file — a SKILL.md containing the same instructions in a self-contained format. Skills mirror the agents they back up and live in `.agents/skills/` (synced to `.hermes/skills/` and other vendor `skills/` dirs by `bash .bin/sync-agents.sh`). Hermes users merge `.hermes/workspace.config.yaml` into `~/.hermes/config.yaml` (sets `skills.external_dirs` and `terminal.cwd`).

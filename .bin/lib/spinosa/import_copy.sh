@@ -114,6 +114,7 @@ is_cloud_storage_path() {
 
 copy_source() {
   local source_path="$1" dest_dir="$2"
+  onboarding_log_event "copy" "start" "source=${source_path}" "dest=${dest_dir}"
   local total_files selected_total copy_processed=0
   selected_total="$(selected_import_count)"
   [[ "$selected_total" -gt 0 ]] || { warn "No selected files found in source location."; return 1; }
@@ -672,6 +673,9 @@ copy_source() {
   COPY_OCR_SKIPPED_COUNT="${ocr_skipped:-0}"
   COPY_IMPORTED_COUNT=$((copied + md_converted + ocr_converted))
 
+  onboarding_log_copy_summary
+  verify_and_recover_import "$source_path" "$dest_dir"
+
   printf '\n'
   if [[ "$failed" -gt 0 ]]; then
     warn "$failed files could not be copied (cloud storage timeout or I/O error). These files are skipped. Run the copy again when all files are synced locally."
@@ -683,7 +687,14 @@ copy_source() {
 }
 
 choose_import_batches() {
-  [[ ${#IMPORT_BATCH_EXTENSIONS[@]} -gt 0 ]] || return 0
+  if [[ ${#IMPORT_BATCH_EXTENSIONS[@]} -eq 0 ]]; then
+    warn "No importable file types were found in the source folder."
+    return 1
+  fi
+
+  if corpus_is_audio_video_only; then
+    note "This corpus contains only audio/video — enable those types in the list below (they are unchecked by default)."
+  fi
 
   local -a MULTI_CHOOSE_RESULTS=()
   local options=() i count ext

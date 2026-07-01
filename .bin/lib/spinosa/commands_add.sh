@@ -28,7 +28,7 @@ cmd_add() {
         printf '    %s\n' "  --file, -f       Single file to add to the workspace"
         printf '    %s\n' "  --dir, -d        Directory of files to add (scanned and batch-converted)"
         printf '    %s\n' "  --extensions     Comma-separated file types to import (e.g. txt,pdf)"
-        printf '    %s\n' "  --cli            Preferred LLM CLI (opencode, gemini, qwen, claude_code, codex, kilo, other)"
+        printf '    %s\n' "  --cli            Preferred LLM CLI (opencode, gemini, qwen, claude_code, codex, hermes, kilo, other)"
         printf '    %s\n' "  --launch         Launch method (copy, run)"
         printf '    %s\n' "  --no-color       Disable colored output"
         return 0
@@ -135,20 +135,26 @@ cmd_add() {
   local add_ocr_converted=0 add_ocr_skipped=0
   local ADD_TOTAL_COUNT=0
 
+  onboarding_log_init "$workspace_path" "add" "$source_path"
+
   if [[ "$source_is_dir" -eq 1 ]]; then
     # ---- Folder mode: full scan + batch import -----------------------------
     print_onboarding_preflight "$workspace_path"
     reset_import_batches
     scan_source "$source_path"
+    onboarding_log_scan_summary
     print_scan_summary
 
     if [[ -n "${flag_extensions:-}" ]]; then
-      IFS=',' read -ra SELECTED_IMPORT_EXTENSIONS <<< "${flag_extensions:-}"
+      parse_selected_extensions_from_flag "${flag_extensions:-}"
+      validate_selected_extensions_against_scan "${flag_extensions:-}" || die "Selected extensions do not match this corpus."
     else
       choose_import_batches || die "No file types selected."
     fi
 
     configure_selected_import_tools || die "Selected file types require unavailable conversion tools."
+    validate_import_tool_coverage "$source_path" || die "Selected files require unavailable conversion tools."
+    onboarding_log_import_options "$source_path" "${flag_extensions:-}"
 
     local copyable_count
     copyable_count="$(selected_import_count)"
@@ -156,7 +162,8 @@ cmd_add() {
       die "No files selected for import."
     fi
     note "Importing ${copyable_count} files..."
-    copy_source "$source_path" "$raw_dir"
+    copy_source "$source_path" "$raw_dir" || die "Import copy failed."
+    assert_import_delivered "$source_path" "$raw_dir" || die "No files were delivered to raw/."
 
     add_copied="${COPY_COPIED_COUNT:-0}"
     add_skipped="${COPY_SKIPPED_COUNT:-0}"
@@ -331,6 +338,9 @@ cmd_add() {
         die "Unsupported file type and no import route is available: $(basename "$src_file")"
         ;;
     esac
+    onboarding_log_import_options "$source_path" "${flag_extensions:-}"
+    onboarding_log_event "add" "single_file" "source=$(display_path "$source_path")" "class=${file_class}"
+    verify_single_import_file "$(dirname "$src_file")" "$raw_dir" "$src_file"
   fi
 
   printf '\n'
@@ -379,6 +389,11 @@ add_timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)
 - MarkItDown skipped: ${add_md_skipped:-0}
 - OCR converted: ${add_ocr_converted:-0}
 - OCR skipped: ${add_ocr_skipped:-0}
+- Post-import verification missing: ${COPY_VERIFY_MISSING_COUNT:-0}
+- Post-import recovered (reprocess): ${COPY_VERIFY_RECOVERED_RETRY_COUNT:-0}
+- Post-import recovered (source copy): ${COPY_VERIFY_RECOVERED_COPY_COUNT:-0}
+- Post-import still missing: ${COPY_VERIFY_STILL_MISSING_COUNT:-0}
+- Import trace log: logs/onboarding.lgo
 
 ## Post-Add Status
 - Post-add action: re-mapper prompt generated

@@ -83,7 +83,7 @@ for skill_dir in "$SKILLS_DIR"/*/; do
                 err "$skill_name: has references/ but no ## References section in SKILL.md"
             else
                 # Extract listed references
-                listed_refs=$(sed -n '/^## References/,/^## /p' "$skill_file" | grep '| `' | sed 's/.*| `\([^`]*\)` |.*/\1/')
+                listed_refs=$(sed -n '/^## References/,/^## /p' "$skill_file" | { grep '| `' || true; } | sed 's/.*| `\([^`]*\)` |.*/\1/')
                 for rf in "${ref_files[@]}"; do
                     if echo "$listed_refs" | grep -qF "$rf"; then
                         ok "$skill_name: references/$rf indexed"

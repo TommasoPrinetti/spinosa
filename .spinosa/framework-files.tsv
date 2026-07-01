@@ -20,6 +20,8 @@ startup-prompt.md	framework	replace_if_unmodified
 .bin/lib/markitdown-cli.py	framework	replace_if_unmodified
 .bin/lib/rapidocr-cli.py	framework	replace_if_unmodified
 .bin/test-import-routing.sh	framework	replace_if_unmodified
+.bin/test-onboarding-verify.sh	framework	replace_if_unmodified
+.bin/test-pdf-classifier.sh	framework	replace_if_unmodified
 .bin/sync-agents.sh	framework	replace_if_unmodified
 install.sh	framework	replace_if_unmodified
 .agents/	framework	replace_if_unmodified

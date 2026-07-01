@@ -11,6 +11,7 @@ choose_preferred_cli() {
     "$(option_spec "claude_code_desktop" "Claude Code Desktop" "open the desktop app with the prompt ready")"
     "$(option_spec "codex" "Codex" "run the Codex terminal CLI in this workspace")"
     "$(option_spec "codex_app" "Codex App" "open the Codex app and paste the copied prompt")"
+    "$(option_spec "hermes" "Hermes Agent" "run the Hermes CLI in this workspace (merge .hermes/workspace.config.yaml first)")"
     "$(option_spec "kilo" "Kilo" "run the Kilo terminal CLI in this workspace")"
     "$(option_spec "other" "Other" "copy a generic launch command for another tool")"
   )
@@ -54,18 +55,24 @@ run_integrated_onboarding() {
       done
     fi
 
+    onboarding_log_init "$root" "onboarding" "$source_path"
+
     print_step 2 3 "Corpus scan and consent"
     print_onboarding_preflight "$root"
     scan_source "$source_path"
+    onboarding_log_scan_summary
     print_scan_summary
 
     if [[ -n "$flag_extensions" ]]; then
-      IFS=',' read -ra SELECTED_IMPORT_EXTENSIONS <<< "$flag_extensions"
+      parse_selected_extensions_from_flag "$flag_extensions"
+      validate_selected_extensions_against_scan "$flag_extensions" || return 1
     else
       choose_import_batches || return 1
     fi
 
     configure_selected_import_tools || return 1
+    validate_import_tool_coverage "$source_path" || return 1
+    onboarding_log_import_options "$source_path" "$flag_extensions"
 
     copyable_count="$(selected_import_count)"
 
@@ -90,7 +97,11 @@ run_integrated_onboarding() {
     tree_sep
     tree_row_last "Cloud source" "files not fully synced locally may be skipped"
   fi
-  copy_source "$source_path" "$root/raw"
+  copy_source "$source_path" "$root/raw" || return 1
+  assert_import_delivered "$source_path" "$root/raw" || {
+    warn "Onboarding stopped — raw/ is empty or incomplete. Fix the import issue and run spinosa new again, or use spinosa add."
+    return 1
+  }
 
   print_step 3 3 "Startup prompt"
   reset_terminal
@@ -101,7 +112,12 @@ run_integrated_onboarding() {
   fi
   preferred_cli_label="$(preferred_cli_name "$preferred_cli")"
   tree_sep
-  tree_row_last "CLI" "${BOLD}${preferred_cli_label}${RESET}"
+  if [[ "$preferred_cli" == "hermes" ]]; then
+    tree_row "CLI" "${BOLD}${preferred_cli_label}${RESET}"
+    tree_row_last "Hermes setup" "merge ${root}/.hermes/workspace.config.yaml into ~/.hermes/config.yaml"
+  else
+    tree_row_last "CLI" "${BOLD}${preferred_cli_label}${RESET}"
+  fi
 
   write_setup_files "$root" "$project_title" "$source_path" "$preferred_cli_label"
   sed -i.bak 's/setup_status: not_started/setup_status: cli_started/' "$root/.spinosa/workspace" 2>/dev/null || \
