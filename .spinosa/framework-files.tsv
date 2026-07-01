@@ -1,6 +1,7 @@
 path	role	update_policy
 AGENTS.md	framework	always_replace
 README.md	framework	replace_if_unmodified
+CHANGELOG.md	framework	replace_if_unmodified
 LICENSE	framework	replace_if_unmodified
 .gitignore	framework	replace_if_unmodified
 .editorconfig	framework	replace_if_unmodified
@@ -21,6 +22,7 @@ startup-prompt.md	framework	replace_if_unmodified
 .bin/lib/rapidocr-cli.py	framework	replace_if_unmodified
 .bin/test-import-routing.sh	framework	replace_if_unmodified
 .bin/test-onboarding-verify.sh	framework	replace_if_unmodified
+.bin/test-doctor.sh	framework	replace_if_unmodified
 .bin/test-pdf-classifier.sh	framework	replace_if_unmodified
 .bin/sync-agents.sh	framework	replace_if_unmodified
 install.sh	framework	replace_if_unmodified

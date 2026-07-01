@@ -204,16 +204,24 @@ System documentation: [`system/configuration.md`](system/configuration.md), [`sy
 |---|---|
 | `spinosa new` | Create a workspace from your corpus folder |
 | `spinosa add` | Add new files or folders to an existing workspace |
-| `spinosa upgrade` | Upgrade the CLI to the latest release |
+| `spinosa upgrade` | Upgrade the **CLI** to the latest release |
+| `spinosa update` | Sync **workspace** framework files to the installed CLI version |
+| `spinosa doctor` | Health check: version skew, tools, cloud paths, Hermes drift |
 | `spinosa uninstall` | Remove Spinosa from your system |
 
 ## Upgrading
 
+Spinosa has two update steps:
+
 ```bash
-spinosa upgrade
+spinosa upgrade              # 1. Global CLI (~/.spinosa/)
+spinosa update --yes         # 2. Workspace framework files (run per workspace)
+spinosa doctor               # 3. Verify everything aligns
 ```
 
-See the release history in GitHub Releases.
+After `spinosa update`, Hermes users should merge `.hermes/workspace.config.yaml` into `~/.hermes/config.yaml`.
+
+See [CLI reference — Upgrade lifecycle](docs/reference/cli.md#upgrade-lifecycle) and [CHANGELOG.md](CHANGELOG.md).
 
 ## Next Steps
 
