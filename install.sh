@@ -2,7 +2,7 @@
 # shellcheck shell=bash
 # ── install.sh — Spinosa Framework Installer (auto-re-execs with bash) ──────
 
-PINNED_VERSION="0.6.8"
+PINNED_VERSION="0.6.9"
 
 if [ -z "${BASH_VERSION-}" ]; then
   if command -v bash >/dev/null 2>&1; then
@@ -495,6 +495,155 @@ check_release_age() {
   ok "Release age verified: ${days_old} day(s) old (minimum: ${min_days})"
 }
 
+# Pinned vendor Python packages — bump vendor_pip_fingerprint() when these change.
+VENDOR_PIP_MARKITDOWN='markitdown[all]==0.1.6'
+VENDOR_PIP_RAPIDOCR='rapidocr==3.8.1'
+VENDOR_PIP_PYPDFIUM2='pypdfium2==5.9.0'
+VENDOR_PIP_PYPDF='pypdf'
+VENDOR_PIP_ONNX_VERSIONS='1.23.2 1.23.1 1.23.0 1.22.1 1.22.0'
+
+vendor_pip_fingerprint() {
+  printf '%s|%s|%s|%s|%s' \
+    "$VENDOR_PIP_MARKITDOWN" "$VENDOR_PIP_RAPIDOCR" "$VENDOR_PIP_PYPDFIUM2" \
+    "$VENDOR_PIP_PYPDF" "$VENDOR_PIP_ONNX_VERSIONS"
+}
+
+vendor_tarball_sha_from_checksums() {
+  local checksums_file="$1" suffix="$2"
+  awk -v f="spinosa-vendor-${suffix}.tar.gz" '$2 == f { print $1; exit }' "$checksums_file"
+}
+
+vendor_python_for_dir() {
+  local vendor_dir="$1" python_bin="${vendor_dir}/python/bin/python3"
+  if [[ ! -x "$python_bin" ]]; then
+    python_bin="${vendor_dir}/Python.framework/Versions/Current/bin/python3"
+  fi
+  [[ -x "$python_bin" ]] || return 1
+  printf '%s' "$python_bin"
+}
+
+read_vendor_metadata_field() {
+  local field="$1"
+  local file="${SPINOSA_METADATA_DIR}/vendor.yaml"
+  [[ -f "$file" ]] || return 1
+  awk -v k="$field" '$1 == k ":" { print $2; exit }' "$file"
+}
+
+write_vendor_metadata() {
+  local suffix="$1" tarball_sha="$2"
+  mkdir -p "$SPINOSA_METADATA_DIR"
+  cat > "${SPINOSA_METADATA_DIR}/vendor.yaml" << EOF
+platform_suffix: ${suffix}
+vendor_tarball_sha256: ${tarball_sha}
+pip_fingerprint: $(vendor_pip_fingerprint)
+updated: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+EOF
+}
+
+vendor_tool_checks_pass() {
+  local vendor_dir="$1" tool
+  for tool in markitdown-cli rapidocr-cli; do
+    [[ -x "${vendor_dir}/${tool}" ]] || return 1
+    case "$tool" in
+      markitdown-cli)
+        "${vendor_dir}/${tool}" --check-markitdown >/dev/null 2>&1 || return 1
+        ;;
+      rapidocr-cli)
+        "${vendor_dir}/${tool}" --check-rapidocr >/dev/null 2>&1 || return 1
+        ;;
+    esac
+  done
+  return 0
+}
+
+vendor_packages_healthy() {
+  local vendor_dir="$1" python_bin
+  python_bin="$(vendor_python_for_dir "$vendor_dir")" || return 1
+  "$python_bin" -c 'from rapidocr import RapidOCR; import onnxruntime; import pypdfium2; from markitdown import MarkItDown; import pypdf' >/dev/null 2>&1
+}
+
+vendor_installed_pins_match() {
+  local vendor_dir="$1" python_bin pkg spec ver installed onnx_ver matched=0
+  python_bin="$(vendor_python_for_dir "$vendor_dir")" || return 1
+
+  for spec in "$VENDOR_PIP_MARKITDOWN" "$VENDOR_PIP_RAPIDOCR" "$VENDOR_PIP_PYPDFIUM2"; do
+    pkg="${spec%%\[*}"
+    pkg="${pkg%%==*}"
+    ver="${spec#*==}"
+    installed="$("$python_bin" -m pip show "$pkg" 2>/dev/null | awk '/^Version:/{print $2; exit}')"
+    [[ "$installed" == "$ver" ]] || return 1
+  done
+
+  installed="$("$python_bin" -m pip show onnxruntime 2>/dev/null | awk '/^Version:/{print $2; exit}')"
+  [[ -n "$installed" ]] || return 1
+  for onnx_ver in $VENDOR_PIP_ONNX_VERSIONS; do
+    [[ "$installed" == "$onnx_ver" ]] && matched=1 && break
+  done
+  [[ "$matched" -eq 1 ]]
+}
+
+vendor_binaries_healthy() {
+  local framework_root="$1" vendor_dir="${2:-}"
+  local checksums_file="${framework_root}/metadata/vendor-checksums.txt"
+  [[ -f "$checksums_file" ]] || return 1
+
+  local suffix verified=0 failed=0 line expected_hash bin_name plat_suffix installed_bin
+  suffix="$(detect_platform_suffix)"
+  if [[ -z "$vendor_dir" ]]; then
+    vendor_dir="${SPINOSA_HOME}/vendor/spinosa-${suffix}"
+  fi
+
+  while IFS= read -r line; do
+    case "$line" in
+      ''|\#*) continue ;;
+    esac
+    expected_hash="$(printf '%s' "$line" | awk '{print $1}')"
+    bin_name="$(printf '%s' "$line" | awk '{print $2}')"
+    plat_suffix="$(printf '%s' "$line" | awk '{print $3}')"
+    [[ "$plat_suffix" == "$suffix" ]] || continue
+
+    installed_bin="${vendor_dir}/${bin_name}"
+    [[ -f "$installed_bin" ]] || installed_bin="${SPINOSA_HOME}/bin/${bin_name}"
+    [[ -f "$installed_bin" ]] || return 1
+
+    if verify_checksum "$installed_bin" "$expected_hash"; then
+      verified=$((verified + 1))
+    else
+      failed=$((failed + 1))
+    fi
+  done < "$checksums_file"
+
+  [[ "$failed" -eq 0 && "$verified" -gt 0 ]]
+}
+
+vendor_bundle_can_reuse() {
+  local checksums_file="$1" suffix="$2" vendor_dest="$3" framework_root="$4"
+  local expected_sha stored_sha stored_suffix stored_pip
+
+  [[ "$REINSTALL" -eq 0 ]] || return 1
+  [[ -d "$vendor_dest" ]] || return 1
+  [[ -f "$checksums_file" ]] || return 1
+
+  expected_sha="$(vendor_tarball_sha_from_checksums "$checksums_file" "$suffix")"
+  [[ -n "$expected_sha" ]] || return 1
+
+  if [[ -f "${SPINOSA_METADATA_DIR}/vendor.yaml" ]]; then
+    stored_sha="$(read_vendor_metadata_field vendor_tarball_sha256)" || return 1
+    stored_suffix="$(read_vendor_metadata_field platform_suffix)" || return 1
+    stored_pip="$(read_vendor_metadata_field pip_fingerprint)" || return 1
+    [[ "$stored_sha" == "$expected_sha" ]] || return 1
+    [[ "$stored_suffix" == "$suffix" ]] || return 1
+    [[ "$stored_pip" == "$(vendor_pip_fingerprint)" ]] || return 1
+  else
+    vendor_binaries_healthy "$framework_root" "$vendor_dest" || return 1
+    vendor_installed_pins_match "$vendor_dest" || return 1
+  fi
+
+  vendor_tool_checks_pass "$vendor_dest" || return 1
+  vendor_packages_healthy "$vendor_dest" || return 1
+  return 0
+}
+
 verify_vendor_binaries() {
   local framework_root="$1" vendor_dir="${2:-}"
   local checksums_file="${framework_root}/metadata/vendor-checksums.txt"
@@ -769,6 +918,40 @@ download_and_verify() {
   fi
 }
 
+install_vendor_python_packages() {
+  local spinosa_python="$1"
+  local pip_ok=0 onnx_ver pip_attempt _pip_start
+  _pip_start=$SECONDS
+  for onnx_ver in $VENDOR_PIP_ONNX_VERSIONS; do
+    [[ $((SECONDS - _pip_start)) -lt 300 ]] || break
+    pip_attempt=0
+    while [[ $pip_ok -eq 0 && $pip_attempt -lt 2 ]]; do
+      pip_attempt=$((pip_attempt + 1))
+      spinner_stop 2>/dev/null || true
+      spinner_start "Installing packages (onnxruntime ${onnx_ver}, attempt ${pip_attempt}/2)"
+      if "$spinosa_python" -m pip install \
+        "$VENDOR_PIP_MARKITDOWN" \
+        "$VENDOR_PIP_RAPIDOCR" \
+        "onnxruntime==${onnx_ver}" \
+        "$VENDOR_PIP_PYPDFIUM2" \
+        "$VENDOR_PIP_PYPDF" \
+        --quiet --timeout 120 --only-binary onnxruntime 2>&1; then
+        pip_ok=1
+        break
+      else
+        if [[ $pip_attempt -lt 2 ]]; then
+          warn "onnxruntime ${onnx_ver} attempt ${pip_attempt}/2 failed — retrying"
+          sleep 4
+        else
+          warn "onnxruntime ${onnx_ver} failed — trying older version"
+        fi
+      fi
+    done
+    [[ $pip_ok -eq 1 ]] && break
+  done
+  [[ "$pip_ok" -eq 1 ]]
+}
+
 install_vendor_bundles() {
   local base_url="$1" tmpdir="$2" version="$3"
   local suffix
@@ -778,6 +961,22 @@ install_vendor_bundles() {
   local vendor_url="${base_url}/spinosa-vendor-${suffix}.tar.gz"
   local vendor_tmp="${tmpdir}/spinosa-vendor-${suffix}.tar.gz"
   local checksums_file="${tmpdir}/checksums.txt"
+  local fw_root="${SPINOSA_HOME}/versions/${version}/spinosa-framework-${version}"
+  local expected_vendor_sha=""
+
+  if [[ ! -f "$checksums_file" ]]; then
+    download "${base_url}/checksums.txt" "$checksums_file" || die "Failed to download checksums.txt — cannot verify vendor bundle"
+  fi
+
+  expected_vendor_sha="$(vendor_tarball_sha_from_checksums "$checksums_file" "$suffix")"
+
+  if vendor_bundle_can_reuse "$checksums_file" "$suffix" "$spinosa_vendor_dest" "$fw_root"; then
+    ok "Bundled document tools unchanged — reusing existing install"
+    write_vendor_metadata "$suffix" "$expected_vendor_sha"
+    smoke_check_vendor_tools "$spinosa_vendor_dest"
+    verify_vendor_binaries "$fw_root" "$spinosa_vendor_dest"
+    return 0
+  fi
 
   download_and_verify "$vendor_url" "$vendor_tmp" "Spinosa vendor for ${suffix}" \
     "checksums.txt" "spinosa-vendor-${suffix}.tar.gz" 3 3
@@ -794,43 +993,11 @@ install_vendor_bundles() {
   chmod +x "${spinosa_vendor_dest}/markitdown-cli" 2>/dev/null || true
   spinner_stop
 
-  local spinosa_python="${spinosa_vendor_dest}/python/bin/python3"
-  if [[ ! -x "$spinosa_python" ]]; then
-    spinosa_python="${spinosa_vendor_dest}/Python.framework/Versions/Current/bin/python3"
-  fi
+  local spinosa_python
+  spinosa_python="$(vendor_python_for_dir "$spinosa_vendor_dest" 2>/dev/null || true)"
 
-  if [[ -x "$spinosa_python" ]]; then
-    local pip_ok=0 onnx_ver pip_attempt _pip_start
-    _pip_start=$SECONDS
-    for onnx_ver in 1.23.2 1.23.1 1.23.0 1.22.1 1.22.0; do
-      [[ $((SECONDS - _pip_start)) -lt 300 ]] || break
-      pip_attempt=0
-      while [[ $pip_ok -eq 0 && $pip_attempt -lt 2 ]]; do
-        pip_attempt=$((pip_attempt + 1))
-        spinner_stop 2>/dev/null || true
-        spinner_start "Installing packages (onnxruntime ${onnx_ver}, attempt ${pip_attempt}/2)"
-        if "$spinosa_python" -m pip install \
-          "markitdown[all]==0.1.6" \
-          "rapidocr==3.8.1" \
-          "onnxruntime==${onnx_ver}" \
-          "pypdfium2==5.9.0" \
-          "pypdf" \
-          --quiet --timeout 120 --only-binary onnxruntime 2>&1; then
-          pip_ok=1
-          break
-        else
-          if [[ $pip_attempt -lt 2 ]]; then
-            warn "onnxruntime ${onnx_ver} attempt ${pip_attempt}/2 failed — retrying"
-            sleep 4
-          else
-            warn "onnxruntime ${onnx_ver} failed — trying older version"
-          fi
-        fi
-      done
-      [[ $pip_ok -eq 1 ]] && break
-    done
-
-    if [[ $pip_ok -eq 1 ]]; then
+  if [[ -n "$spinosa_python" ]]; then
+    if install_vendor_python_packages "$spinosa_python"; then
       spinner_stop "MarkItDown + RapidOCR + PDF tools installed"
       spinner_start "Verifying RapidOCR import"
       if "$spinosa_python" -c "from rapidocr import RapidOCR" 2>/dev/null; then
@@ -893,8 +1060,10 @@ RapidOCR(params={
   fi
 
   smoke_check_vendor_tools "$spinosa_vendor_dest"
-  local fw_root="${SPINOSA_HOME}/versions/${version}/spinosa-framework-${version}"
   verify_vendor_binaries "$fw_root" "$spinosa_vendor_dest"
+  if [[ -n "$expected_vendor_sha" ]]; then
+    write_vendor_metadata "$suffix" "$expected_vendor_sha"
+  fi
 }
 
 install_shims() {

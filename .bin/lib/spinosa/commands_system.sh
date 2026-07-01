@@ -428,12 +428,15 @@ sync_dir_contents() {
   src_real="$(cd "$src" 2>/dev/null && pwd -P)" || { warn "Cannot sync missing directory: $src"; return 1; }
   dst_real="$(cd "$dst" 2>/dev/null && pwd -P)" || dst_real=""
   mkdir -p "$dst"
+  if is_cloud_storage_path "$dst"; then
+    note "Cloud storage destination — copying files individually with retries"
+  fi
   if [[ -n "$dst_real" ]]; then
     # Remove items in dst that don't exist in src
     while IFS= read -r -d '' item; do
       local rel="${item#"$dst_real"/}"
       [[ -e "$src_real/$rel" ]] || rm -rf "$item" 2>/dev/null || true
-    done < <(find "$dst_real" -mindepth 1 -maxdepth 1 -print0 2>/dev/null)
+    done < <(find -P "$dst_real" -mindepth 1 -maxdepth 1 -print0 2>/dev/null)
   fi
   safe_copy_tree "$src_real" "$dst"
 }
