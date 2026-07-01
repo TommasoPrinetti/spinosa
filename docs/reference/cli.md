@@ -49,19 +49,19 @@ Upgrade the **globally installed CLI** to the latest release on a channel. Downl
 
 | Channel | Default? | Resolves to |
 | ------- | -------- | ----------- |
-| `stable` | yes | GitHub `releases/latest` (non-prerelease) |
-| `dev` | no | Newest GitHub prerelease (`X.Y.Z-beta.N`) |
+| `stable` | yes | Rolling GitHub `stable` release |
+| `beta` | no | Rolling GitHub `beta` prerelease |
 
 ```bash
 spinosa upgrade --yes                    # stable latest
-spinosa upgrade --channel dev --yes      # beta latest
+spinosa upgrade --channel beta --yes     # beta latest
 spinosa upgrade --version 0.8.0-beta.1   # pin a specific tag
 ```
 
-Stable install URL: `https://github.com/TommasoPrinetti/spinosa/releases/latest/download/install.sh`  
-Dev install URL: `https://github.com/TommasoPrinetti/spinosa/releases/download/dev/install.sh`
+Stable install URL: `https://github.com/TommasoPrinetti/spinosa/releases/download/stable/install.sh`
+Beta install URL: `https://github.com/TommasoPrinetti/spinosa/releases/download/beta/install.sh`
 
-Set default channel for auto-upgrade prompts: `export SPINOSA_RELEASE_CHANNEL=dev` (auto prompts remain **stable-only**).
+Set default channel for explicit channel-less upgrade tooling: `export SPINOSA_RELEASE_CHANNEL=beta`. Auto-upgrade prompts remain stable-only.
 
 This updates `~/.spinosa/` (framework runtime, vendor Python tools). It does **not** update files inside your workspace folders.
 

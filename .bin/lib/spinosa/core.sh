@@ -134,7 +134,7 @@ spinosa_run_with_timeout() {
   shift
   [[ "$timeout_sec" -gt 0 ]] 2>/dev/null || { "$@"; return $?; }
 
-  if command -v timeout >/dev/null 2>&1; then
+  if [[ -z "${SPINOSA_ACTIVE_PROGRESS_INDEX:-}" ]] && command -v timeout >/dev/null 2>&1; then
     timeout --kill-after=3 "$timeout_sec" "$@"
     local rc=$?
     if [[ "$rc" -eq 124 ]]; then
@@ -142,7 +142,7 @@ spinosa_run_with_timeout() {
     fi
     return "$rc"
   fi
-  if command -v gtimeout >/dev/null 2>&1; then
+  if [[ -z "${SPINOSA_ACTIVE_PROGRESS_INDEX:-}" ]] && command -v gtimeout >/dev/null 2>&1; then
     gtimeout --kill-after=3 "$timeout_sec" "$@"
     local rc=$?
     if [[ "$rc" -eq 124 ]]; then
@@ -151,27 +151,82 @@ spinosa_run_with_timeout() {
     return "$rc"
   fi
 
-  local cmd_pid watch_pid rc=0
-  "$@" &
+  local cmd_pid watch_pid child_pid="" rc=0 spin_seed=0 elapsed=0
+  local status_file child_file
+  local old_int_trap old_term_trap
+  status_file="$(mktemp "${TMPDIR:-/tmp}/spinosa-timeout-status.XXXXXX")" || return 1
+  child_file="$(mktemp "${TMPDIR:-/tmp}/spinosa-timeout-child.XXXXXX")" || { rm -f "$status_file"; return 1; }
+  rm -f "$status_file" "$child_file"
+  old_int_trap="$(trap -p INT || true)"
+  old_term_trap="$(trap -p TERM || true)"
+  (
+    "$@" &
+    printf '%s\n' "$!" > "$child_file"
+    wait "$!"
+    printf '%s\n' "$?" > "$status_file"
+  ) &
   cmd_pid=$!
+  spinosa_timeout_cancel() {
+    SPINOSA_LAST_COPY_FAIL_REASON="cancelled"
+    if [[ -f "$child_file" ]]; then
+      child_pid="$(cat "$child_file" 2>/dev/null || true)"
+      [[ -n "$child_pid" ]] && kill -TERM "$child_pid" 2>/dev/null || true
+    fi
+    kill -TERM "$cmd_pid" "$watch_pid" 2>/dev/null || true
+    sleep 0.2
+    [[ -n "${child_pid:-}" ]] && kill -KILL "$child_pid" 2>/dev/null || true
+    kill -KILL "$cmd_pid" 2>/dev/null || true
+    clear_progress_line
+    printf '\n  Cancelled.\n' >&2
+    rm -f "$status_file" "$child_file" 2>/dev/null || true
+    exit 130
+  }
+  trap spinosa_timeout_cancel INT TERM
   (
     sleep "$timeout_sec"
+    if [[ -f "$child_file" ]]; then
+      _spinosa_timeout_child="$(cat "$child_file" 2>/dev/null || true)"
+      [[ -n "$_spinosa_timeout_child" ]] && kill -TERM "$_spinosa_timeout_child" 2>/dev/null || true
+    fi
     kill -TERM "$cmd_pid" 2>/dev/null || true
     sleep 2
+    if [[ -n "${_spinosa_timeout_child:-}" ]]; then
+      kill -KILL "$_spinosa_timeout_child" 2>/dev/null || true
+    fi
     kill -KILL "$cmd_pid" 2>/dev/null || true
   ) &
   watch_pid=$!
-  if wait "$cmd_pid" 2>/dev/null; then
-    rc=0
-  else
-    rc=$?
-    if [[ "$rc" -eq 143 || "$rc" -eq 137 ]]; then
-      SPINOSA_LAST_COPY_FAIL_REASON="timed out after ${timeout_sec}s"
-      rc=124
+
+  while [[ ! -f "$status_file" ]]; do
+    if ! kill -0 "$cmd_pid" 2>/dev/null; then
+      break
     fi
+    if [[ -n "${SPINOSA_ACTIVE_PROGRESS_INDEX:-}" ]]; then
+      render_active_update_progress "$spin_seed"
+      spin_seed=$((spin_seed + 1))
+    fi
+    sleep 0.2
+    elapsed=$((elapsed + 1))
+    if (( elapsed % 5 == 0 )); then
+      spinosa_log INFO "waiting path=${SPINOSA_ACTIVE_PROGRESS_PATH:-unknown} timeout_sec=${timeout_sec}" 2>/dev/null || true
+    fi
+  done
+
+  wait "$cmd_pid" 2>/dev/null || true
+  if [[ -f "$status_file" ]]; then
+    rc="$(cat "$status_file" 2>/dev/null || printf '1')"
+  else
+    rc=124
   fi
   kill "$watch_pid" 2>/dev/null || true
   wait "$watch_pid" 2>/dev/null || true
+  rm -f "$status_file" "$child_file" 2>/dev/null || true
+  if [[ -n "$old_int_trap" ]]; then eval "$old_int_trap"; else trap - INT; fi
+  if [[ -n "$old_term_trap" ]]; then eval "$old_term_trap"; else trap - TERM; fi
+  if [[ "$rc" -eq 143 || "$rc" -eq 137 || "$rc" -eq 124 ]]; then
+    SPINOSA_LAST_COPY_FAIL_REASON="timed out after ${timeout_sec}s"
+    rc=124
+  fi
   return "$rc"
 }
 
@@ -481,5 +536,4 @@ available_disk_bytes() {
     printf '0'
   fi
 }
-
 

@@ -862,20 +862,40 @@ render_progress_line() {
 
 
 clear_progress_line() {
+  SPINOSA_ACTIVE_PROGRESS_INDEX=""
+  SPINOSA_ACTIVE_PROGRESS_TOTAL=""
+  SPINOSA_ACTIVE_PROGRESS_PATH=""
+  SPINOSA_ACTIVE_PROGRESS_ACTION=""
   [[ -t 2 ]] && printf '\r\033[2K' >&2 || true
 }
 
 
 render_update_manifest_progress() {
-  local index="$1" total="$2" path="$3" action="${4:-syncing}"
+  local index="$1" total="$2" path="$3" action="${4:-syncing}" spin_seed="${5:-$1}"
   local frame ratio label label_width fixed
-  frame="$(spinner_frame "$index")"
+  SPINOSA_ACTIVE_PROGRESS_INDEX="$index"
+  SPINOSA_ACTIVE_PROGRESS_TOTAL="$total"
+  SPINOSA_ACTIVE_PROGRESS_PATH="$path"
+  SPINOSA_ACTIVE_PROGRESS_ACTION="$action"
+  frame="$(spinner_frame "$spin_seed")"
   ratio="${index}/${total}"
   fixed=$((10 + 1 + ${#action} + 1 + ${#ratio} + 3))
   label_width=$((COLS - fixed))
   (( label_width < 12 )) && label_width=12
   label="$(truncate_display_path "$path" "$label_width")"
   render_progress_line "  ${C}${frame}${RESET} ${action} ${ratio} ${DIM}—${RESET} ${label}"
+}
+
+
+render_active_update_progress() {
+  local spin_seed="${1:-0}"
+  [[ -n "${SPINOSA_ACTIVE_PROGRESS_INDEX:-}" ]] || return 0
+  render_update_manifest_progress \
+    "$SPINOSA_ACTIVE_PROGRESS_INDEX" \
+    "$SPINOSA_ACTIVE_PROGRESS_TOTAL" \
+    "$SPINOSA_ACTIVE_PROGRESS_PATH" \
+    "$SPINOSA_ACTIVE_PROGRESS_ACTION" \
+    "$spin_seed"
 }
 
 
