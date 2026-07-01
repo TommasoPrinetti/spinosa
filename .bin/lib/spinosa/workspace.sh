@@ -719,7 +719,8 @@ migrate_workspace_logs_dir() {
   spinosa_log INFO "migrate logs/ → .logs/ workspace=${root}"
 
   # Bulk rename only when .logs/ does not exist — otherwise mv would nest logs/ inside .logs/logs/.
-  if [[ ! -e "$new" ]]; then
+  # Cloud paths: skip bulk mv (Drive/Dropbox FUSE can hang uninterruptibly); use per-file copy.
+  if [[ ! -e "$new" ]] && ! is_cloud_storage_path "$root"; then
     if spinosa_run_with_timeout "$timeout_sec" mv "$old" "$new" 2>/dev/null; then
       ok "Migrated logs/ → .logs/"
       archive_legacy_logs_memory_files "$root"
