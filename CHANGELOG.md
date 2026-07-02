@@ -8,6 +8,22 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.8.0-beta.5] — 2026-07-02
+
+### Added
+
+- Config consolidation: `last_installed_version` and `auto_upgrade` moved to `~/.spinosa/metadata/config.yaml`. Orphan `scan_permission` removed. Dead `install.yaml` fields stripped. Installer reads/writes `last_installed_version` from config.yaml. (User settings now in one file.)
+- Pinned `pypdf==5.1.0` in installer and vendor builds for reproducible Python dependency installs.
+- Hash-locked vendor package install: `build-spinosa-vendor.sh` generates a platform-targeted `requirements.txt` with SHA-256 hashes; `install.sh` runs `pip install --require-hashes` when present.
+- Pre-install disk space check: installer fails early when free space on temp or install volume is below ~500MB.
+- Expanded `spinosa --help` with global flags, command options, conventions, and examples. Per-command `--help` routing for all commands.
+- Community documentation files: `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, `SUPPORT.md`. GitHub issue/PR templates.
+
+### Fixed
+
+- Version check cache cleanup now clears channel-suffixed variants (`_stable`, `_beta`).
+- `auto_upgrade_check()` now reads `auto_upgrade:` from config.yaml (env var `SPINOSA_NO_UPGRADE_CHECK=1` still takes priority).
+
 ## [0.8.0-beta.4] — 2026-07-01
 
 ### Fixed
