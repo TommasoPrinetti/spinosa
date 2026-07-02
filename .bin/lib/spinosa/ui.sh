@@ -150,6 +150,10 @@ option_spec() {
   printf '%s%s%s%s%s' "$value" "$OPTION_SEP" "$label" "$OPTION_SEP" "$description"
 }
 
+option_separator() {
+  option_spec "__separator__" "" ""
+}
+
 
 option_value() {
   local spec="$1"
@@ -193,6 +197,10 @@ option_description() {
   else
     printf ''
   fi
+}
+
+option_is_separator() {
+  [[ "$(option_value "$1")" == "__separator__" ]]
 }
 
 
@@ -334,16 +342,22 @@ reset_terminal() {
 select_menu() {
   local prompt="$1"
   shift
-  local options=("$@")
+  local options=("$@") selectable_options=()
 
   printf '%s\n' "${BOLD}${prompt}${RESET}" >&2
-  for i in "${!options[@]}"; do
-    printf '  %s %s\n' "${DIM}$((i+1)).${RESET}" "$(option_display "${options[$i]}")" >&2
+  local i option
+  for option in "${options[@]}"; do
+    if option_is_separator "$option"; then
+      printf '\n' >&2
+      continue
+    fi
+    selectable_options+=("$option")
+    printf '  %s %s\n' "${DIM}${#selectable_options[@]}.${RESET}" "$(option_display "$option")" >&2
   done
 
   local choice
   while true; do
-    printf '%s' "${DIM}  Enter number [1-${#options[@]}]: ${RESET}" >&2
+    printf '%s' "${DIM}  Enter number [1-${#selectable_options[@]}]: ${RESET}" >&2
 	    if ! read_from_tty choice; then
 	      # If read_from_tty fails (no tty), try reading from stdin
 	      if ! IFS= read -r choice; then
@@ -351,8 +365,8 @@ select_menu() {
 	        return 1
 	      fi
 	    fi
-    if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#options[@]} )); then
-      echo "$(option_value "${options[$((choice-1))]}")"
+    if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#selectable_options[@]} )); then
+      echo "$(option_value "${selectable_options[$((choice-1))]}")"
       return
     fi
     printf '  %s\n' "${R}Invalid choice. Try again.${RESET}" >&2
@@ -385,10 +399,36 @@ arrow_select() {
   old_int_trap="$(trap -p INT || true)"
   old_term_trap="$(trap -p TERM || true)"
 
+  first_selectable_index() {
+    local idx
+    for idx in "${!options[@]}"; do
+      option_is_separator "${options[$idx]}" || { printf '%s' "$idx"; return 0; }
+    done
+    return 1
+  }
+
+  next_selectable_index() {
+    local start="$1" step="$2" idx="$start"
+    local visited=0
+    while (( visited < count )); do
+      idx=$(( (idx + step + count) % count ))
+      if ! option_is_separator "${options[$idx]}"; then
+        printf '%s' "$idx"
+        return 0
+      fi
+      visited=$((visited + 1))
+    done
+    return 1
+  }
+
+  current="$(first_selectable_index)" || { select_menu "$prompt" "${options[@]}"; return; }
+
   render_arrow_options() {
     local i
     for i in "${!options[@]}"; do
-      if (( i == current )); then
+      if option_is_separator "${options[$i]}"; then
+        printf '\n' >&2
+      elif (( i == current )); then
         printf '\r\033[2K  %s›%s %s\n' "${C}" "${RESET}" "$(option_display "${options[$i]}" 1)" >&2
       else
         printf '\r\033[2K    %s\n' "$(option_display "${options[$i]}")" >&2
@@ -440,8 +480,8 @@ arrow_select() {
           return 1
         fi
         case "$seq" in
-          '[A'|'OA') current=$(( (current + count - 1) % count )) ;;
-          '[B'|'OB') current=$(( (current + 1) % count )) ;;
+          '[A'|'OA') current="$(next_selectable_index "$current" -1)" || continue ;;
+          '[B'|'OB') current="$(next_selectable_index "$current" 1)" || continue ;;
           *) continue ;;
         esac
         printf '\033[%dF' "$count" >&2

@@ -8,6 +8,15 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.8.0-beta.8] — 2026-07-02
+
+### Fixed
+
+- `spinosa update` on cloud-folder workspaces now stages manifest and workspace-metadata rewrites locally, copies them back through the timeout-safe path, and time-bounds the final `sync-agents` step so the process no longer appears to freeze immediately after framework copies.
+- The `spinosa update` workspace picker now includes a single `All workspaces` action and visually separates utility actions from the registered workspace list.
+- Removed stale startup dashboard appendix content from `startup-prompt.md`; startup chart behavior now lives in shared chart-rendering references instead of duplicated prompt-local instructions.
+- Added `spinosa-visualizer` to the orchestrator contract in `AGENTS.md` and fixed `.bin/sync-agents.sh` so visualizer mirrors regenerate correctly for Codex, Claude, OpenCode, and Hermes.
+
 ## [0.8.0-beta.7] — 2026-07-02
 
 ### Fixed
