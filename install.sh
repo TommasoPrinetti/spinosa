@@ -228,7 +228,7 @@ while [ $# -gt 0 ]; do
       MIN_DAYS="$2"; shift 2 ;;
     --prefix)
       [ $# -ge 2 ] || die "--prefix requires a directory path"
-      SPINOSA_HOME="$2"; shift 2 ;;
+      SPINOSA_HOME="$2"; SPINOSA_METADATA_DIR="${SPINOSA_HOME}/metadata"; shift 2 ;;
     --bin-dir)
       [ $# -ge 2 ] || die "--bin-dir requires a directory path"
       SPINOSA_BIN_DIR="$2"; shift 2 ;;
@@ -499,8 +499,14 @@ EOF
     else
       sed -i "s/^last_installed_version:.*/last_installed_version: \"${VERSION}\"/" "$config"
     fi
-  else
+  elif [ -f "$config" ]; then
     printf '\nlast_installed_version: "%s"\n' "$VERSION" >> "$config"
+  else
+    cat > "$config" << CONFIG_EOF
+release_channel: stable
+auto_upgrade: true
+last_installed_version: "${VERSION}"
+CONFIG_EOF
   fi
 }
 
