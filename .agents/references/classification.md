@@ -20,6 +20,7 @@ After route split, choose the initial chain. The orchestrator may adapt after ea
 | **Q3 — Hidden connections** | Goal → Searcher → Analyst → **Serendippo** → Writer → Verifier → Evaluator | Implicit/subtle signals, cross-file patterns, tone readable only in context, participant trajectories |
 | **Q4 — Cleanup** | Goal → Janitor → Verifier → Evaluator | Hygiene audit, stale files, archival moves |
 | **Q5 — Coverage** | Goal → Overseer → Evaluator | Every 5 routes, user request, or discretionary trigger |
+| **Q6 — Visualization** | Goal → Visualizer → Writer → Verifier → Evaluator | Data needs a visual form; pure-Unicode chart in markdown |
 
 ### Prompt signals → chain hint
 
@@ -30,6 +31,9 @@ After route split, choose the initial chain. The orchestrator may adapt after ea
 | "subtle", "implicit", "from context", "not declared", "hidden", "cross-cutting", "unexpected connections" | Q3 (include Serendippo) |
 | "cleanup", "hygiene", "stale", "archive" | Q4 |
 | "coverage", "gaps", "what are we missing" | Q5 |
+| "visualize", "chart", "plot this", "graph this data", "show me" + numbers | Q6 |
+
+**Visualizer:** Called when data tables, arrays, or numerical evidence need a Unicode chart. Runs inline (called by Writer) or as standalone Q6 route.
 
 **Serendippo vs Analyst:** Analyst organizes evidence the Searcher already found. Serendippo roams `raw/` for connections Searcher did not surface. Use both when the question needs interpretation **and** discovery.
 
