@@ -60,8 +60,9 @@ spinosa upgrade --version 0.8.0-beta.1   # pin a specific tag
 
 Stable install URL: `https://github.com/TommasoPrinetti/spinosa/releases/download/stable/install.sh`
 Beta install URL: `https://github.com/TommasoPrinetti/spinosa/releases/download/beta/install.sh`
+Exact install URL: `https://github.com/TommasoPrinetti/spinosa/releases/download/vX.Y.Z/install.sh`
 
-Set default channel for explicit channel-less upgrade tooling: `export SPINOSA_RELEASE_CHANNEL=beta`. Auto-upgrade prompts remain stable-only.
+Set default channel for channel-less upgrade tooling: `export SPINOSA_RELEASE_CHANNEL=beta`. Auto-upgrade checks follow the configured release channel in `~/.spinosa/metadata/config.yaml`.
 
 This updates `~/.spinosa/` (framework runtime, vendor Python tools). It does **not** update files inside your workspace folders.
 

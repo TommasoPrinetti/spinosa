@@ -2,7 +2,7 @@
 # shellcheck shell=bash
 # ── install.sh — Spinosa Framework Installer (auto-re-execs with bash) ──────
 
-PINNED_VERSION="0.8.0-beta.5"
+PINNED_VERSION="0.8.0-beta.6"
 PINNED_TAG="beta"
 
 if [ -z "${BASH_VERSION-}" ]; then
@@ -102,6 +102,8 @@ trap '_spinosa_install_err_trap $LINENO' ERR
 # ══════════════════════════════════════════════════════════════════════════════
 
 VERSION="${VERSION:-$PINNED_VERSION}"
+VERSION_EXPLICIT=0
+RELEASE_DOWNLOAD_TAG="$PINNED_TAG"
 DRY_RUN=0
 VERIFY_ONLY=0
 SKIP_BUNDLED_TOOLS=0
@@ -110,6 +112,7 @@ REINSTALL=0
 MIN_DAYS=""
 YES=0
 LAUNCH_DASHBOARD="auto"
+PREFIX_MODE=0
 SPINOSA_HOME="${SPINOSA_HOME:-$HOME/.spinosa}"
 SPINOSA_METADATA_DIR="${SPINOSA_HOME}/metadata"
 SPINOSA_BIN_DIR="${SPINOSA_BIN_DIR:-$HOME/.local/bin}"
@@ -210,11 +213,12 @@ while [ $# -gt 0 ]; do
     --version)
       [ $# -ge 2 ] || die "--version requires a value (use X.Y.Z or 'latest')"
       VERSION="$2"; shift 2
+      VERSION_EXPLICIT=1
       if [[ "$VERSION" != "latest" && ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?(\+[a-zA-Z0-9.]+)?$ ]]; then
         die "Invalid version: $VERSION (use X.Y.Z, X.Y.Z-pre, or 'latest')"
       fi
       ;;
-    --latest)     VERSION="latest"; shift ;;
+    --latest)     VERSION="latest"; VERSION_EXPLICIT=1; shift ;;
     --dry-run)    DRY_RUN=1; shift ;;
     --verify-only) VERIFY_ONLY=1; shift ;;
     --upgrade)    UPGRADE=1; shift ;;
@@ -228,7 +232,7 @@ while [ $# -gt 0 ]; do
       MIN_DAYS="$2"; shift 2 ;;
     --prefix)
       [ $# -ge 2 ] || die "--prefix requires a directory path"
-      SPINOSA_HOME="$2"; SPINOSA_METADATA_DIR="${SPINOSA_HOME}/metadata"; shift 2 ;;
+      SPINOSA_HOME="$2"; SPINOSA_METADATA_DIR="${SPINOSA_HOME}/metadata"; PREFIX_MODE=1; shift 2 ;;
     --bin-dir)
       [ $# -ge 2 ] || die "--bin-dir requires a directory path"
       SPINOSA_BIN_DIR="$2"; shift 2 ;;
@@ -481,6 +485,59 @@ init_global_metadata() {
   done
 }
 
+installer_release_channel() {
+  case "$PINNED_TAG" in
+    stable) printf '%s\n' "stable" ;;
+    beta|dev) printf '%s\n' "beta" ;;
+    v*)
+      if [[ "$PINNED_VERSION" == *-* ]]; then
+        printf '%s\n' "beta"
+      else
+        printf '%s\n' "stable"
+      fi
+      ;;
+    *)
+      if [[ "$PINNED_VERSION" == *-* ]]; then
+        printf '%s\n' "beta"
+      else
+        printf '%s\n' "stable"
+      fi
+      ;;
+  esac
+}
+
+channel_install_url() {
+  local channel="$1"
+  case "$channel" in
+    stable) printf 'https://github.com/%s/releases/download/stable/install.sh\n' "$REPO" ;;
+    beta|dev) printf 'https://github.com/%s/releases/download/beta/install.sh\n' "$REPO" ;;
+    *) die "Unknown release channel: ${channel}" ;;
+  esac
+}
+
+resolve_pinned_version_from_installer() {
+  local channel="$1" url="$2"
+  local installer resolved
+  installer="$(curl -fsSL --max-time 30 "$url" 2>/dev/null || true)"
+  [ -n "$installer" ] || die "Could not resolve latest ${channel} version. Use --version to specify."
+  resolved="$(awk -F'"' '/^PINNED_VERSION=/ { print $2; exit }' <<< "$installer" || true)"
+  [ -n "$resolved" ] || die "${channel} channel installer is missing PINNED_VERSION."
+  printf '%s\n' "$resolved"
+}
+
+config_set_key() {
+  local config="$1" key="$2" value="$3"
+  if grep -q "^${key}:" "$config" 2>/dev/null; then
+    if [ "$(uname -s)" = "Darwin" ]; then
+      sed -i '' "s/^${key}:.*/${key}: ${value}/" "$config"
+    else
+      sed -i "s/^${key}:.*/${key}: ${value}/" "$config"
+    fi
+  else
+    printf '\n%s: %s\n' "$key" "$value" >> "$config"
+  fi
+}
+
 SPINOSA_INSTALL_COMPLETE_STAMP=".spinosa-install-complete"
 INSTALL_COMPLETED=0
 
@@ -493,20 +550,15 @@ bin_dir: "${SPINOSA_BIN_DIR}"
 EOF
   # Write last_installed_version to config.yaml (user-facing settings)
   local config="${SPINOSA_METADATA_DIR}/config.yaml"
-  if grep -q '^last_installed_version:' "$config" 2>/dev/null; then
-    if [ "$(uname -s)" = "Darwin" ]; then
-      sed -i '' "s/^last_installed_version:.*/last_installed_version: \"${VERSION}\"/" "$config"
-    else
-      sed -i "s/^last_installed_version:.*/last_installed_version: \"${VERSION}\"/" "$config"
-    fi
-  elif [ -f "$config" ]; then
-    printf '\nlast_installed_version: "%s"\n' "$VERSION" >> "$config"
-  else
+  if [ ! -f "$config" ]; then
     cat > "$config" << CONFIG_EOF
-release_channel: stable
+release_channel: $(installer_release_channel)
 auto_upgrade: true
 last_installed_version: "${VERSION}"
 CONFIG_EOF
+  else
+    config_set_key "$config" "release_channel" "$(installer_release_channel)"
+    config_set_key "$config" "last_installed_version" "\"${VERSION}\""
   fi
 }
 
@@ -665,14 +717,19 @@ get_installed_version() {
 
 resolve_version() {
   if [ "$VERSION" = "latest" ]; then
-    info "Resolving latest version..."
+    local channel url
+    channel="$(installer_release_channel)"
+    url="$(channel_install_url "$channel")"
+    info "Resolving latest ${channel} version..."
     local resolved
-    resolved="$(curl -fsSL --max-time 30 -o /dev/null -w '%{url_effective}' "https://github.com/${REPO}/releases/latest" 2>/dev/null | sed 's|.*/tag/||' | sed 's/^v//')" || true
-    if [ -z "$resolved" ]; then
-      die "Could not resolve latest version. Use --version to specify."
-    fi
+    resolved="$(resolve_pinned_version_from_installer "$channel" "$url")"
     VERSION="$resolved"
-    info "Latest version: ${VERSION}"
+    RELEASE_DOWNLOAD_TAG="$channel"
+    info "Latest ${channel} version: ${VERSION}"
+  elif [ "$VERSION_EXPLICIT" -eq 1 ]; then
+    RELEASE_DOWNLOAD_TAG="v${VERSION}"
+  else
+    RELEASE_DOWNLOAD_TAG="$PINNED_TAG"
   fi
 }
 
@@ -681,7 +738,7 @@ check_release_age() {
   [ -n "$min_days" ] || return 0
   [ "$min_days" -gt 0 ] 2>/dev/null || die "--min-days must be a positive integer (got: $min_days)"
 
-  local api_url="https://api.github.com/repos/${REPO}/releases/tags/${PINNED_TAG}"
+  local api_url="https://api.github.com/repos/${REPO}/releases/tags/${RELEASE_DOWNLOAD_TAG}"
   local published_at
   published_at="$(curl -fsSL --max-time 30 "$api_url" 2>/dev/null | grep '"published_at":' | head -1 | sed 's/.*"published_at": "\([^"]*\)".*/\1/')" || true
 
@@ -1312,10 +1369,20 @@ RapidOCR(params={
 }
 
 install_shims() {
+  if [ "$PREFIX_MODE" -eq 1 ]; then
+    info "Custom install root (--prefix) — skipping global shim."
+    info "  Run Spinosa from: ${SPINOSA_HOME}/bin/spinosa"
+    return 0
+  fi
   local shim="${SPINOSA_BIN_DIR}/spinosa"
   cat > "$shim" << SHIM_EOF
 #!/bin/sh
-exec bash "${SPINOSA_HOME}/bin/spinosa" "\$@"
+target="${SPINOSA_HOME}/bin/spinosa"
+if [ ! -f "\$target" ]; then
+  echo "spinosa: installation broken — missing \${target}" >&2
+  exit 1
+fi
+exec bash "\$target" "\$@"
 SHIM_EOF
   chmod +x "$shim"
   ok "Created wrapper script: ${shim}"
@@ -1574,7 +1641,7 @@ main() {
   resolve_version
   check_release_age "$VERSION" "$MIN_DAYS"
 
-  local base_url="https://github.com/${REPO}/releases/download/${PINNED_TAG}"
+  local base_url="https://github.com/${REPO}/releases/download/${RELEASE_DOWNLOAD_TAG}"
   local archive_name="spinosa-framework-${VERSION}.tar.gz"
 
   info "Version: ${VERSION}"
@@ -1648,9 +1715,11 @@ main() {
 
   echo ""
   write_spinosa_env_file
-  setup_shell_path
-  activate_spinosa_path_for_session
-  run_basic_test || true
+  if [ "$PREFIX_MODE" -eq 0 ]; then
+    setup_shell_path
+    activate_spinosa_path_for_session
+    run_basic_test || true
+  fi
 
   echo ""
   divider
@@ -1658,7 +1727,11 @@ main() {
 
   spinosa_log INFO "install complete version=${VERSION} home=${SPINOSA_HOME}"
   note "Install log: $(spinosa_log_file)"
-  print_path_instructions
+  if [ "$PREFIX_MODE" -eq 1 ]; then
+    info "Run Spinosa from: ${SPINOSA_HOME}/bin/spinosa"
+  else
+    print_path_instructions
+  fi
   echo ""
   maybe_launch_dashboard
   return 0

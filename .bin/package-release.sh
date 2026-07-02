@@ -127,6 +127,8 @@ fi
 echo "Cleaning .DS_Store and AppleDouble files..."
 find "$FRAMEWORK_DIR" -name ".DS_Store" -delete 2>/dev/null || true
 find "$FRAMEWORK_DIR" -name "._*" -delete 2>/dev/null || true
+find "$FRAMEWORK_DIR" -type d -name "__pycache__" -prune -exec rm -rf {} + 2>/dev/null || true
+find "$FRAMEWORK_DIR" -type f \( -name "*.pyc" -o -name "*.pyo" \) -delete 2>/dev/null || true
 
 # ── Add metadata ────────────────────────────────────────────────────────────
 echo "Writing metadata..."
@@ -259,10 +261,19 @@ COPYFILE_DISABLE=1 tar --no-xattrs -czf "${DIST}/${FRAMEWORK_ARCHIVE}" -C "$STAG
 echo "Staging install.sh..."
 
 cp "${REPO_ROOT}/install.sh" "${DIST}/install.sh"
+if [[ "$(uname -s)" == "Darwin" ]]; then
+  sed -i '' "s/^PINNED_TAG=.*/PINNED_TAG=\"v${VERSION}\"/" "${DIST}/install.sh"
+else
+  sed -i "s/^PINNED_TAG=.*/PINNED_TAG=\"v${VERSION}\"/" "${DIST}/install.sh"
+fi
 
 # Basic validation that we copied a plausible installer (guards against drift or bad source at release time).
 if ! head -5 "${DIST}/install.sh" | grep -q 'auto-re-execs with bash'; then
   echo "Error: staged install.sh does not appear to be the Spinosa installer"
+  exit 1
+fi
+if ! grep -q "^PINNED_TAG=\"v${VERSION}\"" "${DIST}/install.sh"; then
+  echo "Error: staged install.sh PINNED_TAG was not pinned to v${VERSION}"
   exit 1
 fi
 echo "  install.sh staged and validated"

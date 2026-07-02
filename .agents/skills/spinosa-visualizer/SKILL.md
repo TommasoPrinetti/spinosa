@@ -76,6 +76,7 @@ plot_bottom    = └──┴──┴──┴──┴──┴──┴──
 | Compare categories            | Which is larger or smaller?       | Horizontal Bar         | Dot Plot                 |
 | Rank                          | What is the order?                | Sorted Bar             | —                        |
 | Trend over time               | How did it change?                | Multi-Line / Sparkline | —                        |
+| Connected trend               | How did it change with lines?     | Line Chart             | Sparkline                |
 | Distribution                  | What is the spread?               | Histogram              | Box Plot, Density        |
 | Relationship                  | Are these related?                | Scatter (braille)      | Heatmap Row              |
 | Part-to-whole                 | What is the share?                | Stacked Bar            | —                        |
@@ -86,6 +87,10 @@ plot_bottom    = └──┴──┴──┴──┴──┴──┴──
 | Exact values                  | What are the numbers?             | Table + Dot Plot       | —                        |
 | Multi-var health              | What is the status?               | Status Matrix          | Heatmap Row              |
 | Continuous density            | What is the shape?                | Density (braille)      | Histogram                |
+| Matrix pattern detection      | How does this look across 2D?     | Full Matrix Heatmap    | Scatter (braille)        |
+| Overlapping profiles          | How do these compare vertically?  | Ridge Plot             | Density (braille)        |
+| Compact category comparison   | Which is larger (vertical)?       | Vertical Bar           | Horizontal Bar           |
+| Distributions by group        | How do these compare per bin?     | Categorical Histogram  | Grouped Bar              |
 
 ## Chart Type Specifications
 
@@ -691,6 +696,194 @@ Status mapping:
 **Do NOT use:** when audience expects exact counts (use Histogram). When data has < 50 values.
 
 **Validate:** curve peaks align with data mode. Area fills the plot smoothly without gaps.
+
+---
+
+### 18. Full Matrix Heatmap
+
+| Field        | Value                                                         |
+|--------------|---------------------------------------------------------------|
+| **Purpose**  | Show patterns across rows and columns in a 2D matrix          |
+| **Task**     | Matrix pattern detection, correlation, comparison across two dimensions |
+| **Chars**    | `░` (low), `▒` (med-low), `▓` (med-high), `█` (high), ` ` (missing) |
+| **Script**   | `scripts/matrix-heatmap.py`                                   |
+
+**Cookguide:**
+
+| Step | Action | Detail |
+|------|--------|--------|
+| 1. Data Intake | Gather row labels, column labels, 2D matrix of values, min/max | JSON: `{row_labels: [str], col_labels: [str], data: [[float]], min: float, max: float}` |
+| 2. Arrange | Build JSON with `title`, `row_labels`, `col_labels`, `data`, `min`, `max` | Normalize values to [min, max] range. Handle nulls as empty. |
+| 3. Viz | `python3 scripts/matrix-heatmap.py --input data.json --title "..." --width 52 --cell-width 4` | Flags: `--no-numbers` to shade only, `--show-numbers` to show values inside cells |
+| 4. Validate | Check shade intensity matches value. Cell count = rows × cols. | Verify row/col labels align. Values within [min, max]. |
+
+**Rendering:**
+
+```
+┌─ Exercise × Cohort Performance ────────────────────────────────────────┐
+│          C1          C2          C3          C4                         │
+│ E01 Start   ████████  ▓▓▓▓▓▓▓▓  ████████  ▓▓▓▓▓▓▓▓                    │
+│ E02 Mental  ▓▓▓▓▓▓▓▓  ████████  ▓▓▓▓▓▓▓▓  ████████                    │
+│ E03 Metaph  ████████  ████████  ████████  ████████                    │
+│ E04 WeSear  ▓▓▓▓▓▓▓▓  ▓▓▓▓▓▓▓▓  ████████  ████████                    │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+**Do NOT use:** when data has > 30 rows (paginate first). When values are not comparable across cells.
+
+**Validate:** shade intensity matches value. Cell count matches rows × cols. Row/col labels aligned.
+
+---
+
+### 19. Line Chart (Connected)
+
+| Field        | Value                                                         |
+|--------------|---------------------------------------------------------------|
+| **Purpose**  | Show connected trend lines for one or two series over ordered x-axis |
+| **Task**     | Connected trend, time series with connected points             |
+| **Chars**    | Braille U+2800...U+28FF — interpolated dots between consecutive points |
+| **Script**   | `scripts/line-chart.py`                                       |
+
+**Cookguide:**
+
+| Step | Action | Detail |
+|------|--------|--------|
+| 1. Data Intake | Gather ordered (x,y) points per series, with series name and color assignment | JSON: `{series: [{name, points: [{x, y}], color: "left"|"right"}]}` |
+| 2. Arrange | Build JSON with `title`, `x_label`, `y_label`, `series` | x and y should be numeric. For time series, use numeric x (0,1,2...). |
+| 3. Viz | `python3 scripts/line-chart.py --input data.json --title "..." --width 30 --height 10` | Flags: `--grid` for grid lines |
+| 4. Validate | Lines connect consecutive points. Y range covers data min/max. | Check axis labels. Verify braille dots align with data. |
+
+**Rendering:**
+
+```
+┌─ Revenue Over Time ────────────────────────────────────────────────────┐
+│ 200 ┤          ⡠⠤⣀⣀⣀⣀⡠⠤⠤⠁⠋⠉⠉⡋⠉⠉⡉⠉⠉⡋⠉⠉⠁⠋⠉⠉⡋⠉⠉⡉⠉⠉⠉          │
+│ 150 ┤       ⡠⠤⣀⣀⣀⣀⡠⠤⠤⠁⠋⠉⠉⡋⠉⠉⡉⠉⠉⡋⠉⠉⠁⠋⠉⠉⡋⠉⠉⡉⠉⠉⠉           │
+│ 100 ┤    ⡠⠤⣀⣀⣀⣀⡠⠤⠤⠁⠋⠉⠉⡋⠉⠉⡉⠉⠉⡋⠉⠉⠁⠋⠉⠉⡋⠉⠉⡉⠉⠉⠉            │
+│  50 ┤ ⡠⠤⣀⣀⣀⣀⡠⠤⠤⠁⠋⠉⠉⡋⠉⠉⡉⠉⠉⡋⠉⠉⠁⠋⠉⠉⡋⠉⠉⡉⠉⠉⠉             │
+│     └───────────────────────────────────────────────────────────────────      │
+│            0.0          1.0          2.0          3.0                          │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Do NOT use:** when > 2 series (use scatter). When points are not ordered (use scatter).
+
+**Validate:** lines connect consecutive points. Y range covers data min/max. Axis labels aligned.
+
+---
+
+### 20. Ridge Plot (Joy Division)
+
+| Field        | Value                                                         |
+|--------------|---------------------------------------------------------------|
+| **Purpose**  | Show overlapping horizontal series stacked vertically          |
+| **Task**     | Overlapping profiles, ridge comparison                        |
+| **Chars**    | Braille U+2800...U+28FF — filled silhouette per series        |
+| **Script**   | `scripts/ridge-plot.py`                                       |
+
+**Cookguide:**
+
+| Step | Action | Detail |
+|------|--------|--------|
+| 1. Data Intake | Gather list of series, each with ordered y-values | JSON: `{series: [{name, values: [float]}]}` |
+| 2. Arrange | Build JSON with `title`, `x_label`, `series` | Each series has same length values. |
+| 3. Viz | `python3 scripts/ridge-plot.py --input data.json --title "..." --width 52 --height 3` | Flags: `--overlap 0.3` for overlap ratio |
+| 4. Validate | Each series forms a filled silhouette. Overlaps visible. | Check series labels aligned to rows. |
+
+**Rendering:**
+
+```
+┌─ Pulsar Profiles ──────────────────────────────────────────────────────┐
+│        ⣠⣴⣶⣾⣾⣿⣶⣤⡀         P1                                    │
+│     ⣀⣴⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣾⣴⣠⡀                              │
+│⣠⣤⣴⣶⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣾⣴               │
+│  ⡀⣠⣴⣶⣾⣿⣿⣿⣿⣿⣿⣿⣾⣴⣠⡀          P2                      │
+│⣴⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣾⣶⣴⣤               │
+│        ⡀⣠⣶⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿     P3                        │
+│⡀⣀⣀⣀⣠⣤⣶⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿               │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+**Do NOT use:** when > 10 series (too many overlaps). When series have different lengths.
+
+**Validate:** each series forms a filled silhouette. Overlaps visible. Labels aligned to rows.
+
+---
+
+### 21. Vertical Bar Chart
+
+| Field        | Value                                                         |
+|--------------|---------------------------------------------------------------|
+| **Purpose**  | Compare values across categories using upward-growing bars    |
+| **Task**     | Category comparison, compact layout when horizontal space is tight |
+| **Chars**    | `▁▂▃▄▅▆▇█` (8 vertical eighths, upward-growing)              |
+| **Script**   | `scripts/vertical-bar.py`                                     |
+
+**Cookguide:**
+
+| Step | Action | Detail |
+|------|--------|--------|
+| 1. Data Intake | Gather labeled numeric values | JSON: `{bars: [{label, value}]}` |
+| 2. Arrange | Build JSON with `title`, `bars` | Values should be numeric, non-negative. |
+| 3. Viz | `python3 scripts/vertical-bar.py --input data.json --title "..." --width 52 --height 8` | Flags: `--show-values` to show values atop bars |
+| 4. Validate | Tallest bar equals max_value. Bar heights proportional. | Check labels below bars. Values atop bars match data. |
+
+**Rendering:**
+
+```
+┌─ Top Categories by Frequency ──────────────────────────────────────────┐
+│  94   85   75   66   48                                                │
+│ ████ ▂▂▂▂                                                              │
+│ ████ ████ ▃▃▃▃                                                         │
+│ ████ ████ ████ ▅▅▅▅                                                    │
+│ ████ ████ ████ ████ ▁▁▁▁                                               │
+│ ████ ████ ████ ████ ████                                               │
+│ ████ ████ ████ ████ ████                                               │
+│ ████ ████ ████ ████ ████                                               │
+│  A    B    C    D    E                                                  │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+**Do NOT use:** when > 20 bars (too many for vertical layout). When values have negative numbers.
+
+**Validate:** tallest bar equals max_value. Bar heights proportional. Labels centered under bars.
+
+---
+
+### 22. Categorical Histogram
+
+| Field        | Value                                                         |
+|--------------|---------------------------------------------------------------|
+| **Purpose**  | Show grouped or stacked bars per bin, one series per shade    |
+| **Task**     | Multi-series distribution, grouped comparison                  |
+| **Chars**    | `█▓▒░` (one per series, up to 4 series)                       |
+| **Script**   | `scripts/categorical-histogram.py`                            |
+
+**Cookguide:**
+
+| Step | Action | Detail |
+|------|--------|--------|
+| 1. Data Intake | Gather bin labels + multi-series values | JSON: `{bin_labels: [str], series: [{name, values: [float]}]}` |
+| 2. Arrange | Build JSON with `title`, `bin_labels`, `series` | Each series has same length as bin_labels. |
+| 3. Viz | `python3 scripts/categorical-histogram.py --input data.json --title "..." --width 52` | Flags: `--grouped` for grouped (side-by-side), default stacked |
+| 4. Validate | Total bar proportions match values. Shade chars match series. | Check legend in description. Values per bin match data. |
+
+**Rendering:**
+
+```
+┌─ Scores by Type per Cohort ───────────────────────────────────────────┐
+│ C1  Engagement ████████████████████▓▓▓▓▓▓▓▓▓▓▓▓░░░░░░░░░░░░ 85       │
+│     Reflection ████████████████████▓▓▓▓▓▓▓▓▓▓▓▓░░░░░░░░░░░░ 62       │
+│     Synthesis  ████████████████████▓▓▓▓▓▓▓▓▓▓▓▓░░░░░░░░░░░░ 45       │
+│ C2  Engagement ██████████████████████████████▓▓▓▓▓▓▓▓░░░░░░ 72       │
+│     Reflection ██████████████████████████████▓▓▓▓▓▓▓▓░░░░░░ 78       │
+│     Synthesis  ██████████████████████████████▓▓▓▓▓▓▓▓░░░░░░ 55       │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+**Do NOT use:** when > 4 series (too many shades). When bins have unequal widths.
+
+**Validate:** total bar proportions match bin counts. Each series uses distinct shade. Legend included.
 
 ---
 

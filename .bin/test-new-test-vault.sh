@@ -60,7 +60,17 @@ esac
 [[ -d "$CORPUS_SRC" ]] || { echo "FAIL: corpus scope path missing: ${CORPUS_SRC}" >&2; exit 1; }
 
 RUN_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/spinosa-test-vault.XXXXXX")"
-cleanup() { rm -rf "$RUN_ROOT"; }
+SHIM_BACKUP="${RUN_ROOT}/spinosa-shim-backup"
+if [[ -f "$HOME/.local/bin/spinosa" ]]; then
+  cp "$HOME/.local/bin/spinosa" "$SHIM_BACKUP"
+fi
+cleanup() {
+  if [[ -f "$SHIM_BACKUP" ]]; then
+    cp "$SHIM_BACKUP" "$HOME/.local/bin/spinosa"
+    rm -f "$SHIM_BACKUP"
+  fi
+  rm -rf "$RUN_ROOT"
+}
 trap cleanup EXIT INT TERM
 
 CORPUS="${RUN_ROOT}/corpus"
