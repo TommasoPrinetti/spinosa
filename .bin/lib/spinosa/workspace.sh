@@ -717,7 +717,7 @@ migrate_workspace_logs_dir() {
   local dry_run="${2:-0}"
   local old="${root}/logs"
   local new="${root}/.logs"
-  local timeout_sec item base migrated=0 failed=0
+  local timeout_sec item base migrated=0 failed=0 total_items=0 item_index=0
 
   [[ -d "$old" ]] || return 0
 
@@ -732,7 +732,9 @@ migrate_workspace_logs_dir() {
   # Bulk rename only when .logs/ does not exist — otherwise mv would nest logs/ inside .logs/logs/.
   # Cloud paths: skip bulk mv (Drive/Dropbox FUSE can hang uninterruptibly); use per-file copy.
   if [[ ! -e "$new" ]] && ! is_cloud_storage_path "$root"; then
+    render_status_progress "migrating legacy logs" "logs/ → .logs/"
     if spinosa_run_with_timeout "$timeout_sec" mv "$old" "$new" 2>/dev/null; then
+      clear_progress_line
       ok "Migrated logs/ → .logs/"
       archive_legacy_logs_memory_files "$root"
       return 0
@@ -745,17 +747,25 @@ migrate_workspace_logs_dir() {
   shopt -s dotglob nullglob
   for item in "$old"/*; do
     [[ -e "$item" ]] || continue
+    total_items=$((total_items + 1))
+  done
+  for item in "$old"/*; do
+    [[ -e "$item" ]] || continue
     base="$(basename "$item")"
+    item_index=$((item_index + 1))
+    render_status_progress "migrating legacy logs ${item_index}/${total_items}" "logs/${base}" "$item_index"
     if migrate_legacy_logs_item "$item" "$new/$base" "$timeout_sec"; then
       migrated=$((migrated + 1))
       spinosa_log INFO "migrated logs/${base} → .logs/${base}"
     else
+      clear_progress_line
       failed=$((failed + 1))
       warn "logs/ migration: could not move ${base} (${SPINOSA_LAST_COPY_FAIL_REASON:-I/O})"
     fi
   done
 
   archive_legacy_logs_memory_files "$root"
+  clear_progress_line
 
   if [[ "$failed" -eq 0 ]]; then
     if logs_dir_only_framework_leftovers "$old"; then

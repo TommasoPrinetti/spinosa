@@ -8,6 +8,20 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.8.0-beta.9] — 2026-07-02
+
+### Changed
+
+- `spinosa update` now uses a simpler ownership model: release-managed framework paths overwrite in place, while user-state such as `raw/`, `system/context.md`, and workspace notes is preserved.
+- Agent mirror refresh now runs only when `AGENTS.md` or `.agents/` changed, so ordinary framework updates avoid the extra mirror pass.
+
+### Fixed
+
+- Local prerelease builds no longer crash on macOS system Bash 3.2 when rendering the interactive menu.
+- Update progress now keeps a single unified spinner/progress state across manifest updates, directory sync, log migration, and mirror refresh, instead of flickering between partial bars and blank states.
+- Ctrl-C during timed update operations is handled more quickly, with faster polling and child-process cancellation.
+- `.bin/sync-agents.sh` now uses incremental local mirroring, which substantially reduces the time spent on `Refreshing agent mirrors`.
+
 ## [0.8.0-beta.8] — 2026-07-02
 
 ### Fixed

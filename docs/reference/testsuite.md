@@ -369,7 +369,7 @@ After update:
 diff ~/.hermes/config.yaml "$WORKSPACE/.hermes/workspace.config.yaml"
 ```
 
-Manual merge required — document in release notes if template changed.
+If the Hermes workspace template changed, verify the doctor advisory still points users at the correct merge step.
 
 ---
 
