@@ -222,9 +222,9 @@ spinosa upgrade
 
 ## Update policy
 
-- Framework-owned files are updated from this release.
-- User workspace state is not replaced.
-- Locally modified framework files receive .spinosa-new sidecars unless the manifest marks them always_replace.
+- Framework-owned files are overwritten from this release.
+- User workspace state is preserved.
+- Retired and no-longer-managed framework files recorded in the workspace manifest are removed during update.
 EOF
 fi
 

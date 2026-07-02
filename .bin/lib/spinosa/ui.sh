@@ -408,7 +408,10 @@ arrow_select() {
   }
 
   next_selectable_index() {
-    local start="$1" step="$2" idx="$start"
+    local start step idx
+    start="$1"
+    step="$2"
+    idx="$start"
     local visited=0
     while (( visited < count )); do
       idx=$(( (idx + step + count) % count ))
@@ -911,10 +914,13 @@ render_progress_line_standalone() {
 
 
 clear_progress_line() {
+  SPINOSA_ACTIVE_PROGRESS_KIND=""
   SPINOSA_ACTIVE_PROGRESS_INDEX=""
   SPINOSA_ACTIVE_PROGRESS_TOTAL=""
   SPINOSA_ACTIVE_PROGRESS_PATH=""
   SPINOSA_ACTIVE_PROGRESS_ACTION=""
+  SPINOSA_ACTIVE_PROGRESS_COPIED=""
+  SPINOSA_ACTIVE_PROGRESS_SKIPPED=""
   [[ -t 2 ]] && printf '\r\033[2K' >&2 || true
 }
 
@@ -922,10 +928,13 @@ clear_progress_line() {
 render_update_manifest_progress() {
   local index="$1" total="$2" path="$3" action="${4:-syncing}" spin_seed="${5:-$1}"
   local frame ratio label label_width fixed
+  SPINOSA_ACTIVE_PROGRESS_KIND="update"
   SPINOSA_ACTIVE_PROGRESS_INDEX="$index"
   SPINOSA_ACTIVE_PROGRESS_TOTAL="$total"
   SPINOSA_ACTIVE_PROGRESS_PATH="$path"
   SPINOSA_ACTIVE_PROGRESS_ACTION="$action"
+  SPINOSA_ACTIVE_PROGRESS_COPIED=""
+  SPINOSA_ACTIVE_PROGRESS_SKIPPED=""
   frame="$(spinner_frame "$spin_seed")"
   ratio="${index}/${total}"
   fixed=$((10 + 1 + ${#action} + 1 + ${#ratio} + 3))
@@ -935,27 +944,68 @@ render_update_manifest_progress() {
   render_progress_line "  ${C}${frame}${RESET} ${action} ${ratio} ${DIM}—${RESET} ${label}"
 }
 
+render_status_progress() {
+  local action="$1" path="${2:-}" spin_seed="${3:-0}"
+  local frame label label_width fixed
+  SPINOSA_ACTIVE_PROGRESS_KIND="status"
+  SPINOSA_ACTIVE_PROGRESS_INDEX=""
+  SPINOSA_ACTIVE_PROGRESS_TOTAL=""
+  SPINOSA_ACTIVE_PROGRESS_PATH="$path"
+  SPINOSA_ACTIVE_PROGRESS_ACTION="$action"
+  SPINOSA_ACTIVE_PROGRESS_COPIED=""
+  SPINOSA_ACTIVE_PROGRESS_SKIPPED=""
+  frame="$(spinner_frame "$spin_seed")"
+  fixed=$((10 + 1 + ${#action} + 3))
+  label_width=$((COLS - fixed))
+  (( label_width < 12 )) && label_width=12
+  label="$(truncate_display_path "${path:-working...}" "$label_width")"
+  render_progress_line "  ${C}${frame}${RESET} ${action} ${DIM}—${RESET} ${label}"
+}
+
 
 render_active_update_progress() {
   local spin_seed="${1:-0}"
-  [[ -n "${SPINOSA_ACTIVE_PROGRESS_INDEX:-}" ]] || return 0
-  render_update_manifest_progress \
-    "$SPINOSA_ACTIVE_PROGRESS_INDEX" \
-    "$SPINOSA_ACTIVE_PROGRESS_TOTAL" \
-    "$SPINOSA_ACTIVE_PROGRESS_PATH" \
-    "$SPINOSA_ACTIVE_PROGRESS_ACTION" \
-    "$spin_seed"
+  [[ -n "${SPINOSA_ACTIVE_PROGRESS_KIND:-}" ]] || return 0
+  case "${SPINOSA_ACTIVE_PROGRESS_KIND}" in
+    copy)
+      render_copy_progress \
+        "$SPINOSA_ACTIVE_PROGRESS_INDEX" \
+        "$SPINOSA_ACTIVE_PROGRESS_TOTAL" \
+        "${SPINOSA_ACTIVE_PROGRESS_COPIED:-0}" \
+        "${SPINOSA_ACTIVE_PROGRESS_SKIPPED:-0}" \
+        "$SPINOSA_ACTIVE_PROGRESS_PATH" \
+        "$SPINOSA_ACTIVE_PROGRESS_ACTION" \
+        "$spin_seed"
+      ;;
+    update)
+      render_update_manifest_progress \
+        "$SPINOSA_ACTIVE_PROGRESS_INDEX" \
+        "$SPINOSA_ACTIVE_PROGRESS_TOTAL" \
+        "$SPINOSA_ACTIVE_PROGRESS_PATH" \
+        "$SPINOSA_ACTIVE_PROGRESS_ACTION" \
+        "$spin_seed"
+      ;;
+    *)
+      render_status_progress \
+        "$SPINOSA_ACTIVE_PROGRESS_ACTION" \
+        "$SPINOSA_ACTIVE_PROGRESS_PATH" \
+        "$spin_seed"
+      ;;
+  esac
 }
 
 
 render_copy_progress() {
-  local processed="$1" total="$2" copied="$3" skipped="$4" current_file="${5:-}" action="${6:-copying}"
+  local processed="$1" total="$2" copied="$3" skipped="$4" current_file="${5:-}" action="${6:-copying}" spin_seed="${7:-$1}"
   local frame ratio counts fixed width file_width filled=0 bar="" i
+  SPINOSA_ACTIVE_PROGRESS_KIND="copy"
   SPINOSA_ACTIVE_PROGRESS_INDEX="$processed"
   SPINOSA_ACTIVE_PROGRESS_TOTAL="$total"
   SPINOSA_ACTIVE_PROGRESS_PATH="$current_file"
   SPINOSA_ACTIVE_PROGRESS_ACTION="$action"
-  frame="$(spinner_frame "$processed")"
+  SPINOSA_ACTIVE_PROGRESS_COPIED="$copied"
+  SPINOSA_ACTIVE_PROGRESS_SKIPPED="$skipped"
+  frame="$(spinner_frame "$spin_seed")"
   ratio="${processed}/${total}"
   counts="(${copied} copied, ${skipped} skipped)"
   width=$((COLS > 100 ? 20 : 12))

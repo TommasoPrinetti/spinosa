@@ -134,7 +134,7 @@ spinosa_run_with_timeout() {
   shift
   [[ "$timeout_sec" -gt 0 ]] 2>/dev/null || { "$@"; return $?; }
 
-  if [[ -z "${SPINOSA_ACTIVE_PROGRESS_INDEX:-}" ]] && command -v timeout >/dev/null 2>&1; then
+  if [[ -z "${SPINOSA_ACTIVE_PROGRESS_ACTION:-}" ]] && command -v timeout >/dev/null 2>&1; then
     timeout --kill-after=3 "$timeout_sec" "$@"
     local rc=$?
     if [[ "$rc" -eq 124 ]]; then
@@ -142,7 +142,7 @@ spinosa_run_with_timeout() {
     fi
     return "$rc"
   fi
-  if [[ -z "${SPINOSA_ACTIVE_PROGRESS_INDEX:-}" ]] && command -v gtimeout >/dev/null 2>&1; then
+  if [[ -z "${SPINOSA_ACTIVE_PROGRESS_ACTION:-}" ]] && command -v gtimeout >/dev/null 2>&1; then
     gtimeout --kill-after=3 "$timeout_sec" "$@"
     local rc=$?
     if [[ "$rc" -eq 124 ]]; then
@@ -151,76 +151,59 @@ spinosa_run_with_timeout() {
     return "$rc"
   fi
 
-  local cmd_pid watch_pid child_pid="" rc=0 spin_seed=0 elapsed=0
-  local status_file child_file
+  local cmd_pid watch_pid rc=0 spin_seed=0 elapsed_ticks=0
+  local poll_interval="0.05"
   local old_int_trap old_term_trap
-  status_file="$(mktemp "${TMPDIR:-/tmp}/spinosa-timeout-status.XXXXXX")" || return 1
-  child_file="$(mktemp "${TMPDIR:-/tmp}/spinosa-timeout-child.XXXXXX")" || { rm -f "$status_file"; return 1; }
-  rm -f "$status_file" "$child_file"
   old_int_trap="$(trap -p INT || true)"
   old_term_trap="$(trap -p TERM || true)"
-  (
-    "$@" &
-    printf '%s\n' "$!" > "$child_file"
-    wait "$!"
-    printf '%s\n' "$?" > "$status_file"
-  ) &
+
+  "$@" &
   cmd_pid=$!
+
+  spinosa_timeout_kill() {
+    local signal="${1:-TERM}"
+    kill "-${signal}" "$cmd_pid" 2>/dev/null || true
+    kill "-${signal}" -- "-$cmd_pid" 2>/dev/null || true
+  }
+
   spinosa_timeout_cancel() {
     SPINOSA_LAST_COPY_FAIL_REASON="cancelled"
-    if [[ -f "$child_file" ]]; then
-      child_pid="$(cat "$child_file" 2>/dev/null || true)"
-      [[ -n "$child_pid" ]] && kill -TERM "$child_pid" 2>/dev/null || true
+    spinosa_timeout_kill TERM
+    kill -TERM "$watch_pid" 2>/dev/null || true
+    sleep "$poll_interval"
+    if kill -0 "$cmd_pid" 2>/dev/null; then
+      spinosa_timeout_kill KILL
     fi
-    kill -TERM "$cmd_pid" "$watch_pid" 2>/dev/null || true
-    sleep 0.2
-    [[ -n "${child_pid:-}" ]] && kill -KILL "$child_pid" 2>/dev/null || true
-    kill -KILL "$cmd_pid" 2>/dev/null || true
     clear_progress_line
     printf '\n  Cancelled.\n' >&2
-    rm -f "$status_file" "$child_file" 2>/dev/null || true
     exit 130
   }
   trap spinosa_timeout_cancel INT TERM
   (
     sleep "$timeout_sec"
-    if [[ -f "$child_file" ]]; then
-      _spinosa_timeout_child="$(cat "$child_file" 2>/dev/null || true)"
-      [[ -n "$_spinosa_timeout_child" ]] && kill -TERM "$_spinosa_timeout_child" 2>/dev/null || true
+    spinosa_timeout_kill TERM
+    sleep 1
+    if kill -0 "$cmd_pid" 2>/dev/null; then
+      spinosa_timeout_kill KILL
     fi
-    kill -TERM "$cmd_pid" 2>/dev/null || true
-    sleep 2
-    if [[ -n "${_spinosa_timeout_child:-}" ]]; then
-      kill -KILL "$_spinosa_timeout_child" 2>/dev/null || true
-    fi
-    kill -KILL "$cmd_pid" 2>/dev/null || true
   ) &
   watch_pid=$!
 
-  while [[ ! -f "$status_file" ]]; do
-    if ! kill -0 "$cmd_pid" 2>/dev/null; then
-      break
-    fi
-    if [[ -n "${SPINOSA_ACTIVE_PROGRESS_INDEX:-}" ]]; then
+  while kill -0 "$cmd_pid" 2>/dev/null; do
+    if [[ -n "${SPINOSA_ACTIVE_PROGRESS_ACTION:-}" ]]; then
       render_active_update_progress "$spin_seed"
       spin_seed=$((spin_seed + 1))
     fi
-    sleep 0.2
-    elapsed=$((elapsed + 1))
-    if (( elapsed % 5 == 0 )); then
+    sleep "$poll_interval"
+    elapsed_ticks=$((elapsed_ticks + 1))
+    if (( elapsed_ticks % 20 == 0 )); then
       spinosa_log INFO "waiting path=${SPINOSA_ACTIVE_PROGRESS_PATH:-unknown} timeout_sec=${timeout_sec}" 2>/dev/null || true
     fi
   done
 
-  wait "$cmd_pid" 2>/dev/null || true
-  if [[ -f "$status_file" ]]; then
-    rc="$(cat "$status_file" 2>/dev/null || printf '1')"
-  else
-    rc=124
-  fi
+  wait "$cmd_pid" 2>/dev/null || rc=$?
   kill "$watch_pid" 2>/dev/null || true
   wait "$watch_pid" 2>/dev/null || true
-  rm -f "$status_file" "$child_file" 2>/dev/null || true
   if [[ -n "$old_int_trap" ]]; then eval "$old_int_trap"; else trap - INT; fi
   if [[ -n "$old_term_trap" ]]; then eval "$old_term_trap"; else trap - TERM; fi
   if [[ "$rc" -eq 143 || "$rc" -eq 137 || "$rc" -eq 124 ]]; then
@@ -257,6 +240,41 @@ safe_copy_retries_for() {
   else
     printf '3'
   fi
+}
+
+file_size_bytes() {
+  local path="$1"
+  [[ -e "$path" ]] || return 1
+  if stat -f '%z' "$path" >/dev/null 2>&1; then
+    stat -f '%z' "$path"
+  elif stat -c '%s' "$path" >/dev/null 2>&1; then
+    stat -c '%s' "$path"
+  else
+    wc -c < "$path" | tr -d '[:space:]'
+  fi
+}
+
+files_match() {
+  local src="$1" dst="$2"
+  local src_size dst_size timeout_sec rc
+  [[ -f "$src" && -f "$dst" ]] || return 1
+
+  src_size="$(file_size_bytes "$src" 2>/dev/null || echo "")"
+  dst_size="$(file_size_bytes "$dst" 2>/dev/null || echo "")"
+  [[ -n "$src_size" && "$src_size" == "$dst_size" ]] || return 1
+
+  if is_cloud_storage_path "$src" || is_cloud_storage_path "$dst"; then
+    timeout_sec="$(safe_copy_timeout_sec_for "$dst")"
+    SPINOSA_LAST_COPY_FAIL_REASON=""
+    if spinosa_run_with_timeout "$timeout_sec" cmp -s -- "$src" "$dst"; then
+      return 0
+    fi
+    rc=$?
+    [[ "$rc" -eq 124 ]] && return 1
+    return 1
+  fi
+
+  cmp -s -- "$src" "$dst"
 }
 
 safe_copy_delay_for() {
@@ -342,7 +360,7 @@ safe_copy() {
 safe_copy_tree() {
   local src="$1" dst="$2"
   local src_real retries failed=0 src_item rel_path dst_item link_target
-  local total_files=0 processed_files=0 copied_files=0 show_file_progress=0
+  local total_files=0 processed_files=0 copied_files=0 skipped_files=0 show_file_progress=0
   local sync_label="${SPINOSA_SYNC_LABEL:-}"
   local progress_action="copying"
   [[ -n "$sync_label" ]] && progress_action="syncing ${sync_label}"
@@ -373,7 +391,11 @@ safe_copy_tree() {
     elif [[ -f "$src_item" ]]; then
       processed_files=$((processed_files + 1))
       if [[ "$show_file_progress" -eq 1 ]]; then
-        render_copy_progress "$processed_files" "$total_files" "$copied_files" "$failed" "$rel_path" "$progress_action"
+        render_copy_progress "$processed_files" "$total_files" "$copied_files" "$skipped_files" "$rel_path" "$progress_action"
+      fi
+      if [[ -f "$dst_item" ]] && files_match "$src_item" "$dst_item"; then
+        skipped_files=$((skipped_files + 1))
+        continue
       fi
       if safe_copy "$src_item" "$dst_item" "$retries"; then
         copied_files=$((copied_files + 1))
@@ -388,6 +410,25 @@ safe_copy_tree() {
   [[ "$failed" -eq 0 ]]
 }
 
+rsync_copy_dir_contents() {
+  local src="$1" dst="$2" delete_mode="${3:-0}"
+  command -v rsync >/dev/null 2>&1 || return 1
+  is_cloud_storage_path "$src" && return 1
+  is_cloud_storage_path "$dst" && return 1
+  mkdir -p "$dst" || return 1
+  if [[ "$delete_mode" == "1" ]]; then
+    rsync -a --delete \
+      --exclude '.DS_Store' \
+      --exclude '._*' \
+      "$src"/ "$dst"/
+  else
+    rsync -a \
+      --exclude '.DS_Store' \
+      --exclude '._*' \
+      "$src"/ "$dst"/
+  fi
+}
+
 copy_dir_contents() {
   local src="$1" dst="$2"
   local src_real="" framework_real=""
@@ -399,6 +440,9 @@ copy_dir_contents() {
       die "Refusing to copy framework root as a directory; check .spinosa/framework-files.tsv for blank or unsafe paths."
     fi
   fi
+  if rsync_copy_dir_contents "$src_real" "$dst" 0; then
+    return 0
+  fi
   if ! safe_copy_tree "$src_real" "$dst"; then
     if is_cloud_storage_path "$dst"; then
       die "Failed to copy directory to cloud storage destination (${SPINOSA_LAST_COPY_FAIL_REASON:-one or more files failed}) — open the folder in Finder, wait for sync, then retry"
@@ -406,13 +450,6 @@ copy_dir_contents() {
     die "Failed to copy directory: $src"
   fi
 }
-
-
-manifest_hash() {
-  local manifest="$1" path="$2"
-  awk -F '\t' -v p="$path" '$1 == p { print $2; exit }' "$manifest"
-}
-
 
 framework_version() {
   local root="$1"
@@ -438,18 +475,6 @@ is_framework_manifest_entry() {
     die "Unsafe framework manifest path: $path"
   fi
   is_release_managed_role "$role"
-}
-
-
-next_sidecar_path() {
-  local dst="$1"
-  local sidecar="${dst}.spinosa-new"
-  local n=1
-  while [[ -e "$sidecar" ]]; do
-    sidecar="${dst}.spinosa-new.${n}"
-    n=$((n + 1))
-  done
-  echo "$sidecar"
 }
 
 
@@ -536,4 +561,3 @@ available_disk_bytes() {
     printf '0'
   fi
 }
-

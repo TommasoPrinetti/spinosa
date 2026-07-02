@@ -72,8 +72,9 @@ After upgrading, Spinosa offers to run `spinosa update` on registered workspaces
 
 Sync **workspace framework files** to match the installed CLI version.
 
-- Reads `.spinosa/framework-files.tsv` policies (`replace_if_unmodified`, `always_replace`, `never_replace`)
-- Preserves customized files (or injects commented diffs) unless you pass `--force`
+- Overwrites release-managed workspace files from the installed framework
+- Preserves user-state paths such as `raw/`, `system/context.md`, `system/dictionary.md`, and `.spinosa/memory/orchestrator-notes.md`
+- Removes retired or no-longer-managed framework files recorded in the workspace manifest
 - Regenerates vendor mirrors via `.bin/sync-agents.sh` (`.opencode/`, `.claude/`, `.codex/`, `.hermes/skills/`, etc.)
 - Blocked if installed CLI is **older** than the workspace declares — run `spinosa upgrade` first
 
@@ -83,7 +84,7 @@ Examples:
 spinosa update --yes                     # current directory workspace
 spinosa update --yes ~/path/to/workspace-spinosa
 spinosa update --dry-run                 # preview changes
-spinosa update --force --yes             # overwrite customized framework files
+spinosa update --force --yes             # compatibility flag; same behavior
 ```
 
 **Hermes users:** after update, merge `.hermes/workspace.config.yaml` into `~/.hermes/config.yaml` (see [Integrations](#integrations) below).

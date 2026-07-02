@@ -50,8 +50,41 @@ copy_tree_or_die() {
   cp -R "$src" "$dst"
 }
 
+path_is_cloud_storage() {
+  local path="$1"
+  if declare -F is_cloud_storage_path >/dev/null 2>&1; then
+    is_cloud_storage_path "$path"
+    return $?
+  fi
+  return 1
+}
+
+mirror_tree_or_die() {
+  local src="$1" dst="$2"
+  mkdir -p "$dst"
+  if ! path_is_cloud_storage "$dst" && command -v rsync >/dev/null 2>&1; then
+    rsync -a --delete \
+      --exclude '.DS_Store' \
+      --exclude '._*' \
+      "$src"/ "$dst"/
+    return $?
+  fi
+  if declare -F sync_dir_contents >/dev/null 2>&1; then
+    sync_dir_contents "$src" "$dst" || return 1
+    return 0
+  fi
+  rm -rf "$dst"
+  mkdir -p "$dst"
+  copy_tree_or_die "$src" "$dst"
+}
+
 copy_file_or_die() {
   local src="$1" dst="$2"
+  mkdir -p "$(dirname "$dst")"
+  if ! path_is_cloud_storage "$dst"; then
+    cp -p "$src" "$dst" || return 1
+    return 0
+  fi
   if declare -F safe_copy >/dev/null 2>&1; then
     safe_copy "$src" "$dst" || return 1
     return 0
@@ -247,12 +280,7 @@ done
 
 for platform in .opencode .claude .codex .hermes; do
     dest="$REPO_ROOT/$platform/skills"
-    rm -rf "$dest"
-    mkdir -p "$dest"
-    for skill_dir in "$SKILLS_DIR"/*; do
-        [ -d "$skill_dir" ] || continue
-        copy_tree_or_die "$skill_dir" "$dest/$(basename "$skill_dir")"
-    done
+    mirror_tree_or_die "$SKILLS_DIR" "$dest"
     count=$(find "$dest" -mindepth 2 -maxdepth 2 -name "SKILL.md" | wc -l | tr -d ' ')
     echo "  $platform/skills/ → $count skills"
 done
@@ -265,14 +293,8 @@ echo ""
 echo "--- Syncing references ---"
 for platform in .opencode .claude .codex .hermes; do
     dest="$REPO_ROOT/$platform/references"
-    rm -rf "$dest"
     if [[ -d "$REPO_ROOT/.agents/references" ]]; then
-        mkdir -p "$dest"
-        ref_file=""
-        for ref_file in "$REPO_ROOT/.agents/references/"*.md; do
-          [[ -f "$ref_file" ]] || continue
-          copy_file_or_die "$ref_file" "$dest/$(basename "$ref_file")"
-        done
+        mirror_tree_or_die "$REPO_ROOT/.agents/references" "$dest"
         count=$(find "$dest" -name "*.md" | wc -l | tr -d ' ')
         echo "  $platform/references/ → $count files"
     fi

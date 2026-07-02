@@ -378,7 +378,7 @@ prompt_upgrade_workspaces() {
   local ws ws_name
   for ws in "${selected[@]}"; do
     ws_name="$(basename "$ws")"
-    if (cmd_update "$ws" --yes --force); then
+    if (cmd_update "$ws" --yes); then
       ok "Updated: ${ws_name}"
     else
       warn "Update failed for: ${ws_name}"
@@ -400,102 +400,6 @@ prompt_upgrade_workspaces() {
 # COMMAND: update
 # ═══════════════════════════════════════════════════════════════════════════
 
-# ── inject_framework_diff ───────────────────────────────────────────────────
-# Append new framework content as comments inside a customized workspace file,
-# preserving the user's version.  Works for text files; binary files warn only.
-
-inject_framework_diff() {
-  local dst="$1"  src="$2"  rel_path="$3"
-  [[ -f "$src" ]] || return 0
-  local ext="${rel_path##*.}"
-
-  # Determine comment style
-  local comment_open="" comment_close="" line_prefix=""
-  case "$ext" in
-    md|markdown)
-      comment_open="<!-- "
-      comment_close=" -->"
-      line_prefix=""
-      ;;
-    sh|bash|zsh|py|rb|pl|pm|yml|yaml|toml|ini|cfg|conf|gitignore|editorconfig)
-      comment_open=""
-      comment_close=""
-      line_prefix="# "
-      ;;
-    js|ts|jsx|tsx|css|scss|less|php|java|c|cpp|h|hpp)
-      comment_open="/* "
-      comment_close=" */"
-      line_prefix=" * "
-      ;;
-    tex|bib)
-      comment_open=""
-      comment_close=""
-      line_prefix="% "
-      ;;
-    r|R)
-      comment_open=""
-      comment_close=""
-      line_prefix="# "
-      ;;
-    lua)
-      comment_open="--[[ "
-      comment_close=" --]]"
-      line_prefix="-- "
-      ;;
-    *)
-      # Binary or unknown — skip injection, just warn
-      warn "Customized: ${rel_path} (cannot inject comments into .${ext})"
-      return 0
-      ;;
-  esac
-
-  # Build a blank-line-delimited injection block
-  local sep block_file
-  block_file="$(mktemp "${TMPDIR:-/tmp}/spinosa-inject.XXXXXX")" || return 1
-  sep="$(printf '═%.0s' $(seq 1 60))"
-  {
-    printf '\n'
-    if [[ -n "$line_prefix" ]]; then
-      printf '%s%s\n' "$line_prefix" "${sep}"
-      printf '%sSPINOSA UPDATE: New framework version available\n' "$line_prefix"
-      printf '%sThe file '\''%s'\'' was customized. Below is the new\n' "$line_prefix" "$rel_path"
-      printf '%sframework version for reference. Remove this block after\n' "$line_prefix"
-      printf '%sreviewing and merging the relevant changes.\n' "$line_prefix"
-      printf '%s%s\n' "$line_prefix" "${sep}"
-      printf '\n'
-      while IFS= read -r line; do
-        printf '%s%s\n' "$line_prefix" "$line"
-      done < "$src"
-      printf '\n'
-      printf '%s%s\n' "$line_prefix" "${sep}"
-    else
-      printf '%s%s%s\n' "$comment_open" "${sep}" "$comment_close"
-      printf '%sSPINOSA UPDATE: New framework version available%s\n' "$comment_open" "$comment_close"
-      printf '%sThe file '\''%s'\'' was customized. Below is the new%s\n' "$comment_open" "$rel_path" "$comment_close"
-      printf '%sframework version for reference. Remove this block after%s\n' "$comment_open" "$comment_close"
-      printf '%sreviewing and merging the relevant changes.%s\n' "$comment_open" "$comment_close"
-      printf '%s%s%s\n' "$comment_open" "${sep}" "$comment_close"
-      printf '\n'
-      cat "$src"
-      printf '\n'
-      printf '%s%s%s\n' "$comment_open" "${sep}" "$comment_close"
-    fi
-  } > "$block_file"
-
-  if is_cloud_storage_path "$dst"; then
-    local timeout_sec="${SPINOSA_CLOUD_COPY_TIMEOUT_SEC:-60}"
-    if ! spinosa_run_with_timeout "$timeout_sec" sh -c 'cat -- "$1" >> "$2"' _ "$block_file" "$dst"; then
-      warn "Customized: ${rel_path} (injection timed out on cloud storage — merge manually from framework)"
-      rm -f "$block_file" 2>/dev/null || true
-      return 1
-    fi
-  else
-    cat "$block_file" >> "$dst"
-  fi
-  rm -f "$block_file" 2>/dev/null || true
-  printf '  %s %s\n' "${Y}✎${RESET}" "Injected new framework content into customized: ${rel_path}"
-}
-
 # ── sync_dir_contents ────────────────────────────────────────────────────────
 # Like copy_dir_contents but also removes destination items that no longer
 # exist in the source (true sync, not just additive copy).
@@ -506,6 +410,9 @@ sync_dir_contents() {
   src_real="$(cd "$src" 2>/dev/null && pwd -P)" || { warn "Cannot sync missing directory: $src"; return 1; }
   dst_real="$(cd "$dst" 2>/dev/null && pwd -P)" || dst_real=""
   mkdir -p "$dst"
+  if rsync_copy_dir_contents "$src_real" "$dst" 1; then
+    return 0
+  fi
   # Cloud destinations: skip find/rm prune (can hang on Drive/Dropbox FUSE).
   if [[ -n "$dst_real" ]] && ! is_cloud_storage_path "$dst"; then
     while IFS= read -r -d '' item; do
@@ -597,7 +504,7 @@ cmd_update() {
         printf '  %s\n' "Usage: spinosa update [options] [workspace-path]"
         printf '    %s\n' "  --yes             Skip confirmation prompt"
         printf '    %s\n' "  --dry-run         Preview changes without applying them"
-        printf '    %s\n' "  --force           Overwrite customized files (bypass replace_if_unmodified)"
+        printf '    %s\n' "  --force           Compatibility flag (framework-owned paths already overwrite)"
         printf '    %s\n' "  --help            Show this help"
         printf '    %s\n' "  workspace-path    Optional path to a Spinosa workspace"
         return 0
@@ -686,14 +593,14 @@ cmd_update() {
     note "Cloud folder detected."
   fi
 
+  if [[ "$force" -eq 1 ]]; then
+    note "--force is no longer needed; release-managed workspace files overwrite by default."
+  fi
+
   # ── check workspace manifest exists ─────────────────────────────────────
   local manifest_has_entries=0
   if [[ -f "$ws_manifest" ]] && [[ $(awk 'NR>1' "$ws_manifest" 2>/dev/null | wc -l) -gt 0 ]]; then
     manifest_has_entries=1
-  fi
-
-  if [[ "$manifest_has_entries" -eq 0 ]]; then
-    warn "No manifest.tsv or no entries — treating replace_if_unmodified as modified"
   fi
 
   local manifest_total=0 manifest_idx=0
@@ -705,6 +612,10 @@ cmd_update() {
     esac
   done < "$fw_manifest"
 
+  if [[ "$manifest_has_entries" -eq 0 ]]; then
+    warn "No prior workspace manifest found — obsolete framework files cannot be auto-removed on this run."
+  fi
+
   # ── confirm ──────────────────────────────────────────────────────────────
   if [[ "$auto_yes" -ne 1 ]]; then
     if [[ -n "$workspace_version" && "$installed_version" != "dev" && -n "$installed_version" ]]; then
@@ -712,7 +623,7 @@ cmd_update() {
     else
       note "Sync ${manifest_total} framework paths to v${installed_version}"
     fi
-    note "Updates agents, docs, and CLI scripts; preserves raw/, system/context.md, and customized files"
+    note "Overwrites release-managed workspace files; preserves user-state paths like raw/, system/context.md, and workspace notes."
     if ! confirm "Update framework files in this workspace?" "y"; then
       info "Update cancelled."
       return 0
@@ -730,16 +641,19 @@ cmd_update() {
   migrate_workspace_logs_dir "$workspace_path" "$dry_run"
 
   # ── Phase 1: build framework file set ─────────────────────────────────────
-  local processed_list
+  local processed_list declared_list
   processed_list="$(mktemp)" || die "Cannot create temp file"
+  declared_list="$(mktemp)" || { rm -f "$processed_list" 2>/dev/null || true; die "Cannot create temp file"; }
   while IFS=$'\t' read -r fw_path fw_role fw_policy; do
+    [[ -n "$fw_path" && "$fw_path" != "path" ]] || continue
+    echo "$fw_path" >> "$declared_list"
     is_framework_manifest_entry "$fw_path" "$fw_role" || continue
     echo "$fw_path" >> "$processed_list"
   done < "$fw_manifest"
 
-  # ── Phase 2: ADD + UPDATE from framework-files.tsv ────────────────────────
-  local updated=0 skipped=0 added=0 customized=0 removed=0 retired_found=0 copy_failed=0
-  local src dst policy current_hash orig_hash new_hash
+  # ── Phase 2: ADD + REPLACE from framework-files.tsv ───────────────────────
+  local updated=0 skipped=0 added=0 removed=0 retired_found=0 copy_failed=0
+  local src dst policy
   local -a update_changed_paths=()
 
   update_sync_dir() {
@@ -820,6 +734,18 @@ cmd_update() {
     rm -f "$metadata_tmp" 2>/dev/null || true
   }
 
+  should_sync_agent_mirrors() {
+    local changed_path
+    for changed_path in "${update_changed_paths[@]}"; do
+      case "$changed_path" in
+        AGENTS.md|.agents/*)
+          return 0
+          ;;
+      esac
+    done
+    return 1
+  }
+
   while IFS=$'\t' read -r path role policy; do
     is_framework_manifest_entry "$path" "$role" || continue
     [[ -n "$policy" ]] || policy="replace_if_unmodified"
@@ -837,7 +763,6 @@ cmd_update() {
 
       *)
         manifest_idx=$((manifest_idx + 1))
-        # File doesn't exist in workspace → ADD
         if [[ ! -e "$dst" ]]; then
           if [[ "$dry_run" -eq 1 ]]; then
             render_update_manifest_progress "$manifest_idx" "$manifest_total" "$path" "preview add"
@@ -855,120 +780,32 @@ cmd_update() {
           continue
         fi
 
-        # File exists → UPDATE
-        if [[ "$policy" == "always_replace" ]]; then
-          if [[ "$dry_run" -eq 1 ]]; then
+        if [[ -f "$src" && -f "$dst" ]] && files_match "$src" "$dst"; then
+          render_update_manifest_progress "$manifest_idx" "$manifest_total" "$path" "unchanged"
+          skipped=$((skipped + 1))
+          continue
+        fi
+
+        if [[ "$dry_run" -eq 1 ]]; then
+          if [[ -d "$src" ]]; then
+            render_update_manifest_progress "$manifest_idx" "$manifest_total" "$path" "preview sync"
+          else
             render_update_manifest_progress "$manifest_idx" "$manifest_total" "$path" "preview replace"
-            updated=$((updated + 1))
-            update_changed_paths+=("$path")
-          else
-            render_update_manifest_progress "$manifest_idx" "$manifest_total" "$path" "updating"
-            if [[ -d "$src" ]]; then
-              mkdir -p "$dst" && update_sync_dir "$src" "$dst" "$path" && updated=$((updated + 1)) && update_changed_paths+=("$path") || { clear_progress_line; safe_copy_warn_failure "sync" "$path" "$dst"; copy_failed=$((copy_failed + 1)); }
-            elif [[ -f "$src" ]]; then
-              mkdir -p "$(dirname "$dst")"
-              safe_copy "$src" "$dst" && updated=$((updated + 1)) && update_changed_paths+=("$path") || { clear_progress_line; safe_copy_warn_failure "copy" "$path" "$dst"; copy_failed=$((copy_failed + 1)); }
-            fi
           fi
+          updated=$((updated + 1))
+          update_changed_paths+=("$path")
         else
-          # replace_if_unmodified — three-way checksum check
-          orig_hash="$(manifest_hash "$ws_manifest" "$path")"
-
-          if [[ -z "$orig_hash" || "$orig_hash" == "dir" || "$orig_hash" == "none" ]]; then
-            # No checksum baseline — conservative: sync dirs, skip files
-            if [[ -d "$src" ]]; then
-              if [[ "$dry_run" -eq 1 ]]; then
-                render_update_manifest_progress "$manifest_idx" "$manifest_total" "$path" "preview sync"
-                updated=$((updated + 1))
-                update_changed_paths+=("$path")
-              else
-                render_update_manifest_progress "$manifest_idx" "$manifest_total" "$path" "syncing"
-                mkdir -p "$dst"
-                update_sync_dir "$src" "$dst" "$path" && updated=$((updated + 1)) && update_changed_paths+=("$path") || { clear_progress_line; safe_copy_warn_failure "sync" "$path" "$dst"; copy_failed=$((copy_failed + 1)); }
-              fi
-            else
-              render_update_manifest_progress "$manifest_idx" "$manifest_total" "$path" "skipping"
-              skipped=$((skipped + 1))
-            fi
-            continue
-          fi
-
-          # ── fast path: framework file unchanged since last sync ─────
-          new_hash="$(sha256_file "$src" 2>/dev/null || echo "")"
-          if [[ -n "$new_hash" && "$new_hash" == "$orig_hash" ]]; then
-            render_update_manifest_progress "$manifest_idx" "$manifest_total" "$path" "unchanged"
-            skipped=$((skipped + 1))
-            continue
-          fi
-
-          # ── render progress before cloud I/O ────────────────────────
-          if [[ "$dry_run" -eq 1 ]]; then
-            render_update_manifest_progress "$manifest_idx" "$manifest_total" "$path" "preview update"
-          else
+          if [[ -d "$src" ]]; then
+            render_update_manifest_progress "$manifest_idx" "$manifest_total" "$path" "syncing"
+            mkdir -p "$dst"
+            update_sync_dir "$src" "$dst" "$path" && updated=$((updated + 1)) && update_changed_paths+=("$path") || { clear_progress_line; safe_copy_warn_failure "sync" "$path" "$dst"; copy_failed=$((copy_failed + 1)); }
+          elif [[ -f "$src" ]]; then
             render_update_manifest_progress "$manifest_idx" "$manifest_total" "$path" "updating"
-          fi
-
-          SPINOSA_LAST_COPY_FAIL_REASON=""
-          current_hash="$(sha256_file "$dst" 2>/dev/null || echo "missing")"
-          if [[ "$current_hash" == "missing" ]] && cloud_io_timed_out; then
-            clear_progress_line
-            safe_copy_warn_failure "hash" "$path" "$dst"
-            copy_failed=$((copy_failed + 1))
-            continue
-          fi
-
-          if [[ "$current_hash" == "$orig_hash" ]]; then
-            # Unmodified → replace
-            if [[ "$dry_run" -eq 1 ]]; then
-              updated=$((updated + 1))
-              update_changed_paths+=("$path")
-            else
-              if [[ -d "$src" ]]; then
-                mkdir -p "$dst" && update_sync_dir "$src" "$dst" "$path" && updated=$((updated + 1)) && update_changed_paths+=("$path") || { clear_progress_line; safe_copy_warn_failure "sync" "$path" "$dst"; copy_failed=$((copy_failed + 1)); }
-              elif [[ -f "$src" ]]; then
-                mkdir -p "$(dirname "$dst")"
-                safe_copy "$src" "$dst" && updated=$((updated + 1)) && update_changed_paths+=("$path") || { clear_progress_line; safe_copy_warn_failure "copy" "$path" "$dst"; copy_failed=$((copy_failed + 1)); }
-              fi
-            fi
-          elif [[ "$force" -eq 1 ]]; then
-            # Force override
-            if [[ "$dry_run" -eq 1 ]]; then
-              render_update_manifest_progress "$manifest_idx" "$manifest_total" "$path" "preview force"
-              updated=$((updated + 1))
-              update_changed_paths+=("$path")
-            else
-              render_update_manifest_progress "$manifest_idx" "$manifest_total" "$path" "force-updating"
-              if [[ -d "$src" ]]; then
-                mkdir -p "$dst" && update_sync_dir "$src" "$dst" "$path" && updated=$((updated + 1)) && update_changed_paths+=("$path") || { clear_progress_line; safe_copy_warn_failure "sync" "$path" "$dst"; copy_failed=$((copy_failed + 1)); }
-              elif [[ -f "$src" ]]; then
-                mkdir -p "$(dirname "$dst")"
-                safe_copy "$src" "$dst" && updated=$((updated + 1)) && update_changed_paths+=("$path") || { clear_progress_line; safe_copy_warn_failure "copy" "$path" "$dst"; copy_failed=$((copy_failed + 1)); }
-              fi
-            fi
+            mkdir -p "$(dirname "$dst")"
+            safe_copy "$src" "$dst" && updated=$((updated + 1)) && update_changed_paths+=("$path") || { clear_progress_line; safe_copy_warn_failure "copy" "$path" "$dst"; copy_failed=$((copy_failed + 1)); }
           else
-            # Customized — inject new framework content as comments if different
-            # new_hash already computed above
-            if [[ "$current_hash" == "$new_hash" ]]; then
-              render_update_manifest_progress "$manifest_idx" "$manifest_total" "$path" "unchanged"
-              skipped=$((skipped + 1))
-            elif [[ -f "$src" ]]; then
-              if [[ "$dry_run" -eq 1 ]]; then
-                render_update_manifest_progress "$manifest_idx" "$manifest_total" "$path" "preview inject"
-                customized=$((customized + 1))
-                update_changed_paths+=("$path")
-              else
-                render_update_manifest_progress "$manifest_idx" "$manifest_total" "$path" "injecting"
-                if inject_framework_diff "$dst" "$src" "$path"; then
-                  customized=$((customized + 1))
-                  update_changed_paths+=("$path")
-                else
-                  copy_failed=$((copy_failed + 1))
-                fi
-              fi
-            else
-              render_update_manifest_progress "$manifest_idx" "$manifest_total" "$path" "skipping"
-              skipped=$((skipped + 1))
-            fi
+            render_update_manifest_progress "$manifest_idx" "$manifest_total" "$path" "skipping"
+            skipped=$((skipped + 1))
           fi
         fi
         ;;
@@ -984,30 +821,20 @@ cmd_update() {
     while IFS=$'\t' read -r m_path m_hash; do
       [[ -n "$m_path" && "$m_path" != "path" && "$m_hash" != "dir" ]] || continue
       grep -Fxq "$m_path" "$processed_list" 2>/dev/null && continue
+      grep -Fxq "$m_path" "$declared_list" 2>/dev/null && { skipped=$((skipped + 1)); continue; }
 
       local target="${workspace_path}/${m_path}"
       [[ -e "$target" ]] || continue
 
-      SPINOSA_LAST_COPY_FAIL_REASON=""
-      current_hash="$(sha256_file "$target" 2>/dev/null || echo "missing")"
-      if [[ "$current_hash" == "missing" ]] && cloud_io_timed_out; then
-        warn "Hash timed out — skipped remove: ${m_path}"
-        skipped=$((skipped + 1))
-        continue
-      fi
-
-      if [[ "$current_hash" == "$m_hash" || "$force" -eq 1 ]]; then
-        if [[ "$dry_run" -eq 1 ]]; then
-          info "[dry-run] would remove (no longer in framework): ${m_path}"
-          removed=$((removed + 1))
-        else
-          cloud_rm_rf "$target" 2>/dev/null && removed=$((removed + 1)) || warn "Failed to remove: ${m_path}"
-        fi
+      if [[ "$dry_run" -eq 1 ]]; then
+        info "[dry-run] would remove (no longer in framework): ${m_path}"
+        removed=$((removed + 1))
       else
-        warn "Customized file no longer in framework — skipped: ${m_path}"
-        skipped=$((skipped + 1))
+        render_status_progress "removing obsolete files" "$m_path" "$removed"
+        cloud_rm_rf "$target" 2>/dev/null && removed=$((removed + 1)) || { clear_progress_line; warn "Failed to remove: ${m_path}"; }
       fi
     done < "$ws_manifest"
+    clear_progress_line
   fi
 
   # ── Phase 4: retired-framework-files.tsv (remove if still present) ────────
@@ -1019,33 +846,19 @@ cmd_update() {
       local target="${workspace_path}/${r_path}"
       [[ -e "$target" ]] || continue
 
-      # Check safety: remove if unmodified or forced
-      local r_hash
-      r_hash="$(manifest_hash "$ws_manifest" "$r_path")"
-      SPINOSA_LAST_COPY_FAIL_REASON=""
-      current_hash="$(sha256_file "$target" 2>/dev/null || echo "missing")"
-      if [[ "$current_hash" == "missing" ]] && cloud_io_timed_out; then
-        warn "Hash timed out — skipped retired remove: ${r_path}"
-        skipped=$((skipped + 1))
-        continue
-      fi
-
-      if [[ -z "$r_hash" || "$current_hash" == "$r_hash" || "$force" -eq 1 ]]; then
-        if [[ "$dry_run" -eq 1 ]]; then
-          info "[dry-run] would remove retired: ${r_path} (${r_reason})"
-          removed=$((removed + 1))
-        else
-          cloud_rm_rf "$target" 2>/dev/null && removed=$((removed + 1)) || warn "Failed to remove retired: ${r_path}"
-        fi
+      if [[ "$dry_run" -eq 1 ]]; then
+        info "[dry-run] would remove retired: ${r_path} (${r_reason})"
+        removed=$((removed + 1))
       else
-        warn "Customized retired file — skipped: ${r_path}"
-        skipped=$((skipped + 1))
+        render_status_progress "removing retired files" "$r_path" "$retired_found"
+        cloud_rm_rf "$target" 2>/dev/null && removed=$((removed + 1)) || { clear_progress_line; warn "Failed to remove retired: ${r_path}"; }
       fi
       retired_found=$((retired_found + 1))
     done < "$retired_manifest"
+    clear_progress_line
   fi
 
-  rm -f "$processed_list" 2>/dev/null || true
+  rm -f "$processed_list" "$declared_list" 2>/dev/null || true
 
   # ── Phase 5: finalize legacy logs/ → .logs/ (second pass after retired cleanup) ─
   spinosa_log INFO "phase finalize-legacy-logs workspace=${workspace_path}"
@@ -1078,24 +891,32 @@ cmd_update() {
 
   # ── sync agent mirrors ───────────────────────────────────────────────────
   if [[ "$dry_run" -ne 1 && -f "${workspace_path}/.bin/sync-agents.sh" ]]; then
-    spinosa_log INFO "phase sync-agents workspace=${workspace_path}"
-    if is_cloud_storage_path "$workspace_path"; then
-      SPINOSA_LAST_COPY_FAIL_REASON=""
-      if ! spinosa_run_with_timeout "${SPINOSA_CLOUD_SYNC_AGENTS_TIMEOUT_SEC:-120}" sh -c 'bash "$1" >/dev/null 2>&1' _ "${workspace_path}/.bin/sync-agents.sh"; then
-        warn "Agent mirror refresh skipped (${SPINOSA_LAST_COPY_FAIL_REASON:-I/O error})"
+    if should_sync_agent_mirrors; then
+      spinosa_log INFO "phase sync-agents workspace=${workspace_path}"
+      if is_cloud_storage_path "$workspace_path"; then
+        render_status_progress "refreshing agent mirrors" ".bin/sync-agents.sh"
+        SPINOSA_LAST_COPY_FAIL_REASON=""
+        if ! spinosa_run_with_timeout "${SPINOSA_CLOUD_SYNC_AGENTS_TIMEOUT_SEC:-120}" sh -c 'bash "$1" >/dev/null 2>&1' _ "${workspace_path}/.bin/sync-agents.sh"; then
+          clear_progress_line
+          warn "Agent mirror refresh skipped (${SPINOSA_LAST_COPY_FAIL_REASON:-I/O error})"
+        fi
+        clear_progress_line
+      else
+        spinner_start "Refreshing agent mirrors"
+        bash "${workspace_path}/.bin/sync-agents.sh" >/dev/null 2>&1 || true
+        spinner_stop
       fi
     else
-      bash "${workspace_path}/.bin/sync-agents.sh" >/dev/null 2>&1 || true
+      spinosa_log INFO "phase sync-agents skipped workspace=${workspace_path}"
     fi
   fi
 
   # ── report ───────────────────────────────────────────────────────────────
   divider
 
-  local verb="" verb_preserved="preserved" tag="Workspace updated"
+  local verb="" tag="Workspace updated"
   if [[ "$dry_run" -eq 1 ]]; then
     verb="would be "
-    verb_preserved="would be preserved"
     tag="Dry-run"
   fi
 
@@ -1105,7 +926,7 @@ cmd_update() {
   fi
 
   local has_changes=0
-  (( updated > 0 || added > 0 || removed > 0 || customized > 0 )) && has_changes=1
+  (( updated > 0 || added > 0 || removed > 0 )) && has_changes=1
 
   if [[ "$has_changes" -eq 0 && "$dry_run" -ne 1 ]]; then
     ok "Already up to date${version_range}"
@@ -1115,11 +936,10 @@ cmd_update() {
     tree_sep
 
     local rows=()
-    [[ "$updated" -gt 0 ]]    && rows+=("$(plural_count "$updated" "file") ${verb}updated")
-    [[ "$added" -gt 0 ]]      && rows+=("$(plural_count "$added" "new file") ${verb}added")
-    [[ "$removed" -gt 0 ]]    && rows+=("$(plural_count "$removed" "file") ${verb}removed")
-    [[ "$customized" -gt 0 ]] && rows+=("$(plural_count "$customized" "customized file") ${verb_preserved}")
-    [[ "$skipped" -gt 0 ]]    && rows+=("$(plural_count "$skipped" "file") skipped")
+    [[ "$updated" -gt 0 ]] && rows+=("$(plural_count "$updated" "file") ${verb}updated")
+    [[ "$added" -gt 0 ]]   && rows+=("$(plural_count "$added" "new file") ${verb}added")
+    [[ "$removed" -gt 0 ]] && rows+=("$(plural_count "$removed" "file") ${verb}removed")
+    [[ "$skipped" -gt 0 ]] && rows+=("$(plural_count "$skipped" "file") skipped")
 
     local i last_idx=$((${#rows[@]} - 1))
     for ((i = 0; i < ${#rows[@]}; i++)); do
