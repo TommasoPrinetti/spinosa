@@ -536,6 +536,7 @@ prompt_workspace_or_cancel() {
 
 require_workspace() {
   local provided_path="${1:-}"
+  local allow_all="${2:-0}"
 
   # Check if CWD is already a workspace
   if [[ -f ".spinosa/workspace" ]]; then
@@ -595,6 +596,10 @@ require_workspace() {
       options+=("$(option_spec "$ws_path" "$ws_path" "")")
     fi
   done
+  options+=("$(option_separator)")
+  if [[ "$allow_all" == "1" ]]; then
+    options+=("$(option_spec "__all__" "All workspaces" "update every registered workspace")")
+  fi
   options+=("$(option_spec "__scan__" "Find other workspaces" "scan directories for workspaces")")
   options+=("$(option_spec "__enter__" "Enter path manually" "type a workspace path")")
   

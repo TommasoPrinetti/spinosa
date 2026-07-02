@@ -151,6 +151,7 @@ OPENCODE_EOF
                 case "$agent" in
                     spinosa-searcher)    claude_tools="Read, Grep, Glob" ;;
                     spinosa-analyst)     claude_tools="Read" ;;
+                    spinosa-visualizer)  claude_tools="Read, Write" ;;
                     spinosa-writer)      claude_tools="Read, Write" ;;
                     spinosa-verifier)    claude_tools="Read, Grep, Glob, Write" ;;
                     spinosa-evaluator)   claude_tools="Read, Grep, Glob, Write" ;;
@@ -267,7 +268,7 @@ for platform in .opencode .claude .codex .hermes; do
     rm -rf "$dest"
     if [[ -d "$REPO_ROOT/.agents/references" ]]; then
         mkdir -p "$dest"
-        local ref_file
+        ref_file=""
         for ref_file in "$REPO_ROOT/.agents/references/"*.md; do
           [[ -f "$ref_file" ]] || continue
           copy_file_or_die "$ref_file" "$dest/$(basename "$ref_file")"

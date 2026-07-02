@@ -617,7 +617,44 @@ cmd_update() {
     validate_workspace "$workspace_path" || die "Not a valid Spinosa workspace: $workspace_path"
     register_workspace "$workspace_path" "$(basename "$workspace_path")" 2>/dev/null || true
   else
-    workspace_path="$(require_workspace)" || die "No workspace found."
+    workspace_path="$(require_workspace "" 1)" || die "No workspace found."
+  fi
+
+  if [[ "$workspace_path" == "__all__" ]]; then
+    local workspace_data ws_path ws_project
+    local -a all_workspaces=() inner_args=()
+    workspace_data="$(discover_registered_workspaces 2>/dev/null || true)"
+    while IFS='|' read -r ws_path ws_project; do
+      [[ -n "$ws_path" ]] || continue
+      all_workspaces+=("$ws_path")
+    done <<< "$workspace_data"
+
+    [[ ${#all_workspaces[@]} -gt 0 ]] || die "No registered workspaces found."
+
+    if [[ "$auto_yes" -ne 1 ]]; then
+      note "Batch update: $(plural_count "${#all_workspaces[@]}" "workspace")"
+      note "Runs the same framework sync on each registered workspace"
+      if ! confirm "Update all registered workspaces?" "y"; then
+        info "Update cancelled."
+        return 0
+      fi
+    fi
+
+    [[ "$dry_run" -eq 1 ]] && inner_args+=("--dry-run")
+    [[ "$force" -eq 1 ]] && inner_args+=("--force")
+    inner_args+=("--yes")
+
+    local batch_failed=0 batch_index=0 total_workspaces=${#all_workspaces[@]}
+    for ws_path in "${all_workspaces[@]}"; do
+      batch_index=$((batch_index + 1))
+      divider
+      printf '  %s%s[%d/%d] %s%s\n\n' "${BOLD}${C}" "Update" "$batch_index" "$total_workspaces" "$(basename "$ws_path")" "${RESET}"
+      if ! cmd_update "${inner_args[@]}" "$ws_path"; then
+        batch_failed=1
+      fi
+    done
+
+    return "$batch_failed"
   fi
 
   local ws_metadata="${workspace_path}/.spinosa/workspace"
@@ -646,10 +683,7 @@ cmd_update() {
   echo ""
 
   if is_cloud_storage_path "$workspace_path"; then
-    warn "Workspace is on cloud storage — ensure files are synced locally before updating."
-    note "Per-file copy timeout: ${SPINOSA_CLOUD_COPY_TIMEOUT_SEC:-60}s; hash timeout: ${SPINOSA_CLOUD_HASH_TIMEOUT_SEC:-30}s."
-    note "Spinosa copies framework files one-by-one with retries; stalled cloud I/O fails instead of hanging."
-    note "Tail $(spinosa_log_file) to see the current path if the spinner appears frozen."
+    note "Cloud folder detected."
   fi
 
   # ── check workspace manifest exists ─────────────────────────────────────
@@ -688,10 +722,7 @@ cmd_update() {
   if [[ "$dry_run" -eq 1 ]]; then
     info "Dry-run — previewing ${manifest_total} framework paths"
   else
-    info "Applying framework sync (${manifest_total} paths)…"
-    if is_cloud_storage_path "$workspace_path"; then
-      note "If progress stalls, tail $(spinosa_log_file) in another terminal for the current path."
-    fi
+    info "Updating workspace files (${manifest_total} paths)…"
   fi
   echo ""
 
@@ -718,6 +749,75 @@ cmd_update() {
     local rc=$?
     unset SPINOSA_SYNC_LABEL
     return "$rc"
+  }
+
+  rewrite_workspace_manifest() {
+    local manifest_tmp path role policy full_path hash manifest_idx_local=0
+    manifest_tmp="$(mktemp "${TMPDIR:-/tmp}/spinosa-workspace-manifest.XXXXXX")" || die "Cannot create manifest temp file"
+    printf 'path\tsha256\n' > "$manifest_tmp"
+    spinosa_log INFO "rebuilding workspace manifest workspace=${workspace_path}"
+    while IFS=$'\t' read -r path role policy; do
+      is_framework_manifest_entry "$path" "$role" || continue
+      manifest_idx_local=$((manifest_idx_local + 1))
+      full_path="${workspace_path}/${path}"
+      if [[ -f "$full_path" ]]; then
+        render_update_manifest_progress "$manifest_idx_local" "$manifest_total" "$path" "hashing"
+        SPINOSA_LAST_COPY_FAIL_REASON=""
+        hash="$(sha256_file "$full_path" 2>/dev/null || echo "none")"
+        if [[ "$hash" == "none" && cloud_io_timed_out ]]; then
+          clear_progress_line
+          warn "Hash timed out during manifest rebuild: ${path}"
+        fi
+        printf '%s\t%s\n' "$path" "$hash" >> "$manifest_tmp"
+      elif [[ -d "$full_path" ]]; then
+        render_update_manifest_progress "$manifest_idx_local" "$manifest_total" "$path" "recording"
+        printf '%s\tdir\n' "$path" >> "$manifest_tmp"
+      fi
+    done < "$fw_manifest"
+    clear_progress_line
+
+    if is_cloud_storage_path "$ws_manifest"; then
+      safe_copy "$manifest_tmp" "$ws_manifest" || {
+        rm -f "$manifest_tmp" 2>/dev/null || true
+        die "Failed to write workspace manifest (${SPINOSA_LAST_COPY_FAIL_REASON:-I/O error})"
+      }
+    else
+      mv -f "$manifest_tmp" "$ws_manifest" || {
+        rm -f "$manifest_tmp" 2>/dev/null || true
+        die "Failed to write workspace manifest"
+      }
+      return 0
+    fi
+    rm -f "$manifest_tmp" 2>/dev/null || true
+  }
+
+  update_workspace_version_metadata() {
+    local metadata_tmp
+    metadata_tmp="$(mktemp "${TMPDIR:-/tmp}/spinosa-workspace-metadata.XXXXXX")" || die "Cannot create workspace metadata temp file"
+    cp -p "$ws_metadata" "$metadata_tmp" 2>/dev/null || cat "$ws_metadata" > "$metadata_tmp" || {
+      rm -f "$metadata_tmp" 2>/dev/null || true
+      die "Failed to stage workspace metadata for update"
+    }
+    if grep -q '^framework_version:' "$metadata_tmp" 2>/dev/null; then
+      if [[ "$(uname -s)" == "Darwin" ]]; then
+        sed -i '' "s/^framework_version:.*/framework_version: ${installed_version}/" "$metadata_tmp"
+      else
+        sed -i "s/^framework_version:.*/framework_version: ${installed_version}/" "$metadata_tmp"
+      fi
+    fi
+    if is_cloud_storage_path "$ws_metadata"; then
+      safe_copy "$metadata_tmp" "$ws_metadata" || {
+        rm -f "$metadata_tmp" 2>/dev/null || true
+        die "Failed to update workspace metadata (${SPINOSA_LAST_COPY_FAIL_REASON:-I/O error})"
+      }
+    else
+      mv -f "$metadata_tmp" "$ws_metadata" || {
+        rm -f "$metadata_tmp" 2>/dev/null || true
+        die "Failed to update workspace metadata"
+      }
+      return 0
+    fi
+    rm -f "$metadata_tmp" 2>/dev/null || true
   }
 
   while IFS=$'\t' read -r path role policy; do
@@ -876,8 +976,10 @@ cmd_update() {
   done < "$fw_manifest"
 
   clear_progress_line
+  spinosa_log INFO "framework copy phase complete workspace=${workspace_path}"
 
   # ── Phase 3: REMOVE files no longer in framework TSV ──────────────────────
+  spinosa_log INFO "phase remove-extra-files workspace=${workspace_path}"
   if [[ "$manifest_has_entries" -eq 1 ]]; then
     while IFS=$'\t' read -r m_path m_hash; do
       [[ -n "$m_path" && "$m_path" != "path" && "$m_hash" != "dir" ]] || continue
@@ -909,6 +1011,7 @@ cmd_update() {
   fi
 
   # ── Phase 4: retired-framework-files.tsv (remove if still present) ────────
+  spinosa_log INFO "phase remove-retired-files workspace=${workspace_path}"
   if [[ -f "$retired_manifest" ]]; then
     local r_path r_date r_reason
     while IFS=$'\t' read -r r_path r_date r_reason; do
@@ -945,6 +1048,7 @@ cmd_update() {
   rm -f "$processed_list" 2>/dev/null || true
 
   # ── Phase 5: finalize legacy logs/ → .logs/ (second pass after retired cleanup) ─
+  spinosa_log INFO "phase finalize-legacy-logs workspace=${workspace_path}"
   if [[ "$dry_run" -eq 1 ]]; then
     info "[dry-run] would finalize legacy logs/ cleanup"
   else
@@ -953,29 +1057,13 @@ cmd_update() {
 
   # ── regenerate manifest.tsv ──────────────────────────────────────────────
   if [[ "$dry_run" -ne 1 ]]; then
-    printf 'path\tsha256\n' > "$ws_manifest"
-    while IFS=$'\t' read -r path role policy; do
-      is_framework_manifest_entry "$path" "$role" || continue
-      local full_path="${workspace_path}/${path}"
-      if [[ -f "$full_path" ]]; then
-        local hash
-        hash="$(sha256_file "$full_path" 2>/dev/null || echo "none")"
-        printf '%s\t%s\n' "$path" "$hash" >> "$ws_manifest"
-      elif [[ -d "$full_path" ]]; then
-        printf '%s\tdir\n' "$path" >> "$ws_manifest"
-      fi
-    done < "$fw_manifest"
+    rewrite_workspace_manifest
   fi
 
   # ── update workspace metadata ───────────────────────────────────────────
   if [[ "$dry_run" -ne 1 && -n "$installed_version" && "$installed_version" != "dev" ]]; then
-    if grep -q '^framework_version:' "$ws_metadata" 2>/dev/null; then
-      if [[ "$(uname -s)" == "Darwin" ]]; then
-        sed -i '' "s/^framework_version:.*/framework_version: ${installed_version}/" "$ws_metadata"
-      else
-        sed -i "s/^framework_version:.*/framework_version: ${installed_version}/" "$ws_metadata"
-      fi
-    fi
+    spinosa_log INFO "phase update-workspace-metadata workspace=${workspace_path} version=${installed_version}"
+    update_workspace_version_metadata
   fi
 
   # ── clean macOS metadata ─────────────────────────────────────────────────
@@ -990,7 +1078,15 @@ cmd_update() {
 
   # ── sync agent mirrors ───────────────────────────────────────────────────
   if [[ "$dry_run" -ne 1 && -f "${workspace_path}/.bin/sync-agents.sh" ]]; then
-    bash "${workspace_path}/.bin/sync-agents.sh" >/dev/null 2>&1 || true
+    spinosa_log INFO "phase sync-agents workspace=${workspace_path}"
+    if is_cloud_storage_path "$workspace_path"; then
+      SPINOSA_LAST_COPY_FAIL_REASON=""
+      if ! spinosa_run_with_timeout "${SPINOSA_CLOUD_SYNC_AGENTS_TIMEOUT_SEC:-120}" sh -c 'bash "$1" >/dev/null 2>&1' _ "${workspace_path}/.bin/sync-agents.sh"; then
+        warn "Agent mirror refresh skipped (${SPINOSA_LAST_COPY_FAIL_REASON:-I/O error})"
+      fi
+    else
+      bash "${workspace_path}/.bin/sync-agents.sh" >/dev/null 2>&1 || true
+    fi
   fi
 
   # ── report ───────────────────────────────────────────────────────────────
