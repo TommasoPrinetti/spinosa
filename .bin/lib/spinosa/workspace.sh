@@ -319,7 +319,7 @@ ensure_global_metadata() {
   done
   if [[ ! -f "$SPINOSA_CONFIG" ]]; then
     cat > "$SPINOSA_CONFIG" << EOF
-release_channel: stable
+beta: false
 auto_upgrade: true
 EOF
   fi

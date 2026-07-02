@@ -47,10 +47,10 @@ spinosa add --workspace ~/Research/project-spinosa --dir ~/Downloads/new-batch
 
 Upgrade the **globally installed CLI** to the latest release on a channel. Downloads and verifies checksums automatically.
 
-| Channel | Default? | Resolves to |
-| ------- | -------- | ----------- |
-| `stable` | yes | Rolling GitHub `stable` release |
-| `beta` | no | Rolling GitHub `beta` prerelease |
+| Config | Resolves to |
+| ------ | ----------- |
+| `beta: false` | Rolling GitHub `stable` release |
+| `beta: true` | Rolling GitHub `beta` prerelease |
 
 ```bash
 spinosa upgrade --yes                    # stable latest
@@ -62,7 +62,7 @@ Stable install URL: `https://github.com/TommasoPrinetti/spinosa/releases/downloa
 Beta install URL: `https://github.com/TommasoPrinetti/spinosa/releases/download/beta/install.sh`
 Exact install URL: `https://github.com/TommasoPrinetti/spinosa/releases/download/vX.Y.Z/install.sh`
 
-Set default channel for channel-less upgrade tooling: `export SPINOSA_RELEASE_CHANNEL=beta`. Auto-upgrade checks follow the configured release channel in `~/.spinosa/metadata/config.yaml`.
+Set the channel for channel-less upgrade tooling in `~/.spinosa/metadata/config.yaml`: `beta: true` tracks beta prereleases, `beta: false` tracks stable releases. `SPINOSA_RELEASE_CHANNEL=beta|stable` remains an environment override.
 
 This updates `~/.spinosa/` (framework runtime, vendor Python tools). It does **not** update files inside your workspace folders.
 

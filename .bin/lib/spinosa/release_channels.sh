@@ -8,14 +8,37 @@ SPINOSA_STABLE_CHANNEL_TAG="${SPINOSA_STABLE_CHANNEL_TAG:-stable}"
 SPINOSA_BETA_CHANNEL_TAG="${SPINOSA_BETA_CHANNEL_TAG:-beta}"
 SPINOSA_RELEASE_REPO="${SPINOSA_RELEASE_REPO:-TommasoPrinetti/spinosa}"
 
+spinosa_config_file() {
+  printf '%s/metadata/config.yaml' "${SPINOSA_HOME:-$HOME/.spinosa}"
+}
+
+spinosa_beta_toggle_channel() {
+  local value="$1"
+  value="${value//\"/}"
+  value="${value//\'/}"
+  case "$value" in
+    true|yes|on|1) printf '%s' "beta" ;;
+    false|no|off|0) printf '%s' "stable" ;;
+    *) die "Invalid beta config value: ${value} (use true or false)" ;;
+  esac
+}
+
 spinosa_release_channel() {
-  local ch
+  local ch config beta_toggle
   if [[ -n "${SPINOSA_RELEASE_CHANNEL:-}" ]]; then
     ch="$SPINOSA_RELEASE_CHANNEL"
   else
-    ch="$(grep -m1 '^release_channel:' "${SPINOSA_HOME:-$HOME/.spinosa}/metadata/config.yaml" 2>/dev/null | awk '{print $2}')"
-    ch="${ch:-stable}"
+    config="$(spinosa_config_file)"
+    beta_toggle="$(awk '$1 == "beta:" { print $2; exit }' "$config" 2>/dev/null || true)"
+    if [[ -n "$beta_toggle" ]]; then
+      ch="$(spinosa_beta_toggle_channel "$beta_toggle")"
+    else
+      ch="$(awk '$1 == "release_channel:" { print $2; exit }' "$config" 2>/dev/null || true)"
+      ch="${ch:-stable}"
+    fi
   fi
+  ch="${ch//\"/}"
+  ch="${ch//\'/}"
   case "$ch" in
     stable|beta) printf '%s' "$ch" ;;
     dev) printf 'beta' ;;
@@ -23,26 +46,49 @@ spinosa_release_channel() {
   esac
 }
 
+set_config_key() {
+  local config="$1" key="$2" value="$3"
+  if grep -q "^${key}:" "$config" 2>/dev/null; then
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+      sed -i '' "s/^${key}:.*/${key}: ${value}/" "$config"
+    else
+      sed -i "s/^${key}:.*/${key}: ${value}/" "$config"
+    fi
+  else
+    printf '\n%s: %s\n' "$key" "$value" >> "$config"
+  fi
+}
+
+delete_config_key() {
+  local config="$1" key="$2"
+  [[ -f "$config" ]] || return 0
+  if [[ "$(uname -s)" == "Darwin" ]]; then
+    sed -i '' "/^${key}:/d" "$config"
+  else
+    sed -i "/^${key}:/d" "$config"
+  fi
+}
+
 set_release_channel() {
   local ch="$1"
   local config_dir="${SPINOSA_METADATA_DIR:-${SPINOSA_HOME:-$HOME/.spinosa}/metadata}"
   local config="${config_dir}/config.yaml"
+  local beta_toggle
+  [[ "$ch" == "dev" ]] && ch="beta"
+  case "$ch" in
+    beta) beta_toggle=true ;;
+    stable) beta_toggle=false ;;
+    *) die "Invalid release channel: ${ch} (use stable or beta)" ;;
+  esac
   mkdir -p "$config_dir" 2>/dev/null || return 1
   if [[ ! -f "$config" ]]; then
     cat > "$config" << EOF
-release_channel: ${ch}
+beta: ${beta_toggle}
 EOF
     return 0
   fi
-  if grep -q '^release_channel:' "$config" 2>/dev/null; then
-    if [[ "$(uname -s)" == "Darwin" ]]; then
-      sed -i '' "s/^release_channel:.*/release_channel: ${ch}/" "$config"
-    else
-      sed -i "s/^release_channel:.*/release_channel: ${ch}/" "$config"
-    fi
-  else
-    printf '\nrelease_channel: %s\n' "$ch" >> "$config"
-  fi
+  set_config_key "$config" "beta" "$beta_toggle"
+  delete_config_key "$config" "release_channel"
 }
 
 resolve_pinned_version_from_installer() {
