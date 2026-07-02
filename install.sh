@@ -2,7 +2,7 @@
 # shellcheck shell=bash
 # ── install.sh — Spinosa Framework Installer (auto-re-execs with bash) ──────
 
-PINNED_VERSION="0.8.0-beta.4"
+PINNED_VERSION="0.8.0-beta.5"
 PINNED_TAG="beta"
 
 if [ -z "${BASH_VERSION-}" ]; then
@@ -315,6 +315,33 @@ download() {
   fi
 }
 
+available_disk_bytes() {
+  local path="${1:-${TMPDIR:-/tmp}}"
+  local available_kb
+  available_kb="$(df -Pk "$path" 2>/dev/null | awk 'NR==2 { print $4; exit }')"
+  [[ "$available_kb" =~ ^[0-9]+$ ]] || return 1
+  printf '%s\n' "$((available_kb * 1024))"
+}
+
+disk_mb_rounded_down() {
+  local bytes="${1:-0}"
+  [[ "$bytes" =~ ^[0-9]+$ ]] || bytes=0
+  printf '%s\n' "$((bytes / 1024 / 1024))"
+}
+
+check_download_disk_space() {
+  local required_bytes=$((500 * 1024 * 1024))
+  local check_path free_bytes
+  for check_path in "${TMPDIR:-/tmp}" "${SPINOSA_HOME}"; do
+    mkdir -p "$check_path" 2>/dev/null || true
+    free_bytes="$(available_disk_bytes "$check_path" 2>/dev/null || true)"
+    [[ "$free_bytes" =~ ^[0-9]+$ ]] || continue
+    if (( free_bytes < required_bytes )); then
+      die "Need ~500MB free, have $(disk_mb_rounded_down "$free_bytes")MB"
+    fi
+  done
+}
+
 _realpath() {
   local path="$1"
   if [[ -d "$path" ]]; then
@@ -460,16 +487,25 @@ INSTALL_COMPLETED=0
 write_install_metadata() {
   mkdir -p "$SPINOSA_METADATA_DIR"
   cat > "${SPINOSA_METADATA_DIR}/install.yaml" << EOF
+# Install state — machine-generated
 install_root: "${SPINOSA_HOME}"
 bin_dir: "${SPINOSA_BIN_DIR}"
-last_installed_version: "${VERSION}"
-install_complete: true
-updated: "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 EOF
+  # Write last_installed_version to config.yaml (user-facing settings)
+  local config="${SPINOSA_METADATA_DIR}/config.yaml"
+  if grep -q '^last_installed_version:' "$config" 2>/dev/null; then
+    if [ "$(uname -s)" = "Darwin" ]; then
+      sed -i '' "s/^last_installed_version:.*/last_installed_version: \"${VERSION}\"/" "$config"
+    else
+      sed -i "s/^last_installed_version:.*/last_installed_version: \"${VERSION}\"/" "$config"
+    fi
+  else
+    printf '\nlast_installed_version: "%s"\n' "$VERSION" >> "$config"
+  fi
 }
 
 read_last_installed_version() {
-  local file="${SPINOSA_METADATA_DIR}/install.yaml"
+  local file="${SPINOSA_METADATA_DIR}/config.yaml"
   [ -f "$file" ] || return 1
   awk '$1 == "last_installed_version:" { print $2; exit }' "$file"
 }
@@ -675,7 +711,7 @@ check_release_age() {
 VENDOR_PIP_MARKITDOWN='markitdown[all]==0.1.6'
 VENDOR_PIP_RAPIDOCR='rapidocr==3.8.1'
 VENDOR_PIP_PYPDFIUM2='pypdfium2==5.9.0'
-VENDOR_PIP_PYPDF='pypdf'
+VENDOR_PIP_PYPDF='pypdf==5.1.0'
 VENDOR_PIP_ONNX_VERSIONS='1.23.2 1.23.1 1.23.0 1.22.1 1.22.0'
 
 vendor_pip_fingerprint() {
@@ -743,7 +779,7 @@ vendor_installed_pins_match() {
   local vendor_dir="$1" python_bin pkg spec ver installed onnx_ver matched=0
   python_bin="$(vendor_python_for_dir "$vendor_dir")" || return 1
 
-  for spec in "$VENDOR_PIP_MARKITDOWN" "$VENDOR_PIP_RAPIDOCR" "$VENDOR_PIP_PYPDFIUM2"; do
+  for spec in "$VENDOR_PIP_MARKITDOWN" "$VENDOR_PIP_RAPIDOCR" "$VENDOR_PIP_PYPDFIUM2" "$VENDOR_PIP_PYPDF"; do
     pkg="${spec%%\[*}"
     pkg="${pkg%%==*}"
     ver="${spec#*==}"
@@ -1096,8 +1132,30 @@ download_and_verify() {
 }
 
 install_vendor_python_packages() {
-  local spinosa_python="$1"
+  local spinosa_python="$1" vendor_dir="$2"
+  local requirements_lock="${vendor_dir}/requirements.txt"
   local pip_ok=0 onnx_ver pip_attempt _pip_start
+
+  if [[ -f "$requirements_lock" ]]; then
+    for pip_attempt in 1 2; do
+      spinner_stop 2>/dev/null || true
+      spinner_start "Installing locked vendor packages (attempt ${pip_attempt}/2)"
+      if "$spinosa_python" -m pip install \
+        --require-hashes \
+        -r "$requirements_lock" \
+        --quiet --timeout 120 2>&1; then
+        pip_ok=1
+        break
+      fi
+      if [[ "$pip_attempt" -lt 2 ]]; then
+        warn "Locked vendor package install attempt ${pip_attempt}/2 failed — retrying"
+        sleep 4
+      fi
+    done
+    [[ "$pip_ok" -eq 1 ]]
+    return
+  fi
+
   _pip_start=$SECONDS
   for onnx_ver in $VENDOR_PIP_ONNX_VERSIONS; do
     [[ $((SECONDS - _pip_start)) -lt 300 ]] || break
@@ -1178,7 +1236,7 @@ install_vendor_bundles() {
 
   if [[ -n "$spinosa_python" ]]; then
     spinosa_log INFO "vendor_python=${spinosa_python}"
-    if install_vendor_python_packages "$spinosa_python"; then
+    if install_vendor_python_packages "$spinosa_python" "$spinosa_vendor_dest"; then
       spinner_stop "MarkItDown + RapidOCR + PDF tools installed"
       spinner_start "Verifying RapidOCR import"
       if "$spinosa_python" -c "from rapidocr import RapidOCR" 2>/dev/null; then
@@ -1524,6 +1582,7 @@ main() {
 
   mkdir -p "${SPINOSA_HOME}/bin"
   mkdir -p "${SPINOSA_BIN_DIR}"
+  check_download_disk_space
 
   local tmpdir
   tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/spinosa-install.XXXXXX")"

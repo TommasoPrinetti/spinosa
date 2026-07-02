@@ -94,8 +94,8 @@ resolve_framework_root() {
       fi
       if [[ -z "$latest_version" ]]; then
         _meta_last=""
-        [[ -f "${SPINOSA_HOME}/metadata/install.yaml" ]] && \
-          _meta_last="$(awk '$1 == "last_installed_version:" { print $2; exit }' "${SPINOSA_HOME}/metadata/install.yaml")"
+        [[ -f "${SPINOSA_HOME}/metadata/config.yaml" ]] && \
+          _meta_last="$(awk '$1 == "last_installed_version:" { print $2; exit }' "${SPINOSA_HOME}/metadata/config.yaml")"
         if sort -V /dev/null 2>/dev/null; then
           for v in $(ls -1 "${SPINOSA_HOME}/versions" 2>/dev/null | grep -E '^[0-9]' | sort -V); do
             if [[ -f "${SPINOSA_HOME}/versions/${v}/.spinosa-install-complete" ]] \
@@ -178,6 +178,30 @@ while true; do
     *) break ;;
   esac
 done
+
+# ── help routing ───────────────────────────────────────────────────────────
+subcommand="${1:-}"
+case "$subcommand" in
+  help|-h|--help)
+    cmd_help
+    exit 0
+    ;;
+  add|new|startup|upgrade|update|doctor|uninstall)
+    if [[ "${2:-}" == "--help" || "${2:-}" == "-h" ]]; then
+      shift
+      case "$subcommand" in
+        add) cmd_add "$@" ;;
+        new) cmd_new "$@" ;;
+        startup) cmd_startup "$@" ;;
+        upgrade) cmd_upgrade "$@" ;;
+        update) cmd_update "$@" ;;
+        doctor) cmd_doctor "$@" ;;
+        uninstall) cmd_uninstall "$@" ;;
+      esac
+      exit 0
+    fi
+    ;;
+esac
 
 # ── Call auto-upgrade check before command screens render ──
 if [[ "${1:-}" != "upgrade" ]] && [[ "${1:-}" != "__post_upgrade_workspaces" ]] && [[ "${1:-}" != "uninstall" ]] && [[ "${1:-}" != "doctor" ]] && [[ "${1:-}" != "version" ]] && [[ "${1:-}" != "--version" ]] && [[ "${1:-}" != "-v" ]]; then

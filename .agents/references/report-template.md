@@ -30,28 +30,64 @@ created: YYYY-MM-DD
 updated: YYYY-MM-DD
 status: draft
 scope: [one-line description]
-template_version: 2
+pipeline: [agent chain, e.g. searcher → serendippo → writer → verifier]
+query: [original user query]
 ---
 
-# [Headline: task asked and goal — from goal artifact]
+# [Headline: goal from goal artifact]
 
-## Answer
-[Short direct answer to the original request]
+## Goal
+[What the research aimed to answer — restated from the original request]
 
-## Evidence
-[Quotes and source references using verbatim format.
+- - - - -
+
+## TLDR
+[Short natural-language answer, 1–3 sentences]
+
+- - - - -
+
+## Report
+[Main body: evidence, interpretation, analysis, patterns.
+Structure freely with H2/H3 as needed. Inline source citations.
+Unicode charts used where they add clarity.
+Limitations (gaps, uncertainties, what was not checked) noted inline.
 For large evidence sets (>50 sources), include the top 10-20 here and link to the appendix:]
 
 > For the complete evidence set, see `agent_reports/evidence_appendix.md`
 
-## Analysis
-[Interpretation, patterns, connections — include Analyst's broader context here]
+- - - - -
 
-## Limitations
-[Gaps, uncertainties, what was not checked]
+## Conclusions
+[NOT a summary. Critical reflection comparing goal vs findings:
+- What did we expect vs what did we find?
+- Which assumptions held, which broke?
+- What is the gap between the question and what the corpus supports?
+- Implications and insights grounded in the evidence]
 
-## Sources
-[List of all source paths referenced]
+- - - - -
+
+## Serendipity
+[Only when serendippo ran. Alternative viewpoints, hidden connections.
+Omitted entirely when serendippo not in pipeline.]
+
+- - - - -
+
+## Reproducibility
+
+| Field   | Value |
+|---------|-------|
+| Query   | [original query] |
+| Maps    | [maps accessed, count] |
+| Grep    | ["pattern1", ...] |
+| Glob    | ["glob1", ...] |
+| Scanned | [N files] |
+| Read    | [N files] |
+| Rounds  | [N search rounds] |
+| Agents  | [chain] |
+| Tags    | [keywords/terms used] |
+| Gaps    | [coverage gaps] |
+
+**Sources:** [list of all source paths referenced]
 ```
 
 ## Evidence Appendix
@@ -70,7 +106,7 @@ created: YYYY-MM-DD
 
 # Evidence Appendix: [Report Title]
 
-Full evidence set for the main report. The main report contains the top sources and key patterns.
+Full evidence set for the main report. The main report's `## Report` section contains the top sources and key patterns.
 
 ### Source 1: [file path]
 - **Type:** raw_copy

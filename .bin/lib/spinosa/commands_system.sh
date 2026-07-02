@@ -62,14 +62,37 @@ cmd_help() {
   title "Spinosa — Research Framework CLI"
 
   printf '  %s\n' "${BOLD}Usage:${RESET}"
-  printf '  %s\n' "spinosa new [directory]    Create a new workspace and run setup"
-  printf '  %s\n' "spinosa add [options]     Add files to an existing workspace"
-  printf '  %s\n' "spinosa upgrade           Upgrade Spinosa CLI to latest release"
-  printf '  %s\n' "spinosa update            Update workspace framework files"
-  printf '  %s\n' "spinosa doctor            Health check (versions, tools, integrations)"
-  printf '  %s\n' "spinosa uninstall         Remove Spinosa from this system"
-  printf '  %s\n' "spinosa version           Show installed Spinosa version"
-  printf '  %s\n' "spinosa help              Show this help"
+  printf '  %s\n' "spinosa [<global-flags>] <command> [<args>]"
+  printf '  %s\n' "spinosa <command> --help"
+  printf '\n'
+
+  printf '  %s\n' "${BOLD}Conventions:${RESET}"
+  printf '  %s\n' "<required> is a positional argument you must supply."
+  printf '  %s\n' "[optional] may be omitted."
+  printf '\n'
+
+  printf '  %s\n' "${BOLD}Global flags:${RESET}"
+  printf '  %s\n' "spinosa --no-upgrade-check  Skip the startup upgrade reminder"
+  printf '  %s\n' "spinosa --no-color          Disable colored output"
+  printf '  %s\n' "spinosa --numbered          Force numbered menus"
+  printf '\n'
+
+  printf '  %s\n' "${BOLD}Commands:${RESET}"
+  printf '  %s\n' "spinosa new [<corpus-directory>] [--extensions LIST] [--cli CLI] [--launch MODE]"
+  printf '  %s\n' "spinosa add [--workspace PATH] [--file PATH | --dir PATH] [--extensions LIST]"
+  printf '  %s\n' "spinosa upgrade [--channel stable|beta] [--version X.Y.Z] [--yes] [--reinstall]"
+  printf '  %s\n' "spinosa update [<workspace-path>] [--yes] [--dry-run] [--force]"
+  printf '  %s\n' "spinosa startup [--workspace PATH] [--cli CLI] [--launch MODE]"
+  printf '  %s\n' "spinosa doctor [--workspace PATH] [--yes]"
+  printf '  %s\n' "spinosa uninstall [--yes]"
+  printf '  %s\n' "spinosa version"
+  printf '  %s\n' "spinosa help"
+  printf '\n'
+
+  printf '  %s\n' "${BOLD}Examples:${RESET}"
+  printf '  %s\n' "spinosa new ./corpus"
+  printf '  %s\n' "spinosa upgrade --channel beta --version 1.2.3 --yes"
+  printf '  %s\n' "spinosa update ./workspace --dry-run"
   printf '\n'
 
   # Detect workspace
@@ -170,11 +193,11 @@ cmd_upgrade() {
       --yes|-y) auto_yes=1; shift ;;
       --reinstall) reinstall=1; shift ;;
       --help|-h)
-        printf '  %s\n' "Usage: spinosa upgrade [options]"
-        printf '    %s\n' "  --version X.Y.Z   Upgrade to specific version (default: latest on channel)"
+        printf '  %s\n' "Usage: spinosa upgrade [--channel NAME] [--version X.Y.Z] [--yes] [--reinstall]"
         printf '    %s\n' "  --channel NAME    Release channel: stable (default) or beta (prereleases)"
-        printf '    %s\n' "  --yes             Skip confirmation prompt"
-        printf '    %s\n' "  --reinstall       Reinstall current version"
+        printf '    %s\n' "  --version X.Y.Z   Upgrade to a specific version instead of the latest on the channel"
+        printf '    %s\n' "  --yes             Skip the confirmation prompt"
+        printf '    %s\n' "  --reinstall       Reinstall the currently installed version"
         printf '    %s\n' "  --help            Show this help"
         return 0
         ;;
@@ -270,7 +293,7 @@ cmd_upgrade() {
     die "Installer failed. Existing CLI may still be present, but workspace update was not run. See $(spinosa_log_file)"
   fi
 
-  rm -f "$SPINOSA_VERSION_CACHE" 2>/dev/null || true
+  rm -f "$SPINOSA_VERSION_CACHE" "$SPINOSA_VERSION_CACHE"_* 2>/dev/null || true
   rm -rf "$tmpdir"
 
   # Re-resolve framework root so post-upgrade operations see the new version
@@ -1213,6 +1236,9 @@ cmd_doctor() {
 
 auto_upgrade_check() {
   [[ "${SPINOSA_NO_UPGRADE_CHECK:-0}" != "1" ]] || return 0
+  local _au
+  _au="$(grep -m1 '^auto_upgrade:' "$SPINOSA_CONFIG" 2>/dev/null | awk '{print $2}')"
+  [[ "${_au:-true}" != "false" ]] || return 0
   [[ -t 0 ]] || return 0
   local installed_version
   installed_version="$(framework_version "$FRAMEWORK_ROOT")"

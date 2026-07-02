@@ -3,8 +3,6 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SPINOSA_LOG_COMPONENT="test-install-vendor-reuse"
-# shellcheck source=/dev/null
-source "${SCRIPT_DIR}/lib/spinosa/logging_bootstrap.sh" "$@"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 tmpdir="$(mktemp -d)"
 cleanup() { rm -rf "$tmpdir"; }
@@ -14,10 +12,17 @@ export SPINOSA_HOME="${tmpdir}/spinosa"
 export SPINOSA_METADATA_DIR="${SPINOSA_HOME}/metadata"
 export REINSTALL=0
 
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/lib/spinosa/logging_bootstrap.sh" "$@"
+
 # Load vendor reuse helpers from install.sh without executing main().
-# Line range: VENDOR_PIP_* constants through vendor_bundle_can_reuse (keep in sync with install.sh).
+# Anchor range: VENDOR_PIP_* constants through vendor_bundle_can_reuse.
 _vendor_fragment="$(mktemp "${TMPDIR:-/tmp}/spinosa-vendor-fragment.XXXXXX")"
-sed -n '631,779p' "$REPO_ROOT/install.sh" > "$_vendor_fragment"
+awk '
+  /^# Pinned vendor Python packages/ { printing = 1 }
+  /^verify_vendor_binaries\(\)/ { printing = 0 }
+  printing { print }
+' "$REPO_ROOT/install.sh" > "$_vendor_fragment"
 # shellcheck source=/dev/null
 source "$_vendor_fragment"
 rm -f "$_vendor_fragment"

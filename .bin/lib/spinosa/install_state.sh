@@ -4,7 +4,7 @@
 SPINOSA_INSTALL_COMPLETE_STAMP=".spinosa-install-complete"
 
 spinosa_read_last_installed_version() {
-  local file="${SPINOSA_HOME}/metadata/install.yaml"
+  local file="${SPINOSA_CONFIG}"
   [[ -f "$file" ]] || return 1
   awk '$1 == "last_installed_version:" { print $2; exit }' "$file"
 }
