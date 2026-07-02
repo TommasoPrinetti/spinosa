@@ -8,6 +8,22 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.8.0-beta.6] — 2026-07-02
+
+### Added
+
+- Visualizer coverage for full matrix heatmaps, connected line charts, ridge plots, vertical bars, and categorical histograms, with reusable script helpers.
+- Release-channel regression coverage for exact beta installer URLs, rolling channel URLs, installer channel metadata, and channel-aware `--latest`.
+
+### Fixed
+
+- `install.sh --prefix` no longer overwrites the global `~/.local/bin/spinosa` shim, skips PATH/basic-test side effects, and prints the custom install command.
+- Global shims now fail with a clear missing-target message if the installed CLI target is broken.
+- Beta installs now persist `release_channel: beta`; exact beta installs download immutable `vX.Y.Z-beta.N` assets; installer `--latest` resolves through the active rolling channel.
+- Channel version resolution no longer emits `Broken pipe` warnings under `pipefail`.
+- Release publishing now validates `PINNED_TAG`, stages exact release installers with immutable tags, and uploads separate rolling-channel installer/checksum assets.
+- `test-new-test-vault.sh` preserves and restores an existing global shim during integration tests.
+
 ## [0.8.0-beta.5] — 2026-07-02
 
 ### Added

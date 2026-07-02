@@ -6,8 +6,9 @@
 #
 # Before publishing:
 #   1. Bump PINNED_VERSION in install.sh to match <version>
-#   2. Commit on your beta/release branch
-#   3. Run testsuite Phase A (minimum)
+#   2. Set PINNED_TAG="beta" in install.sh
+#   3. Commit on your beta/release branch
+#   4. Run testsuite Phase A (minimum)
 #
 # Install (curl):
 #   curl -fsSL https://github.com/TommasoPrinetti/spinosa/releases/download/beta/install.sh | bash

@@ -137,9 +137,6 @@ fetch_release_notes() {
     api_url="https://api.github.com/repos/${SPINOSA_RELEASE_REPO}/releases/latest"
   else
     tag="v${version}"
-    if is_prerelease_version "$version" 2>/dev/null; then
-      tag="${SPINOSA_BETA_CHANNEL_TAG:-beta}"
-    fi
     api_url="https://api.github.com/repos/${SPINOSA_RELEASE_REPO}/releases/tags/${tag}"
   fi
   

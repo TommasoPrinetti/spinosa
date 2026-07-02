@@ -53,7 +53,7 @@ resolve_pinned_version_from_installer() {
   fi
   installer="$(curl -fsSL --connect-timeout 10 --max-time 20 "$url" 2>/dev/null || true)"
   [[ -n "$installer" ]] || die "Could not fetch ${channel} channel installer (${url}). Publish the rolling ${channel} release first."
-  resolved="$(printf '%s' "$installer" | grep -m1 '^PINNED_VERSION=' | sed 's/^PINNED_VERSION="\(.*\)"/\1/' || true)"
+  resolved="$(awk -F'"' '/^PINNED_VERSION=/ { print $2; exit }' <<< "$installer" || true)"
   [[ -n "$resolved" ]] || die "${channel} channel installer missing PINNED_VERSION. Re-publish the rolling ${channel} release."
   printf '%s' "$resolved"
 }
@@ -82,18 +82,15 @@ resolve_release_version_for_channel() {
 install_url_for_channel() {
   local channel="${1:-stable}" version="${2:-}"
   case "$channel" in
-    stable)
+    stable|beta|dev)
       if [[ -n "$version" && "$version" != "latest" ]]; then
         printf 'https://github.com/%s/releases/download/v%s/install.sh' "$SPINOSA_RELEASE_REPO" "$version"
       else
-        printf '%s' "$SPINOSA_STABLE_INSTALL_URL"
-      fi
-      ;;
-    beta|dev)
-      if [[ -n "$version" && "$version" != "latest" ]]; then
-        printf 'https://github.com/%s/releases/download/%s/install.sh' "$SPINOSA_RELEASE_REPO" "$SPINOSA_BETA_CHANNEL_TAG"
-      else
-        printf '%s' "$SPINOSA_BETA_INSTALL_URL"
+        if [[ "$channel" == "stable" ]]; then
+          printf '%s' "$SPINOSA_STABLE_INSTALL_URL"
+        else
+          printf '%s' "$SPINOSA_BETA_INSTALL_URL"
+        fi
       fi
       ;;
     *) die "Unknown release channel: ${channel}" ;;

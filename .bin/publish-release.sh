@@ -53,6 +53,17 @@ ARCHIVE="${DIST}/spinosa-framework-${VERSION}.tar.gz"
 INSTALLER="${DIST}/install.sh"
 CHECKSUMS="${DIST}/checksums.txt"
 
+sha256_artifact() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$1" | awk '{print $1}'
+  else
+    echo "Error: no SHA-256 tool found" >&2
+    return 1
+  fi
+}
+
 STABLE_VERSION_RE='^[0-9]+\.[0-9]+\.[0-9]+$'
 PRERELEASE_VERSION_RE='^[0-9]+\.[0-9]+\.[0-9]+-[0-9A-Za-z.]+$'
 
@@ -108,6 +119,14 @@ if [[ "$PINNED" != "$VERSION" ]]; then
   echo "  Bump PINNED_VERSION before publishing."
   exit 1
 fi
+PINNED_RELEASE_TAG="$(grep -m1 '^PINNED_TAG=' install.sh | sed 's/^PINNED_TAG="\(.*\)"/\1/')"
+EXPECTED_PINNED_TAG="stable"
+[[ "$PRERELEASE" -eq 1 ]] && EXPECTED_PINNED_TAG="beta"
+if [[ "$PINNED_RELEASE_TAG" != "$EXPECTED_PINNED_TAG" ]]; then
+  echo "Error: install.sh PINNED_TAG=${PINNED_RELEASE_TAG} does not match ${EXPECTED_PINNED_TAG} channel publishing"
+  echo "  Set PINNED_TAG=\"${EXPECTED_PINNED_TAG}\" before publishing this channel."
+  exit 1
+fi
 
 CHANNEL_LABEL="stable"
 [[ "$PRERELEASE" -eq 1 ]] && CHANNEL_LABEL="beta (prerelease)"
@@ -116,6 +135,8 @@ echo "Publishing Spinosa Framework ${TAG} [${CHANNEL_LABEL}]"
 echo "  Branch: ${CURRENT_BRANCH}"
 echo "  Commit: ${CURRENT_SHA}"
 echo ""
+
+git push origin "HEAD:refs/heads/${CURRENT_BRANCH}" >/dev/null 2>&1 || git push origin "HEAD:refs/heads/${CURRENT_BRANCH}"
 
 bash "${REPO_ROOT}/.bin/package-release.sh" "$VERSION"
 
@@ -135,7 +156,17 @@ for tarball in "${REPO_ROOT}/.bin/lib/vendor"/spinosa-vendor-*.tar.gz; do
 done
 
 BODY="$(mktemp "${TMPDIR:-/tmp}/spinosa-release-notes.XXXXXX")"
-trap 'rm -f "$BODY" 2>/dev/null || true' EXIT
+CHANNEL_TMPDIRS=()
+cleanup_publish_tmp() {
+  rm -f "$BODY" 2>/dev/null || true
+  local d
+  if [[ ${#CHANNEL_TMPDIRS[@]} -gt 0 ]]; then
+    for d in "${CHANNEL_TMPDIRS[@]}"; do
+      rm -rf "$d" 2>/dev/null || true
+    done
+  fi
+}
+trap cleanup_publish_tmp EXIT
 
 if [[ "$PRERELEASE" -eq 1 ]]; then
   cat > "$BODY" << EOF
@@ -211,10 +242,11 @@ if gh release view "$TAG" >/dev/null 2>&1; then
   if git rev-parse -q --verify "refs/tags/${TAG}^{commit}" >/dev/null; then
     TAG_SHA="$(git rev-parse "refs/tags/${TAG}^{commit}")"
     if [[ "$TAG_SHA" != "$CURRENT_SHA" ]]; then
-      echo "Error: ${TAG} points at ${TAG_SHA}, not current HEAD ${CURRENT_SHA}"
-      exit 1
+      echo "Updating ${TAG} from ${TAG_SHA} to current HEAD ${CURRENT_SHA}"
     fi
   fi
+  git tag -f "$TAG" "$CURRENT_SHA"
+  git push origin "refs/tags/${TAG}:refs/tags/${TAG}" --force
   echo "Release ${TAG} already exists; uploading assets with --clobber"
   gh release upload "$TAG" "${UPLOAD_ASSETS[@]}" --clobber
 else
@@ -223,8 +255,12 @@ fi
 
 sync_channel_release() {
   local channel_tag="$1" version="$2" title="$3" prerelease="$4"
-  local channel_body
+  local channel_body channel_dist channel_install channel_checksums
   channel_body="$(mktemp "${TMPDIR:-/tmp}/spinosa-${channel_tag}-channel-notes.XXXXXX")"
+  channel_dist="$(mktemp -d "${TMPDIR:-/tmp}/spinosa-${channel_tag}-assets.XXXXXX")"
+  CHANNEL_TMPDIRS+=("$channel_dist")
+  channel_install="${channel_dist}/install.sh"
+  channel_checksums="${channel_dist}/checksums.txt"
   cat > "$channel_body" << EOF
 Rolling ${channel_tag} channel — currently points at **v${version}**.
 
@@ -235,15 +271,39 @@ curl -fsSL https://github.com/TommasoPrinetti/spinosa/releases/download/${channe
 Updated automatically by \`publish-release.sh\`.
 EOF
 
+  cp "$INSTALLER" "$channel_install"
+  if [[ "$(uname -s)" == "Darwin" ]]; then
+    sed -i '' "s/^PINNED_TAG=.*/PINNED_TAG=\"${channel_tag}\"/" "$channel_install"
+  else
+    sed -i "s/^PINNED_TAG=.*/PINNED_TAG=\"${channel_tag}\"/" "$channel_install"
+  fi
+  if ! grep -q "^PINNED_TAG=\"${channel_tag}\"" "$channel_install"; then
+    echo "Error: could not prepare ${channel_tag} channel installer"
+    exit 1
+  fi
+
+  : > "$channel_checksums"
+  printf '%s  %s\n' "$(sha256_artifact "$ARCHIVE")" "$(basename "$ARCHIVE")" >> "$channel_checksums"
+  printf '%s  %s\n' "$(sha256_artifact "$channel_install")" "install.sh" >> "$channel_checksums"
+  local vendor_asset
+  if [[ ${#VENDOR_ASSETS[@]} -gt 0 ]]; then
+    for vendor_asset in "${VENDOR_ASSETS[@]}"; do
+      printf '%s  %s\n' "$(sha256_artifact "$vendor_asset")" "$(basename "$vendor_asset")" >> "$channel_checksums"
+    done
+  fi
+
+  local channel_upload_assets=("$ARCHIVE" "$channel_install" "$channel_checksums")
+  [[ ${#VENDOR_ASSETS[@]} -gt 0 ]] && channel_upload_assets+=("${VENDOR_ASSETS[@]}")
+
   echo ""
   echo "Syncing rolling ${channel_tag} channel release (${channel_tag}) → v${version}"
 
-  git push origin "$CURRENT_BRANCH" >/dev/null 2>&1 || git push origin "$CURRENT_BRANCH"
+  git push origin "HEAD:refs/heads/${CURRENT_BRANCH}" >/dev/null 2>&1 || git push origin "HEAD:refs/heads/${CURRENT_BRANCH}"
 
   if gh release view "$channel_tag" >/dev/null 2>&1; then
     git tag -f "$channel_tag" "$CURRENT_SHA"
-    git push origin "$channel_tag" --force
-    gh release upload "$channel_tag" "${UPLOAD_ASSETS[@]}" --clobber
+    git push origin "refs/tags/${channel_tag}:refs/tags/${channel_tag}" --force
+    gh release upload "$channel_tag" "${channel_upload_assets[@]}" --clobber
     if [[ "$prerelease" == "1" ]]; then
       gh release edit "$channel_tag" --title "$title" --prerelease --notes-file "$channel_body"
     else
@@ -252,12 +312,12 @@ EOF
   else
     local release_args=(--target "$CURRENT_BRANCH" --title "$title" --notes-file "$channel_body" --latest=false)
     [[ "$prerelease" == "1" ]] && release_args+=(--prerelease)
-    gh release create "$channel_tag" "${UPLOAD_ASSETS[@]}" "${release_args[@]}"
+    gh release create "$channel_tag" "${channel_upload_assets[@]}" "${release_args[@]}"
     git fetch origin "refs/tags/${channel_tag}:refs/tags/${channel_tag}" >/dev/null 2>&1 || true
     if ! git rev-parse -q --verify "refs/tags/${channel_tag}^{commit}" >/dev/null 2>&1 \
       || [[ "$(git rev-parse "refs/tags/${channel_tag}^{commit}")" != "$CURRENT_SHA" ]]; then
       git tag -f "$channel_tag" "$CURRENT_SHA"
-      git push origin "$channel_tag" --force
+      git push origin "refs/tags/${channel_tag}:refs/tags/${channel_tag}" --force
     fi
   fi
   rm -f "$channel_body"
