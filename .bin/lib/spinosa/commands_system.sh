@@ -517,14 +517,20 @@ cmd_update() {
   title "Update"
 
   # ── resolve workspace ────────────────────────────────────────────────────
-  local workspace_path
+  local workspace_path installed_version_filter
+  installed_version_filter="$(framework_version "$FRAMEWORK_ROOT")"
+  if [[ -z "$installed_version_filter" || "$installed_version_filter" == "dev" ]]; then
+    if [[ -f "${FRAMEWORK_ROOT}/install.sh" ]]; then
+      installed_version_filter="$(grep -m1 '^PINNED_VERSION=' "${FRAMEWORK_ROOT}/install.sh" | sed 's/^PINNED_VERSION="\(.*\)"/\1/')"
+    fi
+  fi
   if [[ -n "${args[0]:-}" ]]; then
     workspace_path="$(normalize_path_input "${args[0]}")"
     workspace_path="$(expand_home "$workspace_path")"
     validate_workspace "$workspace_path" || die "Not a valid Spinosa workspace: $workspace_path"
     register_workspace "$workspace_path" "$(basename "$workspace_path")" 2>/dev/null || true
   else
-    workspace_path="$(require_workspace "" 1)" || die "No workspace found."
+    workspace_path="$(require_workspace "" 1 "$installed_version_filter")" || die "No workspace found."
   fi
 
   if [[ "$workspace_path" == "__all__" ]]; then
@@ -533,18 +539,24 @@ cmd_update() {
     workspace_data="$(discover_registered_workspaces 2>/dev/null || true)"
     while IFS='|' read -r ws_path ws_project; do
       [[ -n "$ws_path" ]] || continue
+      workspace_list_contains_path "$ws_path" "${all_workspaces[@]-}" && continue
+      if [[ -n "$installed_version_filter" ]] && ! workspace_needs_framework_update "$ws_path" "$installed_version_filter"; then
+        continue
+      fi
       all_workspaces+=("$ws_path")
     done <<< "$workspace_data"
 
-    [[ ${#all_workspaces[@]} -gt 0 ]] || die "No registered workspaces found."
+    [[ ${#all_workspaces[@]} -gt 0 ]] || {
+      if [[ -n "$installed_version_filter" && "$installed_version_filter" != "dev" ]]; then
+        info "All registered workspaces already match v${installed_version_filter}."
+        return 0
+      fi
+      die "No registered workspaces found."
+    }
 
     if [[ "$auto_yes" -ne 1 ]]; then
       note "Batch update: $(plural_count "${#all_workspaces[@]}" "workspace")"
       note "Runs the same framework sync on each registered workspace"
-      if ! confirm "Update all registered workspaces?" "y"; then
-        info "Update cancelled."
-        return 0
-      fi
     fi
 
     [[ "$dry_run" -eq 1 ]] && inner_args+=("--dry-run")
@@ -552,7 +564,7 @@ cmd_update() {
     inner_args+=("--yes")
 
     local batch_failed=0 batch_index=0 total_workspaces=${#all_workspaces[@]}
-    for ws_path in "${all_workspaces[@]}"; do
+    for ws_path in "${all_workspaces[@]-}"; do
       batch_index=$((batch_index + 1))
       divider
       printf '  %s%s[%d/%d] %s%s\n\n' "${BOLD}${C}" "Update" "$batch_index" "$total_workspaces" "$(basename "$ws_path")" "${RESET}"
@@ -666,23 +678,17 @@ cmd_update() {
   }
 
   rewrite_workspace_manifest() {
-    local manifest_tmp path role policy full_path hash manifest_idx_local=0
+    local manifest_tmp path role policy full_path manifest_idx_local=0
     manifest_tmp="$(mktemp "${TMPDIR:-/tmp}/spinosa-workspace-manifest.XXXXXX")" || die "Cannot create manifest temp file"
-    printf 'path\tsha256\n' > "$manifest_tmp"
+    printf 'path\tkind\n' > "$manifest_tmp"
     spinosa_log INFO "rebuilding workspace manifest workspace=${workspace_path}"
     while IFS=$'\t' read -r path role policy; do
       is_framework_manifest_entry "$path" "$role" || continue
       manifest_idx_local=$((manifest_idx_local + 1))
       full_path="${workspace_path}/${path}"
       if [[ -f "$full_path" ]]; then
-        render_update_manifest_progress "$manifest_idx_local" "$manifest_total" "$path" "hashing"
-        SPINOSA_LAST_COPY_FAIL_REASON=""
-        hash="$(sha256_file "$full_path" 2>/dev/null || echo "none")"
-        if [[ "$hash" == "none" && cloud_io_timed_out ]]; then
-          clear_progress_line
-          warn "Hash timed out during manifest rebuild: ${path}"
-        fi
-        printf '%s\t%s\n' "$path" "$hash" >> "$manifest_tmp"
+        render_update_manifest_progress "$manifest_idx_local" "$manifest_total" "$path" "recording"
+        printf '%s\tfile\n' "$path" >> "$manifest_tmp"
       elif [[ -d "$full_path" ]]; then
         render_update_manifest_progress "$manifest_idx_local" "$manifest_total" "$path" "recording"
         printf '%s\tdir\n' "$path" >> "$manifest_tmp"
@@ -744,6 +750,64 @@ cmd_update() {
       esac
     done
     return 1
+  }
+
+  run_sync_agents_with_progress() {
+    local sync_script="$1" timeout_sec="${2:-0}"
+    local line sync_pid watchdog_pid="" rc=1 progress_current=0 progress_total=0 progress_label="" saw_rc=0
+
+    exec 3< <(
+      {
+        SPINOSA_SYNC_AGENTS_PROGRESS=1 bash "$sync_script"
+        printf '::spinosa-rc::%s\n' "$?"
+      } 2>&1
+    )
+    sync_pid=$!
+
+    if [[ "$timeout_sec" -gt 0 ]]; then
+      (
+        sleep "$timeout_sec"
+        if kill -0 "$sync_pid" 2>/dev/null; then
+          kill -TERM "$sync_pid" 2>/dev/null || true
+          sleep 1
+          kill -KILL "$sync_pid" 2>/dev/null || true
+        fi
+      ) &
+      watchdog_pid=$!
+    fi
+
+    while IFS= read -r line <&3; do
+      case "$line" in
+        ::spinosa-progress::*)
+          line="${line#::spinosa-progress::}"
+          progress_current="${line%%::*}"
+          line="${line#*::}"
+          progress_total="${line%%::*}"
+          progress_label="${line#*::}"
+          render_step_progress "$progress_current" "$progress_total" "$progress_label" "refreshing agent mirrors"
+          ;;
+        ::spinosa-rc::*)
+          rc="${line#::spinosa-rc::}"
+          saw_rc=1
+          ;;
+        *)
+          spinosa_log INFO "sync-agents output workspace=${workspace_path} line=$(printf '%s' "$line" | tr '\n' ' ')"
+          ;;
+      esac
+    done
+
+    exec 3<&-
+    [[ -n "$watchdog_pid" ]] && kill "$watchdog_pid" 2>/dev/null || true
+    [[ -n "$watchdog_pid" ]] && wait "$watchdog_pid" 2>/dev/null || true
+
+    if [[ "$saw_rc" -eq 0 ]]; then
+      rc=124
+    fi
+    if [[ "$rc" -eq 143 || "$rc" -eq 137 || "$rc" -eq 124 ]]; then
+      SPINOSA_LAST_COPY_FAIL_REASON="timed out after ${timeout_sec}s"
+      return 124
+    fi
+    return "$rc"
   }
 
   while IFS=$'\t' read -r path role policy; do
@@ -818,8 +882,8 @@ cmd_update() {
   # ── Phase 3: REMOVE files no longer in framework TSV ──────────────────────
   spinosa_log INFO "phase remove-extra-files workspace=${workspace_path}"
   if [[ "$manifest_has_entries" -eq 1 ]]; then
-    while IFS=$'\t' read -r m_path m_hash; do
-      [[ -n "$m_path" && "$m_path" != "path" && "$m_hash" != "dir" ]] || continue
+    while IFS=$'\t' read -r m_path m_kind; do
+      [[ -n "$m_path" && "$m_path" != "path" && "$m_kind" != "dir" ]] || continue
       grep -Fxq "$m_path" "$processed_list" 2>/dev/null && continue
       grep -Fxq "$m_path" "$declared_list" 2>/dev/null && { skipped=$((skipped + 1)); continue; }
 
@@ -894,17 +958,18 @@ cmd_update() {
     if should_sync_agent_mirrors; then
       spinosa_log INFO "phase sync-agents workspace=${workspace_path}"
       if is_cloud_storage_path "$workspace_path"; then
-        render_status_progress "refreshing agent mirrors" ".bin/sync-agents.sh"
         SPINOSA_LAST_COPY_FAIL_REASON=""
-        if ! spinosa_run_with_timeout "${SPINOSA_CLOUD_SYNC_AGENTS_TIMEOUT_SEC:-120}" sh -c 'bash "$1" >/dev/null 2>&1' _ "${workspace_path}/.bin/sync-agents.sh"; then
+        if ! run_sync_agents_with_progress "${workspace_path}/.bin/sync-agents.sh" "${SPINOSA_CLOUD_SYNC_AGENTS_TIMEOUT_SEC:-120}"; then
           clear_progress_line
           warn "Agent mirror refresh skipped (${SPINOSA_LAST_COPY_FAIL_REASON:-I/O error})"
         fi
         clear_progress_line
       else
-        spinner_start "Refreshing agent mirrors"
-        bash "${workspace_path}/.bin/sync-agents.sh" >/dev/null 2>&1 || true
-        spinner_stop
+        if ! run_sync_agents_with_progress "${workspace_path}/.bin/sync-agents.sh" 0; then
+          clear_progress_line
+          warn "Agent mirror refresh skipped (${SPINOSA_LAST_COPY_FAIL_REASON:-I/O error})"
+        fi
+        clear_progress_line
       fi
     else
       spinosa_log INFO "phase sync-agents skipped workspace=${workspace_path}"

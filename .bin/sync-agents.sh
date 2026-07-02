@@ -34,6 +34,36 @@ SPINOSA_LOG_COMPONENT="sync-agents"
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/lib/spinosa/logging_bootstrap.sh" "$@"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
+SYNC_AGENT_PROGRESS="${SPINOSA_SYNC_AGENTS_PROGRESS:-0}"
+SYNC_PROGRESS_STEP=0
+SYNC_PROGRESS_TOTAL=0
+
+count_matching_files() {
+  local dir="$1" pattern="$2" count=0 entry
+  [[ -d "$dir" ]] || { printf '0'; return 0; }
+  for entry in "$dir"/$pattern; do
+    [[ -f "$entry" ]] || continue
+    count=$((count + 1))
+  done
+  printf '%s' "$count"
+}
+
+sync_progress_emit() {
+  local label="$1"
+  [[ "$SYNC_AGENT_PROGRESS" == "1" ]] || return 0
+  SYNC_PROGRESS_STEP=$((SYNC_PROGRESS_STEP + 1))
+  printf '::spinosa-progress::%s::%s::%s\n' "$SYNC_PROGRESS_STEP" "$SYNC_PROGRESS_TOTAL" "$label"
+}
+
+sync_progress_setup() {
+  local agent_count refs_count
+  agent_count="$(count_matching_files "$REPO_ROOT/.agents/agents" '*.md')"
+  refs_count=0
+  [[ -d "$REPO_ROOT/.agents/references" ]] && refs_count=4
+  SYNC_PROGRESS_TOTAL=$((agent_count + agent_count + 4 + refs_count + 3))
+}
+
+sync_progress_setup
 
 if [[ -f "$REPO_ROOT/.bin/lib/spinosa/core.sh" ]]; then
   # shellcheck source=/dev/null
@@ -114,6 +144,7 @@ for canonical in "$REPO_ROOT/.agents/agents/"*.md; do
     [ -f "$canonical" ] || continue
     agent_file=$(basename "$canonical")
     agent="${agent_file%.md}"
+    sync_progress_emit "agents/${agent}"
 
     # ── Parse canonical frontmatter ──────────────────────────────────
     name=""
@@ -245,6 +276,7 @@ for canonical in "$REPO_ROOT/.agents/agents/"*.md; do
     agent_file=$(basename "$canonical")
     agent="${agent_file%.md}"
     agent_label="${agent#spinosa-}"
+    sync_progress_emit "skills/${agent}"
     skill_dir="$SKILLS_DIR/$agent"
     skill_file="$skill_dir/SKILL.md"
 
@@ -280,6 +312,7 @@ done
 
 for platform in .opencode .claude .codex .hermes; do
     dest="$REPO_ROOT/$platform/skills"
+    sync_progress_emit "$platform/skills"
     mirror_tree_or_die "$SKILLS_DIR" "$dest"
     count=$(find "$dest" -mindepth 2 -maxdepth 2 -name "SKILL.md" | wc -l | tr -d ' ')
     echo "  $platform/skills/ → $count skills"
@@ -294,6 +327,7 @@ echo "--- Syncing references ---"
 for platform in .opencode .claude .codex .hermes; do
     dest="$REPO_ROOT/$platform/references"
     if [[ -d "$REPO_ROOT/.agents/references" ]]; then
+        sync_progress_emit "$platform/references"
         mirror_tree_or_die "$REPO_ROOT/.agents/references" "$dest"
         count=$(find "$dest" -name "*.md" | wc -l | tr -d ' ')
         echo "  $platform/references/ → $count files"
@@ -303,6 +337,7 @@ done
 # ── Sync Hermes workspace config ─────────────────────────────────────
 echo ""
 echo "--- Syncing Hermes workspace config ---"
+sync_progress_emit ".hermes/workspace.config.yaml"
 HERMES_DIR="$REPO_ROOT/.hermes"
 mkdir -p "$HERMES_DIR"
 cat > "$HERMES_DIR/workspace.config.yaml" << HERMES_CONFIG_EOF
@@ -325,6 +360,7 @@ echo "  .hermes/workspace.config.yaml → merge into ~/.hermes/config.yaml"
 # ── Sync CLAUDE.md ──────────────────────────────────────────────────
 echo ""
 echo "--- Syncing CLAUDE.md ---"
+sync_progress_emit "CLAUDE.md"
 copy_file_or_die "$REPO_ROOT/AGENTS.md" "$REPO_ROOT/CLAUDE.md"
 today="$(date +%Y-%m-%d)"
 # Update updated date and add provenance fields in the frontmatter block
@@ -345,6 +381,7 @@ echo "  CLAUDE.md → updated"
 # ── Sync .codex/config.toml ───────────────────────────────────────────
 echo ""
 echo "--- Syncing .codex/config.toml ---"
+sync_progress_emit ".codex/config.toml"
 CODEX_AGENTS_DIR="$REPO_ROOT/.codex/agents"
 CODEX_CONFIG="$REPO_ROOT/.codex/config.toml"
 if [[ -d "$CODEX_AGENTS_DIR" ]]; then

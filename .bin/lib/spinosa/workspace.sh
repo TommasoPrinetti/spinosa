@@ -532,11 +532,38 @@ prompt_workspace_or_cancel() {
   done
 }
 
+workspace_list_contains_path() {
+  local needle="$1"
+  shift
+  local entry
+  for entry in "$@"; do
+    [[ "${entry%%|*}" == "$needle" ]] && return 0
+  done
+  return 1
+}
+
+workspace_framework_version_value() {
+  local workspace_path="$1"
+  grep -m1 'framework_version:' "$workspace_path/.spinosa/workspace" 2>/dev/null | awk '{print $2}'
+}
+
+workspace_needs_framework_update() {
+  local workspace_path="$1" installed_version="${2:-}"
+  local ws_version cmp=0
+  validate_workspace "$workspace_path" || return 0
+  [[ -n "$installed_version" && "$installed_version" != "dev" ]] || return 0
+  ws_version="$(workspace_framework_version_value "$workspace_path")"
+  [[ -n "$ws_version" && "$ws_version" != "dev" ]] || return 0
+  compare_versions "$installed_version" "$ws_version" || cmp=$?
+  [[ "$cmp" -ne 0 ]]
+}
+
 # Main helper - returns workspace path or prompts for selection
 
 require_workspace() {
   local provided_path="${1:-}"
   local allow_all="${2:-0}"
+  local outdated_only_version="${3:-}"
 
   # Check if CWD is already a workspace
   if [[ -f ".spinosa/workspace" ]]; then
@@ -573,18 +600,23 @@ require_workspace() {
   
   # Parse discovered workspaces
   while IFS='|' read -r ws_path project; do
-    [[ -n "$ws_path" ]] && discovered+=("$ws_path|$project")
+    [[ -n "$ws_path" ]] || continue
+    workspace_list_contains_path "$ws_path" "${discovered[@]-}" && continue
+    if [[ -n "$outdated_only_version" ]] && ! workspace_needs_framework_update "$ws_path" "$outdated_only_version"; then
+      continue
+    fi
+    discovered+=("$ws_path|$project")
   done <<< "$workspace_data"
   
   if [[ ${#discovered[@]} -eq 0 ]]; then
-    # No valid workspaces - prompt for path
-    prompt_workspace_or_cancel || return 1
-    return 0
+    if [[ -n "$outdated_only_version" && "$outdated_only_version" != "dev" ]]; then
+      info "All registered workspaces already match v${outdated_only_version}."
+    fi
   fi
   
   # Build options for selection
   local options=()
-  for entry in "${discovered[@]}"; do
+  for entry in "${discovered[@]-}"; do
     local ws_path="${entry%%|*}"
     local project="${entry#*|}"
     local ws_name

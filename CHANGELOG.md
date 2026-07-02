@@ -8,6 +8,19 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.8.0-beta.10] — 2026-07-02
+
+### Changed
+
+- `spinosa update` now records a minimal workspace manifest (`file`/`dir`) instead of rebuilding per-file SHA-256 hashes after every update, which removes the slow post-copy hashing phase.
+- The update workspace picker now shows only workspaces that are behind the current framework version, dedupes repeated registry entries by path, and skips the redundant confirmation after selecting `All workspaces`.
+- Agent mirror refresh now renders a real step progress bar instead of a spinner-only status line.
+
+### Fixed
+
+- `spinosa update` no longer crashes on macOS system Bash 3.2 when the stale-workspace filter sees an empty array under `set -u`.
+- Framework template cleanup: removed tracked session residue from `.spinosa/archive/` and reset `.spinosa/memory/orchestrator-notes.md` to a neutral template state.
+
 ## [0.8.0-beta.9] — 2026-07-02
 
 ### Changed

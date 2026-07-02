@@ -962,6 +962,36 @@ render_status_progress() {
   render_progress_line "  ${C}${frame}${RESET} ${action} ${DIM}—${RESET} ${label}"
 }
 
+render_step_progress() {
+  local processed="$1" total="$2" current_label="${3:-}" action="${4:-working}" spin_seed="${5:-$1}"
+  local frame ratio fixed width label_width filled=0 bar="" i label
+  SPINOSA_ACTIVE_PROGRESS_KIND="step"
+  SPINOSA_ACTIVE_PROGRESS_INDEX="$processed"
+  SPINOSA_ACTIVE_PROGRESS_TOTAL="$total"
+  SPINOSA_ACTIVE_PROGRESS_PATH="$current_label"
+  SPINOSA_ACTIVE_PROGRESS_ACTION="$action"
+  SPINOSA_ACTIVE_PROGRESS_COPIED=""
+  SPINOSA_ACTIVE_PROGRESS_SKIPPED=""
+  frame="$(spinner_frame "$spin_seed")"
+  ratio="${processed}/${total}"
+  width=$((COLS > 100 ? 20 : 12))
+  fixed=$((10 + 1 + ${#action} + 1 + ${#ratio} + 3))
+  label_width=$((COLS - fixed - width - 1))
+  (( label_width < 12 )) && label_width=12
+  if (( total > 0 )); then
+    filled=$(( processed * width / total ))
+  fi
+  for ((i = 0; i < width; i++)); do
+    if (( i < filled )); then
+      bar="${bar}█"
+    else
+      bar="${bar}░"
+    fi
+  done
+  label="$(truncate_display_path "${current_label:-working...}" "$label_width")"
+  render_progress_line "  ${C}${frame}${RESET} ${action} ${ratio} [${bar}] ${DIM}—${RESET} ${label}"
+}
+
 
 render_active_update_progress() {
   local spin_seed="${1:-0}"
@@ -979,6 +1009,14 @@ render_active_update_progress() {
       ;;
     update)
       render_update_manifest_progress \
+        "$SPINOSA_ACTIVE_PROGRESS_INDEX" \
+        "$SPINOSA_ACTIVE_PROGRESS_TOTAL" \
+        "$SPINOSA_ACTIVE_PROGRESS_PATH" \
+        "$SPINOSA_ACTIVE_PROGRESS_ACTION" \
+        "$spin_seed"
+      ;;
+    step)
+      render_step_progress \
         "$SPINOSA_ACTIVE_PROGRESS_INDEX" \
         "$SPINOSA_ACTIVE_PROGRESS_TOTAL" \
         "$SPINOSA_ACTIVE_PROGRESS_PATH" \

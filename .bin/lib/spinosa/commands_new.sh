@@ -314,16 +314,14 @@ source_location: ${corpus_path}
 setup_status: not_started
 EOF
 
-  # Generate manifest with checksums
-  printf 'path\tsha256\n' > "$workspace_path/.spinosa/manifest.tsv"
+  # Generate a minimal manifest for later obsolete-file cleanup.
+  printf 'path\tkind\n' > "$workspace_path/.spinosa/manifest.tsv"
   while IFS=$'\t' read -r path role _policy; do
     is_framework_manifest_entry "$path" "$role" || continue
 
     local full_path="${workspace_path}/${path}"
     if [[ -f "$full_path" ]]; then
-      local hash
-      hash="$(sha256_file "$full_path" 2>/dev/null || echo "none")"
-      printf '%s\t%s\n' "$path" "$hash" >> "$workspace_path/.spinosa/manifest.tsv"
+      printf '%s\tfile\n' "$path" >> "$workspace_path/.spinosa/manifest.tsv"
     elif [[ -d "$full_path" ]]; then
       printf '%s\tdir\n' "$path" >> "$workspace_path/.spinosa/manifest.tsv"
     fi
