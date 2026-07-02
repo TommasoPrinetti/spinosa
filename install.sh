@@ -2,7 +2,7 @@
 # shellcheck shell=bash
 # ── install.sh — Spinosa Framework Installer (auto-re-execs with bash) ──────
 
-PINNED_VERSION="0.8.0-beta.6"
+PINNED_VERSION="0.8.0-beta.7"
 PINNED_TAG="beta"
 
 if [ -z "${BASH_VERSION-}" ]; then
@@ -506,6 +506,13 @@ installer_release_channel() {
   esac
 }
 
+installer_beta_toggle() {
+  case "$(installer_release_channel)" in
+    beta) printf '%s\n' "true" ;;
+    *) printf '%s\n' "false" ;;
+  esac
+}
+
 channel_install_url() {
   local channel="$1"
   case "$channel" in
@@ -538,6 +545,16 @@ config_set_key() {
   fi
 }
 
+config_delete_key() {
+  local config="$1" key="$2"
+  [ -f "$config" ] || return 0
+  if [ "$(uname -s)" = "Darwin" ]; then
+    sed -i '' "/^${key}:/d" "$config"
+  else
+    sed -i "/^${key}:/d" "$config"
+  fi
+}
+
 SPINOSA_INSTALL_COMPLETE_STAMP=".spinosa-install-complete"
 INSTALL_COMPLETED=0
 
@@ -552,12 +569,13 @@ EOF
   local config="${SPINOSA_METADATA_DIR}/config.yaml"
   if [ ! -f "$config" ]; then
     cat > "$config" << CONFIG_EOF
-release_channel: $(installer_release_channel)
+beta: $(installer_beta_toggle)
 auto_upgrade: true
 last_installed_version: "${VERSION}"
 CONFIG_EOF
   else
-    config_set_key "$config" "release_channel" "$(installer_release_channel)"
+    config_set_key "$config" "beta" "$(installer_beta_toggle)"
+    config_delete_key "$config" "release_channel"
     config_set_key "$config" "last_installed_version" "\"${VERSION}\""
   fi
 }

@@ -8,6 +8,13 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.8.0-beta.7] — 2026-07-02
+
+### Fixed
+
+- Channel-less upgrade and auto-upgrade now use `beta: true|false` from `~/.spinosa/metadata/config.yaml` as the single persisted channel switch, so beta installs do not fetch stable releases and stable installs do not fetch beta releases.
+- Installer and workspace config bootstrap now persist only `beta: true|false` and remove legacy `release_channel:` entries when rewriting config.
+
 ## [0.8.0-beta.6] — 2026-07-02
 
 ### Added
@@ -19,7 +26,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - `install.sh --prefix` no longer overwrites the global `~/.local/bin/spinosa` shim, skips PATH/basic-test side effects, and prints the custom install command.
 - Global shims now fail with a clear missing-target message if the installed CLI target is broken.
-- Beta installs now persist `release_channel: beta`; exact beta installs download immutable `vX.Y.Z-beta.N` assets; installer `--latest` resolves through the active rolling channel.
+- Beta installs now persist `beta: true`; exact beta installs download immutable `vX.Y.Z-beta.N` assets; installer `--latest` resolves through the active rolling channel.
 - Channel version resolution no longer emits `Broken pipe` warnings under `pipefail`.
 - Release publishing now validates `PINNED_TAG`, stages exact release installers with immutable tags, and uploads separate rolling-channel installer/checksum assets.
 - `test-new-test-vault.sh` preserves and restores an existing global shim during integration tests.
@@ -51,7 +58,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- Config-switchable release channel: set `release_channel: beta|stable` in `~/.spinosa/metadata/config.yaml`. Auto-upgrade and `spinosa upgrade` respect the persisted preference. Running `spinosa upgrade --channel beta` (or `--channel stable`) saves the choice to config — no manual file editing required.
+- Config-switchable release channel: set `beta: true|false` in `~/.spinosa/metadata/config.yaml`. Auto-upgrade and `spinosa upgrade` respect the persisted preference. Running `spinosa upgrade --channel beta` (or `--channel stable`) saves the choice to config — no manual file editing required.
 
 ## [0.8.0-beta.2] — 2026-07-01
 
