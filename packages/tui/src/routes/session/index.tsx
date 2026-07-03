@@ -100,7 +100,7 @@ type ToolCalloutSummary = {
   command: string
 }
 type ToolCalloutSide = "left" | "right"
-type ToolCalloutInfo = { side: ToolCalloutSide; offsetTop: number }
+type ToolCalloutInfo = { side: ToolCalloutSide; offsetTop: number; summary?: ToolCalloutSummary; continuation?: boolean }
 type TranscriptLayout =
   | {
       mode: "classic"
@@ -319,23 +319,47 @@ export function Session() {
     const sides = new Map<string, ToolCalloutInfo>()
     if (layout.mode !== "callout") return sides
 
-    let leftHeight = 0
-    let rightHeight = 0
+    const groups: { parts: ToolPart[]; display: string }[] = []
+    let currentGroup: { parts: ToolPart[]; display: string } | undefined
+
     for (const message of messages()) {
       for (const part of sync.data.part[message.id] ?? []) {
-        if (part.type !== "tool") continue
-        const summary = buildToolCalloutSummary(
-          part.tool,
-          part.state.input ?? {},
-          part.state.status === "pending" ? {} : (part.state.metadata ?? {}),
-          (value) => pathFormatter.format(value),
-        )
-        const side = pickToolCalloutSide(leftHeight, rightHeight)
-        const offsetTop = side === "left" ? leftHeight : rightHeight
-        sides.set(part.callID, { side, offsetTop })
-        const height = estimateToolCalloutHeight(summary, layout.railWidth)
-        if (side === "left") leftHeight += height
-        else rightHeight += height
+        if (part.type !== "tool") { currentGroup = undefined; continue }
+        const display = toolDisplay(part.tool)
+        if (!currentGroup || currentGroup.display !== display) {
+          currentGroup = { parts: [], display }
+          groups.push(currentGroup)
+        }
+        currentGroup.parts.push(part)
+      }
+    }
+
+    let leftHeight = 0
+    let rightHeight = 0
+    for (const group of groups) {
+      const count = group.parts.length
+      const first = group.parts[0]
+      const summary = buildToolCalloutSummary(
+        first.tool,
+        first.state.input ?? {},
+        first.state.status === "pending" ? {} : (first.state.metadata ?? {}),
+        (value) => pathFormatter.format(value),
+      )
+      const tag = count > 1 ? `${summary.tag} x${count}` : summary.tag
+      const groupSummary: ToolCalloutSummary = { tag, command: summary.command }
+      const side = ["todowrite", "task"].includes(group.display) ? "right" : "left"
+      const offsetTop = side === "left" ? leftHeight : rightHeight
+      sides.set(first.callID, { side, offsetTop, summary: groupSummary })
+      const height = estimateToolCalloutHeight(groupSummary, layout.railWidth, first.tool, first.state.status === "pending" ? {} : (first.state.metadata ?? {}), first.state.input ?? {})
+      if (side === "left") leftHeight += height
+      else rightHeight += height
+      for (let i = 1; i < count; i++) {
+        const part = group.parts[i]
+        const offset = side === "left" ? leftHeight : rightHeight
+        sides.set(part.callID, { side, offsetTop: offset, continuation: true })
+        const partHeight = estimateToolCalloutHeight(groupSummary, layout.railWidth, part.tool, part.state.status === "pending" ? {} : (part.state.metadata ?? {}), part.state.input ?? {})
+        if (side === "left") leftHeight += partHeight
+        else rightHeight += partHeight
       }
     }
     return sides
@@ -1405,9 +1429,10 @@ function TranscriptRow(props: {
   callout?: () =>
     | {
         side: ToolCalloutSide
-        summary: ToolCalloutSummary
+        summary?: ToolCalloutSummary
         part: ToolPart
         offsetTop?: number
+        continuation?: boolean
       }
     | undefined
 }) {
@@ -1433,7 +1458,7 @@ function TranscriptRow(props: {
             <box width={calloutLayout().railWidth} justifyContent="flex-end" alignItems="flex-start">
               <Show when={leftCallout()}>
                 {(callout) => (
-                  <ToolRailCallout side="left" summary={callout().summary} part={callout().part} />
+                  <ToolRailCallout side="left" callout={callout()} />
                 )}
               </Show>
             </box>
@@ -1443,7 +1468,7 @@ function TranscriptRow(props: {
             <box width={calloutLayout().railWidth} alignItems="flex-start">
               <Show when={rightCallout()}>
                 {(callout) => (
-                  <ToolRailCallout side="right" summary={callout().summary} part={callout().part} />
+                  <ToolRailCallout side="right" callout={callout()} />
                 )}
               </Show>
             </box>
@@ -1454,10 +1479,34 @@ function TranscriptRow(props: {
   )
 }
 
+const toolCalloutColor = (tool: string, theme: ReturnType<typeof useTheme>["theme"]) => {
+  const display = toolDisplay(tool)
+  const map: Record<string, RGBA> = {
+    bash: theme.secondary,
+    read: theme.success,
+    grep: theme.primary,
+    glob: theme.warning,
+    webfetch: theme.info,
+    websearch: theme.info,
+    write: theme.accent,
+    edit: theme.accent,
+    apply_patch: theme.error,
+    todowrite: theme.textMuted,
+    task: theme.textMuted,
+    skill: theme.info,
+    question: theme.warning,
+  }
+  return map[display] ?? theme.textMuted
+}
+
 function ToolRailCallout(props: {
   side: ToolCalloutSide
-  summary: ToolCalloutSummary
-  part: ToolPart
+  callout: {
+    side: ToolCalloutSide
+    summary?: ToolCalloutSummary
+    part: ToolPart
+    continuation?: boolean
+  }
 }) {
   const { theme } = useTheme()
   const ctx = use()
@@ -1466,20 +1515,40 @@ function ToolRailCallout(props: {
     const value = ctx.layout()
     return value.mode === "callout" ? value : undefined
   })
-  const color = createMemo(() => {
-    if (props.part.state.status === "error") return theme.error
-    if (props.part.state.status === "running") return theme.warning
-    if (props.part.state.status === "pending") return theme.textMuted
-    return theme.secondary
-  })
+  const color = createMemo(() => toolCalloutColor(props.callout.part.tool, theme))
   const railWidth = createMemo(() => layout()?.railWidth ?? 1)
   const [copied, setCopied] = createSignal(false)
 
+  const lines = createMemo(() => Math.max(1, estimateToolCalloutHeight(
+    props.callout.summary ?? { tag: "", command: "" },
+    railWidth(),
+    props.callout.part.tool,
+    props.callout.part.state.status === "pending" ? {} : (props.callout.part.state.metadata ?? {}),
+    props.callout.part.state.input ?? {},
+  )))
+
   const handleCopy = () => {
-    const text = buildCopyCommand(props.part.tool, props.part.state.input ?? {}, props.summary)
+    if (!props.callout.summary) return
+    const text = buildCopyCommand(props.callout.part.tool, props.callout.part.state.input ?? {}, props.callout.summary)
     void clipboard.write?.(text).then(() => setCopied(true))
     setTimeout(() => setCopied(false), 3000)
   }
+
+  if (props.callout.continuation) {
+    return (
+      <box width={railWidth()}>
+        <For each={new Array(lines()).fill(0)}>
+          {() => (
+            <box flexDirection="row" width="100%" alignItems="center" justifyContent={props.side === "left" ? "flex-end" : undefined}>
+              <text width={1} fg={color()}>│</text>
+            </box>
+          )}
+        </For>
+      </box>
+    )
+  }
+
+  const tail = createMemo(() => lines() > 1 ? new Array(lines() - 1).fill(0) : [])
 
   return (
     <box width={railWidth()}>
@@ -1489,7 +1558,7 @@ function ToolRailCallout(props: {
         </Show>
         <box onMouseUp={handleCopy}>
           <text fg={theme.textMuted} wrapMode="none">
-            <span style={{ bg: color(), fg: selectedForeground(theme, color()), bold: true }}> {props.summary.tag} </span>
+            <span style={{ bg: color(), fg: selectedForeground(theme, color()), bold: true }}> {props.callout.summary!.tag} </span>
             <span style={{ bg: theme.backgroundElement, fg: theme.textMuted }}>{copied() ? " ✓ " : " copy "}</span>
           </text>
         </box>
@@ -1497,6 +1566,18 @@ function ToolRailCallout(props: {
           <text width={3} fg={color()}>──┤</text>
         </Show>
       </box>
+      <For each={tail()}>
+        {() => (
+          <box flexDirection="row" width="100%" alignItems="center" justifyContent={props.side === "left" ? "flex-end" : undefined}>
+            <Show when={props.side === "left"}>
+              <text width={3} fg={color()}>│</text>
+            </Show>
+            <Show when={props.side === "right"}>
+              <text width={3} fg={color()}>│</text>
+            </Show>
+          </box>
+        )}
+      </For>
     </box>
   )
 }
@@ -1513,12 +1594,12 @@ function buildCopyCommand(tool: string, input: Record<string, unknown>, summary:
   if (display === "grep") {
     const pattern = stringValue(input.pattern)
     const path = stringValue(input.path) ?? "."
-    return pattern ? `grep -r "${pattern}" ${path}` : summary.command
+    return pattern ? `grep -r "${pattern}" "${path}"` : summary.command
   }
   if (display === "glob") {
     const pattern = stringValue(input.pattern)
     const path = stringValue(input.path) ?? "."
-    return pattern ? `find ${path} -name "${pattern}"` : summary.command
+    return pattern ? `find "${path}" -name "${pattern}"` : summary.command
   }
   if (display === "webfetch") {
     const url = stringValue(input.url)
@@ -1961,8 +2042,11 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
       : 0
     return {
       side: info.side,
-      summary: buildToolCalloutSummary(props.part.tool, toolprops.input, toolprops.metadata, (value) =>
-        pathFormatter.format(value),
+      continuation: info.continuation,
+      summary: info.summary ?? (
+        info.continuation ? undefined : buildToolCalloutSummary(props.part.tool, toolprops.input, toolprops.metadata, (value) =>
+          pathFormatter.format(value),
+        )
       ),
       part: props.part,
       offsetTop: info.offsetTop + toolOffset,
@@ -1972,7 +2056,6 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
   return (
     <TranscriptRow callout={callout}>
       <Show when={!shouldHide()}>
-        <box marginBottom={1}>
           <Switch>
           <Match when={display() === "bash"}>
             <Shell {...toolprops} />
@@ -2017,7 +2100,6 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
             <GenericTool {...toolprops} />
           </Match>
         </Switch>
-        </box>
       </Show>
     </TranscriptRow>
   )
@@ -2103,7 +2185,43 @@ export function buildToolCalloutSummary(
   }
 }
 
-export function estimateToolCalloutHeight(_summary: ToolCalloutSummary, _railWidth: number) {
+export function estimateToolCalloutHeight(
+  _summary: ToolCalloutSummary,
+  _railWidth: number,
+  tool?: string,
+  metadata?: Record<string, unknown>,
+  input?: Record<string, unknown>,
+) {
+  if (!tool) return 1
+  const display = toolDisplay(tool)
+  if (display === "bash") {
+    if (!stringValue(metadata?.output)) return 1
+    const lines = (stringValue(metadata!.output) || "").split("\n").filter(l => l).length
+    return Math.min(16, lines + 6)
+  }
+  if (display === "write") {
+    if (!metadata?.diagnostics) return 1
+    const lines = (stringValue(input?.content) || "").split("\n").filter(l => l).length
+    return Math.min(16, lines + 6)
+  }
+  if (display === "edit") {
+    if (!stringValue(metadata?.diff)) return 1
+    const lines = (stringValue(metadata!.diff) || "").split("\n").filter(l => l).length
+    return Math.min(16, lines + 6)
+  }
+  if (display === "apply_patch") {
+    const files = parseApplyPatchFiles(metadata?.files)
+    if (!files.length) return 1
+    return Math.min(16, files.length + 4)
+  }
+  if (display === "todowrite") {
+    const todos = parseTodos(metadata?.todos)
+    return Math.min(12, todos.length + 2)
+  }
+  if (display === "question") {
+    if (!parseQuestionAnswers(metadata?.answers)) return 1
+    return 4
+  }
   return 1
 }
 
