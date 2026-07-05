@@ -1,0 +1,153 @@
+import { Prompt, type PromptRef } from "../component/prompt"
+import { createEffect, createMemo, createResource, createSignal, onMount, Show } from "solid-js"
+import { Logo } from "../component/logo"
+import { useSync } from "../context/sync"
+import { Toast } from "../ui/toast"
+import { useArgs } from "../context/args"
+import { useLegacyHomeRoute } from "../context/route"
+import { usePromptRef } from "../context/prompt"
+import { useLocal } from "../context/local"
+import { usePluginRuntime } from "../plugin/runtime"
+import { useEditorContext } from "../context/editor"
+import { useTerminalDimensions } from "@opentui/solid"
+import { useTuiConfig } from "../config"
+import { HomeSessionDestinationProvider } from "./home/session-destination"
+import { SpinosaPromptChips } from "./workspace/spinosa-prompt-chips"
+import { MAIN_CONTENT_MAX_WIDTH } from "../util/layout"
+import { CenteredColumn } from "../component/centered-column"
+import { useSpinosaWorkspace } from "../context/spinosa-workspace"
+import { useTheme } from "../context/theme"
+import { useDialog } from "../ui/dialog"
+import { DialogSpinosaWorkspacePicker } from "../component/dialog-spinosa-workspace-picker"
+import { readBundledFrameworkVersion } from "../spinosa/service"
+
+let once = false
+const defaultPlaceholder = {
+  normal: ["Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests"],
+  shell: ["ls -la", "git status", "pwd"],
+}
+const spinosaPlaceholder = {
+  normal: [
+    "Find source-grounded evidence for…",
+    "Compare cohorts using approved corpus sources",
+    "Surface hidden connections across the corpus",
+  ],
+  shell: ["ls -la", "git status", "pwd"],
+}
+
+export function Home() {
+  const pluginRuntime = usePluginRuntime()
+  const sync = useSync()
+  const route = useLegacyHomeRoute()
+  const dialog = useDialog()
+  const promptRef = usePromptRef()
+  const [ref, setRef] = createSignal<PromptRef | undefined>()
+  const args = useArgs()
+  const local = useLocal()
+  const editor = useEditorContext()
+  const dimensions = useTerminalDimensions()
+  const tuiConfig = useTuiConfig()
+  const spinosa = useSpinosaWorkspace()
+  const { theme } = useTheme()
+  const workspaceReady = createMemo(() => Boolean(spinosa.activePath && !spinosa.genericMode))
+  const [bundledVersion] = createResource(readBundledFrameworkVersion)
+  const wsVersion = createMemo(() => spinosa.meta?.frameworkVersion)
+  const placeholders = createMemo(() => {
+    if (spinosa.meta && !spinosa.genericMode && spinosa.meta.setupStatus === "workspace_started") {
+      return spinosaPlaceholder
+    }
+    return defaultPlaceholder
+  })
+  const promptMaxWidth = createMemo(() => {
+    const configured = tuiConfig.prompt?.max_width
+    if (configured === "auto") return MAIN_CONTENT_MAX_WIDTH
+    return configured ?? MAIN_CONTENT_MAX_WIDTH
+  })
+  let sent = false
+  let routeSent = false
+
+  onMount(() => {
+    editor.clearSelection()
+  })
+
+  const bind = (r: PromptRef | undefined) => {
+    setRef(r)
+    promptRef.set(r)
+    if (once || !r) return
+    if (route.prompt) return
+    if (!args.prompt) return
+    r.set({ input: args.prompt, parts: [] })
+    once = true
+  }
+
+  // Set route prompt and auto-submit if flagged
+  createEffect(() => {
+    const r = ref()
+    const prompt = route.prompt
+    if (!r || !prompt) return
+    r.set(prompt)
+    if (prompt.autoSubmit && !routeSent) {
+      routeSent = true
+      setTimeout(() => r.submit(), 0)
+    }
+  })
+
+  // Wait for sync and model store to be ready before auto-submitting --prompt
+  createEffect(() => {
+    const r = ref()
+    if (sent) return
+    if (!r) return
+    if (!sync.ready || !local.model.ready) return
+    if (!args.prompt) return
+    if (r.current.input !== args.prompt) return
+    sent = true
+    r.submit()
+  })
+
+  createEffect(() => {
+    if (!spinosa.pickerRequested) return
+    spinosa.clearPickerRequest()
+    dialog.replace(() => <DialogSpinosaWorkspacePicker />)
+  })
+
+  return (
+    <HomeSessionDestinationProvider>
+      <CenteredColumn>
+        <box flexGrow={1} alignItems="center" paddingLeft={2} paddingRight={2}>
+          <box flexGrow={1} minHeight={0} />
+          <box height={4} minHeight={0} flexShrink={1} />
+          <box flexShrink={0} alignItems="center" flexDirection="column">
+            <Show when={wsVersion()}>
+              <text fg={theme.textMuted}>
+                Spinosa v{bundledVersion() ?? "?"} · workspace v{wsVersion() ?? "?"}
+              </text>
+              <box height={1} />
+            </Show>
+            <pluginRuntime.Slot name="home_logo" mode="replace">
+              <Logo />
+            </pluginRuntime.Slot>
+          </box>
+          <box height={1} minHeight={0} flexShrink={1} />
+          <box width="100%" maxWidth={promptMaxWidth()} zIndex={1000} paddingTop={1} flexShrink={0}>
+            <SpinosaPromptChips />
+            <Show when={workspaceReady()}>
+              <box>
+                <pluginRuntime.Slot name="home_prompt" mode="replace" ref={bind}>
+                  <Prompt
+                    ref={bind}
+                    disabled={false}
+                    right={<pluginRuntime.Slot name="home_prompt_right" />}
+                    placeholders={placeholders()}
+                  />
+                </pluginRuntime.Slot>
+              </box>
+            </Show>
+          </box>
+          <pluginRuntime.Slot name="home_bottom" />
+          <box flexGrow={1} minHeight={0} />
+          <Toast />
+        </box>
+      </CenteredColumn>
+    </HomeSessionDestinationProvider>
+  )
+}
