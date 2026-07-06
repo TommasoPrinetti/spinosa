@@ -39,10 +39,48 @@ const result = await service.recognize("./image.jpg")
 
 (Other platforms need their own `@napi-rs/canvas-{platform}-{arch}` variant.)
 
+## Document Polyfill — OpenCV.js Import Crash
+
+OpenCV.js (`@techstark/opencv-js`) accesses `document` during module evaluation.
+In Node.js/Bun, this throws `ReferenceError` before the `canvas-native` engine
+setting can take effect (since the engine config only affects runtime, not import).
+
+**Fix in `ppuService()` (`ppu-ocr.ts`):** inject a minimal `document` polyfill
+on `globalThis` just before `import("ppu-paddle-ocr")`, then delete it immediately
+after the import resolves. OpenCV.js completes its module init, detects
+`ENVIRONMENT_IS_NODE`, and never uses DOM APIs.
+
+```typescript
+const needsPolyfill = typeof (globalThis as Record<string, unknown>).document === "undefined"
+try {
+  if (needsPolyfill) {
+    ;(globalThis as Record<string, unknown>).document = {
+      currentScript: null,
+      createElement: () => ({}),
+      createDocumentFragment: () => ({}),
+      documentElement: { style: {} },
+      body: { appendChild: () => {}, removeChild: () => {} },
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      querySelector: () => null,
+      querySelectorAll: () => [],
+      cookie: "",
+      title: "",
+    } as any
+  }
+  const { PaddleOcrService: OcrService } = await import("ppu-paddle-ocr")
+  if (needsPolyfill) delete (globalThis as Record<string, unknown>).document
+  // ... construct with canvas-native, initialize ...
+} catch (err) {
+  if (needsPolyfill) delete (globalThis as Record<string, unknown>).document
+  throw err
+}
+```
+
 ## Known Bugs (v6.0.0)
 
 1. **`recognize()` input type gap** — doesn't accept file path strings despite documentation
-2. **OpenCV.js forced load** — even with `canvas-native`, `@techstark/opencv-js` is imported at module level (harmless once routed away from opencv code path)
+2. **OpenCV.js forced load** — even with `canvas-native`, `@techstark/opencv-js` is imported at module level; polyfill required for Node.js/Bun
 3. **Bun cache resolution** — `@napi-rs/canvas` resolves from Bun's global cache in some setups; project-level direct deps fix this
 
 ## Accuracy Trade-off
