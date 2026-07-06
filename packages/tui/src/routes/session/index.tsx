@@ -1473,10 +1473,12 @@ function TranscriptRow(props: {
     const callout = props.callout?.()
     return callout?.side === "left" ? callout : undefined
   })
+  const leftFirst = createMemo(() => leftCallout()?.offsetTop === 0)
   const rightCallout = createMemo(() => {
     const callout = props.callout?.()
     return callout?.side === "right" ? callout : undefined
   })
+  const rightFirst = createMemo(() => rightCallout()?.offsetTop === 0)
 
   return (
     <Show when={layout()} fallback={props.children}>
@@ -1484,21 +1486,21 @@ function TranscriptRow(props: {
         <box id={props.id} width="100%">
           <box flexDirection="row" width="100%">
             <box width={calloutLayout().railWidth} justifyContent="flex-end" alignItems="flex-start">
-              <Show when={leftCallout()}>
-                {(callout) => (
-                  <ToolRailCallout side="left" callout={callout()} />
-                )}
-              </Show>
+                <Show when={leftCallout()}>
+                  {(callout) => (
+                    <ToolRailCallout side="left" firstInBlock={leftFirst()} callout={callout()} />
+                  )}
+                </Show>
             </box>
             <box flexGrow={1} paddingLeft={calloutLayout().gap} paddingRight={calloutLayout().gap}>
               {props.children}
             </box>
             <box width={calloutLayout().railWidth} alignItems="flex-start">
-              <Show when={rightCallout()}>
-                {(callout) => (
-                  <ToolRailCallout side="right" callout={callout()} />
-                )}
-              </Show>
+                <Show when={rightCallout()}>
+                  {(callout) => (
+                    <ToolRailCallout side="right" firstInBlock={rightFirst()} callout={callout()} />
+                  )}
+                </Show>
             </box>
           </box>
         </box>
@@ -1529,6 +1531,7 @@ const toolCalloutColor = (tool: string, theme: ReturnType<typeof useTheme>["them
 
 function ToolRailCallout(props: {
   side: ToolCalloutSide
+  firstInBlock?: boolean
   callout: {
     side: ToolCalloutSide
     summary?: ToolCalloutSummary
@@ -1579,7 +1582,7 @@ function ToolRailCallout(props: {
   const tailLines = createMemo(() => Math.max(0, lines() - 1))
 
   return (
-    <box width={railWidth()}>
+    <box width={railWidth()} marginTop={props.firstInBlock ? 1 : 0}>
       <box flexDirection="row" alignItems="center" width="100%" justifyContent={props.side === "left" ? "flex-end" : undefined}>
         <Show when={props.side === "right"}>
           <text width={3} fg={color()}>├──</text>
