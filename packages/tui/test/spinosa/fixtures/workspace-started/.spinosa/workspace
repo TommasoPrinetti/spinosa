@@ -1,0 +1,5 @@
+project_name: fixture-workspace
+setup_status: workspace_started
+framework_version: test
+source_location: spinosa-tui-fixture
+created: 2026-07-01

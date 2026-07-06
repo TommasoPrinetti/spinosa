@@ -1,0 +1,1 @@
+# spinosa-writer (fixture)

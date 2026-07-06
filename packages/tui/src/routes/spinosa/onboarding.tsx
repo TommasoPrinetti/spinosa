@@ -2,25 +2,37 @@ import { existsSync } from "node:fs"
 import { TextareaRenderable } from "@opentui/core"
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
 import { useTheme } from "../../context/theme"
-import { useRoute, useRouteData } from "../../context/route"
+import { useRoute } from "../../context/route"
 import { useSpinosaWorkspace } from "../../context/spinosa-workspace"
-import { useTuiPaths } from "../../context/runtime"
-import { SplitBorder } from "../../ui/border"
 import { Toast } from "../../ui/toast"
-import { runAdd, runNew, runReinstall, runStartup } from "../../spinosa/cli-bridge"
+import { runNew, runReinstall, runStartup } from "../../spinosa/cli-bridge"
 import { readStartupPrompt, writePreferredCli } from "../../spinosa/service"
 import { CenteredColumn } from "../../component/centered-column"
 import { OPENCODE_BASE_MODE, useOpencodeKeymap, useOpencodeModeStack } from "../../keymap"
+import { buttonBackground, buttonBorder, buttonText } from "../../util/button"
 import {
-  buildImportScanPreview,
   buildNewWorkspacePreview,
   detectDocumentTools,
   detectLlmTools,
   resolveUserPath,
   suggestWorkspacePath,
-  type ImportScanPreview,
   type NewWorkspacePreview,
 } from "../../spinosa/onboarding-preview"
+import {
+  deferPress,
+  delay,
+  generateScanLines,
+  type ImportOption,
+  LogScrollbox,
+  LogoSummary,
+  stripAnsi,
+  ToggleLine,
+  WizardActionButton,
+  WizardActionRow,
+  WizardGateButton,
+  WizardPanel,
+  yieldToEventLoop,
+} from "./wizard-ui"
 
 type WizardStep = "path" | "tools" | "scan" | "imports" | "processing" | "provider" | "done" | "error"
 
@@ -28,12 +40,6 @@ type ToolCheckResult = {
   label: string
   status: "checking" | "available" | "missing"
   detail?: string
-}
-
-type ImportOption = {
-  ext: string
-  count: number
-  selected: boolean
 }
 
 type CliOption = {
@@ -74,24 +80,10 @@ function launchForCli(cliValue: string): string {
   return "run"
 }
 
-function delay(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
-function yieldToEventLoop() {
-  return new Promise<void>((resolve) => setTimeout(resolve, 0))
-}
-
-function stripAnsi(text: string): string {
-  return text.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "")
-}
-
 export function Onboarding() {
   const { theme } = useTheme()
-  const route = useRouteData("onboarding")
   const { navigate } = useRoute()
   const spinosa = useSpinosaWorkspace()
-  const paths = useTuiPaths()
   const keymap = useOpencodeKeymap()
   const modeStack = useOpencodeModeStack()
 
@@ -106,6 +98,7 @@ export function Onboarding() {
   const [focusedSource, setFocusedSource] = createSignal(0)
   const [preview, setPreview] = createSignal<NewWorkspacePreview | undefined>()
   const [toolChecks, setToolChecks] = createSignal<ToolCheckResult[]>([])
+  const [hoveredButton, setHoveredButton] = createSignal<string | null>(null)
   const [scanProgress, setScanProgress] = createSignal(0)
   const [scanTotal, setScanTotal] = createSignal(0)
   const [processingDone, setProcessingDone] = createSignal(false)
@@ -116,14 +109,13 @@ export function Onboarding() {
   let sourceInput: TextareaRenderable | undefined
   const sourceInputs = new Map<number, TextareaRenderable>()
 
-  const isNewMode = createMemo(() => route.mode === "new")
   const selectedExtensions = createMemo(() =>
     importOptions()
       .filter((item) => item.selected)
       .map((item) => item.ext),
   )
 
-  const totalSteps = createMemo(() => (isNewMode() ? 6 : 5))
+  const totalSteps = 6
   const stepIndex = createMemo(() => {
     if (step() === "path") return 1
     if (step() === "tools") return 2
@@ -131,10 +123,9 @@ export function Onboarding() {
     if (step() === "imports") return 4
     if (step() === "processing") return 5
     if (step() === "provider") return 6
-    if (step() === "done") return totalSteps()
-    return totalSteps()
+    if (step() === "done") return totalSteps
+    return totalSteps
   })
-  const primaryTitle = createMemo(() => (isNewMode() ? "Create Spinosa workspace" : "Add files to workspace"))
 
   const appendLogLine = (...lines: string[]) =>
     setLogLines((prev) => {
@@ -161,9 +152,21 @@ export function Onboarding() {
     })
   }
 
+  const focusSourceEntry = (id: number) => {
+    queueMicrotask(() => {
+      const input = sourceInputs.get(id)
+      if (!input || input.isDestroyed) return
+      input.focus()
+      input.gotoLineEnd()
+    })
+  }
+
   const addSourcePath = () => {
-    setSourcePaths((prev) => [...prev, { id: nextSourceId++, path: "" }])
-    queueMicrotask(() => focusSourceInput())
+    const id = nextSourceId++
+    const nextIndex = sourcePaths().length
+    setSourcePaths((prev) => [...prev, { id, path: "" }])
+    setFocusedSource(nextIndex)
+    focusSourceEntry(id)
   }
 
   const removeSourcePath = (id: number) => {
@@ -182,14 +185,8 @@ export function Onboarding() {
       .filter((p): p is string => Boolean(p))
   }
 
-  const goHome = () => navigate({ type: "workspace", pane: "chat" })
-  const leavePathStep = () => {
-    if (isNewMode()) {
-      navigate({ type: "workspace-picker" })
-      return
-    }
-    goHome()
-  }
+  const goHome = () => navigate({ type: "workspace" })
+  const leavePathStep = () => navigate({ type: "workspace-picker" })
 
   const moveBack = () => {
     setWaitingForGate(false)
@@ -290,33 +287,6 @@ export function Onboarding() {
     setWaitingForGate(true)
   }
 
-  const generateScanLines = (preview: NewWorkspacePreview | ImportScanPreview): string[] => {
-    const lines: string[] = []
-    lines.push("Scanning source folder...")
-    if ("preflightRows" in preview) {
-      lines.push("")
-      for (const row of preview.preflightRows) {
-        const icon = row.tone === "error" ? "✗" : row.tone === "success" ? "✓" : "─"
-        const detail = row.detail ? ` | ${row.detail}` : ""
-        lines.push(`${icon} ${row.label} — ${row.status}${detail}`)
-      }
-    }
-    lines.push("")
-    for (const row of preview.scanRows) {
-      const icon = row.tone === "error" ? "✗" : "─"
-      const detail = row.detail ? ` | ${row.detail}` : ""
-      lines.push(`${icon} ${row.label} — ${row.status}${detail}`)
-    }
-    if (preview.importOptions.length > 0) {
-      lines.push("")
-      lines.push(`Importable file types: ${preview.importOptions.length}`)
-      for (const opt of preview.importOptions) {
-        lines.push(`  .${opt.ext} — ${opt.count} file${opt.count === 1 ? "" : "s"}${opt.selected ? "" : " (audio/video, not selected by default)"}`)
-      }
-    }
-    return lines
-  }
-
   const startScan = async () => {
     const resolved = allPathsResolved()
     if (resolved.length === 0) { setStep("error"); return }
@@ -330,14 +300,11 @@ export function Onboarding() {
 
       for (const src of resolved) {
         appendLogLine(`Scanning: ${src}`)
-        const scanPreview =
-          route.mode === "add"
-            ? await buildImportScanPreview(src)
-            : await (async () => {
-                const nextPreview = await buildNewWorkspacePreview(src)
-                setPreview(nextPreview)
-                return nextPreview
-              })()
+        const scanPreview = await (async () => {
+          const nextPreview = await buildNewWorkspacePreview(src)
+          setPreview(nextPreview)
+          return nextPreview
+        })()
 
         for (const opt of scanPreview.importOptions) {
           const existing = mergedOptions.find((m) => m.ext === opt.ext)
@@ -390,10 +357,6 @@ export function Onboarding() {
         return
       }
     }
-    if (route.mode === "add") {
-      await startScan()
-      return
-    }
     await runToolCheck()
   }
 
@@ -425,41 +388,6 @@ export function Onboarding() {
 
     const extensions = selectedExtensions().join(",")
 
-    if (route.mode === "add") {
-      const workspacePath = spinosa.activePath
-      if (!workspacePath) {
-        appendLogLine("No active workspace selected for add mode.")
-        setBusy(false)
-        setStep("error")
-        return
-      }
-      let allOk = true
-      for (let i = 0; i < resolved.length; i++) {
-        if (abortProcessing) { allOk = false; break }
-        appendLogLine(`[${i + 1}/${resolved.length}] Importing: ${resolved[i]}`)
-        const result = await runAdd(workspacePath, resolved[i], {
-          dir: true,
-          extensions,
-          cli: "opencode",
-          onStdout: (chunk) => {
-            const clean = stripAnsi(chunk)
-            if (clean) appendLogLine(clean)
-          },
-          onStderr: (chunk) => {
-            const clean = stripAnsi(chunk)
-            if (clean) appendLogLine(clean)
-          },
-        })
-        if (result.exitCode !== 0) { allOk = false; setStep("error"); break }
-      }
-      if (allOk) {
-        setCreatedWorkspace(workspacePath)
-        setProcessingDone(true)
-      }
-      setBusy(false)
-      return
-    }
-
     const primarySource = resolved[0]!
     const plannedWorkspace = preview()?.workspacePath ?? suggestWorkspacePath(primarySource)
     if (plannedWorkspace) setCreatedWorkspace(plannedWorkspace)
@@ -488,18 +416,14 @@ export function Onboarding() {
     const workspacePath = plannedWorkspace
     if (result.exitCode === 0 && workspacePath) {
       setProcessingDone(true)
-      if (isNewMode()) {
-        setGateLabel("Choose provider")
-        setGateAction(() => () => { setWaitingForGate(false); setStep("provider") })
-        setWaitingForGate(true)
-      }
+      setGateLabel("Choose provider")
+      setGateAction(() => () => { setWaitingForGate(false); setStep("provider") })
+      setWaitingForGate(true)
     } else if (result.exitCode === 0) {
       setProcessingDone(true)
-      if (isNewMode()) {
-        setGateLabel("Choose provider")
-        setGateAction(() => () => { setWaitingForGate(false); setStep("provider") })
-        setWaitingForGate(true)
-      }
+      setGateLabel("Choose provider")
+      setGateAction(() => () => { setWaitingForGate(false); setStep("provider") })
+      setWaitingForGate(true)
       appendLogLine("Workspace created. You may need to open it from the workspace picker.")
     } else {
       setStep("error")
@@ -509,7 +433,7 @@ export function Onboarding() {
 
   const finishProvider = async (cliValue: string) => {
     const workspacePath = createdWorkspace()
-    if (workspacePath && isNewMode()) {
+    if (workspacePath) {
       await writePreferredCli(workspacePath, cliValue)
     }
     setSelectedCli(CLI_OPTIONS.findIndex((o) => o.value === cliValue))
@@ -517,15 +441,14 @@ export function Onboarding() {
     if (cliValue === "spinosa") {
       if (workspacePath) {
         const prompt = await readStartupPrompt(workspacePath)
-        await spinosa.openWorkspace(workspacePath)
-        navigate({
-          type: "workspace",
-          pane: "chat",
-          prompt: {
-            input: prompt ?? "Run Spinosa startup indexing for this workspace. Follow startup-prompt.md: survey corpus, batch mapper extraction, write maps, validate, and set setup_status to workspace_started.",
-            parts: [],
-          },
+        spinosa.queuePrompt({
+          input:
+            prompt ?? "Run Spinosa startup indexing for this workspace. Follow startup-prompt.md: survey corpus, batch mapper extraction, write maps, validate, and set setup_status to workspace_started.",
+          parts: [],
+          autoSubmit: true,
         })
+        await spinosa.openWorkspace(workspacePath)
+        navigate({ type: "workspace" })
       }
     } else {
       if (workspacePath) {
@@ -536,11 +459,6 @@ export function Onboarding() {
   }
 
   const finish = async () => {
-    if (route.mode === "add") {
-      spinosa.refresh()
-      goHome()
-      return
-    }
     const workspacePath = createdWorkspace()
     if (workspacePath) {
       await spinosa.openWorkspace(workspacePath)
@@ -564,6 +482,16 @@ export function Onboarding() {
     const off = keymap.intercept("key", ({ event }) => {
       if (modeStack.current() !== OPENCODE_BASE_MODE) return
       if (busy()) return
+      setHoveredButton(null)
+
+      if (event.ctrl && event.name === "c") {
+        if (step() === "path") {
+          leavePathStep()
+        } else {
+          moveBack()
+        }
+        return true
+      }
 
       if (event.name === "escape") {
         if (step() === "path") {
@@ -571,6 +499,15 @@ export function Onboarding() {
         } else {
           moveBack()
         }
+        return true
+      }
+
+      if (
+        waitingForGate() &&
+        (step() === "tools" || step() === "scan" || step() === "processing") &&
+        event.name === "return"
+      ) {
+        gateAction()()
         return true
       }
 
@@ -674,23 +611,24 @@ export function Onboarding() {
               paddingRight={1}
               paddingTop={0}
               paddingBottom={0}
-              backgroundColor={theme.backgroundPanel}
-              onMouseUp={() => {
-                if (step() === "path") {
-                  leavePathStep()
-                } else {
-                  moveBack()
-                }
-              }}
+              backgroundColor={buttonBackground(theme, hoveredButton() === "back")}
+              onMouseOver={() => setHoveredButton("back")}
+              onMouseOut={() => setHoveredButton(null)}
+              onMouseDown={() =>
+                deferPress(() => {
+                  if (step() === "path") leavePathStep()
+                  else moveBack()
+                })
+              }
             >
-              <text fg={theme.text}>←</text>
+              <text fg={buttonText(theme, hoveredButton() === "back", theme.text)}>←</text>
             </box>
             <text fg={theme.text}>
-              <span style={{ bold: true }}>{primaryTitle()}</span>
+              <span style={{ bold: true }}>Create Spinosa workspace</span>
             </text>
           </box>
           <text fg={theme.textMuted}>
-            Step {stepIndex()} of {totalSteps()}
+            Step {stepIndex()} of {totalSteps}
             {step() === "path" ? " — choose the source folder" : ""}
             {step() === "tools" ? " — checking document tools" : ""}
             {step() === "scan" ? " — scanning source" : ""}
@@ -702,12 +640,10 @@ export function Onboarding() {
           </text>
 
           <Show when={step() === "path"}>
-            <Panel theme={theme} accent>
-              <text fg={theme.textMuted}>{isNewMode() ? "Corpus folder" : "Source folders"}</text>
+            <WizardPanel theme={theme} accent>
+              <text fg={theme.textMuted}>Corpus folder</text>
               <text fg={theme.textMuted}>
-                {isNewMode()
-                  ? "Paste the folder path. Spinosa will inspect the corpus, let you choose file types, then create a sibling `-spinosa` workspace."
-                  : "Add one or more folder paths below. Each is queued for import into the current workspace."}
+                Paste the folder path. Spinosa will inspect the corpus, let you choose file types, then create a sibling `-spinosa` workspace.
               </text>
               <box flexDirection="column" gap={1} paddingTop={1}>
                 <For each={sourcePaths()}>
@@ -731,11 +667,7 @@ export function Onboarding() {
                           value.traits = { status: "PATH" }
                         }}
                         initialValue={entry.path}
-                        placeholder={
-                          isNewMode()
-                            ? "Paste the corpus folder path"
-                            : `Folder path ${index() + 1}`
-                        }
+                        placeholder="Paste the corpus folder path"
                         placeholderColor={theme.textMuted}
                         textColor={theme.text}
                         focusedTextColor={theme.text}
@@ -755,7 +687,7 @@ export function Onboarding() {
                         paddingTop={0}
                         paddingBottom={0}
                         backgroundColor={theme.backgroundPanel}
-                        onMouseUp={() => removeSourcePath(entry.id)}
+                        onMouseDown={() => deferPress(() => removeSourcePath(entry.id))}
                       >
                         <text fg={theme.textMuted}>✕</text>
                       </box>
@@ -768,38 +700,36 @@ export function Onboarding() {
                 paddingBottom={1}
                 paddingLeft={1}
                 paddingRight={1}
-                backgroundColor={
-                  focusedSource() === sourcePaths().length
-                    ? theme.backgroundElement
-                    : theme.backgroundPanel
-                }
+                backgroundColor={buttonBackground(theme, focusedSource() === sourcePaths().length)}
                 border={focusedSource() === sourcePaths().length ? ["left"] : []}
-                borderColor={theme.borderActive}
+                borderColor={buttonBorder(theme, focusedSource() === sourcePaths().length, theme.borderActive)}
                 onMouseOver={() => setFocusedSource(sourcePaths().length)}
-                onMouseUp={addSourcePath}
+                onMouseDown={() => deferPress(addSourcePath)}
               >
-                <text fg={theme.primary}>+ Add another path</text>
+                <text fg={buttonText(theme, focusedSource() === sourcePaths().length, theme.primary)}>
+                  + Add another path
+                </text>
               </box>
-            </Panel>
-            <ActionRow>
-              <ActionButton
+            </WizardPanel>
+            <WizardActionRow>
+              <WizardActionButton
                 theme={theme}
                 label="Back"
                 primary={focusedSource() === sourcePaths().length + 1}
-                onMouseUp={leavePathStep}
+                onPress={leavePathStep}
               />
               <box flexGrow={1} />
-              <ActionButton
+              <WizardActionButton
                 theme={theme}
                 label="Continue"
                 primary={focusedSource() === sourcePaths().length + 2}
-                onMouseUp={() => void continueFromPath()}
+                onPress={() => void continueFromPath()}
               />
-            </ActionRow>
+            </WizardActionRow>
           </Show>
 
           <Show when={step() === "tools" || step() === "scan" || step() === "processing"}>
-            <Panel theme={theme}>
+            <WizardPanel theme={theme}>
               <Show when={step() === "tools"}>
                 <text fg={theme.textMuted}>Checking document processing tools...</text>
               </Show>
@@ -809,23 +739,21 @@ export function Onboarding() {
                 </text>
               </Show>
               <Show when={step() === "processing" && !processingDone()}>
-                <text fg={theme.textMuted}>
-                  {isNewMode() ? "Creating workspace and importing files..." : "Importing files..."}
-                </text>
+                <text fg={theme.textMuted}>Creating workspace and importing files...</text>
               </Show>
               <LogScrollbox theme={theme} lines={logLines()} />
-            </Panel>
-            <ActionRow>
-              <ActionButton theme={theme} label="Back" onMouseUp={moveBack} />
+            </WizardPanel>
+            <WizardActionRow>
+              <WizardActionButton theme={theme} label="Back" onPress={moveBack} />
               <box flexGrow={1} />
               <Show when={waitingForGate()}>
-                <GateButton theme={theme} label={gateLabel()} action={() => gateAction()()} />
+                <WizardGateButton theme={theme} label={gateLabel()} action={() => gateAction()()} />
               </Show>
-            </ActionRow>
+            </WizardActionRow>
           </Show>
 
           <Show when={step() === "imports"}>
-            <Panel theme={theme}>
+            <WizardPanel theme={theme}>
               <text fg={theme.textMuted}>Selectable file-type batches</text>
               <text fg={theme.textMuted}>Select at least one file type. Audio and video start off unchecked.</text>
               <box flexDirection="column" gap={1}>
@@ -834,9 +762,9 @@ export function Onboarding() {
                   paddingBottom={1}
                   paddingLeft={1}
                   paddingRight={1}
-                  backgroundColor={selectedImport() === 0 ? theme.backgroundElement : theme.backgroundPanel}
+                  backgroundColor={buttonBackground(theme, selectedImport() === 0)}
                   onMouseOver={() => setSelectedImport(0)}
-                  onMouseUp={() => toggleAllImports()}
+                  onMouseDown={() => deferPress(toggleAllImports)}
                 >
                   <ToggleLine
                     theme={theme}
@@ -855,9 +783,9 @@ export function Onboarding() {
                   paddingBottom={1}
                   paddingLeft={1}
                   paddingRight={1}
-                  backgroundColor={selectedImport() === index() + 1 ? theme.backgroundElement : theme.backgroundPanel}
+                  backgroundColor={buttonBackground(theme, selectedImport() === index() + 1)}
                   onMouseOver={() => setSelectedImport(index() + 1)}
-                  onMouseUp={() => toggleImport(index())}
+                  onMouseDown={() => deferPress(() => toggleImport(index()))}
                 >
                         <ToggleLine
                           theme={theme}
@@ -872,16 +800,16 @@ export function Onboarding() {
                 </box>
               </box>
               <text fg={theme.textMuted}>↑↓ move · space toggle · a toggle all · enter continue</text>
-            </Panel>
-            <ActionRow>
-              <ActionButton theme={theme} label="Back" onMouseUp={moveBack} />
+            </WizardPanel>
+            <WizardActionRow>
+              <WizardActionButton theme={theme} label="Back" onPress={moveBack} />
               <box flexGrow={1} />
-              <ActionButton theme={theme} label="Continue" primary onMouseUp={() => void continueFromImports()} />
-            </ActionRow>
+              <WizardActionButton theme={theme} label="Continue" primary onPress={() => void continueFromImports()} />
+            </WizardActionRow>
           </Show>
 
           <Show when={step() === "provider"}>
-            <Panel theme={theme}>
+            <WizardPanel theme={theme}>
               <text fg={theme.textMuted}>Preferred LLM CLI</text>
               <text fg={theme.textMuted}>
                 Choose which tool to use for running the startup indexing prompt in this workspace.
@@ -894,31 +822,25 @@ export function Onboarding() {
                       paddingBottom={1}
                       paddingLeft={1}
                       paddingRight={1}
-                      backgroundColor={selectedCli() === index() ? theme.backgroundElement : undefined}
+                      backgroundColor={selectedCli() === index() ? buttonBackground(theme, true) : undefined}
                       onMouseOver={() => setSelectedCli(index())}
-                      onMouseUp={() => void finishProvider(item.value)}
+                      onMouseDown={() => deferPress(() => void finishProvider(item.value))}
                     >
-                      <text fg={selectedCli() === index() ? theme.primary : theme.text}>
+                      <text fg={buttonText(theme, selectedCli() === index(), theme.primary)}>
                         <span style={{ bold: selectedCli() === index() }}>{item.label}</span>
                       </text>
-                      <text fg={theme.textMuted}> {item.description}</text>
+                      <text fg={buttonText(theme, selectedCli() === index(), theme.textMuted)}> {item.description}</text>
                     </box>
                   )}
                 </For>
               </scrollbox>
               <text fg={theme.textMuted}>↑↓ move · enter select</text>
-            </Panel>
+            </WizardPanel>
           </Show>
 
           <Show when={step() === "done" || step() === "error"}>
-            <Panel theme={theme}>
-              <Show when={step() === "done" && !isNewMode()}>
-                <box gap={1}>
-                  <LogoSummary theme={theme} label="Files imported." />
-                  <text fg={theme.textMuted}>Selected file types have been added to the workspace.</text>
-                </box>
-              </Show>
-              <Show when={step() === "done" && isNewMode()}>
+            <WizardPanel theme={theme}>
+              <Show when={step() === "done"}>
                 <box gap={1}>
                   <LogoSummary theme={theme} label="Workspace created." />
                   <text fg={theme.textMuted}>
@@ -934,33 +856,30 @@ export function Onboarding() {
                   <LogScrollbox theme={theme} lines={logLines()} />
                 </Show>
               </Show>
-            </Panel>
-            <ActionRow>
+            </WizardPanel>
+            <WizardActionRow>
               <Show when={step() === "done"}>
-                <ActionButton
+                <WizardActionButton
                   theme={theme}
-                  label={isNewMode() ? "Open workspace" : "Back to homepage"}
+                  label="Open workspace"
                   primary
-                  onMouseUp={() => void finish()}
+                  onPress={() => void finish()}
                 />
               </Show>
               <Show when={step() === "error"}>
-                <ActionButton theme={theme} label="Back" onMouseUp={moveBack} />
+                <WizardActionButton theme={theme} label="Back" onPress={moveBack} />
                 <box flexGrow={1} />
-                <ActionButton theme={theme} label="Retry" primary onMouseUp={() => void continueFromPath()} />
+                <WizardActionButton theme={theme} label="Retry" primary onPress={() => void continueFromPath()} />
               </Show>
-            </ActionRow>
+            </WizardActionRow>
           </Show>
 
           <Show when={step() === "processing" && processingDone()}>
-            <ActionRow>
-              <Show when={isNewMode() && waitingForGate()}>
-                <GateButton theme={theme} label={gateLabel()} action={() => gateAction()()} />
+            <WizardActionRow>
+              <Show when={waitingForGate()}>
+                <WizardGateButton theme={theme} label={gateLabel()} action={() => gateAction()()} />
               </Show>
-              <Show when={!isNewMode()}>
-                <ActionButton theme={theme} label="Done" primary onMouseUp={finish} />
-              </Show>
-            </ActionRow>
+            </WizardActionRow>
           </Show>
 
           <Toast />
@@ -969,169 +888,4 @@ export function Onboarding() {
       </box>
     </CenteredColumn>
   )
-}
-
-function Panel(props: { theme: ReturnType<typeof useTheme>["theme"]; accent?: boolean; children: any }) {
-  return (
-    <box
-      flexDirection="column"
-      gap={1}
-      paddingLeft={2}
-      paddingRight={2}
-      paddingTop={1}
-      paddingBottom={1}
-      backgroundColor={props.theme.backgroundPanel}
-      border={["left"]}
-      customBorderChars={SplitBorder.customBorderChars}
-      borderColor={props.accent ? props.theme.primary : props.theme.border}
-    >
-      {props.children}
-    </box>
-  )
-}
-
-function ActionRow(props: { children: any }) {
-  return (
-    <box flexDirection="row" gap={1} flexWrap="wrap">
-      {props.children}
-    </box>
-  )
-}
-
-function ActionButton(props: {
-  theme: ReturnType<typeof useTheme>["theme"]
-  label: string
-  primary?: boolean
-  onMouseUp: () => void
-}) {
-  return (
-    <box
-      paddingLeft={2}
-      paddingRight={2}
-      paddingTop={1}
-      paddingBottom={1}
-      backgroundColor={props.primary ? props.theme.backgroundElement : props.theme.backgroundPanel}
-      border={["left"]}
-      customBorderChars={SplitBorder.customBorderChars}
-      borderColor={props.primary ? props.theme.primary : props.theme.border}
-      onMouseUp={props.onMouseUp}
-    >
-      <text fg={props.primary ? props.theme.primary : props.theme.textMuted}>
-        <span style={{ bold: props.primary }}>{props.label}</span>
-      </text>
-    </box>
-  )
-}
-
-function GateButton(props: {
-  theme: ReturnType<typeof useTheme>["theme"]
-  label: string
-  action: () => void
-}) {
-  const [remaining, setRemaining] = createSignal(30)
-  let timer: ReturnType<typeof setInterval> | undefined
-
-  onMount(() => {
-    timer = setInterval(() => {
-      setRemaining((r) => {
-        if (r <= 1) {
-          clearInterval(timer)
-          props.action()
-          return 0
-        }
-        return r - 1
-      })
-    }, 1000)
-  })
-
-  onCleanup(() => {
-    if (timer) clearInterval(timer)
-  })
-
-  return (
-    <ActionButton
-      theme={props.theme}
-      label={`${props.label} (${remaining()}s)`}
-      primary
-      onMouseUp={() => {
-        if (timer) clearInterval(timer)
-        props.action()
-      }}
-    />
-  )
-}
-
-function SummaryRow(props: {
-  theme: ReturnType<typeof useTheme>["theme"]
-  branch: "mid" | "last"
-  label: string
-  status: string
-  detail?: string
-  tone?: "normal" | "muted" | "success" | "error"
-}) {
-  const toneColor =
-    props.tone === "success"
-      ? props.theme.success
-      : props.tone === "error"
-        ? props.theme.error
-        : props.theme.textMuted
-
-  return (
-    <text fg={props.theme.text}>
-      <span style={{ fg: props.theme.textMuted }}>{props.branch === "last" ? "└─ " : "├─ "}</span>
-      {props.label}
-      <span style={{ fg: props.theme.textMuted }}> | </span>
-      <span style={{ fg: toneColor }}>{props.status}</span>
-      <Show when={props.detail}>
-        <span style={{ fg: props.theme.textMuted }}> | {props.detail}</span>
-      </Show>
-    </text>
-  )
-}
-
-function ToggleLine(props: {
-  theme: ReturnType<typeof useTheme>["theme"]
-  selected: boolean
-  enabled: boolean
-  label: string
-  count: number
-}) {
-  return (
-    <text fg={props.selected ? props.theme.text : props.theme.textMuted} wrapMode="none">
-      <span style={{ fg: props.enabled ? props.theme.text : props.theme.textMuted }}>{props.enabled ? "●" : "○"}</span>
-      <span style={{ fg: props.selected ? props.theme.text : props.theme.textMuted }}> {props.label}</span>
-      <span style={{ fg: props.theme.textMuted }}> | </span>
-      <span style={{ fg: props.theme.borderActive }}>
-        {props.count} file{props.count === 1 ? "" : "s"}
-      </span>
-    </text>
-  )
-}
-
-function LogScrollbox(props: {
-  theme: ReturnType<typeof useTheme>["theme"]
-  lines: string[]
-}) {
-  return (
-    <scrollbox maxHeight={14} stickyScroll={true} stickyStart="bottom">
-      <For each={props.lines}>
-        {(line) => <text fg={props.theme.textMuted}>{line || " "}</text>}
-      </For>
-    </scrollbox>
-  )
-}
-
-function LogoSummary(props: {
-  theme: ReturnType<typeof useTheme>["theme"]
-  label: string
-}) {
-  return (
-    <text fg={props.theme.text}>
-      <span style={{ bold: true }}>{props.label}</span>
-    </text>
-  )
-}
-
-function isNewModeFromRoute(mode: "new" | "add") {
-  return mode === "new"
 }

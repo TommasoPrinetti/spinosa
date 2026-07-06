@@ -44,7 +44,6 @@ export function StartupHub() {
       run: () =>
         navigate({
           type: "workspace",
-          pane: "chat",
           prompt: { input: promptText(), parts: [], autoSubmit: true },
         }),
     },
@@ -53,7 +52,7 @@ export function StartupHub() {
       title: "Open chat directly",
       description: "Skip startup indexing and open the Chat workspace",
       primary: false,
-      run: () => navigate({ type: "workspace", pane: "chat" }),
+      run: () => navigate({ type: "workspace" }),
     },
     {
       id: "switch",

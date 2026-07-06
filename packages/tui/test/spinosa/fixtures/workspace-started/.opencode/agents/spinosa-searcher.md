@@ -1,0 +1,1 @@
+# spinosa-searcher (fixture)

@@ -62,11 +62,9 @@ export function resolveFrameworkRoot(): string | undefined {
     path.resolve(process.cwd(), "framework"),
     path.resolve(process.cwd(), "..", "spinosa-main"),
     path.join(homedir(), "Documents", "spinosa-main"),
-    path.join(homedir(), "Documents", "spinosa-tui", "framework"),
-    path.join(homedir(), "Documents", "spinosa-tui", "..", "spinosa-main"),
   ]
 
-  if (installed) candidates.unshift(installed)
+  if (installed) candidates.push(installed)
 
   for (const candidate of candidates) {
     if (hasFrameworkMarker(candidate)) return candidate
