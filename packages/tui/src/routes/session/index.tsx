@@ -1569,7 +1569,7 @@ function ToolRailCallout(props: {
   if (props.callout.continuation) {
     return (
       <box width={railWidth()} flexDirection="row" justifyContent={stemJustify()}>
-        <text width={3} fg={color()} wrapMode="none">
+        <text width={3} fg={color()} wrapMode="none" marginTop={1}>
           {stemBlock(lines())}
         </text>
       </box>
@@ -1580,6 +1580,7 @@ function ToolRailCallout(props: {
 
   return (
     <box width={railWidth()}>
+      <text width={railWidth()}>{" "}</text>
       <box flexDirection="row" alignItems="center" width="100%" justifyContent={props.side === "left" ? "flex-end" : undefined}>
         <Show when={props.side === "right"}>
           <text width={3} fg={color()}>├──</text>
