@@ -45,5 +45,5 @@ export async function resolveSpinosaEntryRoute(input: {
     }
   }
 
-  return { type: "workspace-picker" }
+  return { type: "workspace" }
 }
