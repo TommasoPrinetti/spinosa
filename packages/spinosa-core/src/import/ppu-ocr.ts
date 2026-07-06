@@ -93,9 +93,26 @@ async function ppuService(onLog?: (line: string) => void): Promise<PaddleOcrServ
   if (!servicePromise) {
     servicePromise = (async () => {
       onLog?.("PPU PaddleOCR: loading models...")
+      const needsPolyfill = typeof (globalThis as Record<string, unknown>).document === "undefined"
       try {
+        if (needsPolyfill) {
+          ;(globalThis as Record<string, unknown>).document = {
+            currentScript: null,
+            createElement: () => ({}),
+            createDocumentFragment: () => ({}),
+            documentElement: { style: {} },
+            body: { appendChild: () => {}, removeChild: () => {} },
+            addEventListener: () => {},
+            removeEventListener: () => {},
+            querySelector: () => null,
+            querySelectorAll: () => [],
+            cookie: "",
+            title: "",
+          } as any
+        }
         onLog?.("PPU PaddleOCR: step 1 - dynamic import...")
         const { PaddleOcrService: OcrService } = await import("ppu-paddle-ocr")
+        if (needsPolyfill) delete (globalThis as Record<string, unknown>).document
         onLog?.("PPU PaddleOCR: step 2 - import OK, constructing...")
         const service = new OcrService({ processing: { engine: "canvas-native" } })
         onLog?.("PPU PaddleOCR: step 3 - constructed, initializing...")
@@ -103,6 +120,7 @@ async function ppuService(onLog?: (line: string) => void): Promise<PaddleOcrServ
         onLog?.("PPU PaddleOCR: step 4 - ready")
         return service
       } catch (err) {
+        if (needsPolyfill) delete (globalThis as Record<string, unknown>).document
         onLog?.(`PPU PaddleOCR: FAILED at ${err instanceof Error ? err.name : "unknown"} — ${err instanceof Error ? err.message : String(err)}`)
         servicePromise = undefined
         throw err
