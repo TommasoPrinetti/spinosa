@@ -25,6 +25,7 @@ import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
 import { Spinner } from "../../component/spinner"
 import { createSyntaxStyleMemo, generateSubtleSyntax, selectedForeground, useTheme } from "../../context/theme"
 import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA } from "@opentui/core"
+import { buttonBackground, buttonText } from "../../util/button"
 import { Prompt, type PromptRef } from "../../component/prompt"
 import type {
   AssistantMessage,
@@ -81,6 +82,7 @@ import { getRevertDiffFiles } from "../../util/revert-diff"
 import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut, useOpencodeKeymap } from "../../keymap"
 import { usePathFormatter } from "../../context/path-format"
 import { LocationProvider } from "../../context/location"
+import { agentDisplayName } from "../../util/agent"
 
 addDefaultParsers(parsers.parsers)
 
@@ -216,6 +218,7 @@ export function Session() {
   const kv = useKV()
   const { theme } = useTheme()
   const promptRef = usePromptRef()
+  const [backHover, setBackHover] = createSignal(false)
   const session = createMemo(() => sync.session.get(route.sessionID))
   const location = createMemo(() => {
     const current = session()
@@ -1252,6 +1255,23 @@ export function Session() {
               gap={1}
             >
               <Show when={session()}>
+              <box flexShrink={0} width="100%" paddingTop={1}>
+                <box
+                  onMouseOver={() => setBackHover(true)}
+                  onMouseOut={() => setBackHover(false)}
+                  onMouseDown={() => setTimeout(() => navigate({ type: "home" }), 0)}
+                  paddingLeft={2}
+                  paddingRight={2}
+                  paddingTop={1}
+                  paddingBottom={1}
+                  backgroundColor={buttonBackground(theme, backHover())}
+                  flexDirection="row"
+                  alignItems="center"
+                  width={11}
+                >
+                  <text fg={buttonText(theme, backHover())}>{"< Back"}</text>
+                </box>
+              </box>
               <scrollbox
                 ref={(r) => (scroll = r)}
                 viewportOptions={{
@@ -1369,17 +1389,21 @@ export function Session() {
                 </For>
               </scrollbox>
               <box flexShrink={0}>
-                <Show when={permissions().length > 0}>
-                  <PermissionPrompt
-                    request={permissions()[0]}
-                    directory={sync.session.get(permissions()[0].sessionID)?.directory}
-                  />
-                </Show>
-                <Show when={permissions().length === 0 && questions().length > 0}>
-                  <QuestionPrompt
-                    request={questions()[0]}
-                    directory={sync.session.get(questions()[0].sessionID)?.directory}
-                  />
+                <Show when={permissions().length > 0 || questions().length > 0}>
+                  <box paddingLeft={promptPadding()} paddingRight={promptPadding()}>
+                    <Show when={permissions().length > 0}>
+                      <PermissionPrompt
+                        request={permissions()[0]}
+                        directory={sync.session.get(permissions()[0].sessionID)?.directory}
+                      />
+                    </Show>
+                    <Show when={permissions().length === 0 && questions().length > 0}>
+                      <QuestionPrompt
+                        request={questions()[0]}
+                        directory={sync.session.get(questions()[0].sessionID)?.directory}
+                      />
+                    </Show>
+                  </box>
                 </Show>
                 <Show when={session()?.parentID}>
                   <SubagentFooter />
@@ -1534,21 +1558,21 @@ function ToolRailCallout(props: {
     setTimeout(() => setCopied(false), 3000)
   }
 
+  const stem = createMemo(() => (props.side === "left" ? "  │" : "│  "))
+  const stemJustify = createMemo(() => (props.side === "left" ? "flex-end" : "flex-start"))
+  const stemBlock = (count: number) => Array.from({ length: count }, () => stem()).join("\n")
+
   if (props.callout.continuation) {
     return (
-      <box width={railWidth()}>
-        <For each={new Array(lines()).fill(0)}>
-          {() => (
-            <box flexDirection="row" width="100%" alignItems="center" justifyContent={props.side === "left" ? "flex-end" : undefined}>
-              <text width={1} fg={color()}>│</text>
-            </box>
-          )}
-        </For>
+      <box width={railWidth()} flexDirection="row" justifyContent={stemJustify()}>
+        <text width={3} fg={color()} wrapMode="none">
+          {stemBlock(lines())}
+        </text>
       </box>
     )
   }
 
-  const tail = createMemo(() => lines() > 1 ? new Array(lines() - 1).fill(0) : [])
+  const tailLines = createMemo(() => Math.max(0, lines() - 1))
 
   return (
     <box width={railWidth()}>
@@ -1566,18 +1590,13 @@ function ToolRailCallout(props: {
           <text width={3} fg={color()}>──┤</text>
         </Show>
       </box>
-      <For each={tail()}>
-        {() => (
-          <box flexDirection="row" width="100%" alignItems="center" justifyContent={props.side === "left" ? "flex-end" : undefined}>
-            <Show when={props.side === "left"}>
-              <text width={3} fg={color()}>│</text>
-            </Show>
-            <Show when={props.side === "right"}>
-              <text width={3} fg={color()}>│</text>
-            </Show>
-          </box>
-        )}
-      </For>
+      <Show when={tailLines() > 0}>
+        <box flexDirection="row" width="100%" justifyContent={stemJustify()}>
+          <text width={3} fg={color()} wrapMode="none">
+            {stemBlock(tailLines())}
+          </text>
+        </box>
+      </Show>
     </box>
   )
 }
@@ -1620,12 +1639,18 @@ function buildCopyCommand(tool: string, input: Record<string, unknown>, summary:
     return filePath ? `edit "${filePath}"` : summary.command
   }
   if (display === "task") {
-    return stringValue(input.description) ?? summary.command
+    return cleanSystemReminderText(stringValue(input.description)) ?? summary.command
   }
   if (display === "skill") {
     return stringValue(input.name) ?? summary.command
   }
   return summary.command
+}
+
+function cleanSystemReminderText(text: string | undefined) {
+  if (!text) return undefined
+  const cleaned = text.replace(/<system-reminder>[\s\S]*?<\/system-reminder>\s*/g, "").trim()
+  return cleaned || undefined
 }
 
 function UserMessage(props: {
@@ -1840,7 +1865,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
                 >
                   ▣{" "}
                 </span>{" "}
-                <span style={{ fg: theme.text }}>{Locale.titlecase(props.message.mode)}</span>
+                <span style={{ fg: theme.text }}>{agentDisplayName(props.message.mode)}</span>
                 <span style={{ fg: theme.textMuted }}> · {model()}</span>
                 <Show when={duration()}>
                   <span style={{ fg: theme.textMuted }}> · {Locale.duration(duration())}</span>
@@ -2163,7 +2188,7 @@ export function buildToolCalloutSummary(
     return { tag: "EDIT", command: formatPath(stringValue(inputValue.filePath)) }
   }
   if (display === "task") {
-    return { tag: "TASK", command: stringValue(inputValue.description) ?? "Delegate task" }
+    return { tag: "TASK", command: cleanSystemReminderText(stringValue(inputValue.description)) ?? "Delegate task" }
   }
   if (display === "apply_patch") {
     return { tag: "PATCH", command: "Apply patch" }
@@ -2186,47 +2211,77 @@ export function buildToolCalloutSummary(
 }
 
 export function estimateToolCalloutHeight(
-  _summary: ToolCalloutSummary,
-  _railWidth: number,
+  summary: ToolCalloutSummary,
+  railWidth: number,
   tool?: string,
   metadata?: Record<string, unknown>,
   input?: Record<string, unknown>,
 ) {
-  if (!tool) return 1
+  void summary
+  const visibleRows = 1
+  if (!tool) return visibleRows
   const display = toolDisplay(tool)
+  if (display === "read") {
+    const loaded = Array.isArray(metadata?.loaded) ? metadata.loaded.filter((value): value is string => typeof value === "string") : []
+    return Math.max(visibleRows, 1 + loaded.length)
+  }
+  if (display === "task") {
+    const description = cleanSystemReminderText(stringValue(input?.description)) ?? ""
+    const descriptionLines = estimateWrappedCommandLines(description, Math.max(16, railWidth * 2))
+    return Math.max(visibleRows, descriptionLines)
+  }
   if (display === "bash") {
-    if (!stringValue(metadata?.output)) return 1
+    if (!stringValue(metadata?.output)) return visibleRows
     const lines = (stringValue(metadata!.output) || "").split("\n").filter(l => l).length
-    return Math.min(16, lines + 6)
+    return Math.min(16, Math.max(4, lines + 4))
   }
   if (display === "write") {
-    if (!metadata?.diagnostics) return 1
+    if (!metadata?.diagnostics) return visibleRows
     const lines = (stringValue(input?.content) || "").split("\n").filter(l => l).length
-    return Math.min(16, lines + 6)
+    const diagnosticCount = parseDiagnostics(metadata?.diagnostics, stringValue(input?.filePath) ?? "").length
+    return Math.min(16, Math.max(4, lines + diagnosticCount + 3))
   }
   if (display === "edit") {
-    if (!stringValue(metadata?.diff)) return 1
+    if (!stringValue(metadata?.diff)) return visibleRows
     const lines = (stringValue(metadata!.diff) || "").split("\n").filter(l => l).length
-    return Math.min(16, lines + 6)
+    const diagnosticCount = parseDiagnostics(metadata?.diagnostics, stringValue(input?.filePath) ?? "").length
+    return Math.min(16, Math.max(4, lines + diagnosticCount + 3))
   }
   if (display === "apply_patch") {
     const files = parseApplyPatchFiles(metadata?.files)
-    if (!files.length) return 1
-    return Math.min(16, files.length + 4)
+    if (!files.length) return visibleRows
+    return Math.min(16, Math.max(4, files.length * 4))
   }
   if (display === "todowrite") {
     const todos = parseTodos(metadata?.todos)
-    return Math.min(12, todos.length + 2)
+    return Math.min(12, Math.max(3, todos.length + 2))
   }
   if (display === "question") {
-    if (!parseQuestionAnswers(metadata?.answers)) return 1
-    return 4
+    const questionCount = parseQuestions(input?.questions).length || 1
+    if (!parseQuestionAnswers(metadata?.answers)) return visibleRows
+    return Math.max(4, questionCount * 3)
   }
-  return 1
+  return visibleRows
 }
 
 export function pickToolCalloutSide(leftHeight: number, rightHeight: number): ToolCalloutSide {
   return leftHeight <= rightHeight ? "left" : "right"
+}
+
+function estimateWrappedCommandLines(text: string, railWidth: number) {
+  const usableWidth = Math.max(8, railWidth - 6)
+  if (!text) return 1
+
+  let lineCount = 0
+  for (const rawLine of text.split("\n")) {
+    const line = rawLine.trim()
+    if (!line) {
+      lineCount += 1
+      continue
+    }
+    lineCount += Math.max(1, Math.ceil(line.length / usableWidth))
+  }
+  return Math.max(1, Math.min(16, lineCount))
 }
 
 type ToolProps = {
@@ -2706,11 +2761,11 @@ function Task(props: ToolProps) {
   })
 
   const content = createMemo(() => {
-    const description = stringValue(props.input.description)
+    const description = cleanSystemReminderText(stringValue(props.input.description))
     if (!description) return ""
     let content = [
       formatSubagentTitle(
-        Locale.titlecase(stringValue(props.input.subagent_type) ?? "General"),
+        agentDisplayName(stringValue(props.input.subagent_type) ?? "general"),
         description,
         props.metadata.background === true,
       ),
@@ -2740,7 +2795,7 @@ function Task(props: ToolProps) {
       separate={true}
       color={retry() ? theme.error : undefined}
       spinner={isRunning()}
-      complete={stringValue(props.input.description)}
+      complete={cleanSystemReminderText(stringValue(props.input.description))}
       pending="Delegating..."
       part={props.part}
       onClick={() => {

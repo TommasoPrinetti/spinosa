@@ -1,0 +1,139 @@
+import { describe, expect, test } from "bun:test"
+import { mkdtempSync, mkdirSync, rmSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { homedir } from "node:os"
+import path from "node:path"
+import { fileURLToPath } from "node:url"
+import {
+  compareFrameworkVersions,
+  getCorpusSummary,
+  getFrameworkHealth,
+  getRoutesSnapshot,
+  isSpinosaWorkspace,
+  listRegisteredWorkspaces,
+  readWorkspaceMeta,
+  workspaceNeedsFrameworkUpdate,
+  writeWorkspaceFrameworkVersion,
+} from "../../src/spinosa/service"
+import { parseOrchestratorCounter } from "../../src/spinosa/parse-goal"
+
+const fixture = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "fixtures/workspace-started")
+
+describe("service fixture workspace", () => {
+  test("detects spinosa workspace", () => {
+    expect(isSpinosaWorkspace(fixture)).toBe(true)
+  })
+
+  test("reads workspace meta", async () => {
+    const meta = await readWorkspaceMeta(fixture)
+    expect(meta?.projectName).toBe("fixture-workspace")
+    expect(meta?.setupStatus).toBe("workspace_started")
+  })
+
+  test("falls back to folder name when workspace marker has no project_name", async () => {
+    const workspace = mkdtempSync(path.join(tmpdir(), "spinosa-tui-meta-"))
+    mkdirSync(path.join(workspace, ".spinosa"), { recursive: true })
+    try {
+      await Bun.write(
+        path.join(workspace, ".spinosa", "workspace"),
+        ["setup_status: cli_started", "framework_version: 0.1.0"].join("\n"),
+      )
+      const meta = await readWorkspaceMeta(workspace)
+      expect(meta?.projectName).toBe(path.basename(workspace))
+      expect(meta?.setupStatus).toBe("cli_started")
+    } finally {
+      rmSync(workspace, { recursive: true, force: true })
+    }
+  })
+
+  test("detects whether a workspace needs framework update", () => {
+    expect(compareFrameworkVersions("0.2.0", "0.1.9")).toBe(1)
+    expect(compareFrameworkVersions("0.2.0", "0.2.0")).toBe(0)
+    expect(compareFrameworkVersions("0.1.9", "0.2.0")).toBe(-1)
+    expect(workspaceNeedsFrameworkUpdate("0.1.0", "0.2.0")).toBe(true)
+    expect(workspaceNeedsFrameworkUpdate("0.2.0", "0.2.0")).toBe(false)
+    expect(workspaceNeedsFrameworkUpdate("unknown", "0.2.0")).toBe(false)
+    expect(workspaceNeedsFrameworkUpdate("dev", "0.2.0")).toBe(false)
+  })
+
+  test("rewrites the workspace framework version marker", async () => {
+    const workspace = mkdtempSync(path.join(tmpdir(), "spinosa-tui-version-"))
+    mkdirSync(path.join(workspace, ".spinosa"), { recursive: true })
+    try {
+      await Bun.write(
+        path.join(workspace, ".spinosa", "workspace"),
+        ["project_name: demo", "setup_status: workspace_started", "framework_version: 0.1.0"].join("\n"),
+      )
+
+      await writeWorkspaceFrameworkVersion(workspace, "v0.2.3")
+
+      const marker = await Bun.file(path.join(workspace, ".spinosa", "workspace")).text()
+      const meta = await readWorkspaceMeta(workspace)
+      expect(marker).toContain("framework_version: 0.2.3")
+      expect(meta?.frameworkVersion).toBe("0.2.3")
+    } finally {
+      rmSync(workspace, { recursive: true, force: true })
+    }
+  })
+
+  test("parses corpus summary", async () => {
+    const summary = await getCorpusSummary(fixture)
+    expect(summary.hasWorkspaceIndex).toBe(true)
+    expect(summary.rawCount).toBeGreaterThan(0)
+    expect(summary.hubExists).toBe(true)
+    expect(summary.index.extractionProgress.read).toBe(2)
+  })
+
+  test("loads routes snapshot", async () => {
+    const snapshot = await getRoutesSnapshot(fixture)
+    expect(snapshot.goals.length).toBeGreaterThan(0)
+    expect(snapshot.reports.length).toBeGreaterThan(0)
+    expect(snapshot.overseerCounter).toBe(2)
+  })
+
+  test("prefers bound session for active goal", async () => {
+    const snapshot = await getRoutesSnapshot(fixture)
+    const target = snapshot.goals[0]
+    expect(target).toBeDefined()
+    const bound = await getRoutesSnapshot(fixture, target!.sessionId)
+    expect(bound.activeGoal?.sessionId).toBe(target!.sessionId)
+  })
+
+  test("framework health passes", async () => {
+    const health = await getFrameworkHealth(fixture)
+    expect(health.every((row) => row.ok)).toBe(true)
+  })
+
+  test("parses overseer counter from notes", async () => {
+    const file = Bun.file(path.join(fixture, ".spinosa/memory/orchestrator-notes.md"))
+    const notes = await file.text()
+    expect(parseOrchestratorCounter(notes)).toBe(2)
+  })
+
+  test("dedupes repeated registry entries by workspace path", async () => {
+    const workspace = mkdtempSync(path.join(tmpdir(), "spinosa-tui-registry-"))
+    const registry = path.join(homedir(), ".spinosa", "metadata", "workspaces.txt")
+    const original = await Bun.file(registry).text().catch(() => "")
+    mkdirSync(path.join(workspace, ".spinosa"), { recursive: true })
+
+    try {
+      await Bun.write(
+        path.join(workspace, ".spinosa", "workspace"),
+        ["project_name: demo", "setup_status: workspace_started", "framework_version: 0.1.0"].join("\n"),
+      )
+      await Bun.write(
+        registry,
+        [
+          `${workspace}|demo`,
+          `${workspace}|demo`,
+        ].join("\n") + "\n",
+      )
+
+      const workspaces = await listRegisteredWorkspaces()
+      expect(workspaces.filter((entry) => entry.path === workspace)).toHaveLength(1)
+    } finally {
+      await Bun.write(registry, original)
+      rmSync(workspace, { recursive: true, force: true })
+    }
+  })
+})

@@ -1,5 +1,4 @@
 import type { RouteNavigateInput } from "../context/route"
-import type { WorkspacePane } from "../workspace/pane"
 import { isSpinosaWorkspace, readWorkspaceMeta } from "./service"
 import type { SpinosaSetupStatus } from "./types"
 
@@ -10,9 +9,8 @@ export const SPINOSA_LAST_GOAL_KV = "spinosa_last_goal_path"
 
 export function routeForSetupStatus(
   setupStatus: SpinosaSetupStatus,
-  pane: WorkspacePane = "chat",
 ): RouteNavigateInput {
-  return { type: "workspace", pane }
+  return { type: "workspace" }
 }
 
 export async function resolveSpinosaEntryRoute(input: {
@@ -22,13 +20,13 @@ export async function resolveSpinosaEntryRoute(input: {
   forceGeneric?: boolean
 }): Promise<RouteNavigateInput> {
   if (input.skipPicker) {
-    if (input.forceGeneric) return { type: "workspace", pane: "chat" }
+    if (input.forceGeneric) return { type: "workspace" }
     const path = input.kvActivePath && isSpinosaWorkspace(input.kvActivePath) ? input.kvActivePath : input.cwd
     if (isSpinosaWorkspace(path)) {
       const meta = await readWorkspaceMeta(path)
       if (meta) return routeForSetupStatus(meta.setupStatus)
     }
-    return { type: "workspace", pane: "chat" }
+    return { type: "workspace" }
   }
 
   if (input.kvActivePath && isSpinosaWorkspace(input.kvActivePath)) {

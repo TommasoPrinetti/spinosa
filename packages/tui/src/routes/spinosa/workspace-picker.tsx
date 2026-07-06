@@ -10,6 +10,7 @@ import { OPENCODE_BASE_MODE, useOpencodeKeymap, useOpencodeModeStack } from "../
 import { Toast } from "../../ui/toast"
 import { CenteredColumn } from "../../component/centered-column"
 import { MAIN_CONTENT_MAX_WIDTH } from "../../util/layout"
+import { buttonBackground, buttonBorder, buttonText } from "../../util/button"
 import {
   listRegisteredWorkspaces,
   isSpinosaWorkspace,
@@ -84,6 +85,7 @@ export function WorkspacePicker() {
   const [startupSelected, setStartupSelected] = createSignal(0)
   const [managerFocus, setManagerFocus] = createSignal<"actions" | "rows">("rows")
   const [managerAction, setManagerAction] = createSignal(0)
+  const [hoveredButton, setHoveredButton] = createSignal<string | null>(null)
 
   const [deleting, setDeleting] = createSignal<string | undefined>()
   const [updating, setUpdating] = createSignal<string | undefined>()
@@ -166,19 +168,16 @@ export function WorkspacePicker() {
   const launchStartupInChat = async () => {
     const path = startupPath()
     if (!path) return
+    spinosa.queuePrompt({ input: startupPrompt(), parts: [], autoSubmit: true })
     await spinosa.openWorkspace(path)
-    navigate({
-      type: "workspace",
-      pane: "chat",
-      prompt: { input: startupPrompt(), parts: [], autoSubmit: true },
-    })
+    navigate({ type: "workspace" })
   }
 
   const openChatDirectly = async () => {
     const path = startupPath()
     if (!path) return
     await spinosa.openWorkspace(path)
-    navigate({ type: "workspace", pane: "chat" })
+    navigate({ type: "workspace" })
   }
 
   const deleteWorkspace = async (wsPath: string) => {
@@ -359,7 +358,7 @@ export function WorkspacePicker() {
       title: "New workspace",
       description: "Create a new Spinosa workspace from a source folder",
       hint: "1",
-      run: () => navigate({ type: "onboarding", mode: "new" }),
+      run: () => navigate({ type: "onboarding" }),
     },
     {
       id: "select",
@@ -554,18 +553,18 @@ export function WorkspacePicker() {
                   paddingRight={2}
                   paddingTop={1}
                   paddingBottom={1}
-                  backgroundColor={selected() === index() ? theme.backgroundElement : theme.backgroundPanel}
+                  backgroundColor={buttonBackground(theme, selected() === index())}
                   border={["left"]}
-                  borderColor={selected() === index() ? theme.borderActive : theme.border}
+                  borderColor={buttonBorder(theme, selected() === index(), theme.borderActive)}
                   onMouseOver={() => setSelected(index())}
-                  onMouseUp={() => void item.run()}
+                  onMouseDown={() => void item.run()}
                 >
-                  <text fg={theme.text}>
-                    <span style={{ fg: theme.primary, bold: selected() === index() }}>
+                  <text fg={buttonText(theme, selected() === index(), theme.primary)}>
+                    <span style={{ bold: selected() === index() }}>
                       [{item.hint}] {item.title}
                     </span>
                   </text>
-                  <text fg={theme.textMuted}>{item.description}</text>
+                  <text fg={buttonText(theme, selected() === index(), theme.textMuted)}>{item.description}</text>
                 </box>
               )}
             </For>
@@ -581,10 +580,12 @@ export function WorkspacePicker() {
             <box
               paddingLeft={1}
               paddingRight={1}
-              backgroundColor={theme.backgroundPanel}
-              onMouseUp={() => goStep("home")}
+              backgroundColor={buttonBackground(theme, hoveredButton() === "select-back")}
+              onMouseOver={() => setHoveredButton("select-back")}
+              onMouseOut={() => setHoveredButton(null)}
+              onMouseDown={() => goStep("home")}
             >
-              <text fg={theme.text}>←</text>
+              <text fg={buttonText(theme, hoveredButton() === "select-back", theme.text)}>←</text>
             </box>
             <text fg={theme.text}>
               <span style={{ bold: true }}>Choose a workspace</span>
@@ -616,32 +617,32 @@ export function WorkspacePicker() {
                 paddingRight={2}
                 paddingTop={1}
                 paddingBottom={1}
-                backgroundColor={startupSelected() === 0 ? theme.backgroundElement : theme.backgroundPanel}
+                backgroundColor={buttonBackground(theme, startupSelected() === 0)}
                 border={["left"]}
-                borderColor={startupSelected() === 0 ? theme.primary : theme.border}
+                borderColor={buttonBorder(theme, startupSelected() === 0, theme.primary)}
                 onMouseOver={() => setStartupSelected(0)}
-                onMouseUp={() => void launchStartupInChat()}
+                onMouseDown={() => void launchStartupInChat()}
               >
-                <text fg={theme.primary}>
+                <text fg={buttonText(theme, startupSelected() === 0, theme.primary)}>
                   <span style={{ bold: startupSelected() === 0 }}>Launch startup indexing</span>
                 </text>
-                <text fg={theme.textMuted}>Begin indexing automatically in Chat</text>
+                <text fg={buttonText(theme, startupSelected() === 0, theme.textMuted)}>Begin indexing automatically in Chat</text>
               </box>
               <box
                 paddingLeft={2}
                 paddingRight={2}
                 paddingTop={1}
                 paddingBottom={1}
-                backgroundColor={startupSelected() === 1 ? theme.backgroundElement : theme.backgroundPanel}
+                backgroundColor={buttonBackground(theme, startupSelected() === 1)}
                 border={["left"]}
-                borderColor={startupSelected() === 1 ? theme.borderActive : theme.border}
+                borderColor={buttonBorder(theme, startupSelected() === 1, theme.borderActive)}
                 onMouseOver={() => setStartupSelected(1)}
-                onMouseUp={() => void openChatDirectly()}
+                onMouseDown={() => void openChatDirectly()}
               >
-                <text fg={theme.text}>
+                <text fg={buttonText(theme, startupSelected() === 1, theme.text)}>
                   <span style={{ bold: startupSelected() === 1 }}>Open chat directly</span>
                 </text>
-                <text fg={theme.textMuted}>Skip startup and open the workspace</text>
+                <text fg={buttonText(theme, startupSelected() === 1, theme.textMuted)}>Skip startup and open the workspace</text>
               </box>
               <box height={1} />
               <text fg={theme.textMuted} attributes={TextAttributes.DIM}>
@@ -662,18 +663,18 @@ export function WorkspacePicker() {
                     paddingRight={2}
                     paddingTop={1}
                     paddingBottom={1}
-                    backgroundColor={selected() === index() ? theme.backgroundElement : theme.backgroundPanel}
+                    backgroundColor={buttonBackground(theme, selected() === index())}
                     border={["left"]}
-                    borderColor={selected() === index() ? theme.borderActive : theme.border}
+                    borderColor={buttonBorder(theme, selected() === index(), theme.borderActive)}
                     onMouseOver={() => setSelected(index())}
-                    onMouseUp={() => void item.run()}
+                    onMouseDown={() => void item.run()}
                   >
-                    <text fg={theme.text}>
-                      <span style={{ fg: theme.primary, bold: selected() === index() }}>
+                    <text fg={buttonText(theme, selected() === index(), theme.primary)}>
+                      <span style={{ bold: selected() === index() }}>
                         [{item.hint}] {item.title}
                       </span>
                     </text>
-                    <text fg={theme.textMuted}>{item.description}</text>
+                    <text fg={buttonText(theme, selected() === index(), theme.textMuted)}>{item.description}</text>
                   </box>
                 )}
               </For>
@@ -693,10 +694,12 @@ export function WorkspacePicker() {
             <box
               paddingLeft={1}
               paddingRight={1}
-              backgroundColor={theme.backgroundPanel}
-              onMouseUp={() => goStep("home")}
+              backgroundColor={buttonBackground(theme, hoveredButton() === "manager-back")}
+              onMouseOver={() => setHoveredButton("manager-back")}
+              onMouseOut={() => setHoveredButton(null)}
+              onMouseDown={() => goStep("home")}
             >
-              <text fg={theme.text}>←</text>
+              <text fg={buttonText(theme, hoveredButton() === "manager-back", theme.text)}>←</text>
             </box>
             <text fg={theme.text}>
               <span style={{ bold: true }}>Workspace manager</span>
@@ -729,21 +732,27 @@ export function WorkspacePicker() {
                         <box
                           paddingLeft={1}
                           paddingRight={1}
-                          backgroundColor={active() ? theme.backgroundElement : theme.backgroundPanel}
+                          backgroundColor={buttonBackground(theme, active())}
                           border={["left"]}
-                          borderColor={active() ? theme.borderActive : theme.border}
+                          borderColor={buttonBorder(theme, active(), theme.borderActive)}
                           onMouseOver={() => {
                             setManagerFocus("actions")
                             setManagerAction(index())
                           }}
-                          onMouseUp={() => {
+                          onMouseDown={() => {
                             if (action.disabled) return
                             setManagerFocus("actions")
                             setManagerAction(index())
                             void action.run()
                           }}
                         >
-                          <text fg={action.disabled ? theme.textMuted : active() ? theme.primary : theme.text}>
+                          <text
+                            fg={
+                              action.disabled
+                                ? theme.textMuted
+                                : buttonText(theme, active(), theme.text)
+                            }
+                          >
                             <span style={{ bold: active() }}>{action.label}</span>
                           </text>
                         </box>

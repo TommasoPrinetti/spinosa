@@ -94,6 +94,7 @@ copy_direct_raw_file() {
 
 copy_source() {
   local source_path="$1" dest_dir="$2"
+  export SPINOSA_PROGRESS_NEWLINES=1
   onboarding_log_event "copy" "start" "source=${source_path}" "dest=${dest_dir}"
   local total_files selected_total copy_processed=0
   selected_total="$(selected_import_count)"
@@ -278,7 +279,8 @@ copy_source() {
             spinosa_debug_md "MarkItDown batch spawned — pid=$_md_pid, reading fifo..."
 
             local _md_read_exit=0 _md_wait_status=0 _md_elapsed_sec=0
-            exec 3<"$_md_fifo"
+            # O_RDWR open (<>), does not block even when no writer has opened the FIFO yet
+            exec 3<>"$_md_fifo"
             while true; do
               if IFS= read -r -t "$CONVERTER_FIFO_POLL_SEC" -u 3 _line; then
                 _md_elapsed_sec=0
@@ -509,7 +511,8 @@ copy_source() {
             spinosa_debug "Batch process spawned — pid=$_ocr_pid, reading fifo..."
 
             local _ocr_read_exit=0 _ocr_wait_status=0 _ocr_elapsed_sec=0
-            exec 4<"$_ocr_fifo"
+            # O_RDWR open (<>), does not block even when no writer has opened the FIFO yet
+            exec 4<>"$_ocr_fifo"
             while true; do
               if IFS= read -r -t "$CONVERTER_FIFO_POLL_SEC" -u 4 _line; then
                 _ocr_elapsed_sec=0

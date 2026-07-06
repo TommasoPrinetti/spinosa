@@ -83,35 +83,157 @@ export async function readWorkspaceMeta(workspacePath: string): Promise<SpinosaW
   }
 }
 
-function parseFrameworkVersion(value: string | undefined) {
-  const normalized = value?.trim().replace(/^v/, "")
-  if (!normalized || normalized === "unknown" || normalized === "dev") return
-  const parts = normalized.split(".").map((part) => Number(part))
-  if (parts.some((part) => Number.isNaN(part) || part < 0)) return
-  return parts
+export type FrameworkReleaseStream = "beta" | "stable"
+
+type ParsedFrameworkVersion = {
+  core: number[]
+  prerelease: string[]
 }
 
-export function compareFrameworkVersions(left: string | undefined, right: string | undefined) {
-  const leftParts = parseFrameworkVersion(left)
-  const rightParts = parseFrameworkVersion(right)
-  if (!leftParts || !rightParts) return
+export function normalizeFrameworkVersion(value: string | undefined) {
+  return value?.trim().replace(/^v/i, "") ?? ""
+}
 
-  const length = Math.max(leftParts.length, rightParts.length)
-  for (let index = 0; index < length; index++) {
-    const leftValue = leftParts[index] ?? 0
-    const rightValue = rightParts[index] ?? 0
-    if (leftValue > rightValue) return 1
-    if (leftValue < rightValue) return -1
+export function isLegacyDevWorkspaceVersion(value: string | undefined) {
+  const normalized = normalizeFrameworkVersion(value).toLowerCase()
+  return normalized === "dev" || normalized === "vdev"
+}
+
+export function parseInstallPinnedVersion(installScript: string | undefined) {
+  if (!installScript) return undefined
+  const match = installScript.match(/^PINNED_VERSION="([^"]+)"/m)
+  return match?.[1]?.trim()
+}
+
+export function resolveBundledFrameworkVersion(
+  metadataVersion: string | undefined,
+  installScript: string | undefined,
+) {
+  const metadata = metadataVersion?.trim()
+  if (metadata && metadata !== "dev") return metadata
+  return parseInstallPinnedVersion(installScript)
+}
+
+function parseComparableFrameworkVersion(value: string | undefined): ParsedFrameworkVersion | undefined {
+  if (!value) return
+  const normalized = normalizeFrameworkVersion(value)
+  if (!normalized || normalized === "unknown" || isLegacyDevWorkspaceVersion(normalized)) return
+
+  const [base, ...rest] = normalized.split("-")
+  const prerelease = rest.join("-").split(".").filter(Boolean)
+  const coreTokens = base.split(".")
+  if (coreTokens.length === 0 || coreTokens.some((part) => !/^\d+$/.test(part))) return
+
+  return {
+    core: coreTokens.map((part) => Number.parseInt(part, 10)),
+    prerelease,
+  }
+}
+
+function comparePrereleaseTokens(left: string[], right: string[]) {
+  const max = Math.max(left.length, right.length)
+  for (let index = 0; index < max; index++) {
+    const leftToken = left[index] ?? ""
+    const rightToken = right[index] ?? ""
+    if (leftToken === rightToken) continue
+    if (!leftToken) return -1
+    if (!rightToken) return 1
+
+    const leftNumeric = /^\d+$/.test(leftToken) ? Number.parseInt(leftToken, 10) : undefined
+    const rightNumeric = /^\d+$/.test(rightToken) ? Number.parseInt(rightToken, 10) : undefined
+    if (leftNumeric !== undefined && rightNumeric !== undefined) {
+      if (leftNumeric > rightNumeric) return 1
+      if (leftNumeric < rightNumeric) return -1
+      continue
+    }
+    if (leftNumeric !== undefined) return -1
+    if (rightNumeric !== undefined) return 1
+    if (leftToken > rightToken) return 1
+    if (leftToken < rightToken) return -1
   }
   return 0
 }
 
-export function workspaceNeedsFrameworkUpdate(workspaceVersion: string | undefined, bundledVersion: string | undefined) {
-  return compareFrameworkVersions(bundledVersion, workspaceVersion) === 1
+/** Returns 1 when left is newer, -1 when right is newer, 0 when equal. Undefined when incomparable. */
+export function compareFrameworkVersions(left: string | undefined, right: string | undefined) {
+  if (isLegacyDevWorkspaceVersion(left) && isLegacyDevWorkspaceVersion(right)) return 0
+  if (isLegacyDevWorkspaceVersion(left)) return -1
+  if (isLegacyDevWorkspaceVersion(right)) return 1
+
+  const leftParsed = parseComparableFrameworkVersion(left)
+  const rightParsed = parseComparableFrameworkVersion(right)
+  if (!leftParsed || !rightParsed) return
+
+  const maxCore = Math.max(leftParsed.core.length, rightParsed.core.length)
+  for (let index = 0; index < maxCore; index++) {
+    const leftValue = leftParsed.core[index] ?? 0
+    const rightValue = rightParsed.core[index] ?? 0
+    if (leftValue > rightValue) return 1
+    if (leftValue < rightValue) return -1
+  }
+
+  const leftPrerelease = leftParsed.prerelease
+  const rightPrerelease = rightParsed.prerelease
+  if (leftPrerelease.length === 0 && rightPrerelease.length > 0) return 1
+  if (leftPrerelease.length > 0 && rightPrerelease.length === 0) return -1
+  if (leftPrerelease.length > 0 && rightPrerelease.length > 0) {
+    return comparePrereleaseTokens(leftPrerelease, rightPrerelease)
+  }
+  return 0
+}
+
+export function isPrereleaseFrameworkVersion(value: string | undefined) {
+  const normalized = normalizeFrameworkVersion(value)
+  return /^\d+\.\d+\.\d+-.+$/u.test(normalized)
+}
+
+export function workspaceFrameworkStream(value: string | undefined): FrameworkReleaseStream | undefined {
+  if (isLegacyDevWorkspaceVersion(value)) return "beta"
+  const normalized = normalizeFrameworkVersion(value)
+  if (!normalized || normalized === "unknown") return
+  if (isPrereleaseFrameworkVersion(value)) return "beta"
+  if (/^\d+\.\d+\.\d+$/u.test(normalized)) return "stable"
+  return
+}
+
+export function bundledFrameworkStream(value: string | undefined): FrameworkReleaseStream | undefined {
+  if (!value || isLegacyDevWorkspaceVersion(value)) return
+  return workspaceFrameworkStream(value)
+}
+
+export async function readInstallReleaseChannel(): Promise<FrameworkReleaseStream | undefined> {
+  const config = Bun.file(path.join(homedir(), ".spinosa", "metadata", "config.yaml"))
+  if (!(await config.exists())) return
+  const text = await config.text()
+  const match = text.match(/^beta:\s*(\S+)/m)
+  if (!match) return
+  const value = match[1]!.replace(/["']/g, "").toLowerCase()
+  if (value === "true" || value === "yes" || value === "on" || value === "1") return "beta"
+  if (value === "false" || value === "no" || value === "off" || value === "0") return "stable"
+  return
+}
+
+export function workspaceNeedsFrameworkUpdate(
+  workspaceVersion: string | undefined,
+  bundledVersion: string | undefined,
+  installStream?: FrameworkReleaseStream,
+) {
+  const bundled = normalizeFrameworkVersion(bundledVersion)
+  if (!bundled || isLegacyDevWorkspaceVersion(bundledVersion)) return false
+
+  if (isLegacyDevWorkspaceVersion(workspaceVersion)) return true
+
+  const workspaceStream = workspaceFrameworkStream(workspaceVersion)
+  const targetStream = bundledFrameworkStream(bundled) ?? installStream
+  if (workspaceStream && targetStream && workspaceStream !== targetStream) return false
+
+  return compareFrameworkVersions(bundled, workspaceVersion) === 1
 }
 
 export async function readBundledFrameworkVersion() {
-  return (await readFrameworkFile("metadata/version"))?.trim()
+  const metadata = (await readFrameworkFile("metadata/version"))?.trim()
+  const installScript = await readFrameworkFile("install.sh")
+  return resolveBundledFrameworkVersion(metadata, installScript)
 }
 
 async function readConfiguration(workspacePath: string) {

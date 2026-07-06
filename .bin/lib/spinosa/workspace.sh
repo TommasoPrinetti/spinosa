@@ -547,15 +547,39 @@ workspace_framework_version_value() {
   grep -m1 'framework_version:' "$workspace_path/.spinosa/workspace" 2>/dev/null | awk '{print $2}'
 }
 
+normalize_framework_version() {
+  local value="$1"
+  value="${value#v}"
+  value="${value#V}"
+  printf '%s' "$value"
+}
+
+is_legacy_dev_version() {
+  local value="$1"
+  local normalized
+  normalized="$(normalize_framework_version "$value" | tr '[:upper:]' '[:lower:]')"
+  [[ "$normalized" == "dev" || "$normalized" == "vdev" ]]
+}
+
 workspace_needs_framework_update() {
   local workspace_path="$1" installed_version="${2:-}"
   local ws_version cmp=0
-  validate_workspace "$workspace_path" || return 0
-  [[ -n "$installed_version" && "$installed_version" != "dev" ]] || return 0
+  validate_workspace "$workspace_path" || return 1
+
+  # Bundled / installed version is blank or dev/vdev — can't determine, no update.
+  [[ -n "$installed_version" ]] || return 1
+  is_legacy_dev_version "$installed_version" && return 1
+
   ws_version="$(workspace_framework_version_value "$workspace_path")"
-  [[ -n "$ws_version" && "$ws_version" != "dev" ]] || return 0
+
+  # Workspace version is blank — can't determine, no update.
+  [[ -n "$ws_version" ]] || return 1
+
+  # Workspace version is dev/vdev — always needs update (legacy beta).
+  is_legacy_dev_version "$ws_version" && return 0
+
   compare_versions "$installed_version" "$ws_version" || cmp=$?
-  [[ "$cmp" -ne 0 ]]
+  [[ "$cmp" -eq 1 ]]
 }
 
 # Main helper - returns workspace path or prompts for selection

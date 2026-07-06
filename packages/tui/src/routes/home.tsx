@@ -20,6 +20,7 @@ import { useTheme } from "../context/theme"
 import { useDialog } from "../ui/dialog"
 import { DialogSpinosaWorkspacePicker } from "../component/dialog-spinosa-workspace-picker"
 import { readBundledFrameworkVersion } from "../spinosa/service"
+import { workspaceAsciiBannerText } from "../spinosa/workspace-name"
 
 let once = false
 const defaultPlaceholder = {
@@ -50,8 +51,21 @@ export function Home() {
   const spinosa = useSpinosaWorkspace()
   const { theme } = useTheme()
   const workspaceReady = createMemo(() => Boolean(spinosa.activePath && !spinosa.genericMode))
+  const startupPrompt = createMemo(() => route.prompt ?? spinosa.pendingPrompt)
+  const startupPromptIsQueued = createMemo(() => !route.prompt && Boolean(spinosa.pendingPrompt))
   const [bundledVersion] = createResource(readBundledFrameworkVersion)
   const wsVersion = createMemo(() => spinosa.meta?.frameworkVersion)
+  const workspaceBannerText = createMemo(() => {
+    const workspacePath = spinosa.activePath
+    if (!workspacePath || spinosa.genericMode) return undefined
+    return workspaceAsciiBannerText(workspacePath)
+  })
+  const versionLabel = createMemo(() => {
+    const parts: string[] = []
+    if (bundledVersion()) parts.push(`Spinosa v${bundledVersion()}`)
+    if (wsVersion()) parts.push(`workspace v${wsVersion()}`)
+    return parts.join(" · ")
+  })
   const placeholders = createMemo(() => {
     if (spinosa.meta && !spinosa.genericMode && spinosa.meta.setupStatus === "workspace_started") {
       return spinosaPlaceholder
@@ -64,7 +78,7 @@ export function Home() {
     return configured ?? MAIN_CONTENT_MAX_WIDTH
   })
   let sent = false
-  let routeSent = false
+  let lastRoutePromptKey: string | undefined
 
   onMount(() => {
     editor.clearSelection()
@@ -74,7 +88,7 @@ export function Home() {
     setRef(r)
     promptRef.set(r)
     if (once || !r) return
-    if (route.prompt) return
+    if (startupPrompt()) return
     if (!args.prompt) return
     r.set({ input: args.prompt, parts: [] })
     once = true
@@ -83,13 +97,29 @@ export function Home() {
   // Set route prompt and auto-submit if flagged
   createEffect(() => {
     const r = ref()
-    const prompt = route.prompt
+    const prompt = startupPrompt()
     if (!r || !prompt) return
     r.set(prompt)
-    if (prompt.autoSubmit && !routeSent) {
-      routeSent = true
-      setTimeout(() => r.submit(), 0)
-    }
+  })
+
+  // Auto-submit route prompt once the prompt, sync, and model state are ready.
+  createEffect(() => {
+    const r = ref()
+    const prompt = startupPrompt()
+    if (!r || !prompt?.autoSubmit) return
+    if (!sync.ready || !local.model.ready) return
+    if (r.current.input !== prompt.input) return
+
+    const promptKey = JSON.stringify({
+      input: prompt.input,
+      parts: prompt.parts,
+      autoSubmit: prompt.autoSubmit,
+    })
+    if (lastRoutePromptKey === promptKey) return
+    lastRoutePromptKey = promptKey
+    if (startupPromptIsQueued()) spinosa.consumePendingPrompt()
+
+    setTimeout(() => r.submit(), 0)
   })
 
   // Wait for sync and model store to be ready before auto-submitting --prompt
@@ -117,14 +147,21 @@ export function Home() {
           <box flexGrow={1} minHeight={0} />
           <box height={4} minHeight={0} flexShrink={1} />
           <box flexShrink={0} alignItems="center" flexDirection="column">
-            <Show when={wsVersion()}>
-              <text fg={theme.textMuted}>
-                Spinosa v{bundledVersion() ?? "?"} · workspace v{wsVersion() ?? "?"}
-              </text>
+            <Show when={versionLabel()}>
+              <text fg={theme.textMuted}>{versionLabel()}</text>
               <box height={1} />
             </Show>
             <pluginRuntime.Slot name="home_logo" mode="replace">
-              <Logo />
+              <Show when={workspaceBannerText()} fallback={<Logo />}>
+                {(banner) => (
+                  <ascii_font
+                    text={banner()}
+                    font="block"
+                    color={theme.text}
+                    selectable={false}
+                  />
+                )}
+              </Show>
             </pluginRuntime.Slot>
           </box>
           <box height={1} minHeight={0} flexShrink={1} />
