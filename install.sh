@@ -312,12 +312,23 @@ detect_platform_suffix() {
 download() {
   local url="$1" dest="$2"
   if command -v curl >/dev/null 2>&1; then
-    curl -fSL --silent --show-error --max-time 300 --connect-timeout 30 "$url" -o "$dest"
+    curl -fSL --retry 3 --retry-delay 3 --silent --show-error --max-time 600 --connect-timeout 30 "$url" -o "$dest"
   elif command -v wget >/dev/null 2>&1; then
-    wget -q --show-progress --timeout=30 --tries=1 "$url" -O "$dest"
+    wget -q --show-progress --timeout=30 --tries=4 "$url" -O "$dest"
   else
     die "Neither curl nor wget found. Please install one."
   fi
+}
+
+download_github_release_asset() {
+  local repo="$1" tag="$2" asset="$3" dest="$4"
+  local api_url="https://api.github.com/repos/${repo}/releases/tags/${tag}"
+  local asset_url
+  asset_url="$(curl -fsSL --max-time 30 "$api_url" 2>/dev/null | grep -E '"browser_download_url"' | grep "$asset" | head -1 | sed 's/.*"browser_download_url": *"\([^"]*\)".*/\1/')"
+  if [ -n "$asset_url" ]; then
+    curl -fSL --retry 3 --retry-delay 3 --max-time 600 --connect-timeout 30 "$asset_url" -o "$dest" && return 0
+  fi
+  return 1
 }
 
 bun_asset_name() {
@@ -1230,6 +1241,15 @@ download_and_verify() {
       download_ok=true
       break
     fi
+    # Fallback: try GitHub API if direct download failed
+    if [ "$retries" -eq 0 ] && [ -n "${archive_name:-}" ]; then
+      spinner_stop
+      warn "Direct download failed — trying API fallback for ${archive_name}"
+      if download_github_release_asset "$REPO" "$RELEASE_DOWNLOAD_TAG" "$archive_name" "$dest"; then
+        download_ok=true
+        break
+      fi
+    fi
     spinner_stop
     retries=$((retries + 1))
     if [ "$retries" -lt "$max_retries" ]; then
@@ -1334,7 +1354,11 @@ install_vendor_bundles() {
   fi
 
   download_and_verify "$vendor_url" "$vendor_tmp" "Spinosa vendor for ${suffix}" \
-    "checksums.txt" "spinosa-vendor-${suffix}.tar.gz" 3 3
+    "checksums.txt" "spinosa-vendor-${suffix}.tar.gz" 3 3 || {
+    note "Vendor bundle download failed — continuing without MarkItDown support."
+    note "Run 'spinosa upgrade --reinstall' later to retry."
+    return 0
+  }
 
   spinner_start "Installing Spinosa vendor (Python + wrappers)"
   local vendor_extract_tmp="${tmpdir}/vendor-extract"
