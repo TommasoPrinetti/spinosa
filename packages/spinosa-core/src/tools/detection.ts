@@ -68,46 +68,6 @@ export function markitdownToolAvailable(toolPath: string): boolean {
   return false
 }
 
-export function rapidocrToolAvailable(toolPath: string): boolean {
-  if (!isExecutable(toolPath)) return false
-  const result = spawnSync(toolPath, ["--check-rapidocr"], {
-    stdio: ["ignore", "pipe", "pipe"],
-  })
-  if (result.status === 0) return true
-  const output = (result.stdout?.toString() ?? "") + (result.stderr?.toString() ?? "")
-  if (output.includes("unrecognized arguments: --check-rapidocr")) {
-    const pythonBin = vendorPythonForTool(toolPath)
-    if (!pythonBin) return false
-    const pyResult = spawnSync(pythonBin, ["-c", "from rapidocr import RapidOCR; import onnxruntime; import pypdfium2"], {
-      stdio: ["ignore", "pipe", "pipe"],
-    })
-    return pyResult.status === 0
-  }
-  return false
-}
-
-export function rapidocrOcrAvailable(): boolean {
-  const unifiedBin = path.join(unifiedVendorDir(), "rapidocr-cli")
-  if (rapidocrToolAvailable(unifiedBin)) return true
-  const fwDir = frameworkVendorDir()
-  if (fwDir) {
-    const frameworkBin = path.join(fwDir, "rapidocr-cli")
-    if (rapidocrToolAvailable(frameworkBin)) return true
-  }
-  return false
-}
-
-export function rapidocrOcrBin(): string | undefined {
-  const unifiedBin = path.join(unifiedVendorDir(), "rapidocr-cli")
-  if (isExecutable(unifiedBin)) return unifiedBin
-  const fwDir = frameworkVendorDir()
-  if (fwDir) {
-    const frameworkBin = path.join(fwDir, "rapidocr-cli")
-    if (isExecutable(frameworkBin)) return frameworkBin
-  }
-  return undefined
-}
-
 export function ppuPaddleOcrAvailable(): boolean {
   try {
     require.resolve("ppu-paddle-ocr")
@@ -117,13 +77,8 @@ export function ppuPaddleOcrAvailable(): boolean {
   }
 }
 
-export function legacyRapidocrEnabled(): boolean {
-  return process.env.SPINOSA_USE_LEGACY_RAPIDOCR === "1"
-}
-
 export function ocrAvailable(): boolean {
-  if (ppuPaddleOcrAvailable()) return true
-  return legacyRapidocrEnabled() && rapidocrOcrAvailable()
+  return ppuPaddleOcrAvailable()
 }
 
 export function markitdownAvailable(): boolean {
@@ -210,11 +165,11 @@ export function detectLlmTools(): string[] {
   return LLM_COMMANDS.filter(({ command }) => commandOnPath(command)).map(({ label }) => label)
 }
 
-export function isRapidocrImage(ext: string): boolean {
+export function isOcrImage(ext: string): boolean {
   return extInList(ext, IMAGE_EXTENSIONS)
 }
 
-export function isRapidocrPdf(ext: string): boolean {
+export function isOcrPdf(ext: string): boolean {
   return ext === "pdf"
 }
 
@@ -239,8 +194,8 @@ export function configureSelectedImportTools(
       }
     } else if (ext === "pdf") {
       if (markitdownAvailable()) markitdownChoice = true
-      if (ocrAvailable()) ocrChoice = true
-      if (!markitdownAvailable() && !ocrAvailable()) {
+      ocrChoice = true
+      if (!markitdownAvailable()) {
         warnings.push("PDF import requires MarkItDown or PPU PaddleOCR, but neither converter is available.")
       }
     } else if (extInList(ext, IMAGE_EXTENSIONS)) {

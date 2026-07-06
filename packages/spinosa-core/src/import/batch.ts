@@ -9,7 +9,7 @@ export interface BatchSelectOption {
 
 export function formatBatchOptions(
   batches: ImportBatch[],
-  toolStatus?: { markitdown: boolean; rapidocr: boolean },
+  toolStatus?: { markitdown: boolean },
 ): BatchSelectOption[] {
   return batches.map((b) => ({
     ext: b.ext,
@@ -20,23 +20,17 @@ export function formatBatchOptions(
 
 function batchOptionLabel(
   ext: string,
-  toolStatus?: { markitdown: boolean; rapidocr: boolean },
+  toolStatus?: { markitdown: boolean },
 ): string {
   let tag = ""
   if (toolStatus) {
-    const { markitdown, rapidocr } = toolStatus
+    const { markitdown } = toolStatus
     if (ext === "pdf") {
-      if (markitdown && rapidocr) {
-        tag = " (MarkItDown / OCR)"
-      } else if (markitdown) {
-        tag = " (MarkItDown)"
-      } else if (rapidocr) {
-        tag = " (OCR)"
-      }
+      tag = " (MarkItDown / OCR)"
     } else if (extInList(ext, MARKITDOWN_EXTENSIONS)) {
       if (markitdown) tag = " (MarkItDown)"
     } else if (extInList(ext, IMAGE_EXTENSIONS)) {
-      if (rapidocr) tag = " (OCR)"
+      tag = " (OCR)"
     }
   }
   return `.${ext}${tag}`
@@ -128,7 +122,7 @@ export class ImportBatchManager {
   }
 
   getSelectOptions(
-    toolStatus?: { markitdown: boolean; rapidocr: boolean },
+    toolStatus?: { markitdown: boolean },
   ): BatchSelectOption[] {
     return formatBatchOptions(this.batches, toolStatus)
   }

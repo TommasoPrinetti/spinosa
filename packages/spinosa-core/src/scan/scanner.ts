@@ -37,7 +37,6 @@ export interface ScanBytes {
 }
 
 export interface ToolStatus {
-  rapidocr: boolean
   markitdown: boolean
   pypdfium2: boolean
   pypdf: boolean
@@ -125,7 +124,6 @@ export async function detectDocumentTools(): Promise<ToolStatus> {
     pypdfAvailable(),
   ])
   return {
-    rapidocr: ocrAvailable(),
     markitdown: markitdownAvailable(),
     pypdfium2,
     pypdf,

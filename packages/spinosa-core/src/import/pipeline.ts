@@ -266,7 +266,6 @@ export async function runOcrPhase(
   files: ClassifiedEntry[],
   sourcePath: string,
   destDir: string,
-  toolStatus: { rapidocr: boolean },
   prog: ProgressEmitter,
   onLog?: (msg: string) => void,
 ): Promise<{ ocrConverted: number; ocrSkipped: number; recoverable: { src: string; dest: string }[] }> {
@@ -294,7 +293,7 @@ export async function runOcrPhase(
     prog.file("OCR", i + 1, total, ps.rel)
   }
 
-  if (toProcess.length > 0 && toolStatus.rapidocr) {
+  if (toProcess.length > 0) {
     onLog?.(`PPU PaddleOCR: Processing ${toProcess.length} files`)
     const ocrLog = path.join(logsDir, "ocr-processed.ndjson")
     try {
@@ -321,19 +320,6 @@ export async function runOcrPhase(
       onLog?.(`PPU PaddleOCR engine failed: ${err instanceof Error ? err.message : String(err)} — skipping OCR pass`)
       ocrSkipped = toProcess.length
     }
-  } else if (toProcess.length > 0 && legacyRapidocrEnabled()) {
-    const ocrBin = resolveBinary("rapidocr-cli")
-    if (!ocrBin) {
-      onLog?.("legacy rapidocr-cli not found on PATH — skipping OCR pass")
-    } else {
-      onLog?.(`Legacy RapidOCR: Processing ${toProcess.length} files`)
-      const ocrLog = path.join(logsDir, "ocr-processed.ndjson")
-      const ocrResult = await runConverterBatch("ocr", ocrBin, toProcess, sourcePath, destDir, ocrLog, prog, onLog, 600_000)
-      ocrConverted += ocrResult.converted
-      ocrSkipped += ocrResult.skipped
-    }
-  } else if (toProcess.length > 0) {
-    onLog?.("PPU PaddleOCR not available — skipping OCR pass")
   }
 
   return { ocrConverted, ocrSkipped, recoverable }
@@ -417,14 +403,12 @@ function importOutputExists(destDir: string, relDest: string): boolean {
   return convertedOutputExists(path.join(destDir, relDest))
 }
 
-function retryConverterSingle(
-  engine: string,
+function retryConverterMarkitdown(
   srcFile: string,
   destFile: string,
   sourcePath: string,
 ): boolean {
-  const binName = engine === "ocr" ? "rapidocr-cli" : "markitdown-cli"
-  const binary = resolveBinary(binName)
+  const binary = resolveBinary("markitdown-cli")
   if (!binary) return false
   try {
     mkdirSync(path.dirname(destFile), { recursive: true })
@@ -540,12 +524,11 @@ function convertTextPdfWithPdftotext(srcFile: string, destFile: string, relPath:
 
 // ── Binary lookup ────────────────────────────────────────────────────────
 
-import { legacyRapidocrEnabled, markitdownBin, ocrAvailable, rapidocrOcrBin } from "../tools/detection"
+import { markitdownBin, ocrAvailable } from "../tools/detection"
 
 function resolveBinary(name: string): string | null {
-  // Check vendor dirs first (markitdown-cli, legacy rapidocr-cli)
+  // Check vendor dirs first (markitdown-cli)
   if (name === "markitdown-cli") return markitdownBin() ?? null
-  if (name === "rapidocr-cli") return rapidocrOcrBin() ?? null
   // Fallback: Bun.which, then PATH
   if (typeof Bun !== "undefined" && Bun.which) {
     return Bun.which(name) ?? null
@@ -779,7 +762,7 @@ export async function verifyAndRecoverImport(
         break
       }
       case "markitdown": {
-        if (retryConverterSingle("markitdown", srcFile, destFile, sourcePath)) {
+        if (retryConverterMarkitdown(srcFile, destFile, sourcePath)) {
           injectColdFrontmatter(destFile)
           onLog?.(`    Recovered (markitdown retry): ${relPath}`)
           ok = true
@@ -803,7 +786,7 @@ export async function verifyAndRecoverImport(
             onLog?.(`    PPU OCR engine failed: ${err instanceof Error ? err.message : String(err)} — skipping OCR recovery`)
           }
         }
-        if (ppuConverted > 0 || (legacyRapidocrEnabled() && retryConverterSingle("ocr", srcFile, destFile, sourcePath))) {
+        if (ppuConverted > 0) {
           injectColdFrontmatter(destFile)
           onLog?.(`    Recovered (ocr retry): ${relPath}`)
           ok = true
@@ -874,7 +857,7 @@ export async function copySource(
   }
 
   if (runPhase("ocr") && options?.ocrChoice) {
-    const or = await runOcrPhase(classified.ocrFiles, sourcePath, destDir, { rapidocr: ocrAvailable() }, prog, options?.onLog)
+    const or = await runOcrPhase(classified.ocrFiles, sourcePath, destDir, prog, options?.onLog)
     res.ocrConverted += or.ocrConverted; res.ocrSkipped += or.ocrSkipped
     allRecoverable.push(...or.recoverable)
   }

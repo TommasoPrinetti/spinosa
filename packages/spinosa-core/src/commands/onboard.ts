@@ -197,7 +197,7 @@ export async function runImportPhase(
   if (phase === "markitdown") {
     return runMarkitdownPhase(classified.markitdownFiles, ctx.sourcePath, ctx.rawDir, prog, onLog)
   }
-  return runOcrPhase(classified.ocrFiles, ctx.sourcePath, ctx.rawDir, { rapidocr: ctx.toolStatus.rapidocr }, prog, onLog)
+  return runOcrPhase(classified.ocrFiles, ctx.sourcePath, ctx.rawDir, prog, onLog)
 }
 
 // ── Phase C: Finalize (verification, CLI, prompt, summary) ────────────────
@@ -213,7 +213,7 @@ export async function completeOnboarding(
   phase("verification", "Verifying import delivery...")
   const verifyResult = await verifyAndRecoverImport(
     ctx.sourcePath, ctx.rawDir, ctx.batches,
-    ctx.toolStatus.markitdown, ctx.toolStatus.rapidocr,
+    ctx.toolStatus.markitdown, true,
     (msg: string) => onPhase?.("import", msg),
   )
 
@@ -337,7 +337,7 @@ export async function runAddOnboarding(
   const toolStatus = await detectDocumentTools()
   const copyResult = await copySource(sourcePath, rawDir, {
     markitdownChoice: toolStatus.markitdown,
-    ocrChoice: toolStatus.rapidocr,
+    ocrChoice: true,
     batchManager: batches,
   })
   const importResult = toCopyImportResult(copyResult, scanCounts.total)
@@ -367,7 +367,7 @@ async function writeOnboardingSummary(summary: OnboardingSummary): Promise<void>
   } = summary
 
   const ocrMode = scanCounts.ocrConvertible > 0
-    ? (copyResult.ocrConverted > 0 ? "rapidocr_structured" : toolStatus.rapidocr ? "rapidocr_available" : "rapidocr_not_bundled")
+    ? (copyResult.ocrConverted > 0 ? "ppu_ocr_converted" : "ppu_ocr_available")
     : "not_applicable"
 
   const markitdownMode = scanCounts.markitdown > 0
