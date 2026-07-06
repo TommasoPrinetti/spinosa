@@ -1368,7 +1368,6 @@ install_vendor_bundles() {
   mkdir -p "$(dirname "$spinosa_vendor_dest")"
   mv "$vendor_extract_tmp" "$spinosa_vendor_dest"
   clean_macos_metadata "$spinosa_vendor_dest"
-  chmod +x "${spinosa_vendor_dest}/rapidocr-cli" 2>/dev/null || true
   chmod +x "${spinosa_vendor_dest}/markitdown-cli" 2>/dev/null || true
   spinner_stop
 

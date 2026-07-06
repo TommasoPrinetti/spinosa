@@ -28,13 +28,11 @@ source "${SCRIPT_DIR}/lib/spinosa/logging_bootstrap.sh" "$@"
 FRAMEWORK_ROOT="$(dirname "$SCRIPT_DIR")"
 VENDOR_BASE="${FRAMEWORK_ROOT}/.bin/lib/vendor"
 MARKITDOWN_CLI="${FRAMEWORK_ROOT}/.bin/lib/markitdown-cli.py"
-RAPIDOCR_CLI="${FRAMEWORK_ROOT}/.bin/lib/rapidocr-cli.py"
 
 PYTHON_VERSION="3.11.15"
 PYTHON_BUILD_VERSION="20260602"
 
 VENDOR_PIP_MARKITDOWN='markitdown[all]==0.1.6'
-VENDOR_PIP_RAPIDOCR='rapidocr==3.8.1'
 VENDOR_PIP_PYPDFIUM2='pypdfium2==5.9.0'
 VENDOR_PIP_PYPDF='pypdf==5.1.0'
 VENDOR_PIP_ONNX_VERSIONS=(1.23.2 1.23.1 1.23.0 1.22.1 1.22.0)
@@ -152,7 +150,6 @@ generate_requirements_lock() {
             --only-binary=:all: \
             "${platform_args[@]}" \
             "${VENDOR_PIP_MARKITDOWN}" \
-            "${VENDOR_PIP_RAPIDOCR}" \
             "onnxruntime==${onnx_ver}" \
             "${VENDOR_PIP_PYPDFIUM2}" \
             "${VENDOR_PIP_PYPDF}" >/dev/null; then
@@ -277,10 +274,10 @@ build_platform() {
     # Copy CLI wrappers
     log "Copying CLI wrappers..."
     cp "${MARKITDOWN_CLI}" "${vendor_dir}/markitdown-cli.py"
-    cp "${RAPIDOCR_CLI}" "${vendor_dir}/rapidocr-cli.py"
 
     # Create markitdown-cli bash launcher
     cat > "${vendor_dir}/markitdown-cli" << 'MDWRAP_EOF'
+
 #!/usr/bin/env bash
 # MarkItDown CLI wrapper for Spinosa
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -295,23 +292,6 @@ fi
 exec "${PYTHON_BIN}" "${SCRIPT_DIR}/markitdown-cli.py" "$@"
 MDWRAP_EOF
     chmod +x "${vendor_dir}/markitdown-cli"
-
-    # Create rapidocr-cli bash launcher
-    cat > "${vendor_dir}/rapidocr-cli" << 'RAPIDWRAP_EOF'
-#!/usr/bin/env bash
-# RapidOCR CLI wrapper for Spinosa
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PYTHON_BIN="${SCRIPT_DIR}/python/bin/python3"
-if [[ ! -x "${PYTHON_BIN}" ]]; then
-    PYTHON_BIN="${SCRIPT_DIR}/Python.framework/Versions/Current/bin/python3"
-fi
-if [[ ! -x "${PYTHON_BIN}" ]]; then
-    echo "ERROR: Bundled Python not found in ${SCRIPT_DIR}/python/" >&2
-    exit 1
-fi
-exec "${PYTHON_BIN}" "${SCRIPT_DIR}/rapidocr-cli.py" "$@"
-RAPIDWRAP_EOF
-    chmod +x "${vendor_dir}/rapidocr-cli"
 
     # Package
     log "Creating archive..."
