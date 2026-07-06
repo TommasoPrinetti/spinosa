@@ -113,6 +113,10 @@ if [[ -f "${FRAMEWORK_DIR}/docs/reference/testsuite.md" ]]; then
   rm -f "${FRAMEWORK_DIR}/docs/reference/testsuite.md"
   echo "  Stripped maintainer-only: docs/reference/testsuite.md"
 fi
+if [[ -d "${FRAMEWORK_DIR}/packages/spinosa-core/node_modules" ]]; then
+  rm -rf "${FRAMEWORK_DIR}/packages/spinosa-core/node_modules"
+  echo "  Stripped generated: packages/spinosa-core/node_modules"
+fi
 
 echo "  Copied: $copied_count paths"
 echo "  Excluded: $excluded_count user/generated paths"
@@ -217,7 +221,12 @@ echo "  Release date: ${TODAY}"
 
 # ── Vendor versions ──────────────────────────────────────────────────────────
 VERSIONS_FILE="${FRAMEWORK_DIR}/metadata/vendor-versions.txt"
-printf 'python 3.11.15\n' > "$VERSIONS_FILE"
+{
+  printf 'bun 1.3.14\n'
+  printf 'ppu-paddle-ocr 6.0.0\n'
+  printf 'pdftoppm required-for-scanned-pdf-rendering\n'
+  printf 'python 3.11.15 legacy-markitdown-and-rapidocr-fallback\n'
+} > "$VERSIONS_FILE"
 echo "  Vendor versions recorded"
 
 # ── Vendor binary checksums ─────────────────────────────────────────────────────

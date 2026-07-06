@@ -10,7 +10,7 @@ export const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", 
 export function Spinner(props: { children?: JSX.Element; color?: RGBA }) {
   const { theme } = useTheme()
   const kv = useKV()
-  const color = () => props.color ?? theme.textMuted
+  const color = () => props.color ?? theme.spinnerColor ?? theme.textMuted
   return (
     <Show when={kv.get("animations_enabled", true)} fallback={<text fg={color()}>⋯ {props.children}</text>}>
       <box flexDirection="row" gap={1}>

@@ -130,6 +130,20 @@ resolve_framework_root() {
 FRAMEWORK_ROOT="$(resolve_framework_root)"
 SPINOSA_BANNER_PRINTED=0
 
+if [[ -f "${FRAMEWORK_ROOT}/packages/spinosa-core/bin/spinosa.ts" ]]; then
+  SPINOSA_BUN="${SPINOSA_BUN:-}"
+  if [[ -z "$SPINOSA_BUN" && -x "${SPINOSA_HOME}/bin/bun" ]]; then
+    SPINOSA_BUN="${SPINOSA_HOME}/bin/bun"
+  fi
+  if [[ -z "$SPINOSA_BUN" ]] && command -v bun >/dev/null 2>&1; then
+    SPINOSA_BUN="$(command -v bun)"
+  fi
+  if [[ -n "$SPINOSA_BUN" ]]; then
+    export PATH="${FRAMEWORK_ROOT}/node_modules/.bin:${PATH}"
+    exec "$SPINOSA_BUN" run "${FRAMEWORK_ROOT}/packages/spinosa-core/bin/spinosa.ts" "${ORIGINAL_ARGS[@]}"
+  fi
+fi
+
 # ── sourced libraries ───────────────────────────────────────────────────────
 SPINOSA_LIB_DIR="${FRAMEWORK_ROOT}/.bin/lib/spinosa"
 SPINOSA_LIBS=(

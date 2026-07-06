@@ -388,28 +388,28 @@ export function WorkspacePicker() {
   }
 
   onMount(() => {
-    const off = keymap.intercept("key", ({ event }) => {
+    const off = keymap.intercept("key", ({ event, consume }) => {
       if (modeStack.current() !== OPENCODE_BASE_MODE) return
 
       if (step() === "home") {
         const list = homeOptions()
         if (event.name === "up" || event.name === "k") {
           setSelected((v) => Math.max(0, v - 1))
-          return true
+          consume(); return
         }
         if (event.name === "down" || event.name === "j") {
           setSelected((v) => Math.min(list.length - 1, v + 1))
-          return true
+          consume(); return
         }
         if (event.name === "return") {
           runSelected()
-          return true
+          consume(); return
         }
         const index = list.findIndex((item) => item.hint === event.name)
         if (index >= 0) {
           setSelected(index)
           runSelected()
-          return true
+          consume(); return
         }
         return
       }
@@ -417,20 +417,20 @@ export function WorkspacePicker() {
       if (step() === "select" && startupPath()) {
         if (event.name === "up" || event.name === "k") {
           setStartupSelected((v) => Math.max(0, v - 1))
-          return true
+          consume(); return
         }
         if (event.name === "down" || event.name === "j") {
           setStartupSelected((v) => Math.min(1, v + 1))
-          return true
+          consume(); return
         }
         if (event.name === "return") {
           if (startupSelected() === 0) void launchStartupInChat()
           else void openChatDirectly()
-          return true
+          consume(); return
         }
         if (event.name === "escape") {
           setStartupPath(undefined)
-          return true
+          consume(); return
         }
         return
       }
@@ -438,7 +438,7 @@ export function WorkspacePicker() {
       if (event.name === "escape") {
         if (step() === "select" || step() === "manager") {
           goStep("home")
-          return true
+          consume(); return
         }
         return
       }
@@ -447,21 +447,21 @@ export function WorkspacePicker() {
         const list = selectOptions()
         if (event.name === "up" || event.name === "k") {
           setSelected((v) => Math.max(0, v - 1))
-          return true
+          consume(); return
         }
         if (event.name === "down" || event.name === "j") {
           setSelected((v) => Math.min(list.length - 1, v + 1))
-          return true
+          consume(); return
         }
         if (event.name === "return") {
           runSelect()
-          return true
+          consume(); return
         }
         const index = list.findIndex((item) => item.hint === event.name)
         if (index >= 0) {
           setSelected(index)
           runSelect()
-          return true
+          consume(); return
         }
       }
 
@@ -471,55 +471,55 @@ export function WorkspacePicker() {
         if (event.name === "left" || event.name === "h") {
           if (managerFocus() === "actions") {
             setManagerAction((value) => Math.max(0, value - 1))
-            return true
+            consume(); return
           }
         }
         if (event.name === "right" || event.name === "l") {
           if (managerFocus() === "actions") {
             setManagerAction((value) => Math.min(actions.length - 1, value + 1))
-            return true
+            consume(); return
           }
         }
         if (event.name === "up" || event.name === "k") {
           if (managerFocus() === "rows") {
             if (selected() === 0) setManagerFocus("actions")
             else setSelected((v) => Math.max(0, v - 1))
-            return true
+            consume(); return
           }
           setManagerAction((value) => Math.max(0, value - 1))
-          return true
+          consume(); return
         }
         if (event.name === "down" || event.name === "j") {
           if (managerFocus() === "actions") {
             if (rows.length > 0) setManagerFocus("rows")
-            return true
+            consume(); return
           }
           setSelected((v) => Math.min(rows.length - 1, v + 1))
-          return true
+          consume(); return
         }
         if (event.name === "a") {
           void updateAllWorkspaces()
-          return true
+          consume(); return
         }
         if (event.name === "u") {
           const row = selectedManagerRow()
           if (row) void updateWorkspace(row.path)
-          return true
+          consume(); return
         }
         if (event.name === "d") {
           const row = selectedManagerRow()
           if (row) void deleteWorkspace(row.path)
-          return true
+          consume(); return
         }
         if (event.name === "return") {
           if (managerFocus() === "actions") {
             const action = actions[managerAction()]
             if (action && !action.disabled) void action.run()
-            return true
+            consume(); return
           }
           const row = selectedManagerRow()
           if (row) void pickWorkspace(row.path)
-          return true
+          consume(); return
         }
       }
     })

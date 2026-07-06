@@ -17,7 +17,7 @@ export function deferPress(action: () => void) {
 
 /** Blur a focused input so mouse-driven controls can receive hover and click. */
 export function blurIfFocused(renderable?: { focused?: boolean; blur?: () => void; isDestroyed?: boolean }) {
-  if (renderable && !renderable.isDestroyed && renderable.focused) renderable.blur()
+  if (renderable && !renderable.isDestroyed && renderable.focused && renderable.blur) renderable.blur()
 }
 
 /** Invalidate in-flight async wizard work when the user navigates back or starts a new run. */

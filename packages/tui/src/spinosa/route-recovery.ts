@@ -1,5 +1,5 @@
-import type { GoalArtifactSummary } from "./types"
-import { artifactExists } from "./service"
+import type { GoalArtifactSummary } from "@opencode-ai/spinosa-core/types"
+import { artifactExists } from "@opencode-ai/spinosa-core/workspace/meta"
 
 export type RecoveryGap = {
   role: string

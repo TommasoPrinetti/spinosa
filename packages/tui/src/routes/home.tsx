@@ -1,5 +1,5 @@
 import { Prompt, type PromptRef } from "../component/prompt"
-import { createEffect, createMemo, createResource, createSignal, onMount, Show } from "solid-js"
+import { createEffect, createMemo, createResource, createSignal, onCleanup, onMount, Show } from "solid-js"
 import { Logo } from "../component/logo"
 import { useSync } from "../context/sync"
 import { Toast } from "../ui/toast"
@@ -19,8 +19,12 @@ import { useSpinosaWorkspace } from "../context/spinosa-workspace"
 import { useTheme } from "../context/theme"
 import { useDialog } from "../ui/dialog"
 import { DialogSpinosaWorkspacePicker } from "../component/dialog-spinosa-workspace-picker"
-import { readBundledFrameworkVersion } from "../spinosa/service"
+import { OPENCODE_BASE_MODE, useOpencodeKeymap, useOpencodeModeStack } from "../keymap"
+import { readBundledFrameworkVersion, compareFrameworkVersions } from "../spinosa/service"
 import { workspaceAsciiBannerText } from "../spinosa/workspace-name"
+import { resolveReleaseVersionForChannel, spinosaReleaseChannel } from "@opencode-ai/spinosa-core/system/channels"
+import { runUpgrade } from "../spinosa/cli-bridge"
+import { buttonBackground, buttonText } from "../util/button"
 
 let once = false
 const defaultPlaceholder = {
@@ -53,7 +57,7 @@ export function Home() {
   const workspaceReady = createMemo(() => Boolean(spinosa.activePath && !spinosa.genericMode))
   const startupPrompt = createMemo(() => route.prompt ?? spinosa.pendingPrompt)
   const startupPromptIsQueued = createMemo(() => !route.prompt && Boolean(spinosa.pendingPrompt))
-  const [bundledVersion] = createResource(readBundledFrameworkVersion)
+  const [bundledVersion, { refetch: refetchBundled }] = createResource(readBundledFrameworkVersion)
   const wsVersion = createMemo(() => spinosa.meta?.frameworkVersion)
   const workspaceBannerText = createMemo(() => {
     const workspacePath = spinosa.activePath
@@ -66,6 +70,58 @@ export function Home() {
     if (wsVersion()) parts.push(`workspace v${wsVersion()}`)
     return parts.join(" · ")
   })
+  const [latestVersion] = createResource(async () => {
+    try {
+      const channel = await spinosaReleaseChannel()
+      return await resolveReleaseVersionForChannel(channel)
+    } catch { return undefined }
+  })
+  const upgradeAvailable = createMemo(() => {
+    const bv = bundledVersion()
+    const lv = latestVersion()
+    if (!bv || !lv) return false
+    return compareFrameworkVersions(lv, bv) === 1
+  })
+  const [upgradeHover, setUpgradeHover] = createSignal(false)
+  const [upgrading, setUpgrading] = createSignal(false)
+  const modeStack = useOpencodeModeStack()
+  const keymap = useOpencodeKeymap()
+  const [keyboardFocus, setKeyboardFocus] = createSignal(-1)
+
+  onMount(() => {
+    const off = keymap.intercept("key", ({ event, consume }) => {
+      if (modeStack.current() !== OPENCODE_BASE_MODE) return
+
+      if (event.name === "up" || event.name === "k") {
+        setKeyboardFocus((v) => Math.max(-1, v - 1))
+        consume(); return
+      }
+      if (event.name === "down" || event.name === "j") {
+        if (keyboardFocus() === -1 && upgradeAvailable()) {
+          setKeyboardFocus(0)
+          consume(); return
+        }
+        setKeyboardFocus((v) => Math.min(0, v + 1))
+        consume(); return
+      }
+      if (event.name === "return" && keyboardFocus() === 0) {
+        void doUpgrade()
+        consume(); return
+      }
+    })
+    onCleanup(off)
+  })
+
+  const doUpgrade = async () => {
+    if (upgrading()) return
+    setUpgrading(true)
+    try {
+      await runUpgrade()
+      refetchBundled()
+    } finally {
+      setUpgrading(false)
+    }
+  }
   const placeholders = createMemo(() => {
     if (spinosa.meta && !spinosa.genericMode && spinosa.meta.setupStatus === "workspace_started") {
       return spinosaPlaceholder
@@ -150,6 +206,20 @@ export function Home() {
             <Show when={versionLabel()}>
               <text fg={theme.textMuted}>{versionLabel()}</text>
               <box height={1} />
+              <Show when={upgradeAvailable()}>
+                <box
+                  paddingX={1}
+                  backgroundColor={upgradeHover() || keyboardFocus() === 0 ? theme.text : undefined}
+                  onMouseDown={doUpgrade}
+                  onMouseOver={() => !upgrading() && setUpgradeHover(true)}
+                  onMouseOut={() => setUpgradeHover(false)}
+                >
+                  <text fg={buttonText(theme, upgradeHover() || keyboardFocus() === 0, theme.primary)}>
+                    {upgrading() ? "Upgrading…" : "Upgrade available"}
+                  </text>
+                </box>
+                <box height={1} />
+              </Show>
             </Show>
             <pluginRuntime.Slot name="home_logo" mode="replace">
               <Show when={workspaceBannerText()} fallback={<Logo />}>

@@ -4,6 +4,7 @@
 
 PINNED_VERSION="0.8.0-beta.10"
 PINNED_TAG="beta"
+BUNDLED_BUN_VERSION="1.3.14"
 
 if [ -z "${BASH_VERSION-}" ]; then
   if command -v bash >/dev/null 2>&1; then
@@ -316,6 +317,61 @@ download() {
     wget -q --show-progress --timeout=30 --tries=1 "$url" -O "$dest"
   else
     die "Neither curl nor wget found. Please install one."
+  fi
+}
+
+bun_asset_name() {
+  case "$(uname -s)-$(uname -m)" in
+    Darwin-arm64|Darwin-aarch64) printf '%s\n' "bun-darwin-aarch64" ;;
+    Darwin-x86_64|Darwin-amd64)  printf '%s\n' "bun-darwin-x64" ;;
+    Linux-aarch64|Linux-arm64)   printf '%s\n' "bun-linux-aarch64" ;;
+    Linux-x86_64|Linux-amd64)    printf '%s\n' "bun-linux-x64" ;;
+    *) return 1 ;;
+  esac
+}
+
+install_bundled_bun() {
+  local tmpdir="$1"
+  local asset bun_zip bun_extract bun_src
+  asset="$(bun_asset_name)" || die "Unsupported platform for bundled Bun: $(uname -s) $(uname -m)"
+  bun_zip="${tmpdir}/${asset}.zip"
+  bun_extract="${tmpdir}/bun-runtime"
+
+  if [[ -x "${SPINOSA_HOME}/bin/bun" ]] && "${SPINOSA_HOME}/bin/bun" --version 2>/dev/null | grep -qx "$BUNDLED_BUN_VERSION"; then
+    ok "Bundled Bun ${BUNDLED_BUN_VERSION} already installed"
+    return 0
+  fi
+
+  command -v unzip >/dev/null 2>&1 || die "unzip is required to install bundled Bun"
+  download "https://github.com/oven-sh/bun/releases/download/bun-v${BUNDLED_BUN_VERSION}/${asset}.zip" "$bun_zip" \
+    || die "Failed to download Bun ${BUNDLED_BUN_VERSION}"
+  rm -rf "$bun_extract"
+  mkdir -p "$bun_extract"
+  unzip -q "$bun_zip" -d "$bun_extract"
+  bun_src="$(find "$bun_extract" -type f -name bun -perm -111 | head -1)"
+  [[ -n "$bun_src" ]] || die "Downloaded Bun archive did not contain executable bun"
+  mkdir -p "${SPINOSA_HOME}/bin"
+  cp "$bun_src" "${SPINOSA_HOME}/bin/.bun.tmp"
+  chmod +x "${SPINOSA_HOME}/bin/.bun.tmp"
+  mv "${SPINOSA_HOME}/bin/.bun.tmp" "${SPINOSA_HOME}/bin/bun"
+  ok "Installed bundled Bun ${BUNDLED_BUN_VERSION}"
+}
+
+install_bun_dependencies() {
+  local fw_root="$1"
+  local bun_bin="${SPINOSA_HOME}/bin/bun"
+  local core_dir="${fw_root}/packages/spinosa-core"
+  [[ -x "$bun_bin" ]] || die "Bundled Bun missing at ${bun_bin}"
+  [[ -f "${core_dir}/package.json" ]] || return 0
+  spinner_start "Installing Bun dependencies"
+  if (cd "$core_dir" && "$bun_bin" install --production >/dev/null 2>&1); then
+    spinner_stop "Bun dependencies installed"
+  else
+    spinner_stop
+    die "Bun dependency install failed. Re-run install, or check ${SPINOSA_HOME}/logs/spinosa.log"
+  fi
+  if ! command -v pdftoppm >/dev/null 2>&1 || ! command -v pdftotext >/dev/null 2>&1 || ! command -v pdfinfo >/dev/null 2>&1; then
+    warn "Poppler tools not found — image OCR works, but PDF page splitting needs pdftoppm, pdftotext, and pdfinfo"
   fi
 }
 
@@ -788,7 +844,7 @@ check_release_age() {
   ok "Release age verified: ${days_old} day(s) old (minimum: ${min_days})"
 }
 
-# Pinned vendor Python packages — bump vendor_pip_fingerprint() when these change.
+# Pinned legacy Python packages for MarkItDown page splitting.
 VENDOR_PIP_MARKITDOWN='markitdown[all]==0.1.6'
 VENDOR_PIP_RAPIDOCR='rapidocr==3.8.1'
 VENDOR_PIP_PYPDFIUM2='pypdfium2==5.9.0'
@@ -796,9 +852,8 @@ VENDOR_PIP_PYPDF='pypdf==5.1.0'
 VENDOR_PIP_ONNX_VERSIONS='1.23.2 1.23.1 1.23.0 1.22.1 1.22.0'
 
 vendor_pip_fingerprint() {
-  printf '%s|%s|%s|%s|%s' \
-    "$VENDOR_PIP_MARKITDOWN" "$VENDOR_PIP_RAPIDOCR" "$VENDOR_PIP_PYPDFIUM2" \
-    "$VENDOR_PIP_PYPDF" "$VENDOR_PIP_ONNX_VERSIONS"
+  printf '%s|%s|bun:%s|ppu-paddle-ocr:6.0.0' \
+    "$VENDOR_PIP_MARKITDOWN" "$VENDOR_PIP_PYPDF" "$BUNDLED_BUN_VERSION"
 }
 
 vendor_tarball_sha_from_checksums() {
@@ -836,14 +891,11 @@ EOF
 
 vendor_tool_checks_pass() {
   local vendor_dir="$1" tool
-  for tool in markitdown-cli rapidocr-cli; do
+  for tool in markitdown-cli; do
     [[ -x "${vendor_dir}/${tool}" ]] || return 1
     case "$tool" in
       markitdown-cli)
         "${vendor_dir}/${tool}" --check-markitdown >/dev/null 2>&1 || return 1
-        ;;
-      rapidocr-cli)
-        "${vendor_dir}/${tool}" --check-rapidocr >/dev/null 2>&1 || return 1
         ;;
     esac
   done
@@ -853,14 +905,14 @@ vendor_tool_checks_pass() {
 vendor_packages_healthy() {
   local vendor_dir="$1" python_bin
   python_bin="$(vendor_python_for_dir "$vendor_dir")" || return 1
-  "$python_bin" -c 'from rapidocr import RapidOCR; import onnxruntime; import pypdfium2; from markitdown import MarkItDown; import pypdf' >/dev/null 2>&1
+  "$python_bin" -c 'from markitdown import MarkItDown; import pypdf' >/dev/null 2>&1
 }
 
 vendor_installed_pins_match() {
   local vendor_dir="$1" python_bin pkg spec ver installed onnx_ver matched=0
   python_bin="$(vendor_python_for_dir "$vendor_dir")" || return 1
 
-  for spec in "$VENDOR_PIP_MARKITDOWN" "$VENDOR_PIP_RAPIDOCR" "$VENDOR_PIP_PYPDFIUM2" "$VENDOR_PIP_PYPDF"; do
+  for spec in "$VENDOR_PIP_MARKITDOWN" "$VENDOR_PIP_PYPDF"; do
     pkg="${spec%%\[*}"
     pkg="${pkg%%==*}"
     ver="${spec#*==}"
@@ -868,12 +920,7 @@ vendor_installed_pins_match() {
     [[ "$installed" == "$ver" ]] || return 1
   done
 
-  installed="$("$python_bin" -m pip show onnxruntime 2>/dev/null | awk '/^Version:/{print $2; exit}')"
-  [[ -n "$installed" ]] || return 1
-  for onnx_ver in $VENDOR_PIP_ONNX_VERSIONS; do
-    [[ "$installed" == "$onnx_ver" ]] && matched=1 && break
-  done
-  [[ "$matched" -eq 1 ]]
+  return 0
 }
 
 vendor_binaries_healthy() {
@@ -991,7 +1038,7 @@ smoke_check_vendor_tools() {
   local vendor_dir="$1"
   local failed=0 tool
 
-  for tool in markitdown-cli rapidocr-cli; do
+  for tool in markitdown-cli; do
     if [ ! -x "${vendor_dir}/${tool}" ]; then
       warn "${tool} is not executable in vendor bundle"
       failed=$((failed + 1))
@@ -1000,14 +1047,6 @@ smoke_check_vendor_tools() {
     case "$tool" in
       markitdown-cli)
         if "${vendor_dir}/${tool}" --check-markitdown >/dev/null 2>&1; then
-          ok "${tool} package check passed"
-        else
-          warn "${tool} package check failed"
-          failed=$((failed + 1))
-        fi
-        ;;
-      rapidocr-cli)
-        if "${vendor_dir}/${tool}" --check-rapidocr >/dev/null 2>&1; then
           ok "${tool} package check passed"
         else
           warn "${tool} package check failed"
@@ -1318,65 +1357,15 @@ install_vendor_bundles() {
   if [[ -n "$spinosa_python" ]]; then
     spinosa_log INFO "vendor_python=${spinosa_python}"
     if install_vendor_python_packages "$spinosa_python" "$spinosa_vendor_dest"; then
-      spinner_stop "MarkItDown + RapidOCR + PDF tools installed"
-      spinner_start "Verifying RapidOCR import"
-      if "$spinosa_python" -c "from rapidocr import RapidOCR" 2>/dev/null; then
-        spinner_stop
-        ok "RapidOCR import verified"
-        spinner_start "Cleaning up unused models"
-        "$spinosa_python" -c "
-import rapidocr, os
-models_dir = os.path.join(os.path.dirname(rapidocr.__file__), 'models')
-for f in os.listdir(models_dir):
-    if f.startswith('ch_'):
-        os.remove(os.path.join(models_dir, f))
-for f in ['ppocr_keys_v1.txt', 'ppocrv5_dict.txt']:
-    path = os.path.join(models_dir, f)
-    if os.path.exists(path): os.remove(path)
-" 2>/dev/null || true
-        spinner_stop "Models cleaned"
-
-        spinner_start "Downloading OCR models"
-        local ocr_log="${SPINOSA_HOME}/logs/ocr-model-download.log"
-        mkdir -p "$(dirname "$ocr_log")"
-        if "$spinosa_python" -c "
-import logging
-logging.getLogger('RapidOCR').setLevel(logging.WARNING)
-logging.getLogger('onnxruntime').setLevel(logging.WARNING)
-from rapidocr import RapidOCR, EngineType, LangDet, LangRec, ModelType, OCRVersion
-RapidOCR(params={
-    'Det.engine_type': EngineType.ONNXRUNTIME,
-    'Det.lang_type': LangDet.EN,
-    'Det.model_type': ModelType.MOBILE,
-    'Det.ocr_version': OCRVersion.PPOCRV4,
-    'Rec.engine_type': EngineType.ONNXRUNTIME,
-    'Rec.lang_type': LangRec.EN,
-    'Rec.model_type': ModelType.MOBILE,
-    'Rec.ocr_version': OCRVersion.PPOCRV4,
-})
-" >"$ocr_log" 2>&1; then
-          spinner_stop "Models ready"
-        else
-          spinner_stop "Models not downloaded"
-          fail "OCR models could not be pre-downloaded — will download on first use"
-          note "Check internet access if this persists"
-        fi
-        ok "Python packages installed"
-      else
-        spinner_stop
-        fail "RapidOCR installed but cannot import — system library missing"
-        if [[ "$(uname -s)" == "Linux" ]]; then
-          note "On Linux, install: sudo apt-get install libgl1"
-        fi
-        warn "PDF/image OCR and Office doc conversion will not be available"
-      fi
+      spinner_stop "MarkItDown legacy PDF tools installed"
+      ok "Python MarkItDown fallback installed"
     else
       spinner_stop
-      warn "pip install failed — PDF/image OCR and Office doc conversion will not be available"
-      rm -f "${spinosa_vendor_dest}/rapidocr-cli" "${spinosa_vendor_dest}/markitdown-cli" 2>/dev/null || true
+      warn "pip install failed — legacy MarkItDown conversion will not be available"
+      rm -f "${spinosa_vendor_dest}/markitdown-cli" 2>/dev/null || true
     fi
   else
-    warn "Bundled Python not found — PDF/image OCR and Office doc conversion will not be available"
+    warn "Bundled Python not found — legacy MarkItDown conversion will not be available"
   fi
 
   smoke_check_vendor_tools "$spinosa_vendor_dest"
@@ -1416,6 +1405,7 @@ write_spinosa_env_file() {
   cat > "$SPINOSA_ENV_FILE" << EOF
 # Spinosa CLI environment — managed by install.sh
 export SPINOSA_BIN_DIR="${SPINOSA_BIN_DIR}"
+export SPINOSA_BUN="${SPINOSA_HOME}/bin/bun"
 export PATH="${SPINOSA_BIN_DIR}:\$PATH"
 EOF
 }
@@ -1704,9 +1694,13 @@ main() {
   mkdir -p "${SPINOSA_HOME}/versions/${VERSION}"
   mv "$extract_tmp"/* "${SPINOSA_HOME}/versions/${VERSION}/"
   clean_macos_metadata "${SPINOSA_HOME}/versions/${VERSION}"
+  local fw_root="${SPINOSA_HOME}/versions/${VERSION}/spinosa-framework-${VERSION}"
+
+  install_bundled_bun "$tmpdir"
+  install_bun_dependencies "$fw_root"
 
   # Install CLI binary (atomic write: temp + mv to avoid partial reads)
-  local spinosa_bin="${SPINOSA_HOME}/versions/${VERSION}/spinosa-framework-${VERSION}/.bin/spinosa"
+  local spinosa_bin="${fw_root}/.bin/spinosa"
   if [ -f "$spinosa_bin" ]; then
     cp "$spinosa_bin" "${SPINOSA_HOME}/bin/.spinosa.tmp"
     chmod +x "${SPINOSA_HOME}/bin/.spinosa.tmp"
@@ -1723,7 +1717,6 @@ main() {
 
   install_shims
 
-  local fw_root="${SPINOSA_HOME}/versions/${VERSION}/spinosa-framework-${VERSION}"
   mark_version_install_complete "$VERSION"
   install_install_state_lib "$fw_root"
   INSTALL_COMPLETED=1

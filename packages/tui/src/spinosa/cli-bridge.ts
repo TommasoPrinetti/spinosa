@@ -3,13 +3,24 @@ import { homedir } from "node:os"
 import path from "node:path"
 import { spawn, type ChildProcess } from "node:child_process"
 import { tuiLog } from "./log"
-import { resolveFrameworkBin, resolveFrameworkRoot } from "./framework"
+import { resolveFrameworkBin, resolveFrameworkRoot } from "@opencode-ai/spinosa-core/framework/discovery"
+import { createWorkspace } from "@opencode-ai/spinosa-core/commands/create"
+import {
+  runOnboarding,
+  prepareOnboarding,
+  runImportPhase,
+  completeOnboarding,
+} from "@opencode-ai/spinosa-core/commands/onboard"
+import { ProgressEmitter } from "@opencode-ai/spinosa-core/progress/progress"
+import type { OnboardingContext, PhaseAccumulator, OnboardingResult } from "@opencode-ai/spinosa-core/commands/onboard"
+import { runStartup as tsRunStartup } from "@opencode-ai/spinosa-core/commands/startup"
+import { addFiles } from "@opencode-ai/spinosa-core/commands/add"
+import { upgradeFramework } from "@opencode-ai/spinosa-core/commands/upgrade"
+import { updateWorkspace } from "@opencode-ai/spinosa-core/commands/update"
 import type { CliRunResult } from "./types"
 
 const CANDIDATE_BINS = [
   () => process.env.SPINOSA_BIN,
-  // Dev repo bin takes priority over installed framework so shell-script fixes
-  // (import_copy.sh etc.) are live immediately during development.
   () => {
     const devBin = path.join(homedir(), "Documents", "spinosa-main", ".bin", "spinosa")
     if (existsSync(devBin)) return devBin
@@ -27,6 +38,8 @@ export async function resolveSpinosaBin(workspacePath?: string): Promise<string 
   }
   return undefined
 }
+
+// ── Legacy fallback: spawn Bash CLI for operations not yet ported ──────────
 
 export async function runSpinosa(
   args: string[],
@@ -52,7 +65,6 @@ export async function runSpinosa(
   }
 
   const frameworkRoot = resolveFrameworkRoot()
-  tuiLog(`spawn bin=${bin} frameworkRoot=${frameworkRoot ?? "undefined"} cwd=${input?.cwd ?? frameworkRoot ?? "cwd"} args=${JSON.stringify(args)}`)
   const SPINOSA_RUN_TIMEOUT_MS = 600_000
   return new Promise((resolve) => {
     const child = spawn(bin, args, {
@@ -68,7 +80,6 @@ export async function runSpinosa(
       stdio: ["ignore", "pipe", "pipe"],
     })
     input?.onSpawn?.(child)
-    tuiLog(`spawned pid=${child.pid} timeoutMs=${SPINOSA_RUN_TIMEOUT_MS}`)
 
     const timeout = setTimeout(() => {
       tuiLog(`timeout pid=${child.pid} killing after ${SPINOSA_RUN_TIMEOUT_MS}ms`)
@@ -89,9 +100,6 @@ export async function runSpinosa(
     })
     child.on("close", (code, signal) => {
       clearTimeout(timeout)
-      const outLen = stdout.length
-      const errLen = stderr.length
-      tuiLog(`close pid=${child.pid} exitCode=${code} signal=${signal ?? "none"} stdout=${outLen}B stderr=${errLen}B`)
       resolve({
         exitCode: code,
         stdout,
@@ -101,7 +109,6 @@ export async function runSpinosa(
     })
     child.on("error", (error) => {
       clearTimeout(timeout)
-      tuiLog(`error pid=${child.pid} message=${error.message}`)
       resolve({
         exitCode: 1,
         stdout,
@@ -110,6 +117,241 @@ export async function runSpinosa(
     })
   })
 }
+
+// ── Ported operations (TypeScript) ────────────────────────────────────────
+
+export type CopyProgress = { phase: string; curr: number; total: number; rel: string }
+export type NewWorkspacePhase =
+  | "setup"
+  | "scan"
+  | "batch_selection"
+  | "tool_validation"
+  | "import"
+  | "direct"
+  | "markitdown"
+  | "ocr"
+  | "verification"
+  | "cli_selection"
+  | "prompt"
+  | "complete"
+  | "blocked"
+
+export const PHASES = {
+  SETUP: "setup",
+  SCAN: "scan",
+  BATCH_SELECTION: "batch_selection",
+  TOOL_VALIDATION: "tool_validation",
+  IMPORT: "import",
+  DIRECT_COPY: "direct",
+  MARKITDOWN: "markitdown",
+  OCR: "ocr",
+  VERIFICATION: "verification",
+  CLI_SELECTION: "cli_selection",
+  PROMPT: "prompt",
+  COMPLETE: "complete",
+  BLOCKED: "blocked",
+} as const
+
+export async function runNew(
+  corpusPath: string,
+  input?: {
+    extensions?: string
+    cli?: string
+    launch?: string
+    onStdout?: (chunk: string) => void
+    onStderr?: (chunk: string) => void
+    onPhase?: (phase: NewWorkspacePhase, message: string) => void
+    onCopyProgress?: (prog: CopyProgress) => void
+  },
+) {
+  tuiLog(`runNew corpusPath=${corpusPath} extensions=${input?.extensions ?? "none"}`)
+
+  const frameworkRoot = resolveFrameworkRoot()
+  if (!frameworkRoot) {
+    return { exitCode: 1, stdout: "", stderr: "Framework root not found." } satisfies CliRunResult
+  }
+
+  try {
+    const result = await createWorkspace({
+      corpusPath,
+      frameworkRoot,
+      extensions: input?.extensions,
+      preferredCli: input?.cli ?? "opencode",
+      launch: (input?.launch as "copy" | "run" | undefined) ?? "run",
+      onProgress: (msg) => {
+        input?.onPhase?.("setup", msg)
+        input?.onStdout?.(msg + "\n")
+      },
+    })
+
+    if (!result.success) {
+      return { exitCode: 1, stdout: "", stderr: "Workspace creation failed." } satisfies CliRunResult
+    }
+
+    const projectTitle = path.basename(corpusPath)
+    const onboardingResult = await runOnboarding({
+      workspacePath: result.workspacePath,
+      frameworkRoot,
+      sourcePath: corpusPath,
+      projectTitle,
+      flagExtensions: input?.extensions,
+      flagCli: input?.cli ?? "opencode",
+      flagLaunch: (input?.launch as "copy" | "run" | undefined) ?? "run",
+      onPhase: (phase, msg) => {
+        input?.onPhase?.(phase as NewWorkspacePhase, msg)
+        input?.onStdout?.(msg + "\n")
+      },
+      onCopyProgress: (phase, curr, total, rel) => {
+        input?.onCopyProgress?.({ phase, curr, total, rel })
+      },
+    })
+
+    if (!onboardingResult.success) {
+      return { exitCode: 1, stdout: "", stderr: "Onboarding failed." } satisfies CliRunResult
+    }
+
+    const cr = onboardingResult.copyResult
+    const summary = cr
+      ? `Imported ${cr.imported} file(s): ${cr.copied} direct, ${cr.mdConverted} MarkItDown, ${cr.ocrConverted} OCR\n`
+      : "Workspace created and onboarded.\n"
+    return { exitCode: 0, stdout: summary, stderr: "" } satisfies CliRunResult
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    tuiLog(`runNew error: ${msg}`)
+    return { exitCode: 1, stdout: "", stderr: msg } satisfies CliRunResult
+  }
+}
+
+// ── Phased onboarding (TUI controls flow between phases) ─────────────────
+
+export async function prepareNew(
+  corpusPath: string,
+  input?: {
+    extensions?: string
+    onPhase?: (phase: NewWorkspacePhase, message: string) => void
+    onStdout?: (chunk: string) => void
+  },
+): Promise<OnboardingContext | null> {
+  tuiLog(`prepareNew corpusPath=${corpusPath}`)
+
+  const frameworkRoot = resolveFrameworkRoot()
+  if (!frameworkRoot) return null
+
+  const wsResult = await createWorkspace({
+    corpusPath,
+    frameworkRoot,
+    extensions: input?.extensions,
+    preferredCli: "opencode",
+    launch: "copy",
+    onProgress: (msg) => {
+      input?.onPhase?.("setup", msg)
+      input?.onStdout?.(msg + "\n")
+    },
+  })
+  if (!wsResult.success) return null
+
+  const projectTitle = path.basename(corpusPath)
+  const prepared = await prepareOnboarding({
+    workspacePath: wsResult.workspacePath,
+    frameworkRoot,
+    sourcePath: corpusPath,
+    projectTitle,
+    flagExtensions: input?.extensions,
+    onPhase: (phase, msg) => {
+      input?.onPhase?.(phase as NewWorkspacePhase, msg)
+      input?.onStdout?.(msg + "\n")
+    },
+  })
+  if ("success" in prepared && !prepared.success) return null
+  return prepared as OnboardingContext
+}
+
+export async function runNewPhase(
+  ctx: OnboardingContext,
+  phase: "direct" | "markitdown" | "ocr",
+  prog?: ProgressEmitter,
+  onLog?: (msg: string) => void,
+): Promise<
+  | { copied: number; skipped: number; failed: number }
+  | { mdConverted: number; mdSkipped: number }
+  | { ocrConverted: number; ocrSkipped: number }
+> {
+  return runImportPhase(ctx, phase, prog, onLog)
+}
+
+export async function completeNew(
+  ctx: OnboardingContext,
+  acc: PhaseAccumulator,
+  input?: {
+    onPhase?: (phase: NewWorkspacePhase, message: string) => void
+    onStdout?: (chunk: string) => void
+  },
+): Promise<OnboardingResult> {
+  return completeOnboarding(ctx, acc, {
+    workspacePath: ctx.workspacePath,
+    frameworkRoot: ctx.frameworkRoot,
+    sourcePath: ctx.sourcePath,
+    projectTitle: ctx.projectTitle,
+    onPhase: (phase, msg) => {
+      input?.onPhase?.(phase as NewWorkspacePhase, msg)
+      input?.onStdout?.(msg + "\n")
+    },
+  })
+}
+
+export async function runStartup(workspacePath: string, input?: { cli?: string; launch?: string }) {
+  tuiLog(`runStartup ws=${workspacePath} cli=${input?.cli ?? "opencode"}`)
+  const frameworkRoot = resolveFrameworkRoot()
+
+  try {
+    const result = await tsRunStartup({
+      workspacePath,
+      frameworkRoot: frameworkRoot ?? "",
+      preferredCli: input?.cli ?? "opencode",
+    })
+    return { exitCode: 0, stdout: result.prompt + "\n", stderr: "" } satisfies CliRunResult
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return { exitCode: 1, stdout: "", stderr: msg } satisfies CliRunResult
+  }
+}
+
+export async function runAdd(
+  workspacePath: string,
+  sourcePath: string,
+  input?: {
+    dir?: boolean
+    extensions?: string
+    cli?: string
+    onStdout?: (chunk: string) => void
+    onStderr?: (chunk: string) => void
+    onSpawn?: (child: ChildProcess) => void
+  },
+) {
+  tuiLog(`runAdd ws=${workspacePath} src=${sourcePath} dir=${input?.dir ?? false}`)
+
+  try {
+    const result = await addFiles({
+      workspacePath,
+      sourcePath,
+      sourceIsDir: input?.dir ?? false,
+      extensions: input?.extensions,
+      onProgress: (msg) => {
+        input?.onStdout?.(msg + "\n")
+      },
+    })
+
+    if (result.success) {
+      return { exitCode: 0, stdout: `Imported ${result.totalTargeted} files.\n`, stderr: "" } satisfies CliRunResult
+    }
+    return { exitCode: 1, stdout: "", stderr: "Add files failed." } satisfies CliRunResult
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return { exitCode: 1, stdout: "", stderr: msg } satisfies CliRunResult
+  }
+}
+
+// ── Still Bash-spawned (not yet ported) ───────────────────────────────────
 
 export async function runCheckStartup(workspacePath: string) {
   const script = path.join(workspacePath, ".bin", "check-startup.sh")
@@ -129,12 +371,8 @@ export async function runCheckStartup(workspacePath: string) {
     })
     let stdout = ""
     let stderr = ""
-    child.stdout?.on("data", (chunk) => {
-      stdout += String(chunk)
-    })
-    child.stderr?.on("data", (chunk) => {
-      stderr += String(chunk)
-    })
+    child.stdout?.on("data", (chunk) => { stdout += String(chunk) })
+    child.stderr?.on("data", (chunk) => { stderr += String(chunk) })
     child.on("close", (code, signal) => {
       resolve({ exitCode: code, stdout, stderr, signal: signal ?? undefined })
     })
@@ -148,53 +386,71 @@ export async function runUpgrade(input?: {
   onStdout?: (chunk: string) => void
   onStderr?: (chunk: string) => void
 }) {
-  return runSpinosa(["upgrade"], {
-    onStdout: input?.onStdout,
-    onStderr: input?.onStderr,
-  })
+  tuiLog("runUpgrade (TS)")
+  try {
+    const result = await upgradeFramework({
+      channel: "stable",
+      yes: true,
+      onPhase: (_phase, msg) => input?.onStdout?.(msg + "\n"),
+    })
+    if (result.success) {
+      input?.onStdout?.(`Upgraded to v${result.newVersion}\n`)
+      return { exitCode: 0, stdout: "", stderr: "" } satisfies CliRunResult
+    }
+    return { exitCode: 1, stdout: "", stderr: "Upgrade failed." } satisfies CliRunResult
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return { exitCode: 1, stdout: "", stderr: msg } satisfies CliRunResult
+  }
 }
 
 export async function runReinstall(input?: {
   onStdout?: (chunk: string) => void
   onStderr?: (chunk: string) => void
 }) {
-  return runSpinosa(
-    ["upgrade", "--reinstall"],
-    {
-      onStdout: input?.onStdout,
-      onStderr: input?.onStderr,
-    },
-  )
+  tuiLog("runReinstall (TS)")
+  try {
+    const result = await upgradeFramework({
+      channel: "stable",
+      reinstall: true,
+      yes: true,
+      onPhase: (_phase, msg) => input?.onStdout?.(msg + "\n"),
+    })
+    if (result.success) {
+      input?.onStdout?.(`Reinstalled v${result.newVersion}\n`)
+      return { exitCode: 0, stdout: "", stderr: "" } satisfies CliRunResult
+    }
+    return { exitCode: 1, stdout: "", stderr: "Reinstall failed." } satisfies CliRunResult
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return { exitCode: 1, stdout: "", stderr: msg } satisfies CliRunResult
+  }
 }
 
 export async function runUpdate(workspacePath: string, input?: {
   onStdout?: (chunk: string) => void
   onStderr?: (chunk: string) => void
 }) {
-  return runSpinosa(["update", "--yes", workspacePath], {
-    cwd: workspacePath,
-    workspacePath,
-    onStdout: input?.onStdout,
-    onStderr: input?.onStderr,
-  })
-}
-
-export async function runNew(
-  corpusPath: string,
-  input?: {
-    extensions?: string
-    cli?: string
-    launch?: string
-    onStdout?: (chunk: string) => void
-    onStderr?: (chunk: string) => void
-  },
-) {
-  const args = ["new", corpusPath, "--no-color", "--cli", input?.cli ?? "opencode", "--launch", input?.launch ?? "run"]
-  if (input?.extensions) args.push("--extensions", input.extensions)
-  return runSpinosa(args, {
-    onStdout: input?.onStdout,
-    onStderr: input?.onStderr,
-  })
+  tuiLog(`runUpdate (TS) ws=${workspacePath}`)
+  const frameworkRoot = resolveFrameworkRoot()
+  if (!frameworkRoot) {
+    return { exitCode: 1, stdout: "", stderr: "Framework root not found." } satisfies CliRunResult
+  }
+  try {
+    const result = await updateWorkspace({
+      workspacePath,
+      frameworkRoot,
+      onPhase: (_phase, msg) => input?.onStdout?.(msg + "\n"),
+    })
+    if (result.success) {
+      input?.onStdout?.(`Update complete: ${result.added} added, ${result.updated} updated, ${result.removed} removed\n`)
+      return { exitCode: 0, stdout: "", stderr: "" } satisfies CliRunResult
+    }
+    return { exitCode: 1, stdout: "", stderr: "Update failed." } satisfies CliRunResult
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return { exitCode: 1, stdout: "", stderr: msg } satisfies CliRunResult
+  }
 }
 
 export async function runSyncAgents(workspacePath: string) {
@@ -214,58 +470,13 @@ export async function runSyncAgents(workspacePath: string) {
     })
     let stdout = ""
     let stderr = ""
-    child.stdout?.on("data", (chunk) => {
-      stdout += String(chunk)
-    })
-    child.stderr?.on("data", (chunk) => {
-      stderr += String(chunk)
-    })
+    child.stdout?.on("data", (chunk) => { stdout += String(chunk) })
+    child.stderr?.on("data", (chunk) => { stderr += String(chunk) })
     child.on("close", (code, signal) => {
       resolve({ exitCode: code, stdout, stderr, signal: signal ?? undefined })
     })
     child.on("error", (error) => {
       resolve({ exitCode: 1, stdout, stderr: error.message })
     })
-  })
-}
-
-export async function runStartup(workspacePath: string, input?: { cli?: string; launch?: string }) {
-  return runSpinosa(
-    ["startup", "--workspace", workspacePath, "--cli", input?.cli ?? "opencode", "--launch", input?.launch ?? "run", "--no-color"],
-    { cwd: workspacePath, workspacePath },
-  )
-}
-
-export async function runAdd(
-  workspacePath: string,
-  sourcePath: string,
-  input?: {
-    dir?: boolean
-    extensions?: string
-    cli?: string
-    onStdout?: (chunk: string) => void
-    onStderr?: (chunk: string) => void
-    onSpawn?: (child: ChildProcess) => void
-  },
-) {
-  const args = [
-    "add",
-    "--workspace",
-    workspacePath,
-    input?.dir ? "--dir" : "--file",
-    sourcePath,
-    "--no-color",
-    "--cli",
-    input?.cli ?? "opencode",
-    "--launch",
-    "copy",
-  ]
-  if (input?.extensions) args.push("--extensions", input.extensions)
-  return runSpinosa(args, {
-    cwd: workspacePath,
-    workspacePath,
-    onStdout: input?.onStdout,
-    onStderr: input?.onStderr,
-    onSpawn: input?.onSpawn,
   })
 }

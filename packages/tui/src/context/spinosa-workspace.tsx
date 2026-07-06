@@ -1,10 +1,13 @@
-import { createSignal, createResource } from "solid-js"
+import { createEffect, createSignal, createResource } from "solid-js"
 import { createSimpleContext } from "./helper"
 import { useKV } from "./kv"
 import { useRoute } from "./route"
 import { useTuiPaths } from "./runtime"
+import { useDialog } from "../ui/dialog"
+import { DialogWorkspaceUnavailable } from "../component/dialog-workspace-unavailable"
 import type { PromptInfo } from "../prompt/history"
 import {
+  resolveSpinosaEntryRoute,
   routeForSetupStatus,
   SPINOSA_ACTIVE_WORKSPACE_KV,
   SPINOSA_GENERIC_MODE_KV,
@@ -21,6 +24,7 @@ export const { use: useSpinosaWorkspace, provider: SpinosaWorkspaceProvider } = 
     const kv = useKV()
     const route = useRoute()
     const paths = useTuiPaths()
+    const dialog = useDialog()
     const cwdWorkspace = isSpinosaWorkspace(paths.cwd) ? paths.cwd : undefined
     const [activePath, setActivePath] = createSignal<string | undefined>(cwdWorkspace)
     const [genericMode, setGenericMode] = createSignal(false)
@@ -30,6 +34,22 @@ export const { use: useSpinosaWorkspace, provider: SpinosaWorkspaceProvider } = 
     const [meta, { refetch: refetchMeta }] = createResource(activePath, async (workspacePath) => {
       if (!workspacePath || !isSpinosaWorkspace(workspacePath)) return undefined
       return readWorkspaceMeta(workspacePath)
+    })
+
+    const [startupRoute] = createResource(
+      () => "startup",
+      async () => {
+        const storedPath = kv.get(SPINOSA_ACTIVE_WORKSPACE_KV) as string | undefined
+        return resolveSpinosaEntryRoute({
+          cwd: paths.cwd,
+          kvActivePath: storedPath,
+          skipPicker: false,
+        })
+      },
+    )
+    createEffect(() => {
+      const r = startupRoute()
+      if (r) route.navigate(r)
     })
 
     const openWorkspace = async (workspacePath: string) => {
@@ -42,7 +62,9 @@ export const { use: useSpinosaWorkspace, provider: SpinosaWorkspaceProvider } = 
       setPickerRequested(false)
       const loaded = await readWorkspaceMeta(workspacePath)
       if (!loaded) {
-        route.navigate({ type: "workspace" })
+        dialog.replace(() => (
+          <DialogWorkspaceUnavailable onRestore={() => { showPicker(); return true }} />
+        ))
         return
       }
       route.navigate(routeForSetupStatus(loaded.setupStatus))
