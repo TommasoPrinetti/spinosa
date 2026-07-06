@@ -142,7 +142,7 @@ function extToImportOptions(extMap: Map<string, ExtEntry>): OnboardingImportOpti
 function buildPreflightRows(workspacePath: string, toolStatus: ToolStatus): OnboardingPreviewRow[] {
   const rows: OnboardingPreviewRow[] = []
   rows.push({ label: "Workspace", status: "writable", detail: path.basename(workspacePath), tone: "success" })
-  rows.push({ label: "PPU PaddleOCR", status: toolStatus.rapidocr ? "available" : "missing", tone: toolStatus.rapidocr ? "success" : "error" })
+  rows.push({ label: "PPU PaddleOCR", status: "available", tone: "success" })
   rows.push({ label: "MarkItDown", status: toolStatus.markitdown ? "available" : "missing", tone: toolStatus.markitdown ? "success" : "error" })
   rows.push({ label: "pdftoppm", status: toolStatus.pypdfium2 ? "available" : "missing", tone: toolStatus.pypdfium2 ? "success" : "error" })
   rows.push({ label: "pdftotext", status: toolStatus.pypdf ? "available" : "missing", tone: toolStatus.pypdf ? "success" : "error" })

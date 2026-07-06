@@ -13,6 +13,7 @@ startup-prompt.md	framework	replace_if_unmodified
 .bin/startup-prompt.md	framework	replace_if_unmodified
 .bin/spinosa	framework	replace_if_unmodified
 packages/spinosa-core/	framework	replace_if_unmodified
+bun.lock	framework	replace_if_unmodified
 .bin/lib/spinosa/	framework	replace_if_unmodified
 .bin/lib/markitdown-cli.py	framework	replace_if_unmodified
 .bin/lib/rapidocr-cli.py	framework	replace_if_unmodified
