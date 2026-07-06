@@ -94,11 +94,16 @@ async function ppuService(onLog?: (line: string) => void): Promise<PaddleOcrServ
     servicePromise = (async () => {
       onLog?.("PPU PaddleOCR: loading models...")
       try {
+        onLog?.("PPU PaddleOCR: step 1 - dynamic import...")
         const { PaddleOcrService: OcrService } = await import("ppu-paddle-ocr")
+        onLog?.("PPU PaddleOCR: step 2 - import OK, constructing...")
         const service = new OcrService({ processing: { engine: "canvas-native" } })
+        onLog?.("PPU PaddleOCR: step 3 - constructed, initializing...")
         await service.initialize()
+        onLog?.("PPU PaddleOCR: step 4 - ready")
         return service
       } catch (err) {
+        onLog?.(`PPU PaddleOCR: FAILED at ${err instanceof Error ? err.name : "unknown"} — ${err instanceof Error ? err.message : String(err)}`)
         servicePromise = undefined
         throw err
       }
