@@ -1397,19 +1397,18 @@ export function Prompt(props: PromptProps) {
         ? (local.agent.list().find((a) => a.name === lastUserMessage()?.agent) ?? local.agent.current())
         : local.agent.current()
     const color = agent ? local.agent.color(agent.name) : theme.border
+    const ifactor = theme.inactiveFactor ?? 0.6
     return {
       frames: createFrames({
         color,
         style: "blocks",
-        inactiveFactor: 0.6,
-        // enableFading: false,
+        inactiveFactor: ifactor,
         minAlpha: 0.3,
       }),
       color: createColors({
         color,
         style: "blocks",
-        inactiveFactor: 0.6,
-        // enableFading: false,
+        inactiveFactor: ifactor,
         minAlpha: 0.3,
       }),
     }

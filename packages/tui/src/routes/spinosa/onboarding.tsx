@@ -1,11 +1,12 @@
 import { existsSync } from "node:fs"
 import { TextareaRenderable } from "@opentui/core"
-import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show } from "solid-js"
 import { useTheme } from "../../context/theme"
 import { useRoute } from "../../context/route"
 import { useSpinosaWorkspace } from "../../context/spinosa-workspace"
 import { Toast } from "../../ui/toast"
-import { runNew, runReinstall, runStartup } from "../../spinosa/cli-bridge"
+import { ProgressEmitter } from "@opencode-ai/spinosa-core/progress/progress"
+import { PHASES, prepareNew, runNewPhase, completeNew, runReinstall, runStartup, type NewWorkspacePhase } from "../../spinosa/cli-bridge"
 import { readStartupPrompt, writePreferredCli } from "../../spinosa/service"
 import { CenteredColumn } from "../../component/centered-column"
 import { OPENCODE_BASE_MODE, useOpencodeKeymap, useOpencodeModeStack } from "../../keymap"
@@ -19,6 +20,8 @@ import {
   type NewWorkspacePreview,
 } from "../../spinosa/onboarding-preview"
 import {
+  blurIfFocused,
+  createWorkflowGuard,
   deferPress,
   delay,
   generateScanLines,
@@ -34,7 +37,7 @@ import {
   yieldToEventLoop,
 } from "./wizard-ui"
 
-type WizardStep = "path" | "tools" | "scan" | "imports" | "processing" | "provider" | "done" | "error"
+type WizardStep = "path" | "tools" | "scan" | "imports" | "setup" | "direct" | "markitdown" | "ocr" | "verification" | "provider" | "done" | "error"
 
 type ToolCheckResult = {
   label: string
@@ -50,7 +53,6 @@ type CliOption = {
 
 type SourcePathEntry = {
   id: number
-  path: string
 }
 
 let nextSourceId = 1
@@ -88,7 +90,7 @@ export function Onboarding() {
   const modeStack = useOpencodeModeStack()
 
   const [step, setStep] = createSignal<WizardStep>("path")
-  const [sourcePaths, setSourcePaths] = createSignal<SourcePathEntry[]>([{ id: 0, path: "" }])
+  const [sourcePaths, setSourcePaths] = createSignal<SourcePathEntry[]>([{ id: 0 }])
   const [logLines, setLogLines] = createSignal<string[]>([])
   const [createdWorkspace, setCreatedWorkspace] = createSignal<string | undefined>()
   const [busy, setBusy] = createSignal(false)
@@ -102,12 +104,19 @@ export function Onboarding() {
   const [scanProgress, setScanProgress] = createSignal(0)
   const [scanTotal, setScanTotal] = createSignal(0)
   const [processingDone, setProcessingDone] = createSignal(false)
+  const [processingStatus, setProcessingStatus] = createSignal("")
+  const SPINNER_FRAMES = ["|", "/", "—", "\\"]
+  const [spinIdx, setSpinIdx] = createSignal(0)
+  let spinTimer: ReturnType<typeof setInterval> | undefined
+  const spinOn = () => { if (!spinTimer) spinTimer = setInterval(() => setSpinIdx((i) => (i + 1) % 4), 200) }
+  const spinOff = () => { if (spinTimer) { clearInterval(spinTimer); spinTimer = undefined; setSpinIdx(0) } }
   const [gateLabel, setGateLabel] = createSignal("")
   const [gateAction, setGateAction] = createSignal<() => void>(() => {})
   const [waitingForGate, setWaitingForGate] = createSignal(false)
   let abortProcessing = false
+  let gateResolve: (() => void) | undefined
   let sourceInput: TextareaRenderable | undefined
-  const sourceInputs = new Map<number, TextareaRenderable>()
+  let pendingPaths: string[] | undefined
 
   const selectedExtensions = createMemo(() =>
     importOptions()
@@ -115,14 +124,18 @@ export function Onboarding() {
       .map((item) => item.ext),
   )
 
-  const totalSteps = 6
+  const totalSteps = 10
   const stepIndex = createMemo(() => {
     if (step() === "path") return 1
     if (step() === "tools") return 2
     if (step() === "scan") return 3
     if (step() === "imports") return 4
-    if (step() === "processing") return 5
-    if (step() === "provider") return 6
+    if (step() === "setup") return 5
+    if (step() === "direct") return 6
+    if (step() === "markitdown") return 7
+    if (step() === "ocr") return 8
+    if (step() === "verification") return 9
+    if (step() === "provider") return 10
     if (step() === "done") return totalSteps
     return totalSteps
   })
@@ -144,6 +157,11 @@ export function Onboarding() {
 
   const clearLog = () => setLogLines([])
 
+  const applyProcessingPhase = (phase: NewWorkspacePhase) => {
+    if (phase === "setup") { clearLog(); setStep("setup"); return }
+    if (phase === "verification") { clearLog(); setStep("verification"); return }
+  }
+
   const focusSourceInput = () => {
     queueMicrotask(() => {
       if (!sourceInput || sourceInput.isDestroyed) return
@@ -164,36 +182,95 @@ export function Onboarding() {
   const addSourcePath = () => {
     const id = nextSourceId++
     const nextIndex = sourcePaths().length
-    setSourcePaths((prev) => [...prev, { id, path: "" }])
+    setSourcePaths((prev) => [...prev, { id }])
     setFocusedSource(nextIndex)
     focusSourceEntry(id)
   }
 
   const removeSourcePath = (id: number) => {
-    setSourcePaths((prev) => (prev.length > 1 ? prev.filter((e) => e.id !== id) : prev))
+    setSourcePaths((prev) => {
+      if (prev.length <= 1) return prev
+      pathSnapshot.delete(id)
+      sourceInputs.delete(id)
+      return prev.filter((e) => e.id !== id)
+    })
   }
 
-  const setSourcePathAt = (id: number, value: string) => {
-    setSourcePaths((prev) => prev.map((e) => (e.id === id ? { ...e, path: value } : e)))
+  const workflow = createWorkflowGuard()
+  const pathSnapshot = new Map<number, string>()
+  const sourceInputs = new Map<number, TextareaRenderable>()
+
+  const readPathText = (id: number) => {
+    const live = sourceInputs.get(id)?.plainText?.trim()
+    if (live) return live
+    return pathSnapshot.get(id)?.trim() ?? ""
   }
 
-  const allPathsResolved: () => string[] = () => {
-    return sourcePaths()
-      .map((e) => e.path.trim())
+  const snapshotSourcePaths = () => {
+    for (const entry of sourcePaths()) {
+      const text = sourceInputs.get(entry.id)?.plainText ?? pathSnapshot.get(entry.id) ?? ""
+      pathSnapshot.set(entry.id, text)
+    }
+  }
+
+  const blurSourceInputs = () => {
+    for (const input of sourceInputs.values()) blurIfFocused(input)
+    blurIfFocused(sourceInput)
+  }
+
+  onCleanup(() => {})
+
+  const sourceInputFocused = () => focusedSourceIndex() >= 0
+
+  const focusedSourceIndex = () => {
+    const paths = sourcePaths()
+    for (let i = 0; i < paths.length; i++) {
+      const input = sourceInputs.get(paths[i]!.id)
+      if (input && !input.isDestroyed && input.focused) return i
+    }
+    return -1
+  }
+
+  const cycleFocusedSource = (offset: number) => {
+    const paths = sourcePaths()
+    const current = focusedSourceIndex()
+    if (current < 0 || paths.length === 0) return
+    const next = (current + offset + paths.length) % paths.length
+    setFocusedSource(next)
+    const entry = paths[next]
+    if (entry) focusSourceEntry(entry.id)
+  }
+
+  const allPathsResolved = () =>
+    sourcePaths()
+      .map((e) => readPathText(e.id))
       .filter(Boolean)
       .map((p) => resolveUserPath(p))
       .filter((p): p is string => Boolean(p))
-  }
 
   const goHome = () => navigate({ type: "workspace" })
-  const leavePathStep = () => navigate({ type: "workspace-picker" })
+  const leavePathStep = () => {
+    goHome()
+  }
+
+  const handleBackPress = () => {
+    if (step() === "path") leavePathStep()
+    else moveBack()
+  }
+
+  const stopActiveWork = () => {
+    if (gateResolve) { gateResolve(); gateResolve = undefined }
+    abortProcessing = true
+    setBusy(false)
+    setWaitingForGate(false)
+  }
 
   const moveBack = () => {
-    setWaitingForGate(false)
+    stopActiveWork()
     if (step() === "tools") { setStep("path"); return }
     if (step() === "scan") { setStep("path"); return }
     if (step() === "imports") { setStep("scan"); return }
-    if (step() === "processing") { setStep("imports"); return }
+    if (step() === "setup" || step() === "direct" || step() === "markitdown" || step() === "ocr" || step() === "verification") { setStep("imports"); return }
     if (step() === "provider") {
       setGateLabel("Choose provider")
       setGateAction(() => () => {
@@ -201,7 +278,7 @@ export function Onboarding() {
         setStep("provider")
       })
       setWaitingForGate(true)
-      setStep("processing")
+      setStep("verification")
       return
     }
     if (step() === "error") {
@@ -216,10 +293,10 @@ export function Onboarding() {
   }
 
   const generateToolCheckLines = (): ToolCheckResult[] => [
-    { label: "RapidOCR", status: "checking", detail: "scanned PDFs and images" },
+    { label: "PPU PaddleOCR", status: "checking", detail: "scanned PDFs and images" },
     { label: "MarkItDown", status: "checking", detail: "Office docs, EPUB, HTML, text PDFs" },
-    { label: "pypdfium2", status: "checking", detail: "scanned PDF rendering" },
-    { label: "pypdf", status: "checking", detail: "text PDF splitting" },
+    { label: "pdftoppm", status: "checking", detail: "scanned PDF page rendering" },
+    { label: "pdftotext", status: "checking", detail: "text PDF splitting" },
   ]
 
   const runToolCheck = async () => {
@@ -240,10 +317,10 @@ export function Onboarding() {
     const llmTools = detectLlmTools()
 
     const results: ToolCheckResult[] = [
-      { label: "RapidOCR", status: toolStatus.rapidocr ? "available" : "missing", detail: "scanned PDFs and images" },
+      { label: "PPU PaddleOCR", status: toolStatus.rapidocr ? "available" : "missing", detail: "scanned PDFs and images" },
       { label: "MarkItDown", status: toolStatus.markitdown ? "available" : "missing", detail: "Office docs, EPUB, HTML, text PDFs" },
-      { label: "pypdfium2", status: toolStatus.pypdfium2 ? "available" : "missing", detail: "scanned PDF rendering" },
-      { label: "pypdf", status: toolStatus.pypdf ? "available" : "missing", detail: "text PDF splitting" },
+      { label: "pdftoppm", status: toolStatus.pypdfium2 ? "available" : "missing", detail: "scanned PDF page rendering" },
+      { label: "pdftotext", status: toolStatus.pypdf ? "available" : "missing", detail: "text PDF splitting" },
     ]
     setToolChecks(results)
 
@@ -282,14 +359,14 @@ export function Onboarding() {
     setGateLabel("Start scanning")
     setGateAction(() => () => {
       setWaitingForGate(false)
-      startScan()
+      void startScan()
     })
     setWaitingForGate(true)
   }
 
   const startScan = async () => {
-    const resolved = allPathsResolved()
-    if (resolved.length === 0) { setStep("error"); return }
+    const resolved = pendingPaths
+    if (!resolved || resolved.length === 0) { setStep("error"); return }
     clearLog()
     setStep("scan")
     await yieldToEventLoop()
@@ -344,6 +421,7 @@ export function Onboarding() {
 
   const continueFromPath = async () => {
     if (busy()) return
+    snapshotSourcePaths()
     const resolved = allPathsResolved()
     if (resolved.length === 0) {
       appendLogLine("At least one valid source path is required.")
@@ -357,6 +435,8 @@ export function Onboarding() {
         return
       }
     }
+    // Save resolved paths — textarea will be unmounted when step leaves "path"
+    pendingPaths = resolved
     await runToolCheck()
   }
 
@@ -369,22 +449,29 @@ export function Onboarding() {
     startProcessing()
   }
 
+  const gate = () => new Promise<void>((resolve) => {
+    gateResolve = resolve
+    setGateLabel("Continue")
+    setGateAction(() => () => { setWaitingForGate(false); gateResolve = undefined; resolve() })
+    setWaitingForGate(true)
+  })
+
   const startProcessing = async () => {
     if (busy()) return
-    setBusy(true)
-    clearLog()
-    setStep("processing")
-    setProcessingDone(false)
-    abortProcessing = false
-    await yieldToEventLoop()
-
-    const resolved = allPathsResolved()
-    if (resolved.length === 0) {
+    const resolved = pendingPaths
+    if (!resolved || resolved.length === 0) {
       appendLogLine("At least one valid source path is required.")
-      setBusy(false)
       setStep("error")
       return
     }
+    setBusy(true)
+    clearLog()
+    setStep("setup")
+    setProcessingDone(false)
+    abortProcessing = false
+    gateResolve = undefined
+    spinOn()
+    await yieldToEventLoop()
 
     const extensions = selectedExtensions().join(",")
 
@@ -392,43 +479,79 @@ export function Onboarding() {
     const plannedWorkspace = preview()?.workspacePath ?? suggestWorkspacePath(primarySource)
     if (plannedWorkspace) setCreatedWorkspace(plannedWorkspace)
 
-    appendLogLine("Starting workspace creation and import...")
-    appendLogLine("")
+    try {
+      const onStdout = (chunk: string) => {
+        const lines = stripAnsi(chunk).split(/\r?\n/g).map(l => l.trim()).filter(Boolean)
+        for (const raw of lines) appendLogLine(raw)
+      }
 
-    let sawStartupPrompt = false
-    const result = await runNew(primarySource, {
-      extensions,
-      cli: "opencode",
-      launch: "copy",
-      onStdout: (chunk) => {
-        const raw = stripAnsi(chunk)
-        if (!raw) return
-        if (sawStartupPrompt) return
-        if (raw.includes("[3/3] Startup prompt")) { sawStartupPrompt = true; return }
-        appendLogLine(raw)
-      },
-      onStderr: (chunk) => {
-        const raw = stripAnsi(chunk)
-        if (raw) appendLogLine(raw)
-      },
-    })
+      // Phase A: Prepare (creates workspace, scans, validates tools)
+      const ctx = await prepareNew(primarySource, {
+        extensions,
+        onPhase: (phase) => { applyProcessingPhase(phase) },
+        onStdout,
+      })
+      if (!ctx) { setStep("error"); return }
+      setCreatedWorkspace(ctx.workspacePath)
 
-    const workspacePath = plannedWorkspace
-    if (result.exitCode === 0 && workspacePath) {
-      setProcessingDone(true)
-      setGateLabel("Choose provider")
-      setGateAction(() => () => { setWaitingForGate(false); setStep("provider") })
-      setWaitingForGate(true)
-    } else if (result.exitCode === 0) {
-      setProcessingDone(true)
-      setGateLabel("Choose provider")
-      setGateAction(() => () => { setWaitingForGate(false); setStep("provider") })
-      setWaitingForGate(true)
-      appendLogLine("Workspace created. You may need to open it from the workspace picker.")
-    } else {
+      // Phase B: Import phases (direct → markitdown → OCR)
+      const sharedProg = new ProgressEmitter()
+
+      const onPhaseLog = (msg: string) => {
+        if (msg.startsWith("  ")) { setProcessingStatus(msg.trim()); return }
+        appendLogLine(msg)
+      }
+
+      // Phase B1: Direct copy
+      setStep("direct")
+      setProcessingStatus("")
+      clearLog()
+      appendLogLine("Starting direct copy...")
+      const dr: any = await runNewPhase(ctx, PHASES.DIRECT_COPY, sharedProg, onPhaseLog)
+      appendLogLine(`✓ Direct copy done (${(dr as any).copied ?? "?"} copied, ${(dr as any).skipped ?? "?"} skipped, ${(dr as any).failed ?? "?"} failed)`)
+      if (abortProcessing) { setStep("imports"); return }
+      await gate()
+
+      // Phase B2: MarkItDown
+      setStep("markitdown")
+      setProcessingStatus("")
+      clearLog()
+      appendLogLine("Starting MarkItDown conversion...")
+      const mr: any = await runNewPhase(ctx, PHASES.MARKITDOWN, sharedProg, onPhaseLog)
+      appendLogLine(`✓ MarkItDown done (${(mr as any).mdConverted ?? "?"} converted, ${(mr as any).mdSkipped ?? "?"} skipped)`)
+      if (abortProcessing) { setStep("imports"); return }
+      await gate()
+
+      // Phase B3: OCR
+      setStep("ocr")
+      setProcessingStatus("")
+      clearLog()
+      appendLogLine("Starting OCR...")
+      const or: any = await runNewPhase(ctx, PHASES.OCR, sharedProg, onPhaseLog)
+      appendLogLine(`✓ OCR done (${(or as any).ocrConverted ?? "?"} converted, ${(or as any).ocrSkipped ?? "?"} skipped)`)
+      if (abortProcessing) { setStep("imports"); return }
+
+      // Phase C: Finalize (verification, CLI, prompt, summary)
+      const result = await completeNew(ctx, { direct: dr, markitdown: mr, ocr: or }, {
+        onPhase: (phase) => { applyProcessingPhase(phase) },
+        onStdout,
+      })
+
+      if (result.success) {
+        setProcessingDone(true)
+        setGateLabel("PROCEED")
+        setGateAction(() => () => { setWaitingForGate(false); setStep("provider") })
+        setWaitingForGate(true)
+      } else {
+        setStep("error")
+      }
+    } catch (err) {
+      appendLogLine(`Error: ${err instanceof Error ? err.message : String(err)}`)
       setStep("error")
+    } finally {
+      spinOff()
+      setBusy(false)
     }
-    setBusy(false)
   }
 
   const finishProvider = async (cliValue: string) => {
@@ -442,8 +565,7 @@ export function Onboarding() {
       if (workspacePath) {
         const prompt = await readStartupPrompt(workspacePath)
         spinosa.queuePrompt({
-          input:
-            prompt ?? "Run Spinosa startup indexing for this workspace. Follow startup-prompt.md: survey corpus, batch mapper extraction, write maps, validate, and set setup_status to workspace_started.",
+          input: prompt ?? "Error: startup-prompt.md not found. Run the startup indexing workflow manually.",
           parts: [],
           autoSubmit: true,
         })
@@ -479,64 +601,61 @@ export function Onboarding() {
 
   onMount(() => {
     focusSourceInput()
-    const off = keymap.intercept("key", ({ event }) => {
+    const off = keymap.intercept("key", ({ event, consume }) => {
       if (modeStack.current() !== OPENCODE_BASE_MODE) return
-      if (busy()) return
       setHoveredButton(null)
 
-      if (event.ctrl && event.name === "c") {
-        if (step() === "path") {
-          leavePathStep()
-        } else {
-          moveBack()
-        }
-        return true
+      if ((event.ctrl && event.name === "c") || event.name === "escape") {
+        if (step() === "path") leavePathStep()
+        else moveBack()
+        consume(); return
       }
 
-      if (event.name === "escape") {
-        if (step() === "path") {
-          leavePathStep()
-        } else {
-          moveBack()
-        }
-        return true
-      }
+      if (busy()) return
 
-      if (
-        waitingForGate() &&
-        (step() === "tools" || step() === "scan" || step() === "processing") &&
-        event.name === "return"
-      ) {
+      if (waitingForGate() && (step() === "tools" || step() === "scan" || step() === "setup" || step() === "direct" || step() === "markitdown" || step() === "ocr" || step() === "verification") && event.name === "return") {
         gateAction()()
-        return true
+        consume(); return
       }
 
       if (step() === "path") {
         const pathsLen = sourcePaths().length
-        if (event.name === "up" || event.name === "k") {
-          setFocusedSource((v) => Math.max(0, v - 1))
-          return true
-        }
-        if (event.name === "down" || event.name === "j") {
-          setFocusedSource((v) => Math.min(pathsLen + 2, v + 1))
-          return true
-        }
-        if (event.name === "return") {
-          const focus = focusedSource()
-          if (focus < pathsLen) {
-            const entry = sourcePaths()[focus]
-            if (entry) {
-              const el = sourceInputs.get(entry.id)
-              if (el && !el.isDestroyed) el.focus()
-            }
-          } else if (focus === pathsLen) {
-            addSourcePath()
-          } else if (focus === pathsLen + 1) {
-            leavePathStep()
-          } else {
-            void continueFromPath()
+        const editingIndex = focusedSourceIndex()
+
+        if (editingIndex >= 0) {
+          if (event.name === "up" || event.name === "k") {
+            cycleFocusedSource(-1)
+            consume(); return
           }
-          return true
+          if (event.name === "down" || event.name === "j") {
+            cycleFocusedSource(1)
+            consume(); return
+          }
+        }
+
+        if (!sourceInputFocused()) {
+          if (event.name === "up" || event.name === "k") {
+            setFocusedSource((v) => Math.max(0, v - 1))
+            consume(); return
+          }
+          if (event.name === "down" || event.name === "j") {
+            setFocusedSource((v) => Math.min(pathsLen + 2, v + 1))
+            consume(); return
+          }
+          if (event.name === "return") {
+            const focus = focusedSource()
+            if (focus < pathsLen) {
+              const entry = sourcePaths()[focus]
+              if (entry) focusSourceEntry(entry.id)
+            } else if (focus === pathsLen) {
+              addSourcePath()
+            } else if (focus === pathsLen + 1) {
+              leavePathStep()
+            } else {
+              void continueFromPath()
+            }
+            consume(); return
+          }
         }
       }
 
@@ -544,11 +663,11 @@ export function Onboarding() {
         const listLength = importOptions().length + 1
         if (event.name === "up" || event.name === "k") {
           setSelectedImport((value) => Math.max(0, value - 1))
-          return true
+          consume(); return
         }
         if (event.name === "down" || event.name === "j") {
           setSelectedImport((value) => Math.min(listLength - 1, value + 1))
-          return true
+          consume(); return
         }
         if (event.name === "space") {
           if (selectedImport() === 0) {
@@ -556,49 +675,58 @@ export function Onboarding() {
           } else {
             toggleImport(selectedImport() - 1)
           }
-          return true
+          consume(); return
         }
         if (event.name === "a") {
           toggleAllImports()
-          return true
+          consume(); return
         }
         if (event.name === "return") {
           continueFromImports()
-          return true
+          consume(); return
         }
       }
 
       if (step() === "provider") {
         if (event.name === "up" || event.name === "k") {
           setSelectedCli((value) => Math.max(0, value - 1))
-          return true
+          consume(); return
         }
         if (event.name === "down" || event.name === "j") {
           setSelectedCli((value) => Math.min(CLI_OPTIONS.length - 1, value + 1))
-          return true
+          consume(); return
         }
         if (event.name === "return") {
           void finishProvider(CLI_OPTIONS[selectedCli()]!.value)
-          return true
+          consume(); return
         }
       }
 
       if (step() === "done" && event.name === "return") {
         void finish()
-        return true
+        consume(); return
       }
 
       if (step() === "error" && event.name === "return") {
         moveBack()
-        return true
+        consume(); return
       }
     })
-    onCleanup(off)
+    onCleanup(() => {
+      stopActiveWork()
+      off()
+    })
   })
 
-  createEffect(() => {
-    if (step() === "path") focusSourceInput()
-  })
+  createEffect(
+    on(
+      step,
+      (current, previous) => {
+        if (current === "path" && current !== previous) focusSourceInput()
+      },
+      { defer: true },
+    ),
+  )
 
   return (
     <CenteredColumn>
@@ -612,14 +740,12 @@ export function Onboarding() {
               paddingTop={0}
               paddingBottom={0}
               backgroundColor={buttonBackground(theme, hoveredButton() === "back")}
-              onMouseOver={() => setHoveredButton("back")}
+              onMouseOver={() => {
+                blurSourceInputs()
+                setHoveredButton("back")
+              }}
               onMouseOut={() => setHoveredButton(null)}
-              onMouseDown={() =>
-                deferPress(() => {
-                  if (step() === "path") leavePathStep()
-                  else moveBack()
-                })
-              }
+              onMouseDown={() => deferPress(handleBackPress)}
             >
               <text fg={buttonText(theme, hoveredButton() === "back", theme.text)}>←</text>
             </box>
@@ -633,7 +759,7 @@ export function Onboarding() {
             {step() === "tools" ? " — checking document tools" : ""}
             {step() === "scan" ? " — scanning source" : ""}
             {step() === "imports" ? " — choose file types to import" : ""}
-            {step() === "processing" ? " — importing files" : ""}
+            {step() === "setup" ? " — setting up workspace" : step() === "direct" ? " — direct copy" : step() === "markitdown" ? " — MarkItDown" : step() === "ocr" ? " — OCR" : step() === "verification" ? " — verification" : ""}
             {step() === "provider" ? " — choose LLM provider" : ""}
             {step() === "done" ? " — workspace ready" : ""}
             {step() === "error" ? " — fix the issue and retry" : ""}
@@ -660,33 +786,38 @@ export function Onboarding() {
                       border={focusedSource() === index() ? ["left"] : []}
                       borderColor={theme.borderActive}
                     >
-                      <textarea
-                        ref={(value: TextareaRenderable) => {
-                          sourceInputs.set(entry.id, value)
-                          if (index() === 0) sourceInput = value
-                          value.traits = { status: "PATH" }
-                        }}
-                        initialValue={entry.path}
-                        placeholder="Paste the corpus folder path"
-                        placeholderColor={theme.textMuted}
-                        textColor={theme.text}
-                        focusedTextColor={theme.text}
-                        cursorColor={theme.primary}
-                        minHeight={1}
-                        maxHeight={1}
+                      <box
                         flexGrow={1}
-                        onContentChange={() => {
-                          const el = sourceInputs.get(entry.id)
-                          setSourcePathAt(entry.id, el?.plainText ?? "")
+                        onMouseDown={() => {
+                          setFocusedSource(index())
+                          focusSourceEntry(entry.id)
                         }}
-                        onSubmit={() => {}}
-                      />
+                      >
+                        <textarea
+                          ref={(value: TextareaRenderable) => {
+                            sourceInputs.set(entry.id, value)
+                            if (index() === 0) sourceInput = value
+                            value.traits = { status: "PATH" }
+                          }}
+                          initialValue={pathSnapshot.get(entry.id) ?? ""}
+                          placeholder="Paste the corpus folder path"
+                          placeholderColor={theme.textMuted}
+                          textColor={theme.text}
+                          focusedTextColor={theme.text}
+                          cursorColor={theme.primary}
+                          minHeight={1}
+                          maxHeight={1}
+                          flexGrow={1}
+                          onSubmit={() => {}}
+                        />
+                      </box>
                       <box
                         paddingLeft={1}
                         paddingRight={1}
                         paddingTop={0}
                         paddingBottom={0}
                         backgroundColor={theme.backgroundPanel}
+                        onMouseOver={() => blurSourceInputs()}
                         onMouseDown={() => deferPress(() => removeSourcePath(entry.id))}
                       >
                         <text fg={theme.textMuted}>✕</text>
@@ -703,7 +834,10 @@ export function Onboarding() {
                 backgroundColor={buttonBackground(theme, focusedSource() === sourcePaths().length)}
                 border={focusedSource() === sourcePaths().length ? ["left"] : []}
                 borderColor={buttonBorder(theme, focusedSource() === sourcePaths().length, theme.borderActive)}
-                onMouseOver={() => setFocusedSource(sourcePaths().length)}
+                onMouseOver={() => {
+                  blurSourceInputs()
+                  setFocusedSource(sourcePaths().length)
+                }}
                 onMouseDown={() => deferPress(addSourcePath)}
               >
                 <text fg={buttonText(theme, focusedSource() === sourcePaths().length, theme.primary)}>
@@ -716,6 +850,10 @@ export function Onboarding() {
                 theme={theme}
                 label="Back"
                 primary={focusedSource() === sourcePaths().length + 1}
+                onHover={() => {
+                  blurSourceInputs()
+                  setFocusedSource(sourcePaths().length + 1)
+                }}
                 onPress={leavePathStep}
               />
               <box flexGrow={1} />
@@ -723,25 +861,37 @@ export function Onboarding() {
                 theme={theme}
                 label="Continue"
                 primary={focusedSource() === sourcePaths().length + 2}
+                onHover={() => {
+                  blurSourceInputs()
+                  setFocusedSource(sourcePaths().length + 2)
+                }}
                 onPress={() => void continueFromPath()}
               />
             </WizardActionRow>
           </Show>
 
-          <Show when={step() === "tools" || step() === "scan" || step() === "processing"}>
+          <Show when={step() === "tools" || step() === "scan" || step() === "setup" || step() === "direct" || step() === "markitdown" || step() === "ocr" || step() === "verification"}>
             <WizardPanel theme={theme}>
               <Show when={step() === "tools"}>
                 <text fg={theme.textMuted}>Checking document processing tools...</text>
+                <LogScrollbox theme={theme} lines={logLines()} />
               </Show>
               <Show when={step() === "scan"}>
                 <text fg={theme.textMuted}>
                   {scanProgress() > 0 ? `Scanning... (${scanProgress()}/${scanTotal()})` : "Reading source folder..."}
                 </text>
+                <LogScrollbox theme={theme} lines={logLines()} />
               </Show>
-              <Show when={step() === "processing" && !processingDone()}>
-                <text fg={theme.textMuted}>Creating workspace and importing files...</text>
+              <Show when={step() === "setup" || step() === "direct" || step() === "markitdown" || step() === "ocr" || step() === "verification"}>
+                <text fg={theme.textMuted}>
+                  {!processingDone() ? `${SPINNER_FRAMES[spinIdx()]} ` : ""}
+                  {step() === "setup" ? "Creating workspace..." : step() === "direct" ? "Direct copy" : step() === "markitdown" ? "MarkItDown conversion" : step() === "ocr" ? "OCR processing" : step() === "verification" ? "Verifying import..." : "All done"}
+                </text>
+                <Show when={processingStatus() !== ""}>
+                  <text fg={theme.textMuted}>  {processingStatus()}</text>
+                </Show>
+                <LogScrollbox theme={theme} lines={logLines()} />
               </Show>
-              <LogScrollbox theme={theme} lines={logLines()} />
             </WizardPanel>
             <WizardActionRow>
               <WizardActionButton theme={theme} label="Back" onPress={moveBack} />
@@ -870,14 +1020,6 @@ export function Onboarding() {
                 <WizardActionButton theme={theme} label="Back" onPress={moveBack} />
                 <box flexGrow={1} />
                 <WizardActionButton theme={theme} label="Retry" primary onPress={() => void continueFromPath()} />
-              </Show>
-            </WizardActionRow>
-          </Show>
-
-          <Show when={step() === "processing" && processingDone()}>
-            <WizardActionRow>
-              <Show when={waitingForGate()}>
-                <WizardGateButton theme={theme} label={gateLabel()} action={() => gateAction()()} />
               </Show>
             </WizardActionRow>
           </Show>

@@ -86,10 +86,12 @@ export type Theme = {
   readonly syntaxType: RGBA
   readonly syntaxOperator: RGBA
   readonly syntaxPunctuation: RGBA
+  readonly spinnerColor: RGBA
+  readonly inactiveFactor: number
   readonly thinkingOpacity: number
   _hasSelectedListItemText: boolean
 }
-type ThemeColor = Exclude<keyof Theme, "thinkingOpacity" | "_hasSelectedListItemText">
+type ThemeColor = Exclude<keyof Theme, "thinkingOpacity" | "_hasSelectedListItemText" | "spinnerColor" | "inactiveFactor">
 export type SyntaxStyleOverrides = Record<string, { italic?: boolean }>
 
 export function selectedForeground(theme: Theme, bg?: RGBA): RGBA {
@@ -124,6 +126,8 @@ export type ThemeJson = {
     selectedListItemText?: ColorValue
     backgroundMenu?: ColorValue
     thinkingOpacity?: number
+    spinnerColor?: ColorValue
+    inactiveFactor?: number
   }
 }
 
@@ -265,7 +269,7 @@ export function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
 
   const resolved = Object.fromEntries(
     Object.entries(theme.theme)
-      .filter(([key]) => key !== "selectedListItemText" && key !== "backgroundMenu" && key !== "thinkingOpacity")
+      .filter(([key]) => key !== "selectedListItemText" && key !== "backgroundMenu" && key !== "thinkingOpacity" && key !== "spinnerColor" && key !== "inactiveFactor")
       .map(([key, value]) => {
         return [key, resolveColor(value as ColorValue)]
       }),
@@ -277,7 +281,6 @@ export function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
     resolved.selectedListItemText = resolveColor(theme.theme.selectedListItemText!)
   } else {
     // Backward compatibility: if selectedListItemText is not defined, use background color
-    // This preserves the current behavior for all existing themes
     resolved.selectedListItemText = resolved.background
   }
 
@@ -288,12 +291,22 @@ export function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
     resolved.backgroundMenu = resolved.backgroundElement
   }
 
+  // Handle spinnerColor - optional with fallback to accent
+  const spinnerColor = theme.theme.spinnerColor !== undefined
+    ? resolveColor(theme.theme.spinnerColor)
+    : resolved.accent!
+
+  // Handle inactiveFactor - optional with default of 0.2
+  const inactiveFactor = theme.theme.inactiveFactor ?? 0.2
+
   // Handle thinkingOpacity - optional with default of 0.6
   const thinkingOpacity = theme.theme.thinkingOpacity ?? 0.6
 
   return {
     ...resolved,
     _hasSelectedListItemText: hasSelectedListItemText,
+    spinnerColor,
+    inactiveFactor,
     thinkingOpacity,
   } as Theme
 }

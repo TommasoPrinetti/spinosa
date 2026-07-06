@@ -1243,7 +1243,28 @@ export function Session() {
           tui: tuiConfig,
         }}
       >
-        <box flexDirection="row" flexGrow={1} minHeight={0}>
+        <box flexDirection="row" flexGrow={1} minHeight={0} position="relative">
+          <Show when={session()}>
+            <box
+              position="absolute"
+              top={0}
+              left={2}
+              zIndex={10}
+              onMouseOver={() => setBackHover(true)}
+              onMouseOut={() => setBackHover(false)}
+              onMouseUp={() => navigate({ type: "home" })}
+              paddingLeft={2}
+              paddingRight={2}
+              paddingTop={1}
+              paddingBottom={1}
+              backgroundColor={buttonBackground(theme, backHover())}
+              flexDirection="row"
+              alignItems="center"
+              width={11}
+            >
+              <text fg={buttonText(theme, backHover())}>{"< Back"}</text>
+            </box>
+          </Show>
           <box flexGrow={1} minHeight={0}>
             <box
               flexGrow={1}
@@ -1255,23 +1276,6 @@ export function Session() {
               gap={1}
             >
               <Show when={session()}>
-              <box flexShrink={0} width="100%" paddingTop={1}>
-                <box
-                  onMouseOver={() => setBackHover(true)}
-                  onMouseOut={() => setBackHover(false)}
-                  onMouseDown={() => setTimeout(() => navigate({ type: "home" }), 0)}
-                  paddingLeft={2}
-                  paddingRight={2}
-                  paddingTop={1}
-                  paddingBottom={1}
-                  backgroundColor={buttonBackground(theme, backHover())}
-                  flexDirection="row"
-                  alignItems="center"
-                  width={11}
-                >
-                  <text fg={buttonText(theme, backHover())}>{"< Back"}</text>
-                </box>
-              </box>
               <scrollbox
                 ref={(r) => (scroll = r)}
                 viewportOptions={{

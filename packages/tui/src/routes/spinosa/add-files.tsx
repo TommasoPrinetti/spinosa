@@ -412,21 +412,21 @@ export function AddFiles() {
 
   onMount(() => {
     focusSourceInput()
-    const off = keymap.intercept("key", ({ event }) => {
+    const off = keymap.intercept("key", ({ event, consume }) => {
       if (modeStack.current() !== OPENCODE_BASE_MODE) return
       setHoveredBack(false)
 
       if ((event.ctrl && event.name === "c") || event.name === "escape") {
         if (step() === "path") leavePathStep()
         else moveBack()
-        return true
+        consume(); return
       }
 
       if (busy()) return
 
       if (waitingForGate() && (step() === "scan" || step() === "processing") && event.name === "return") {
         gateAction()()
-        return true
+        consume(); return
       }
 
       if (step() === "path") {
@@ -436,22 +436,22 @@ export function AddFiles() {
         if (editingIndex >= 0) {
           if (event.name === "up" || event.name === "k") {
             cycleFocusedSource(-1)
-            return true
+            consume(); return
           }
           if (event.name === "down" || event.name === "j") {
             cycleFocusedSource(1)
-            return true
+            consume(); return
           }
         }
 
         if (!sourceInputFocused()) {
           if (event.name === "up" || event.name === "k") {
             setFocusedSource((v) => Math.max(0, v - 1))
-            return true
+            consume(); return
           }
           if (event.name === "down" || event.name === "j") {
             setFocusedSource((v) => Math.min(pathsLen + 2, v + 1))
-            return true
+            consume(); return
           }
           if (event.name === "return") {
             const focus = focusedSource()
@@ -465,7 +465,7 @@ export function AddFiles() {
             } else {
               void continueFromPath()
             }
-            return true
+            consume(); return
           }
         }
       }
@@ -474,35 +474,35 @@ export function AddFiles() {
         const listLength = importOptions().length + 1
         if (event.name === "up" || event.name === "k") {
           setSelectedImport((value) => Math.max(0, value - 1))
-          return true
+          consume(); return
         }
         if (event.name === "down" || event.name === "j") {
           setSelectedImport((value) => Math.min(listLength - 1, value + 1))
-          return true
+          consume(); return
         }
         if (event.name === "space") {
           if (selectedImport() === 0) toggleAllImports()
           else toggleImport(selectedImport() - 1)
-          return true
+          consume(); return
         }
         if (event.name === "a") {
           toggleAllImports()
-          return true
+          consume(); return
         }
         if (event.name === "return") {
           continueFromImports()
-          return true
+          consume(); return
         }
       }
 
       if (step() === "done" && event.name === "return") {
         finish()
-        return true
+        consume(); return
       }
 
       if (step() === "error" && event.name === "return") {
         moveBack()
-        return true
+        consume(); return
       }
     })
     onCleanup(() => {

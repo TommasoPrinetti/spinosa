@@ -70,20 +70,20 @@ export function StartupHub() {
   }
 
   onMount(() => {
-    const off = keymap.intercept("key", ({ event }) => {
+    const off = keymap.intercept("key", ({ event, consume }) => {
       if (modeStack.current() !== OPENCODE_BASE_MODE) return
       const list = options()
       if (event.name === "up" || event.name === "k") {
         setSelected((value) => Math.max(0, value - 1))
-        return true
+        consume(); return
       }
       if (event.name === "down" || event.name === "j") {
         setSelected((value) => Math.min(list.length - 1, value + 1))
-        return true
+        consume(); return
       }
       if (event.name === "return") {
         runSelected()
-        return true
+        consume(); return
       }
     })
     onCleanup(off)

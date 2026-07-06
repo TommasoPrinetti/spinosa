@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@opencode-ai/spinosa-core",
+  "version": "1.17.12",
+  "type": "module",
+  "license": "MIT",
+  "private": true,
+  "bin": {
+    "spinosa": "./bin/spinosa.ts"
+  },
+  "scripts": {
+    "typecheck": "tsgo --noEmit",
+    "test": "bun test --timeout 30000 --only-failures",
+    "cli": "bun run ./bin/spinosa.ts"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "devDependencies": {
+    "@tsconfig/bun": "catalog:",
+    "@types/bun": "catalog:"
+  },
+  "dependencies": {
+    "@napi-rs/canvas": "1.0.2",
+    "@napi-rs/canvas-darwin-arm64": "1.0.2",
+    "markitdown-ts": "0.0.10",
+    "ppu-paddle-ocr": "6.0.0"
+  }
+}

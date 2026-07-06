@@ -1,8 +1,21 @@
-import { accessSync, existsSync, readdirSync, statSync, statfsSync, constants } from "node:fs"
+import { existsSync, readdirSync, statSync, accessSync, constants } from "node:fs"
 import { homedir } from "node:os"
 import path from "node:path"
-import { spawn } from "node:child_process"
-import { resolveFrameworkRoot } from "./framework"
+import { detectLlmTools as coreDetectLlmTools } from "@opencode-ai/spinosa-core/tools/detection"
+import { resolveUserPath } from "@opencode-ai/spinosa-core/utils/path"
+import { formatBytes, pluralCount } from "@opencode-ai/spinosa-core/utils/string"
+import {
+  IMAGE_EXTENSIONS,
+  MARKDOWN_EXTENSIONS,
+  NATIVE_EXTENSIONS,
+  MARKITDOWN_EXTENSIONS,
+  AUDIO_VIDEO_EXTENSIONS,
+  fileExt,
+} from "@opencode-ai/spinosa-core/constants"
+import { shouldSkipSourceFile, classifySourceFile } from "@opencode-ai/spinosa-core/extension/classifier"
+import { suggestWorkspacePath as coreSuggestWorkspacePath } from "@opencode-ai/spinosa-core/scan/scanner"
+import { detectDocumentTools as coreDetectDocumentTools } from "@opencode-ai/spinosa-core/scan/scanner"
+import type { ToolStatus as CoreToolStatus } from "@opencode-ai/spinosa-core/scan/scanner"
 
 export type OnboardingImportOption = {
   ext: string
@@ -33,443 +46,150 @@ export type ImportScanPreview = {
   importOptions: OnboardingImportOption[]
 }
 
-type SourceClass = "markdown" | "markitdown" | "native" | "ocr" | "video" | "audio" | "unknown" | "ignored"
+export type ToolStatus = CoreToolStatus
 
-export type ToolStatus = {
-  rapidocr: boolean
-  markitdown: boolean
-  pypdfium2: boolean
-  pypdf: boolean
+// ── Per-extension scan ───────────────────────────────────────────────
+
+type ExtEntry = { ext: string; count: number; bytes: number }
+
+function shouldSkipScanDir(name: string) {
+  return name === ".git" || name === "node_modules" || name === "__MACOSX" || name === ".trash" || name.endsWith(".app") || name.endsWith(".photoslibrary")
 }
 
-type ScanTotals = {
-  markdown: { count: number; bytes: number }
-  markitdown: { count: number; bytes: number }
-  native: { count: number; bytes: number }
-  ocr: { count: number; bytes: number }
-  video: { count: number; bytes: number }
-  audio: { count: number; bytes: number }
-  unknown: { count: number; bytes: number }
-  ignored: { count: number }
-}
+async function scanByExtension(sourcePath: string): Promise<{
+  extMap: Map<string, ExtEntry>
+  totals: { markdown: number; markitdown: number; native: number; ocr: number; video: number; audio: number; unknown: number; ignored: number; total: number }
+}> {
+  const extMap = new Map<string, ExtEntry>()
+  const totals = { markdown: 0, markitdown: 0, native: 0, ocr: 0, video: 0, audio: 0, unknown: 0, ignored: 0, total: 0 }
 
-const MARKDOWN_EXTENSIONS = new Set(
-  "txt|rtf|textile|wiki|mediawiki|dokuwiki|pmwiki|outliner|workflowy|dynalist|yaml|yml|toml|css|js|ts|py|rb|sh|log|ini|cfg|conf|tex|bib|org|adoc|rst|tiddlywiki|logseq|roam|obsidian".split(
-    "|",
-  ),
-)
-const NATIVE_EXTENSIONS = new Set(["md"])
-const MARKITDOWN_EXTENSIONS = new Set(["docx", "pptx", "xlsx", "xls", "epub", "html", "htm", "msg", "zip", "json", "csv", "xml"])
-const IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "gif", "webp", "heic", "heif", "tif", "tiff", "bmp", "svg"])
-const AUDIO_VIDEO_EXTENSIONS = new Set(["mp4", "mov", "m4v", "avi", "mkv", "webm", "wmv", "mp3", "wav", "m4a", "aac", "flac", "ogg", "opus", "aiff"])
-const AUDIO_EXTENSIONS = new Set(["mp3", "wav", "m4a", "aac", "flac", "ogg", "opus", "aiff"])
-const VIDEO_EXTENSIONS = new Set(["mp4", "mov", "m4v", "avi", "mkv", "webm", "wmv"])
-
-const LLM_TOOL_COMMANDS = [
-  { command: "claude", label: "Claude Code" },
-  { command: "codex", label: "Codex" },
-  { command: "gemini", label: "Gemini" },
-  { command: "opencode", label: "OpenCode" },
-  { command: "hermes", label: "Hermes Agent" },
-  { command: "qwen", label: "Qwen" },
-  { command: "kilo", label: "Kilo" },
-] as const
-
-function zeroTotals(): ScanTotals {
-  return {
-    markdown: { count: 0, bytes: 0 },
-    markitdown: { count: 0, bytes: 0 },
-    native: { count: 0, bytes: 0 },
-    ocr: { count: 0, bytes: 0 },
-    video: { count: 0, bytes: 0 },
-    audio: { count: 0, bytes: 0 },
-    unknown: { count: 0, bytes: 0 },
-    ignored: { count: 0 },
-  }
-}
-
-function commandExists(name: string) {
-  const envPath = process.env.PATH ?? ""
-  for (const directory of envPath.split(path.delimiter)) {
-    if (!directory) continue
-    const candidate = path.join(directory, name)
-    if (existsSync(candidate)) return true
-  }
-  return false
-}
-
-function runCheck(command: string, args: string[]) {
-  return new Promise<boolean>((resolve) => {
-    const child = spawn(command, args, {
-      stdio: ["ignore", "ignore", "ignore"],
-    })
-    child.on("close", (code) => resolve(code === 0))
-    child.on("error", () => resolve(false))
-  })
-}
-
-function formatBytes(value: number) {
-  if (value <= 0) return "0 B"
-  const units = ["B", "KB", "MB", "GB", "TB"]
-  let size = value
-  let index = 0
-  while (size >= 1024 && index < units.length - 1) {
-    size /= 1024
-    index += 1
-  }
-  return `${size.toFixed(index === 0 ? 0 : 2)} ${units[index]}`
-}
-
-function plural(count: number, singular: string, pluralForm?: string) {
-  if (count === 1) return `${count} ${singular}`
-  return `${count} ${pluralForm ?? `${singular}s`}`
-}
-
-function pushScanRow(rows: OnboardingPreviewRow[], total: { count: number; bytes: number }, label: string, detail?: string) {
-  if (total.count <= 0) return
-  rows.push({
-    label,
-    status: detail ?? formatBytes(total.bytes),
-  })
-}
-
-function yieldToEventLoop() {
-  return new Promise<void>((resolve) => setTimeout(resolve, 0))
-}
-
-function frameworkVendorBin(name: "markitdown-cli" | "rapidocr-cli") {
-  const root = resolveFrameworkRoot()
-  if (!root) return
-  const platform = `${(process.env.OS ?? process.platform).toLowerCase()}-${process.arch === "x64" ? "amd64" : process.arch === "arm64" ? "arm64" : process.arch}`
-  const homeBin = path.join(homedir(), ".spinosa", "vendor", `spinosa-${platform}`, name)
-  if (existsSync(homeBin)) return homeBin
-  const frameworkBin = path.join(root, ".bin", "lib", "vendor", `spinosa-${platform}`, name)
-  if (existsSync(frameworkBin)) return frameworkBin
-}
-
-function bundledPythonBin() {
-  const platform = `${(process.env.OS ?? process.platform).toLowerCase()}-${process.arch === "x64" ? "amd64" : process.arch === "arm64" ? "arm64" : process.arch}`
-  const vendorRoot = path.join(homedir(), ".spinosa", "vendor", `spinosa-${platform}`)
-  const candidates = [
-    path.join(vendorRoot, "python", "bin", "python3"),
-    path.join(vendorRoot, "Python.framework", "Versions", "Current", "bin", "python3"),
-  ]
-  for (const candidate of candidates) {
-    if (existsSync(candidate)) return candidate
-  }
-}
-
-function fallbackPythonBin() {
-  return bundledPythonBin() ?? (commandExists("python3") ? "python3" : undefined)
-}
-
-export async function detectDocumentTools(): Promise<ToolStatus> {
-  const markitdownBin = frameworkVendorBin("markitdown-cli")
-  const rapidocrBin = frameworkVendorBin("rapidocr-cli")
-  const python = fallbackPythonBin()
-
-  const [markitdown, rapidocr, pypdfium2, pypdf] = await Promise.all([
-    markitdownBin ? runCheck(markitdownBin, ["--check-markitdown"]) : Promise.resolve(false),
-    rapidocrBin ? runCheck(rapidocrBin, ["--check-rapidocr"]) : Promise.resolve(false),
-    python ? runCheck(python, ["-c", "import pypdfium2"]) : Promise.resolve(false),
-    python ? runCheck(python, ["-c", "import pypdf"]) : Promise.resolve(false),
-  ])
-
-  return {
-    markitdown,
-    rapidocr,
-    pypdfium2,
-    pypdf,
-  }
-}
-
-export function detectLlmTools() {
-  const tools = LLM_TOOL_COMMANDS.filter((item) => commandExists(item.command)).map((item) => item.label)
-  return tools.length > 0 ? tools : ["Other (manual)"]
-}
-
-function directoryWritable(targetPath: string) {
-  const base = existsSync(targetPath) ? targetPath : path.dirname(targetPath)
-  try {
-    accessSync(base, constants.W_OK)
-    return true
-  } catch {
-    return false
-  }
-}
-
-function availableDiskBytes(targetPath: string) {
-  try {
-    const stats = statfsSync(targetPath)
-    return stats.bavail * stats.bsize
-  } catch {
-    return 0
-  }
-}
-
-function fileExtension(filePath: string) {
-  return path.extname(filePath).slice(1).toLowerCase()
-}
-
-function isTextBasedPdf(filePath: string) {
-  try {
-    const sample = Bun.file(filePath).slice(0, 262_144)
-    return sample
-      .text()
-      .then((text) => {
-        if (text.includes("/Encrypt")) return false
-        return text.includes("/Font") || text.includes("/CIDFont")
-      })
-      .catch(() => false)
-  } catch {
-    return Promise.resolve(false)
-  }
-}
-
-function shouldSkipDirectory(name: string) {
-  return (
-    name === ".git" ||
-    name === "node_modules" ||
-    name === "__MACOSX" ||
-    name === ".trash" ||
-    name.endsWith(".app") ||
-    name.endsWith(".photoslibrary")
-  )
-}
-
-function shouldSkipFile(name: string, entryPath: string) {
-  const lower = name.toLowerCase()
-  return (
-    lower === "agents.md" ||
-    lower === ".ds_store" ||
-    lower === ".localized" ||
-    lower === ".gitkeep" ||
-    lower.startsWith("._") ||
-    entryPath.includes(`${path.sep}.git${path.sep}`) ||
-    entryPath.includes(`${path.sep}node_modules${path.sep}`)
-  )
-}
-
-async function classifySourceFile(filePath: string): Promise<SourceClass> {
-  const ext = fileExtension(filePath)
-  if (!ext) return "unknown"
-  if (NATIVE_EXTENSIONS.has(ext)) return "native"
-  if (MARKDOWN_EXTENSIONS.has(ext)) return "markdown"
-  if (MARKITDOWN_EXTENSIONS.has(ext)) return "markitdown"
-  if (ext === "pdf") return (await isTextBasedPdf(filePath)) ? "markitdown" : "ocr"
-  if (IMAGE_EXTENSIONS.has(ext)) return "ocr"
-  if (VIDEO_EXTENSIONS.has(ext)) return "video"
-  if (AUDIO_EXTENSIONS.has(ext)) return "audio"
-  if (AUDIO_VIDEO_EXTENSIONS.has(ext)) return "video"
-  return "unknown"
-}
-
-async function scanSource(sourcePath: string) {
-  const totals = zeroTotals()
-  const extCounts = new Map<string, number>()
-  let processedEntries = 0
-
-  async function walk(currentPath: string): Promise<void> {
-    for (const entry of readdirSync(currentPath, { withFileTypes: true })) {
-      processedEntries += 1
-      if (processedEntries % 128 === 0) {
-        await yieldToEventLoop()
-      }
-
-      const entryPath = path.join(currentPath, entry.name)
-      if (entry.isDirectory()) {
-        if (shouldSkipDirectory(entry.name)) continue
-        await walk(entryPath)
+  async function walk(dir: string) {
+    let entries: string[]
+    try { entries = readdirSync(dir) } catch { return }
+    for (const entry of entries) {
+      if (entry.startsWith(".") && entry !== "." && entry !== "..") continue
+      const fullPath = path.join(dir, entry)
+      let st: ReturnType<typeof statSync>
+      try { st = statSync(fullPath) } catch { continue }
+      if (st.isDirectory()) {
+        if (shouldSkipScanDir(entry)) continue
+        await walk(fullPath)
         continue
       }
-
-      if (!entry.isFile()) continue
-      if (shouldSkipFile(entry.name, entryPath)) {
-        totals.ignored.count += 1
-        continue
+      if (!st.isFile()) continue
+      if (shouldSkipSourceFile(fullPath)) { totals.ignored++; continue }
+      const ext = fileExt(fullPath)
+      if (!ext) { totals.unknown++; continue }
+      const cls = await classifySourceFile(fullPath)
+      switch (cls) {
+        case "markdown": totals.markdown++; break
+        case "markitdown": totals.markitdown++; break
+        case "native": totals.native++; break
+        case "ocr_convertible": totals.ocr++; break
+        case "video": totals.video++; break
+        case "audio": totals.audio++; break
+        default: totals.unknown++; break
       }
-
-      const bytes = statSync(entryPath).size
-      const ext = fileExtension(entry.name)
-      const klass = await classifySourceFile(entryPath)
-      if (ext) {
-        extCounts.set(ext, (extCounts.get(ext) ?? 0) + 1)
-      }
-
-      if (klass === "markdown") {
-        totals.markdown.count += 1
-        totals.markdown.bytes += bytes
-      } else if (klass === "markitdown") {
-        totals.markitdown.count += 1
-        totals.markitdown.bytes += bytes
-      } else if (klass === "native") {
-        totals.native.count += 1
-        totals.native.bytes += bytes
-      } else if (klass === "ocr") {
-        totals.ocr.count += 1
-        totals.ocr.bytes += bytes
-      } else if (klass === "video") {
-        totals.video.count += 1
-        totals.video.bytes += bytes
-      } else if (klass === "audio") {
-        totals.audio.count += 1
-        totals.audio.bytes += bytes
-      } else if (klass === "unknown") {
-        totals.unknown.count += 1
-        totals.unknown.bytes += bytes
-      }
+      totals.total++
+      const existing = extMap.get(ext)
+      if (existing) { existing.count++ }
+      else { extMap.set(ext, { ext, count: 1, bytes: st.size }) }
     }
   }
 
   await walk(sourcePath)
-
-  const importOptions = [...extCounts.entries()]
-    .map(([ext, count]) => ({
-      ext,
-      count,
-      selected: !AUDIO_VIDEO_EXTENSIONS.has(ext),
-    }))
-    .sort((left, right) => left.ext.localeCompare(right.ext))
-
-  return { totals, importOptions }
+  return { extMap, totals }
 }
 
-function buildScanRows(scan: Awaited<ReturnType<typeof scanSource>>): OnboardingPreviewRow[] {
-  const scanRows: OnboardingPreviewRow[] = [
-    {
-      label: "Source scan",
-      status: "complete",
-      tone: "success",
-    },
-  ]
-  pushScanRow(scanRows, scan.totals.native, `${plural(scan.totals.native.count, "native-readable file")} to copy unchanged`)
-  pushScanRow(scanRows, scan.totals.markitdown, `${plural(scan.totals.markitdown.count, "MarkItDown/structured file")} available for Markdown conversion`)
-  pushScanRow(scanRows, scan.totals.ocr, `${plural(scan.totals.ocr.count, "scanned PDF and image")} available for OCR`)
-  pushScanRow(
-    scanRows,
-    scan.totals.video,
-    `${plural(scan.totals.video.count, "video")} available (not selected by default)`,
-  )
-  pushScanRow(
-    scanRows,
-    scan.totals.audio,
-    `${plural(scan.totals.audio.count, "audio file")} available (not selected by default)`,
-  )
-  pushScanRow(scanRows, scan.totals.markdown, `${plural(scan.totals.markdown.count, "text-based file")} to rename to .md`)
-  pushScanRow(scanRows, scan.totals.unknown, `${plural(scan.totals.unknown.count, "file")} unsupported or unknown`)
-  if (scan.totals.ignored.count > 0) {
-    scanRows.push({
-      label: `${plural(scan.totals.ignored.count, "file")} skipped`,
-      status: "system/dotfile",
-      tone: "muted",
+// ── Build scan rows (for display) ────────────────────────────────────
+
+function buildScanRows(totals: { markdown: number; markitdown: number; native: number; ocr: number; video: number; audio: number; unknown: number; ignored: number }): OnboardingPreviewRow[] {
+  const rows: OnboardingPreviewRow[] = []
+  const push = (count: number, label: string) => {
+    if (count > 0) rows.push({ label, status: `${count} file${count === 1 ? "" : "s"}` })
+  }
+  push(totals.markdown, "Text-based files to rename")
+  push(totals.markitdown, "Office docs / HTML / EPUB / text PDFs")
+  push(totals.native, "Native Markdown to copy")
+  push(totals.ocr, "Scanned PDFs and images for OCR")
+  push(totals.video, "Videos")
+  push(totals.audio, "Audio")
+  if (totals.unknown > 0) rows.push({ label: "Unknown files", status: `${pluralCount(totals.unknown, "file")} unsupported`, tone: "muted" })
+  if (totals.ignored > 0) rows.push({ label: "Ignored", status: `${pluralCount(totals.ignored, "file")} skipped`, tone: "muted" })
+  return rows
+}
+
+// ── Build import options (per extension, for toggles) ────────────────
+
+function extToImportOptions(extMap: Map<string, ExtEntry>): OnboardingImportOption[] {
+  const options: OnboardingImportOption[] = []
+  // Audio/video are NOT selected by default — same as Bash MULTI_CHOOSE_EXCLUDE
+  const audioExts = new Set(["mp3", "wav", "m4a", "aac", "flac", "ogg", "opus", "aiff"])
+  const videoExts = new Set(["mp4", "mov", "m4v", "avi", "mkv", "webm", "wmv"])
+
+  for (const [ext, entry] of extMap) {
+    const isAv = audioExts.has(ext) || videoExts.has(ext)
+    options.push({
+      ext,
+      count: entry.count,
+      selected: !isAv, // audio/video deselected by default
     })
   }
-  return scanRows
+  options.sort((a, b) => a.ext.localeCompare(b.ext))
+  return options
 }
 
-export function resolveUserPath(value: string) {
-  if (!value) return
-  const trimmed = value.trim()
-  if (!trimmed) return
-  const expanded = trimmed === "~" ? homedir() : trimmed.startsWith("~/") ? path.join(homedir(), trimmed.slice(2)) : trimmed
-  return path.resolve(expanded)
+function buildPreflightRows(workspacePath: string, toolStatus: ToolStatus): OnboardingPreviewRow[] {
+  const rows: OnboardingPreviewRow[] = []
+  rows.push({ label: "Workspace", status: "writable", detail: path.basename(workspacePath), tone: "success" })
+  rows.push({ label: "PPU PaddleOCR", status: toolStatus.rapidocr ? "available" : "missing", tone: toolStatus.rapidocr ? "success" : "error" })
+  rows.push({ label: "MarkItDown", status: toolStatus.markitdown ? "available" : "missing", tone: toolStatus.markitdown ? "success" : "error" })
+  rows.push({ label: "pdftoppm", status: toolStatus.pypdfium2 ? "available" : "missing", tone: toolStatus.pypdfium2 ? "success" : "error" })
+  rows.push({ label: "pdftotext", status: toolStatus.pypdf ? "available" : "missing", tone: toolStatus.pypdf ? "success" : "error" })
+  return rows
 }
 
-export function suggestWorkspacePath(sourcePath: string) {
-  const resolved = resolveUserPath(sourcePath)
-  if (!resolved) return
-  const corpusName = path.basename(resolved)
-  const parentDir = path.dirname(resolved)
-  const base = path.join(parentDir, `${corpusName}-spinosa`)
-  let candidate = base
-  let index = 2
-  while (existsSync(candidate)) {
-    candidate = `${base}-${index}`
-    index += 1
-  }
-  return candidate
+export async function detectDocumentTools(): Promise<ToolStatus> {
+  return coreDetectDocumentTools()
 }
 
-export async function buildImportScanPreview(sourcePathInput: string): Promise<ImportScanPreview> {
-  const sourcePath = resolveUserPath(sourcePathInput)
-  if (!sourcePath) {
-    throw new Error("Source path is required.")
-  }
+export function detectLlmTools(): string[] {
+  return coreDetectLlmTools()
+}
 
-  const scan = await scanSource(sourcePath)
+function resolveWorkspacePath(projectName: string): string {
+  const cwd = process.cwd()
+  return coreSuggestWorkspacePath(cwd) ?? path.join(path.dirname(cwd), `${projectName}-spinosa`)
+}
+
+export async function buildNewWorkspacePreview(sourcePath: string): Promise<NewWorkspacePreview> {
+  const projectName = path.basename(sourcePath)
+  const workspacePath = resolveWorkspacePath(projectName)
+  const toolStatus = await detectDocumentTools()
+  const { extMap, totals } = await scanByExtension(sourcePath)
 
   return {
-    projectName: path.basename(sourcePath) || "workspace",
-    sourcePath,
-    scanRows: buildScanRows(scan),
-    importOptions: scan.importOptions,
-  }
-}
-
-export async function buildNewWorkspacePreview(sourcePathInput: string): Promise<NewWorkspacePreview> {
-  const sourcePath = resolveUserPath(sourcePathInput)
-  if (!sourcePath) {
-    throw new Error("Source path is required.")
-  }
-  const workspacePath = suggestWorkspacePath(sourcePath)
-  if (!workspacePath) {
-    throw new Error("Could not derive workspace path.")
-  }
-
-  const [toolStatus, scan] = await Promise.all([detectDocumentTools(), scanSource(sourcePath)])
-  const llmTools = detectLlmTools()
-  const workspaceWritable = directoryWritable(workspacePath)
-  const freeBytes = availableDiskBytes(path.dirname(workspacePath))
-
-  const preflightRows: OnboardingPreviewRow[] = [
-    {
-      label: "Workspace",
-      status: workspaceWritable ? "writable" : "blocked",
-      detail: path.basename(workspacePath),
-      tone: workspaceWritable ? "success" : "error",
-    },
-    {
-      label: "RapidOCR",
-      status: toolStatus.rapidocr ? "available" : "missing",
-      detail: toolStatus.rapidocr ? "scanned PDFs and images" : "scanned PDFs and images skipped",
-      tone: toolStatus.rapidocr ? "success" : "error",
-    },
-    {
-      label: "MarkItDown",
-      status: toolStatus.markitdown ? "available" : "missing",
-      detail: toolStatus.markitdown ? "Office docs, structured data, EPUB, HTML, text PDFs" : "Office docs, EPUB, HTML, and text PDFs skipped",
-      tone: toolStatus.markitdown ? "success" : "error",
-    },
-    {
-      label: "pypdfium2",
-      status: toolStatus.pypdfium2 ? "available" : "missing",
-      detail: toolStatus.pypdfium2 ? "scanned PDF rendering" : "scanned PDF rendering unavailable",
-      tone: toolStatus.pypdfium2 ? "success" : "error",
-    },
-    {
-      label: "pypdf",
-      status: toolStatus.pypdf ? "available" : "missing",
-      detail: toolStatus.pypdf ? "text PDF splitting" : "multi-page text PDFs not split",
-      tone: toolStatus.pypdf ? "success" : "error",
-    },
-    {
-      label: "Free space",
-      status: formatBytes(freeBytes),
-      tone: "muted",
-    },
-    {
-      label: "Tools",
-      status: llmTools.join(", "),
-      tone: "muted",
-    },
-  ]
-
-  return {
-    projectName: path.basename(sourcePath) || "workspace",
+    projectName,
     sourcePath,
     workspacePath,
-    preflightRows,
-    scanRows: buildScanRows(scan),
-    importOptions: scan.importOptions,
+    preflightRows: buildPreflightRows(workspacePath, toolStatus),
+    scanRows: buildScanRows(totals),
+    importOptions: extToImportOptions(extMap),
   }
 }
+
+export async function buildImportScanPreview(sourcePath: string): Promise<ImportScanPreview> {
+  const projectName = path.basename(sourcePath)
+  const workspacePath = resolveWorkspacePath(projectName)
+  const { extMap, totals } = await scanByExtension(sourcePath)
+
+  return {
+    projectName,
+    sourcePath,
+    scanRows: buildScanRows(totals),
+    importOptions: extToImportOptions(extMap),
+  }
+}
+
+export { resolveUserPath } from "@opencode-ai/spinosa-core/utils/path"
+export { suggestWorkspacePath } from "@opencode-ai/spinosa-core/scan/scanner"

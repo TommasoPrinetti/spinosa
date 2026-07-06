@@ -1,6 +1,6 @@
 import type { RouteNavigateInput } from "../context/route"
-import { isSpinosaWorkspace, readWorkspaceMeta } from "./service"
-import type { SpinosaSetupStatus } from "./types"
+import { isSpinosaWorkspace, readWorkspaceMeta } from "@opencode-ai/spinosa-core/workspace/meta"
+import type { SpinosaSetupStatus } from "@opencode-ai/spinosa-core/types"
 
 export const SPINOSA_ACTIVE_WORKSPACE_KV = "spinosa_active_workspace_path"
 export const SPINOSA_GENERIC_MODE_KV = "spinosa_generic_mode"

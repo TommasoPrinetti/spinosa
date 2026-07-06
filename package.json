@@ -23,6 +23,7 @@
       "packages/script",
       "packages/sdk/js",
       "packages/server",
+      "packages/spinosa-core",
       "packages/tui",
       "packages/ui"
     ],
