@@ -245,7 +245,7 @@ for tarball in "${REPO_ROOT}/.bin/lib/vendor"/spinosa-vendor-*.tar.gz; do
   vtmp="$(mktemp -d "${TMPDIR:-/tmp}/vendor-checksum.XXXXXX")"
   tar -xzf "$tarball" -C "$vtmp" --strip-components=1
 
-  for binary in rapidocr-cli markitdown-cli python/bin/python3; do
+  for binary in markitdown-cli python/bin/python3; do
     if [[ -f "${vtmp}/${binary}" ]]; then
       printf '%s  %s  %s\n' \
         "$(sha256_artifact "${vtmp}/${binary}")" \

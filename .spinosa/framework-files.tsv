@@ -16,7 +16,6 @@ packages/spinosa-core/	framework	replace_if_unmodified
 bun.lock	framework	replace_if_unmodified
 .bin/lib/spinosa/	framework	replace_if_unmodified
 .bin/lib/markitdown-cli.py	framework	replace_if_unmodified
-.bin/lib/rapidocr-cli.py	framework	replace_if_unmodified
 .bin/sync-agents.sh	framework	replace_if_unmodified
 .agents/	framework	replace_if_unmodified
 docs/	framework	replace_if_unmodified
