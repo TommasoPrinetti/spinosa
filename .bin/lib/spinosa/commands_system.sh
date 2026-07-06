@@ -78,6 +78,8 @@ cmd_help() {
   printf '\n'
 
   printf '  %s\n' "${BOLD}Commands:${RESET}"
+  printf '  %s\n' "spinosa                    Open Spinosa TUI (requires OpenCode)"
+  printf '  %s\n' "spinosa cli                Open the terminal dashboard (CLI menu)"
   printf '  %s\n' "spinosa new [<corpus-directory>] [--extensions LIST] [--cli CLI] [--launch MODE]"
   printf '  %s\n' "spinosa add [--workspace PATH] [--file PATH | --dir PATH] [--extensions LIST]"
   printf '  %s\n' "spinosa upgrade [--channel stable|beta] [--version X.Y.Z] [--yes] [--reinstall]"

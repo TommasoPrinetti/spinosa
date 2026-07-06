@@ -8,9 +8,10 @@ set -euo pipefail
 ORIGINAL_ARGS=("$@")
 
 # ── spinosa — CLI entry point ────────────────────────────────────────────────
-# Usage: spinosa [add|new|startup|upgrade|update|uninstall|version|help]
+# Usage: spinosa [command]
 #
 # Commands:
+#   cli       Open the Spinosa terminal dashboard (CLI menu)
 #   add       Add files to an existing Spinosa workspace
 #   new       Create a new Spinosa workspace and run setup
 #   startup   Re-run the startup prompt on an existing workspace
@@ -19,6 +20,8 @@ ORIGINAL_ARGS=("$@")
 #   uninstall Remove Spinosa from this system
 #   version   Show Spinosa version
 #   help      Show this help
+#
+# Run without arguments to open the Spinosa TUI (requires OpenCode).
 
 # ── ANSI colors (zero dependencies) ─────────────────────────────────────────
 if [[ "${NO_COLOR:-}" == "1" ]] || [[ ! -t 1 ]]; then
@@ -130,6 +133,18 @@ resolve_framework_root() {
 FRAMEWORK_ROOT="$(resolve_framework_root)"
 SPINOSA_BANNER_PRINTED=0
 
+# ── No arguments: open the TUI ──────────────────────────────────────────
+if [[ $# -eq 0 ]]; then
+  if command -v opencode >/dev/null 2>&1; then
+    exec opencode "$@"
+  fi
+  printf '\n  %sOpenCode is required for the Spinosa TUI.%s\n' "${Y}" "${RESET}" >&2
+  printf '  Install OpenCode, then run %sspinosa%s again.\n' "${BOLD}" "${RESET}"
+  printf '  Or use %sspinosa cli%s for the terminal dashboard.\n' "${BOLD}" "${RESET}"
+  printf '\n'
+  exit 1
+fi
+
 if [[ -f "${FRAMEWORK_ROOT}/packages/spinosa-core/bin/spinosa.ts" ]]; then
   SPINOSA_BUN="${SPINOSA_BUN:-}"
   if [[ -z "$SPINOSA_BUN" && -x "${SPINOSA_HOME}/bin/bun" ]]; then
@@ -200,7 +215,7 @@ case "$subcommand" in
     cmd_help
     exit 0
     ;;
-  add|new|startup|upgrade|update|doctor|uninstall)
+  cli|add|new|startup|upgrade|update|doctor|uninstall)
     if [[ "${2:-}" == "--help" || "${2:-}" == "-h" ]]; then
       shift
       case "$subcommand" in
@@ -226,6 +241,7 @@ fi
 # MAIN
 # ═══════════════════════════════════════════════════════════════════════════
 case "${1:-}" in
+  cli)       shift; cmd_dashboard "$@" ;;
   add)       shift; cmd_add "$@" ;;
   new)       shift; cmd_new "$@" ;;
   startup)   shift; cmd_startup "$@" ;;
@@ -236,7 +252,6 @@ case "${1:-}" in
   uninstall) shift; cmd_uninstall "$@" ;;
   version|--version|-v) printf 'spinosa %s\n' "$(framework_version "$FRAMEWORK_ROOT")"; exit 0 ;;
   help|-h|--help) cmd_help ;;
-  "") cmd_dashboard ;;
   *)
     printf '%s\n' "${R}Unknown command: $1${RESET}" >&2
     cmd_help
