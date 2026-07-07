@@ -4,6 +4,7 @@ README.md	framework	replace_if_unmodified
 package.json	framework	replace_if_unmodified
 bunfig.toml	framework	replace_if_unmodified
 LICENSE	framework	replace_if_unmodified
+patches/	framework	replace_if_unmodified
 .gitignore	framework	replace_if_unmodified
 .editorconfig	framework	replace_if_unmodified
 .bin/check-startup.sh	framework	replace_if_unmodified
@@ -48,3 +49,15 @@ CLAUDE.md	generated_state	exclude_from_update
 .obsidian/snippets/spinosa.css	framework	replace_if_unmodified
 packages/opencode/	framework	replace_if_unmodified
 packages/tui/	framework	replace_if_unmodified
+packages/core/	framework	replace_if_unmodified
+packages/effect-drizzle-sqlite/	framework	replace_if_unmodified
+packages/effect-sqlite-node/	framework	replace_if_unmodified
+packages/http-recorder/	framework	replace_if_unmodified
+packages/llm/	framework	replace_if_unmodified
+packages/plugin/	framework	replace_if_unmodified
+packages/protocol/	framework	replace_if_unmodified
+packages/schema/	framework	replace_if_unmodified
+packages/script/	framework	replace_if_unmodified
+packages/sdk/js/	framework	replace_if_unmodified
+packages/server/	framework	replace_if_unmodified
+packages/ui/	framework	replace_if_unmodified
