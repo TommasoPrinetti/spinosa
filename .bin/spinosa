@@ -143,17 +143,30 @@ SPINOSA_BANNER_PRINTED=0
 
 # ── No arguments: open the bundled TUI ────────────────────────────────────
 if [[ $# -eq 0 ]]; then
-  # Check if @spinosa/tui is installed globally
+  # Primary: launch from installed framework tree (packages/opencode + bun deps installed)
+  if [[ -d "${FRAMEWORK_ROOT}/packages/opencode" ]]; then
+    SPINOSA_BUN="${SPINOSA_BUN:-}"
+    if [[ -z "$SPINOSA_BUN" && -x "${SPINOSA_HOME}/bin/bun" ]]; then
+      SPINOSA_BUN="${SPINOSA_HOME}/bin/bun"
+    fi
+    if [[ -z "$SPINOSA_BUN" ]] && command -v bun >/dev/null 2>&1; then
+      SPINOSA_BUN="$(command -v bun)"
+    fi
+    if [[ -n "$SPINOSA_BUN" ]]; then
+      export SPINOSA_FRAMEWORK_ROOT="${FRAMEWORK_ROOT}"
+      exec "$SPINOSA_BUN" run --cwd "${FRAMEWORK_ROOT}/packages/opencode" --conditions=browser src/index.ts "$@"
+    fi
+  fi
+  # Fallback: npm-published @spinosa/tui
   if command -v npx >/dev/null 2>&1 && npx --yes @spinosa/tui --version >/dev/null 2>&1; then
     exec npx @spinosa/tui "$@"
   fi
-  # Check for system opencode as fallback
+  # Fallback: system opencode
   if command -v opencode >/dev/null 2>&1; then
     exec opencode "$@"
   fi
-  printf '\n  %sSpinosa TUI is not installed.%s\n' "${Y}" "${RESET}" >&2
-  printf '  Run %sbun install -g @spinosa/tui%s to install it.\n' "${BOLD}" "${RESET}"
-  printf '  Or use %sspinosa cli%s for the terminal dashboard.\n' "${BOLD}" "${RESET}"
+  printf '\n  %sSpinosa TUI is not available.%s\n' "${Y}" "${RESET}" >&2
+  printf '  Re-run the installer or run %sbun install -g @spinosa/tui%s.\n' "${BOLD}" "${RESET}"
   printf '\n'
   exit 1
 fi
