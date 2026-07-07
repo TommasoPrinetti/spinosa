@@ -380,6 +380,22 @@ install_bun_dependencies() {
     spinner_stop
     die "Dependency install failed. See ${SPINOSA_HOME}/logs/spinosa.log"
   fi
+
+  # Ensure all workspace packages are resolvable as @opencode-ai/* symlinks.
+  # `bun install --production` from the framework root sometimes skips symlinks
+  # for packages with complex native dep chains (core, spinosa-core, etc.).
+  local nm="${fw_root}/node_modules/@opencode-ai"
+  mkdir -p "$nm"
+  for pkg_dir in "${fw_root}/packages"/*/ "${fw_root}/packages/sdk/js"; do
+    local pkg_json="${pkg_dir}package.json"
+    [[ -f "$pkg_json" ]] || continue
+    local pkg_name
+    pkg_name="$(grep '"name"' "$pkg_json" | head -1 | sed 's/.*"name": *"\(.*\)".*/\1/')"
+    [[ -n "$pkg_name" && "$pkg_name" == @opencode-ai/* ]] || continue
+    local link="$nm/${pkg_name#@opencode-ai/}"
+    [[ -L "$link" ]] || ln -sf "$pkg_dir" "$link" 2>/dev/null || true
+  done
+
   if ! command -v pdftoppm >/dev/null 2>&1 || ! command -v pdftotext >/dev/null 2>&1 || ! command -v pdfinfo >/dev/null 2>&1; then
     warn "Poppler tools not found — image OCR works, but PDF page splitting needs pdftoppm, pdftotext, and pdfinfo"
   fi
