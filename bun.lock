@@ -4,6 +4,11 @@
   "workspaces": {
     "": {
       "name": "spinosa-main",
+      "dependencies": {
+        "@ff-labs/fff-bun": "0.9.4",
+        "@opentui/core": "catalog:",
+        "@parcel/watcher": "2.5.1",
+      },
       "devDependencies": {
         "@types/mime-types": "3.0.1",
       },
@@ -495,6 +500,10 @@
         "@solidjs/meta": "^0.29.0",
         "solid-js": "^1.9.0",
       },
+    },
+    "spinosa-tui": {
+      "name": "@spinosa/tui",
+      "version": "0.8.0-beta.12",
     },
   },
   "trustedDependencies": [
@@ -1326,6 +1335,8 @@
     "@solid-primitives/utils": ["@solid-primitives/utils@6.4.0", "", { "peerDependencies": { "solid-js": "^1.6.12" } }, "sha512-AeGTBg8Wtkh/0s+evyLtP8piQoS4wyqqQaAFs2HJcFMMjYAtUgo+ZPduRXLjPlqKVc2ejeR544oeqpbn8Egn8A=="],
 
     "@solidjs/meta": ["@solidjs/meta@0.29.4", "", { "peerDependencies": { "solid-js": ">=1.8.4" } }, "sha512-zdIWBGpR9zGx1p1bzIPqF5Gs+Ks/BH8R6fWhmUa/dcK1L2rUC8BAcZJzNRYBQv74kScf1TSOs0EY//Vd/I0V8g=="],
+
+    "@spinosa/tui": ["@spinosa/tui@workspace:spinosa-tui"],
 
     "@standard-schema/spec": ["@standard-schema/spec@1.0.0", "", {}, "sha512-m2bOd0f2RT9k8QJx1JN85cZYyH1RqFBdlwtkSlf4tBDYLCiiZnv1fIIwacK6cqwXavOydf0NPToMQgpKq+dVlA=="],
 

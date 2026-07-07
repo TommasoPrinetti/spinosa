@@ -6,7 +6,20 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 **Release policy:** versions are published only with explicit maintainer approval.
 
-## [Unreleased]
+## [0.8.0-beta.13] — 2026-07-07
+
+### Changed
+
+- Framework tarball now ships `packages/opencode/` and `packages/tui/` (our enhanced opencode fork) plus all supporting workspace packages and root `package.json`/`bunfig.toml` for `bun install --production` resolution.
+- `install.sh` runs `bun install --production` from the framework root once, resolving all workspace deps in a single pass.
+- `.bin/spinosa` launches `npx @spinosa/tui` when installed, falls back to system `opencode`.
+- Handoff runners use the bundled TUI path instead of system `opencode`.
+- `package-release.sh` strips test/ and node_modules from opencode/tui packages before packaging.
+
+### Fixed
+
+- Cross-platform build failure for darwin-x64 (onnxruntime arm64-only). Native platform builds handled per-platform.
+
 
 ### Fixed (beta.12 re-release)
 

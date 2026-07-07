@@ -14,12 +14,17 @@ export function detectLlmClis(): string[] {
     ["codex", "Codex"],
     ["gemini", "Gemini"],
     ["opencode", "OpenCode"],
+    ["spinosa-tui", "OpenCode"],
     ["hermes", "Hermes Agent"],
     ["qwen", "Qwen"],
     ["kilo", "Kilo"],
   ]
+  const seen = new Set<string>()
   for (const [bin, label] of checks) {
-    if (existsOnPath(bin)) results.push(label)
+    if (existsOnPath(bin) && !seen.has(label)) {
+      seen.add(label)
+      results.push(label)
+    }
   }
   if (results.length === 0) results.push("Other (manual)")
   return results
@@ -120,11 +125,16 @@ export function runCliWithPrompt(root: string, cli: string, prompt: string): boo
       return true
     }
     case "opencode": {
-      if (!existsOnPath("opencode")) return false
+      const hasBundledTui = existsOnPath("spinosa-tui")
+      const hasSystemOpencode = existsOnPath("opencode")
+      if (!hasBundledTui && !hasSystemOpencode) return false
       const dir = createTempDir()
       const promptPath = prepareTempPrompt(dir, prompt)
       const escapedRoot = root.replace(/'/g, "'\\''")
-      const scriptPath = promptLaunchScript(promptPath, root, `opencode --prompt "$(cat "$_prompt")" '${escapedRoot}'`, dir)
+      const cliCommand = hasBundledTui
+        ? `npx @spinosa/tui --prompt "$(cat "$_prompt")" '${escapedRoot}'`
+        : `opencode --prompt "$(cat "$_prompt")" '${escapedRoot}'`
+      const scriptPath = promptLaunchScript(promptPath, root, cliCommand, dir)
       launchInTerminal(scriptPath)
       return true
     }

@@ -1,0 +1,11 @@
+{
+  "name": "@spinosa/tui",
+  "version": "0.8.0-beta.12",
+  "private": true,
+  "description": "Spinosa TUI — enhanced opencode with workspace management",
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "build": "bun run ../../script/build-tui.ts"
+  }
+}

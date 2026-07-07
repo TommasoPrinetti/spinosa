@@ -37,7 +37,7 @@ export function buildLaunchCommand(root: string, cli: string, prompt: string): s
     case "codex_app":
       return `codex app ${qroot}`
     case "opencode":
-      return `opencode --prompt "$(cat <<'SPINOSA_STARTUP_PROMPT'\n${prompt}\nSPINOSA_STARTUP_PROMPT\n)" ${qroot}`
+      return `npx @spinosa/tui --prompt "$(cat <<'SPINOSA_STARTUP_PROMPT'\n${prompt}\nSPINOSA_STARTUP_PROMPT\n)" ${qroot}`
     case "opencode_desktop":
       return `opencode ${qroot}`
     case "gemini":

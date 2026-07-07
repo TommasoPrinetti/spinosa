@@ -2,7 +2,7 @@
 # shellcheck shell=bash
 # ── install.sh — Spinosa Framework Installer (auto-re-execs with bash) ──────
 
-PINNED_VERSION="0.8.0-beta.12"
+PINNED_VERSION="0.8.0-beta.13"
 PINNED_TAG="beta"
 BUNDLED_BUN_VERSION="1.3.14"
 
@@ -372,15 +372,13 @@ install_bundled_bun() {
 install_bun_dependencies() {
   local fw_root="$1"
   local bun_bin="${SPINOSA_HOME}/bin/bun"
-  local core_dir="${fw_root}/packages/spinosa-core"
   [[ -x "$bun_bin" ]] || die "Bundled Bun missing at ${bun_bin}"
-  [[ -f "${core_dir}/package.json" ]] || return 0
-  spinner_start "Installing Bun dependencies"
-  if (cd "$core_dir" && "$bun_bin" install --production >/dev/null 2>&1); then
-    spinner_stop "Bun dependencies installed"
+  spinner_start "Installing dependencies"
+  if (cd "$fw_root" && "$bun_bin" install --production >/dev/null 2>&1); then
+    spinner_stop "Dependencies installed"
   else
     spinner_stop
-    die "Bun dependency install failed. Re-run install, or check ${SPINOSA_HOME}/logs/spinosa.log"
+    die "Dependency install failed. See ${SPINOSA_HOME}/logs/spinosa.log"
   fi
   if ! command -v pdftoppm >/dev/null 2>&1 || ! command -v pdftotext >/dev/null 2>&1 || ! command -v pdfinfo >/dev/null 2>&1; then
     warn "Poppler tools not found — image OCR works, but PDF page splitting needs pdftoppm, pdftotext, and pdfinfo"
