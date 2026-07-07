@@ -47,17 +47,17 @@ export class InvalidDurableEventError extends Schema.TaggedErrorClass<InvalidDur
   },
 ) {}
 
-const decodeSerializedEvent = (event: SerializedEvent): Payload => {
+const decodeSerializedEvent = (event: SerializedEvent): Effect.Effect<Payload, InvalidDurableEventError> => {
   const definition = Durable.get(event.type)
   if (!definition?.durable) {
-    throw new InvalidDurableEventError({ type: event.type, message: `Unknown durable event type ${event.type}` })
+    return Effect.fail(new InvalidDurableEventError({ type: event.type, message: `Unknown durable event type ${event.type}` }))
   }
-  return {
+  return Effect.sync(() => ({
     id: event.id,
     type: definition.type,
     durable: { aggregateID: event.aggregateID, seq: event.seq, version: definition.durable.version },
     data: Schema.decodeUnknownSync(definition.data)(event.data),
-  }
+  }))
 }
 
 export const readAggregate = Effect.fn("EventV2.readAggregate")(function* <A>(
@@ -549,8 +549,8 @@ export const layerWith = (options?: LayerOptions) =>
               .all(),
           ),
           Effect.orDie,
-          Effect.map((rows) =>
-            rows.map((event) =>
+          Effect.flatMap((rows) =>
+            Effect.forEach(rows, (event) =>
               decodeSerializedEvent({
                 id: event.id,
                 aggregateID: event.aggregate_id,

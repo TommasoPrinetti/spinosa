@@ -8,7 +8,7 @@ import { AbsolutePath, RelativePath } from "./schema"
 import { FSUtil } from "./fs-util"
 import { AppProcess } from "./process"
 import { makeGlobalNode } from "./effect/app-node"
-import { File } from "./file"
+import { Diff as FileDiff } from "./file"
 import { KeyedMutex } from "./effect/keyed-mutex"
 
 export class Repository extends Schema.Class<Repository>("Git.Repository")({
@@ -155,13 +155,13 @@ export interface Interface {
       to: TreeID
       context?: number
       paths?: readonly RelativePath[]
-    }) => Effect.Effect<readonly File.Diff[], OperationError>
+    }) => Effect.Effect<readonly FileDiff[], OperationError>
     readonly preview: (input: {
       repository: Repository
       current: TreeID
       files: ReadonlyMap<RelativePath, TreeID>
       context?: number
-    }) => Effect.Effect<readonly File.Diff[], OperationError>
+    }) => Effect.Effect<readonly FileDiff[], OperationError>
     readonly restore: (input: {
       repository: Repository
       files: ReadonlyMap<RelativePath, TreeID>
@@ -611,7 +611,7 @@ const layer = Layer.effect(
             additions: binary ? 0 : Number(stats[0] ?? 0),
             deletions: binary ? 0 : Number(stats[1] ?? 0),
             patch,
-          } satisfies File.Diff
+          } satisfies FileDiff
         }),
       )
     })

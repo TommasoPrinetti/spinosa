@@ -46,7 +46,7 @@ Yes. Ask the same question again, or refine it. Each question is a new dispatch.
 Two commands — different scopes:
 
 1. **`spinosa upgrade`** — updates the **CLI** (global install under `~/.spinosa/`). Your workspace folders are not modified.
-2. **`spinosa update`** — updates **framework files inside a workspace** (agents, docs templates, `.bin/`, vendor mirrors). Release-managed files are overwritten; user-state like `system/context.md`, `dictionary.md`, `raw/`, and workspace notes are preserved.
+2. **`spinosa update`** — updates **framework files inside a workspace** (agents, docs templates, `.bin/`, agent mirrors). Release-managed files are overwritten; user-state like `system/context.md`, `dictionary.md`, `raw/`, and workspace notes are preserved.
 
 After upgrading the CLI, run `spinosa update` on each workspace (Spinosa prompts you after upgrade). Then run **`spinosa doctor`** to check version alignment.
 

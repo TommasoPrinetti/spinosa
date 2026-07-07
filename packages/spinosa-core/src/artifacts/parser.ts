@@ -13,12 +13,12 @@ const AGENT_ORDER = [
   "spinosa-janitor",
 ]
 
-export function sessionIdFromGoalFilename(filename: string) {
+export function sessionIdFromGoalFilename(filename: string): string | undefined {
   const match = filename.match(/^g_(.+)\.md$/)
   return match?.[1]
 }
 
-export function parseYamlFrontmatter(text: string) {
+export function parseYamlFrontmatter(text: string): Record<string, string> {
   const match = text.match(/^---\r?\n([\s\S]*?)\r?\n---/)
   if (!match) return {}
   const fields: Record<string, string> = {}
@@ -156,7 +156,7 @@ export function parseGoalArtifact(text: string, goalPath: string): GoalArtifactS
   }
 }
 
-export function parseReportFrontmatter(text: string) {
+export function parseReportFrontmatter(text: string): { title?: string; status?: string; sessionId?: string } {
   const yaml = parseYamlFrontmatter(text)
   const title = text.match(/^#\s+(.+)$/m)?.[1]?.trim()
   return {
@@ -166,7 +166,7 @@ export function parseReportFrontmatter(text: string) {
   }
 }
 
-export function parseOrchestratorCounter(notes: string) {
+export function parseOrchestratorCounter(notes: string): number | undefined {
   const match =
     notes.match(/routes_since_overseer:\s*(\d+)/i) ??
     notes.match(/routes since last overseer[:\s]+(\d+)/i) ??
@@ -174,7 +174,7 @@ export function parseOrchestratorCounter(notes: string) {
   return match ? Number(match[1]) : undefined
 }
 
-export function parseOrchestratorAdvisories(notes: string) {
+export function parseOrchestratorAdvisories(notes: string): string[] {
   const block = notes.match(/## Orchestrator Advisories([\s\S]*?)(?=\n## |\n# |$)/)?.[1]
   if (!block) return []
   return block

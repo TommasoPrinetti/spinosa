@@ -17,6 +17,7 @@ export const optional = <S extends Schema.Top>(schema: S) =>
     }),
   )
 
+/** Adds methods to schema via Object.assign. Mutates the input schema — call on a fresh schema. */
 export const statics =
   <S extends object, M extends Record<string, unknown>>(methods: (schema: S) => M) =>
   (schema: S): S & M =>

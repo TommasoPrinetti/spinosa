@@ -12,4 +12,3 @@ export {
 export * as Cassette from "./cassette.js"
 export * as Redactor from "./redactor.js"
 
-export * as HttpRecorderInternal from "./internal.js"

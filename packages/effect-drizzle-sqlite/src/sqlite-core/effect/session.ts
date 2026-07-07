@@ -31,7 +31,7 @@ import { SQLiteEffectDatabase } from "./db"
 
 type MigrationConfigWithInit = MigrationConfig & { init?: boolean }
 
-type SQLiteEffectExecuteMethod = SQLiteExecuteMethod | "values"
+export type SQLiteEffectExecuteMethod = SQLiteExecuteMethod | "values"
 
 export class SQLiteEffectPreparedQuery<
   T extends PreparedQueryConfig,
@@ -45,7 +45,7 @@ export class SQLiteEffectPreparedQuery<
   joinsNotNullableMap?: Record<string, boolean>
   private jitMapper?: RowsMapper<any> | RelationalRowsMapper<any>
   private cacheConfig: WithCacheConfig | undefined
-  private effectExecuteMethod: SQLiteExecuteMethod
+  private effectExecuteMethod: SQLiteEffectExecuteMethod
 
   constructor(
     private executor: (
@@ -63,7 +63,7 @@ export class SQLiteEffectPreparedQuery<
       | undefined,
     cacheConfig: WithCacheConfig | undefined,
     private fields: SelectedFieldsOrdered | undefined,
-    executeMethod: SQLiteExecuteMethod,
+    executeMethod: SQLiteEffectExecuteMethod,
     private useJitMappers: boolean | undefined,
     private customResultMapper?: (
       rows: TIsRqbV2 extends true ? Record<string, unknown>[] : unknown[][],
@@ -299,6 +299,9 @@ export class SQLiteEffectPreparedQuery<
       case "get": {
         return this.mapGetResult(response, isFromBatch)
       }
+      case "values": {
+        return this.mapRunResult(response, isFromBatch)
+      }
     }
   }
 }
@@ -315,7 +318,7 @@ export abstract class SQLiteEffectSession<
   abstract prepareQuery<T extends PreparedQueryConfig = PreparedQueryConfig>(
     query: Query,
     fields: SelectedFieldsOrdered | undefined,
-    executeMethod: SQLiteExecuteMethod,
+    executeMethod: SQLiteEffectExecuteMethod,
     customResultMapper?: (rows: unknown[][], mapColumnValue?: (value: unknown) => unknown) => unknown,
     queryMetadata?: {
       type: "select" | "update" | "delete" | "insert"
@@ -388,7 +391,7 @@ export abstract class SQLiteEffectSession<
     return this.prepareQuery<PreparedQueryConfig & { values: T[]; execute: T[] }>(
       this.dialect.sqlToQuery(query),
       undefined,
-      "all",
+      "values",
     ).values()
   }
 

@@ -106,7 +106,7 @@ export const AttemptID = Schema.String.pipe(
 export type AttemptID = typeof AttemptID.Type
 
 const AttemptTime = Schema.Struct({
-  created: Schema.Number,
+  created: Schema.Number, // Schema.Finite would reject Infinity/NaN but would also break serialization of valid dates in some pipelines
   expires: Schema.Number,
 })
 

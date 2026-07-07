@@ -43,11 +43,16 @@ export function client<T extends Definition>(target: {
   }
   return {
     call<Method extends keyof T>(method: Method, input: Parameters<T[Method]>[0]): Promise<ReturnType<T[Method]>> {
+      const { promise, resolve, reject } = Promise.withResolvers<ReturnType<T[Method]>>()
       const requestId = id++
-      return new Promise((resolve) => {
-        pending.set(requestId, resolve)
+      pending.set(requestId, resolve)
+      try {
         target.postMessage(JSON.stringify({ type: "rpc.request", method, input, id: requestId }))
-      })
+      } catch (err) {
+        pending.delete(requestId)
+        reject(err)
+      }
+      return promise
     },
     on<Data>(event: string, handler: (data: Data) => void) {
       let handlers = listeners.get(event)

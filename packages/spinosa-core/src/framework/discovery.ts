@@ -1,3 +1,5 @@
+import { comparePrereleaseTokens } from "../utils/version"
+
 import { existsSync, readFileSync, readdirSync } from "node:fs"
 import { homedir } from "node:os"
 import path from "node:path"
@@ -22,8 +24,11 @@ function compareFrameworkVersions(a: string, b: string): number {
   }
   if (!va.pre && vb.pre) return 1
   if (va.pre && !vb.pre) return -1
-  if (va.pre > vb.pre) return 1
-  if (va.pre < vb.pre) return -1
+  const prereleaseResult = comparePrereleaseTokens(
+    va.pre ? va.pre.split(".") : [],
+    vb.pre ? vb.pre.split(".") : [],
+  )
+  if (prereleaseResult !== 0) return prereleaseResult
   return 0
 }
 
@@ -48,7 +53,7 @@ function discoverInstalledFramework(): string | undefined {
       }
     }
   } catch {
-    // ignore unreadable versions directory
+    // ignored — unreadable versions directory
   }
   return bestDir || undefined
 }

@@ -229,7 +229,7 @@ export const make = Effect.gen(function* () {
       let sink: Sink.Sink<void, unknown, never, PlatformError.PlatformError> = Sink.drain
       if (Predicate.isNotNull(proc.stdin)) {
         sink = NodeSink.fromWritable({
-          evaluate: () => proc.stdin!,
+          evaluate: () => proc.stdin,
           onError: (err) => toPlatformError("fromWritable(stdin)", toError(err), command),
           endOnDone: cfg.endOnDone,
           encoding: cfg.encoding,
@@ -247,13 +247,13 @@ export const make = Effect.gen(function* () {
   ) => {
     let stdout = proc.stdout
       ? NodeStream.fromReadable({
-          evaluate: () => proc.stdout!,
+          evaluate: () => proc.stdout,
           onError: (cause) => toPlatformError("fromReadable(stdout)", toError(cause), command),
         })
       : Stream.empty
     let stderr = proc.stderr
       ? NodeStream.fromReadable({
-          evaluate: () => proc.stderr!,
+          evaluate: () => proc.stderr,
           onError: (cause) => toPlatformError("fromReadable(stderr)", toError(cause), command),
         })
       : Stream.empty
@@ -305,7 +305,8 @@ export const make = Effect.gen(function* () {
 
     return Effect.try({
       try: () => {
-        globalThis.process.kill(-proc.pid!, signal)
+        if (proc.pid == null) throw new Error("process pid is null")
+        globalThis.process.kill(-proc.pid, signal)
       },
       catch: (err) => toPlatformError("kill", toError(err), command),
     })
@@ -405,8 +406,10 @@ export const make = Effect.gen(function* () {
           const fd = yield* setupFds(command, proc, extra)
           const out = setupOutput(command, proc, sout, serr)
           let ref = true
+          const pid = proc.pid
+          if (pid == null) return yield* Effect.die(new Error("process pid is null"))
           return makeHandle({
-            pid: ProcessId(proc.pid!),
+            pid: ProcessId(pid),
             stdin: yield* setupStdin(command, proc, sin),
             stdout: out.stdout,
             stderr: out.stderr,

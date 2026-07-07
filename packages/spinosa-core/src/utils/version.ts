@@ -45,7 +45,7 @@ function parseComparableFrameworkVersion(
 ): { core: number[]; prerelease: string[] } | undefined {
   if (!value) return
   const normalized = normalizeFrameworkVersion(value)
-  if (!normalized || normalized === "unknown" || isLegacyDevWorkspaceVersion(normalized)) return
+  if (!normalized || normalized === "unknown" || normalized.toLowerCase() === "dev") return
 
   const [base, ...rest] = normalized.split("-")
   const prerelease = rest.join("-").split(".").filter(Boolean)
@@ -58,7 +58,7 @@ function parseComparableFrameworkVersion(
   }
 }
 
-function comparePrereleaseTokens(left: string[], right: string[]): number {
+export function comparePrereleaseTokens(left: string[], right: string[]): number {
   const max = Math.max(left.length, right.length)
   for (let index = 0; index < max; index++) {
     const leftToken = left[index] ?? ""

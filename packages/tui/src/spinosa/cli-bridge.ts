@@ -2,6 +2,7 @@ import { existsSync } from "node:fs"
 import { homedir } from "node:os"
 import path from "node:path"
 import { spawn, type ChildProcess } from "node:child_process"
+import { readBundledFrameworkVersion } from "./service"
 import { tuiLog } from "./log"
 import { resolveFrameworkBin, resolveFrameworkRoot } from "@opencode-ai/spinosa-core/framework/discovery"
 import { createWorkspace } from "@opencode-ai/spinosa-core/commands/create"
@@ -383,13 +384,14 @@ export async function runCheckStartup(workspacePath: string) {
 }
 
 export async function runUpgrade(input?: {
+  channel?: string
   onStdout?: (chunk: string) => void
   onStderr?: (chunk: string) => void
 }) {
   tuiLog("runUpgrade (TS)")
   try {
     const result = await upgradeFramework({
-      channel: "stable",
+      channel: input?.channel ?? "stable",
       yes: true,
       onPhase: (_phase, msg) => input?.onStdout?.(msg + "\n"),
     })
@@ -405,26 +407,58 @@ export async function runUpgrade(input?: {
 }
 
 export async function runReinstall(input?: {
+  channel?: string
   onStdout?: (chunk: string) => void
   onStderr?: (chunk: string) => void
 }) {
   tuiLog("runReinstall (TS)")
-  try {
-    const result = await upgradeFramework({
-      channel: "stable",
-      reinstall: true,
-      yes: true,
-      onPhase: (_phase, msg) => input?.onStdout?.(msg + "\n"),
-    })
-    if (result.success) {
-      input?.onStdout?.(`Reinstalled v${result.newVersion}\n`)
-      return { exitCode: 0, stdout: "", stderr: "" } satisfies CliRunResult
-    }
-    return { exitCode: 1, stdout: "", stderr: "Reinstall failed." } satisfies CliRunResult
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
+  const fwRoot = resolveFrameworkRoot()
+  if (!fwRoot) {
+    const msg = "Framework root not found — cannot reinstall vendor tools."
+    input?.onStderr?.(msg + "\n")
     return { exitCode: 1, stdout: "", stderr: msg } satisfies CliRunResult
   }
+  const localInstaller = path.join(fwRoot, "install.sh")
+  if (!existsSync(localInstaller)) {
+    const msg = "install.sh not found in framework root."
+    input?.onStderr?.(msg + "\n")
+    return { exitCode: 1, stdout: "", stderr: msg } satisfies CliRunResult
+  }
+  const version = await readBundledFrameworkVersion()
+  if (!version) {
+    const msg = "Could not read bundled framework version."
+    input?.onStderr?.(msg + "\n")
+    return { exitCode: 1, stdout: "", stderr: msg } satisfies CliRunResult
+  }
+  input?.onStdout?.(`Reinstalling vendor tools for v${version}...\n`)
+  return new Promise<CliRunResult>((resolve) => {
+    const child = spawn("bash", [localInstaller, "--reinstall", "--version", version, "--yes", "--no-launch", "--no-bundled-tools"], {
+      stdio: ["ignore", "pipe", "pipe"],
+    })
+    let stdout = ""
+    let stderr = ""
+    child.stdout.on("data", (chunk: Buffer) => {
+      const text = chunk.toString("utf-8")
+      stdout += text
+      input?.onStdout?.(text)
+    })
+    child.stderr.on("data", (chunk: Buffer) => {
+      const text = chunk.toString("utf-8")
+      stderr += text
+      input?.onStderr?.(text)
+    })
+    child.on("close", (code) => {
+      if (code === 0) {
+        input?.onStdout?.(`Reinstall complete.\n`)
+        resolve({ exitCode: 0, stdout, stderr })
+      } else {
+        resolve({ exitCode: code ?? 1, stdout, stderr })
+      }
+    })
+    child.on("error", (err) => {
+      resolve({ exitCode: 1, stdout, stderr: err.message })
+    })
+  })
 }
 
 export async function runUpdate(workspacePath: string, input?: {

@@ -7,7 +7,7 @@ import { useSpinosaWorkspace } from "../../context/spinosa-workspace"
 import { Toast } from "../../ui/toast"
 import { ProgressEmitter } from "@opencode-ai/spinosa-core/progress/progress"
 import { PHASES, prepareNew, runNewPhase, completeNew, runReinstall, runStartup, type NewWorkspacePhase } from "../../spinosa/cli-bridge"
-import { readStartupPrompt, writePreferredCli } from "../../spinosa/service"
+import { readBundledFrameworkVersion, isPrereleaseFrameworkVersion, readStartupPrompt, writePreferredCli } from "../../spinosa/service"
 import { CenteredColumn } from "../../component/centered-column"
 import { OPENCODE_BASE_MODE, useOpencodeKeymap, useOpencodeModeStack } from "../../keymap"
 import { buttonBackground, buttonBorder, buttonText } from "../../util/button"
@@ -340,7 +340,11 @@ export function Onboarding() {
       await delay(100)
       appendLogLine("")
       appendLogLine("Some tools missing — repairing...")
+      // Infer channel from the installed bundle: prerelease → beta, otherwise → stable
+      const bv = await readBundledFrameworkVersion()
+      const channel = bv && isPrereleaseFrameworkVersion(bv) ? "beta" : "stable"
       await runReinstall({
+        channel,
         onStdout: (chunk) => {
           const clean = stripAnsi(chunk)
           if (clean) appendLogLine(clean)

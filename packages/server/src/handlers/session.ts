@@ -24,16 +24,16 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.list",
         Effect.fn(function* (ctx) {
-          const query =
-            ctx.query.cursor !== undefined
-              ? yield* SessionsCursor.parse(ctx.query.cursor).pipe(
-                  Effect.mapError(() => new InvalidCursorError({ message: "Invalid cursor" })),
-                )
-              : ctx.query
+          const { cursor: rawCursor, ...query } = ctx.query
+          if (rawCursor !== undefined) {
+            Object.assign(query, yield* SessionsCursor.parse(rawCursor).pipe(
+              Effect.mapError(() => new InvalidCursorError({ message: "Invalid cursor" })),
+            ))
+          }
           const sessions = yield* session.list({
             ...query,
             workspaceID: query.workspace,
-            limit: ctx.query.limit ?? DefaultSessionsLimit,
+            limit: query.limit ?? DefaultSessionsLimit,
           })
           const first = sessions[0]
           const last = sessions.at(-1)
@@ -241,7 +241,8 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
               ),
               Effect.catchTag("Snapshot.Error", (error) => {
                 const ref = `err_${crypto.randomUUID().slice(0, 8)}`
-                return Effect.logError("failed to stage session revert", { cause: error }).pipe(
+                return Effect.logError("failed to stage session revert").pipe(
+                  Effect.annotateLogs({ cause: error }),
                   Effect.andThen(
                     Effect.fail(
                       new UnknownError({
@@ -269,8 +270,8 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                 }),
             ),
             Effect.catchTag("Snapshot.Error", (error) => {
-              const ref = `err_${crypto.randomUUID().slice(0, 8)}`
-              return Effect.logError("failed to clear session revert", { cause: error }).pipe(
+              return Effect.logError("failed to clear session revert").pipe(
+                Effect.annotateLogs({ cause: error }),
                 Effect.andThen(
                   Effect.fail(
                     new UnknownError({

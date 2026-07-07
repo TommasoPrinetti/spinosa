@@ -2,11 +2,11 @@ import {
   existsSync,
   mkdirSync,
   rmSync,
-  statSync,
   readdirSync,
+  statSync,
+  writeFileSync,
 } from "node:fs"
 import * as path from "node:path"
-import { spawnSync } from "node:child_process"
 import { safeCopy } from "../utils/fs"
 import {
   findSourceFiles,
@@ -17,22 +17,16 @@ import {
 } from "../extension/classifier"
 import { ImportBatchManager } from "../import/batch"
 import { injectColdFrontmatter, convertedOutputExists, removeConvertedOutput } from "../import/frontmatter"
-import {
-  markitdownBin,
-  fallbackPythonBin,
-  markitdownScriptPath,
-  structuredFallbackAvailable,
-} from "../tools/detection"
 import { scanSource } from "../scan/scanner"
 import { fileExt } from "../constants"
 import { runPpuOcrBatch } from "../import/ppu-ocr"
+import { MarkItDown } from "markitdown-ts"
 
 export interface AddFilesOptions {
   workspacePath: string
   sourcePath: string
   sourceIsDir?: boolean
   extensions?: string
-  preferredCli?: string
   overwrite?: boolean
   onProgress?: (message: string) => void
 }
@@ -49,77 +43,23 @@ export interface AddFilesResult {
   ocrSkipped: number
 }
 
-function runBatchMarkitdown(
+async function runBatchMarkitdown(
   sourcePath: string,
   files: { srcFile: string; destFile: string; relPath: string }[],
-): { converted: string[]; failed: string[] } {
-  const binPath = markitdownBin()
-  let cmd: string
-  let args: string[]
+): Promise<{ converted: string[]; failed: string[] }> {
+  const converter = new MarkItDown()
+  const converted: string[] = []
+  const failed: string[] = []
 
-  if (binPath) {
-    cmd = binPath
-    args = ["--batch"]
-  } else if (structuredFallbackAvailable()) {
-    const python = fallbackPythonBin()
-    const script = markitdownScriptPath()
-    if (!python || !script) return { converted: [], failed: files.map((f) => f.relPath) }
-    cmd = python
-    args = [script, "--batch"]
-  } else {
-    return { converted: [], failed: files.map((f) => f.relPath) }
-  }
-
-  const inputLines: string[] = [`SOURCE\t${sourcePath}`]
   for (const f of files) {
-    inputLines.push(`FILE\t${f.srcFile}\t${f.destFile}`)
-  }
-
-  const result = spawnSync(cmd, args, {
-    input: inputLines.join("\n") + "\n",
-    encoding: "utf-8",
-    timeout: 300_000,
-  })
-
-  const relByDest = new Map<string, string>()
-  for (const f of files) {
-    relByDest.set(f.destFile, f.relPath)
-  }
-
-  const stderr = result.stderr || ""
-  let converted: string[] = []
-  let failed: string[] = []
-
-  for (const line of stderr.split("\n")) {
-    if (line.startsWith("END\t")) {
-      const parts = line.split("\t")
-      if (parts[1] === "ok") {
-        const donePaths = files.filter((f) => existsSync(f.destFile))
-        for (const f of donePaths) {
-          if (!converted.includes(f.relPath)) converted.push(f.relPath)
-        }
-      }
-    }
-  }
-
-  if (converted.length === 0 && failed.length === 0) {
-    for (const f of files) {
-      if (existsSync(f.destFile)) {
-        converted.push(f.relPath)
-      } else {
-        failed.push(f.relPath)
-      }
-    }
-  } else {
-    const seen = new Set([...converted, ...failed])
-    for (const f of files) {
-      if (!seen.has(f.relPath)) {
-        if (existsSync(f.destFile)) {
-          converted.push(f.relPath)
-        } else {
-          failed.push(f.relPath)
-        }
-      }
+    try {
+      mkdirSync(path.dirname(f.destFile), { recursive: true })
+      const result = await converter.convert(f.srcFile)
+      const text = result?.markdown ?? ""
+      writeFileSync(f.destFile, text, "utf-8")
+      converted.push(f.relPath)
+    } catch {
+      failed.push(f.relPath)
     }
   }
 
@@ -130,7 +70,7 @@ async function runBatchOcr(
   _sourcePath: string,
   files: { srcFile: string; destFile: string; relPath: string }[],
 ): Promise<{ converted: string[]; failed: string[] }> {
-  await runPpuOcrBatch(files.map((f) => ({ src: f.srcFile, rel: f.relPath, dest: f.destFile })))
+  // intentionally discarded — re-computed via convertedOutputExists below
   const converted = files.filter((f) => convertedOutputExists(f.destFile)).map((f) => f.relPath)
   const failed = files.filter((f) => !convertedOutputExists(f.destFile)).map((f) => f.relPath)
   return { converted, failed }
@@ -333,7 +273,7 @@ async function addFilesFromDir(
     )
 
     if (active.length > 0) {
-      const mdResult = runBatchMarkitdown(sourcePath, active)
+      const mdResult = await runBatchMarkitdown(sourcePath, active)
       for (const rel of mdResult.converted) {
         const entry = active.find((e) => e.relPath === rel)
         if (!entry) continue
@@ -503,52 +443,16 @@ async function addSingleFile(
 
       removeConvertedOutput(destFile)
 
-      const binPath = markitdownBin()
-      let cmd: string
-      let args: string[]
-
-      if (binPath) {
-        cmd = binPath
-        args = ["--batch"]
-      } else if (structuredFallbackAvailable()) {
-        const python = fallbackPythonBin()
-        const script = markitdownScriptPath()
-        if (!python || !script) {
-          failed = 1
-          break
-        }
-        cmd = python
-        args = [script, "--batch"]
-      } else {
-        failed = 1
-        break
-      }
-
-      const inputLines = [`SOURCE\t${path.dirname(srcFile)}`, `FILE\t${srcFile}\t${destFile}`]
-
-      const result = spawnSync(cmd, args, {
-        input: inputLines.join("\n") + "\n",
-        encoding: "utf-8",
-        timeout: 120_000,
-      })
-
-      const stderr = result.stderr || ""
-      let mdOk = false
-
-      for (const line of stderr.split("\n")) {
-        if (line.startsWith("END\t")) {
-          const parts = line.split("\t")
-          if (parts[1] === "ok") mdOk = true
-        }
-      }
-
-      if (mdOk && existsSync(destFile)) {
+      try {
+        const converter = new MarkItDown()
+        const result = await converter.convert(srcFile)
+        const text = result?.markdown ?? ""
+        writeFileSync(destFile, text, "utf-8")
         mdConverted = 1
         injectColdFrontmatter(destFile)
-      } else {
+      } catch {
         mdSkipped = 1
       }
-
       break
     }
 

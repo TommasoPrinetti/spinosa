@@ -55,18 +55,22 @@ def distribution(values, total_width):
 
 def main():
     parser = argparse.ArgumentParser(description="Categorical Histogram")
-    parser.add_argument("--input", type=str, help="Input JSON file")
+    parser.add_argument("--input", "-i", type=str, help="Input JSON file")
     parser.add_argument("--title", type=str, default="", help="Chart title")
     parser.add_argument("--width", type=int, default=52, help="Total box width")
     parser.add_argument("--max-value", type=float, default=None, help="Override max for consistent scale")
     parser.add_argument("--grouped", action="store_true", help="Grouped mode (default: stacked)")
     args = parser.parse_args()
 
-    if args.input:
-        with open(args.input) as f:
-            data = json.load(f)
-    else:
-        data = json.load(sys.stdin)
+    try:
+        if args.input:
+            with open(args.input) as f:
+                data = json.load(f)
+        else:
+            data = json.load(sys.stdin)
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        print(f"Error loading input: {e}", file=sys.stderr)
+        sys.exit(1)
 
     bin_labels = data["bin_labels"]
     series = data["series"]

@@ -14,7 +14,6 @@ import argparse
 import json
 import sys
 
-BLOCK_CHARS = [' ', '▁', '▂', '▃', '▄', '▅', '▆', '▇', '█']
 FULL = '█'
 EMPTY = ' '
 
@@ -140,10 +139,14 @@ def main():
     parser.add_argument('--title', default='', help='Chart title')
     parser.add_argument('--width', type=int, default=52, help='Chart total width (default: 52)')
     parser.add_argument('--height', type=int, default=8, help='Chart height in rows (default: 8)')
-    parser.add_argument('--show-values', action='store_true', default=True, help='Show values atop bars (default: True)')
+    parser.add_argument('--show-values', action='store_true', default=False, help='Show values atop bars (default: True)')
     args = parser.parse_args()
 
-    data = load_data(args.input)
+    try:
+        data = load_data(args.input)
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        print(f"Error loading input: {e}", file=sys.stderr)
+        sys.exit(1)
     chart = build_chart(data, args.title, args.width, args.height, args.show_values)
     print(chart)
 

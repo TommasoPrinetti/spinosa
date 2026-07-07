@@ -230,8 +230,8 @@ export namespace FSUtil {
     const resolved = pathResolve(windowsPath(p))
     try {
       return normalizePath(realpathSync(resolved))
-    } catch (e: any) {
-      if (e?.code === "ENOENT") return normalizePath(resolved)
+    } catch (e: unknown) {
+      if (typeof e === "object" && e !== null && "code" in e && (e as Record<string, unknown>).code === "ENOENT") return normalizePath(resolved)
       throw e
     }
   }

@@ -26,12 +26,12 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
   const [grouped, { refetch }] = createResource(
     () => ({
       filter: store.filter,
-      items: typeof props.items === "function" ? props.items(store.filter) : props.items,
+      items: props.items,
     }),
     async ({ filter, items }) => {
       const query = filter ?? ""
       const needle = query.toLowerCase()
-      const all = (await Promise.resolve(items)) || []
+      const all = (await Promise.resolve(typeof items === "function" ? items(filter) : items)) || []
       const result = pipe(
         all,
         (x) => {

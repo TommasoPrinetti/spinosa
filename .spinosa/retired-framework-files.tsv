@@ -18,3 +18,4 @@ logs/.gitkeep	2026-07-01	renamed_to_dot_logs
 CHANGELOG.md	2026-07-01	repo_only_not_user_deliverable
 install.sh	2026-07-01	global_installer_not_workspace_copy
 docs/reference/testsuite.md	2026-07-01	maintainer_only_not_user_deliverable
+.bin/lib/markitdown-cli.py	2026-07-07	python_vendor_removed_markitdown_ts_is_primary

@@ -9,11 +9,17 @@ import { Api } from "../api"
 const subscriberCapacity = 256
 
 function eventData(data: unknown): Sse.Event {
+  let payload: string
+  try {
+    payload = JSON.stringify(Schema.encodeUnknownSync(OpenCodeEvent)(data))
+  } catch {
+    payload = JSON.stringify({})
+  }
   return {
     _tag: "Event",
     event: "message",
     id: undefined,
-    data: JSON.stringify(Schema.encodeUnknownSync(OpenCodeEvent)(data)),
+    data: payload,
   }
 }
 

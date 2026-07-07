@@ -108,7 +108,7 @@ async function ppuService(onLog?: (line: string) => void): Promise<PaddleOcrServ
             querySelectorAll: () => [],
             cookie: "",
             title: "",
-          } as any
+          } as Record<string, unknown>
         }
         onLog?.("PPU PaddleOCR: step 1 - dynamic import...")
         const { PaddleOcrService: OcrService } = await import("ppu-paddle-ocr")

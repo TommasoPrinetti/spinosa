@@ -160,9 +160,8 @@ export const fffLayer = Layer.effect(
         }),
       grep: (input) =>
         Effect.sync(() => {
-          const prefix = input.path?.replaceAll("\\", "/").replace(/\/$/, "")
           const found = result.value.grep(
-            [prefix ? `${prefix}/**` : undefined, input.include, input.pattern]
+            [input.pattern, prefix ? `path:${prefix}/**` : undefined, input.include ? `include:${input.include}` : undefined]
               .filter((value) => value !== undefined)
               .join(" "),
             { mode: "regex", pageSize: input.limit, timeBudgetMs: 1_500 },

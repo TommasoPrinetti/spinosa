@@ -329,5 +329,7 @@ export function hasUnbound(root: Node<unknown, unknown, any>, source: AnyNode): 
 function flatten(node: AnyNode): readonly AnyNode[] {
   return node.kind === "group" ? node.dependencies.flatMap(flatten) : [node]
 }
+// flatMap recurses into group nodes to produce a flat list for the tree walker.
+// This avoids recursive type instantiation for deeply nested node graphs.
 
 export * as LayerNode from "./layer-node"

@@ -246,7 +246,6 @@ async function cmdAdd(args: string[]) {
     sourcePath: resolvedSrc,
     sourceIsDir,
     extensions: flagExtensions || undefined,
-    preferredCli: flagCli || "opencode",
     onProgress: (msg) => note(msg),
   })
 

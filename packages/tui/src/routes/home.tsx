@@ -2,9 +2,10 @@ import { Prompt, type PromptRef } from "../component/prompt"
 import { createEffect, createMemo, createResource, createSignal, onCleanup, onMount, Show } from "solid-js"
 import { Logo } from "../component/logo"
 import { useSync } from "../context/sync"
-import { Toast } from "../ui/toast"
+import { Toast, useToast } from "../ui/toast"
 import { useArgs } from "../context/args"
 import { useLegacyHomeRoute } from "../context/route"
+import { useExit } from "../context/exit"
 import { usePromptRef } from "../context/prompt"
 import { useLocal } from "../context/local"
 import { usePluginRuntime } from "../plugin/runtime"
@@ -20,9 +21,10 @@ import { useTheme } from "../context/theme"
 import { useDialog } from "../ui/dialog"
 import { DialogSpinosaWorkspacePicker } from "../component/dialog-spinosa-workspace-picker"
 import { OPENCODE_BASE_MODE, useOpencodeKeymap, useOpencodeModeStack } from "../keymap"
-import { readBundledFrameworkVersion, compareFrameworkVersions } from "../spinosa/service"
+import { readBundledFrameworkVersion, compareFrameworkVersions, isPrereleaseFrameworkVersion } from "../spinosa/service"
 import { workspaceAsciiBannerText } from "../spinosa/workspace-name"
-import { resolveReleaseVersionForChannel, spinosaReleaseChannel } from "@opencode-ai/spinosa-core/system/channels"
+import { resolveReleaseVersionForChannel } from "@opencode-ai/spinosa-core/system/channels"
+import type { ReleaseChannel } from "@opencode-ai/spinosa-core/system/channels"
 import { runUpgrade } from "../spinosa/cli-bridge"
 import { buttonBackground, buttonText } from "../util/button"
 
@@ -42,6 +44,7 @@ const spinosaPlaceholder = {
 
 export function Home() {
   const pluginRuntime = usePluginRuntime()
+  const exit = useExit()
   const sync = useSync()
   const route = useLegacyHomeRoute()
   const dialog = useDialog()
@@ -72,8 +75,12 @@ export function Home() {
   })
   const [latestVersion] = createResource(async () => {
     try {
-      const channel = await spinosaReleaseChannel()
-      return await resolveReleaseVersionForChannel(channel)
+      const bv = bundledVersion()
+      if (!bv) return undefined
+      // Infer channel from the bundled version: prerelease → beta, otherwise → stable.
+      // This prevents offering stable upgrades when the user runs a beta build.
+      const inferredChannel: ReleaseChannel = isPrereleaseFrameworkVersion(bv) ? "beta" : "stable"
+      return await resolveReleaseVersionForChannel(inferredChannel)
     } catch { return undefined }
   })
   const upgradeAvailable = createMemo(() => {
@@ -112,12 +119,36 @@ export function Home() {
     onCleanup(off)
   })
 
+  const toast = useToast()
   const doUpgrade = async () => {
     if (upgrading()) return
     setUpgrading(true)
+    const bv = bundledVersion()
+    const channel: ReleaseChannel = bv && isPrereleaseFrameworkVersion(bv) ? "beta" : "stable"
+    const progressMsgs: string[] = []
     try {
-      await runUpgrade()
-      refetchBundled()
+      const result = await runUpgrade({
+        channel,
+        onStdout: (msg) => {
+          progressMsgs.push(msg.trim())
+          toast.show({ variant: "info", message: msg.trim(), duration: 0 })
+        },
+        onStderr: (msg) => {
+          progressMsgs.push(msg.trim())
+          toast.show({ variant: "warning", message: msg.trim(), duration: 0 })
+        },
+      })
+      if (result.exitCode === 0) {
+        toast.show({ variant: "success", message: "Upgrade complete! Restarting…" })
+        // Give toast time to render, then restart the TUI
+        await new Promise((r) => setTimeout(r, 1500))
+        exit()
+      } else {
+        toast.show({ variant: "error", message: result.stderr || "Upgrade failed" })
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      toast.show({ variant: "error", message: msg })
     } finally {
       setUpgrading(false)
     }
@@ -128,11 +159,13 @@ export function Home() {
     }
     return defaultPlaceholder
   })
+
   const promptMaxWidth = createMemo(() => {
     const configured = tuiConfig.prompt?.max_width
     if (configured === "auto") return MAIN_CONTENT_MAX_WIDTH
     return configured ?? MAIN_CONTENT_MAX_WIDTH
   })
+
   let sent = false
   let lastRoutePromptKey: string | undefined
 

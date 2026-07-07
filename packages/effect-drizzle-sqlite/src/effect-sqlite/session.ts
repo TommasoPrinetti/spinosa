@@ -15,6 +15,7 @@ import type { AnyRelations } from "drizzle-orm/relations"
 import type { RelationalQueryMapperConfig } from "drizzle-orm/relations"
 import type { Query } from "drizzle-orm/sql/sql"
 import type { SQLiteAsyncDialect } from "drizzle-orm/sqlite-core/dialect"
+import type { SQLiteEffectExecuteMethod } from "../sqlite-core/effect/session"
 import { SQLiteEffectPreparedQuery, SQLiteEffectSession, SQLiteEffectTransaction } from "../sqlite-core/effect/session"
 import type { SelectedFieldsOrdered } from "drizzle-orm/sqlite-core/query-builders/select.types"
 import type { PreparedQueryConfig, SQLiteExecuteMethod, SQLiteTransactionConfig } from "drizzle-orm/sqlite-core/session"
@@ -51,7 +52,7 @@ export class EffectSQLiteSession<TRelations extends AnyRelations> extends SQLite
   override prepareQuery<T extends PreparedQueryConfig = PreparedQueryConfig>(
     query: Query,
     fields: SelectedFieldsOrdered | undefined,
-    executeMethod: SQLiteExecuteMethod,
+    executeMethod: SQLiteEffectExecuteMethod,
     customResultMapper?: (rows: unknown[][], mapColumnValue?: (value: unknown) => unknown) => unknown,
     queryMetadata?: {
       type: "select" | "update" | "delete" | "insert"

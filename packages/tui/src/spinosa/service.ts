@@ -65,6 +65,7 @@ export async function readBundledFrameworkVersion() {
 
 export {
   compareFrameworkVersions,
+  isPrereleaseFrameworkVersion,
   isSpinosaWorkspace,
   readWorkspaceMeta,
   listRegisteredWorkspaces,
@@ -229,8 +230,8 @@ export async function listAuxiliaryArtifacts(workspacePath: string) {
     else if (name.startsWith("e_")) buckets.evaluator.push(name)
     else if (name.startsWith("extraction_batch_")) buckets.extraction.push(name)
   }
-  for (const key of Object.keys(buckets)) {
-    buckets[key]!.sort().reverse()
+  for (const key of Object.keys(buckets) as (keyof typeof buckets)[]) {
+    buckets[key].sort().reverse()
   }
   return buckets
 }

@@ -15,9 +15,8 @@ import { ProgressEmitter } from "../progress/progress"
 import { writeSetupFiles } from "../workspace/registry"
 import { writeWorkspaceStatus } from "../workspace/meta"
 import { generateStartupPrompt } from "./startup"
-import { preferredCliName } from "../handoff/builder"
+import { preferredCliName, buildLaunchCommand } from "../handoff/builder"
 import { copyToClipboard } from "../handoff/runner"
-import { buildLaunchCommand } from "../handoff/builder"
 
 export type OnboardingPhase =
   | "scan"
@@ -297,14 +296,10 @@ export async function runOnboarding(
   const phase = onPhase ?? (() => {})
 
   phase("direct", "Copying files...")
-  const dr: { copied: number; skipped: number; failed: number } = await runImportPhase(ctx, "direct", onCopyProgress, (msg) => onPhase?.("import", msg)) as any
-
+  const dr = await runImportPhase(ctx, "direct", onCopyProgress, (msg) => onPhase?.("import", msg)) as { copied: number; skipped: number; failed: number }
   phase("markitdown", "Converting with MarkItDown...")
-  const mr: { mdConverted: number; mdSkipped: number } = await runImportPhase(ctx, "markitdown", onCopyProgress, (msg) => onPhase?.("import", msg)) as any
-
-  phase("ocr", "Running OCR...")
-  const or: { ocrConverted: number; ocrSkipped: number } = await runImportPhase(ctx, "ocr", onCopyProgress, (msg) => onPhase?.("import", msg)) as any
-
+  const mr = await runImportPhase(ctx, "markitdown", onCopyProgress, (msg) => onPhase?.("import", msg)) as { mdConverted: number; mdSkipped: number }
+  const or = await runImportPhase(ctx, "ocr", onCopyProgress, (msg) => onPhase?.("import", msg)) as { ocrConverted: number; ocrSkipped: number }
   return completeOnboarding(ctx, { direct: dr, markitdown: mr, ocr: or }, options)
 }
 

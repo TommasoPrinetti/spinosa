@@ -1,7 +1,6 @@
 import { existsSync, mkdirSync, appendFileSync, readFileSync, readdirSync, writeFileSync } from "node:fs"
 import * as path from "node:path"
-import { spawn, spawnSync } from "node:child_process"
-import { createInterface } from "node:readline"
+import { spawnSync } from "node:child_process"
 import { MarkItDown } from "markitdown-ts"
 
 import { fileExt, STRUCTURED_FALLBACK_EXTENSIONS } from "../constants"
@@ -14,13 +13,13 @@ import {
   classifySourceFile,
   importRouteForFile,
 } from "../extension/classifier"
-import { safeCopy, safeCopyAsync } from "../utils/fs"
-import { isTextBasedPdf } from "../extension/pdf"
+import { safeCopyAsync } from "../utils/fs"
 import type { FileClass, ImportRoute } from "../extension/types"
 import { injectColdFrontmatter, convertedOutputExists } from "./frontmatter"
 import type { ImportBatchManager } from "./batch"
 import { runPpuOcrBatch } from "./ppu-ocr"
 import { ProgressEmitter } from "../progress/progress"
+import { ocrAvailable } from "../tools/detection"
 
 export interface CopyResult {
   copied: number
@@ -122,8 +121,8 @@ export async function runDirectPhase(
   let copied = 0; let skipped = 0; let failed = 0
   const recoverable: { src: string; dest: string }[] = []
 
-  for (let i = 0; i < files.length; i++) {
-    const { src, rel, dest } = files[i]!
+  for (const [i, entry] of files.entries()) {
+    const { src, rel, dest } = entry
     const result = await copyDirectRawFile(src, dest, rel, prog, onLog, i + 1, files.length)
     if (result === "copied") { copied++; injectColdFrontmatter(dest); recoverable.push({ src, dest }) }
     else if (result === "skipped") { skipped++ }
@@ -154,8 +153,7 @@ export async function runMarkitdownPhase(
 
   mdSkipped += preSkipped.length
   const total = preSkipped.length + toProcess.length
-  for (let i = 0; i < preSkipped.length; i++) {
-    const ps = preSkipped[i]!
+  for (const [i, ps] of preSkipped.entries()) {
     onLog?.(`  ${ps.rel} → already converted, skipped`)
     appendNdjson(path.join(logsDir, "markitdown-processed.ndjson"), {
       ts: isoNow(), status: "skip", source: ps.rel,
@@ -198,64 +196,49 @@ export async function runMarkitdownPhase(
   const preCount = preSkipped.length
 
   if (remainingMd.length > 0) {
-    const markitdownBin = resolveBinary("markitdown-cli")
-
-    if (markitdownBin) {
-      onLog?.(`MarkItDown: Converting ${remainingMd.length} files`)
-      const mdLog = path.join(logsDir, "markitdown-processed.ndjson")
-      const mdResult = await runConverterBatch("markitdown", markitdownBin, remainingMd, sourcePath, destDir, mdLog, prog, onLog)
-      mdConverted += mdResult.converted
-      mdSkipped += mdResult.skipped
-      for (const f of remainingMd) {
-        if (convertedOutputExists(f.dest)) recoverable.push({ src: f.src, dest: f.dest })
-      }
-      await yieldToEL()
-    } else {
-      const converter = new MarkItDown()
-      const mdLog = path.join(logsDir, "markitdown-processed.ndjson")
-      for (let i = 0; i < remainingMd.length; i++) {
-        const f = remainingMd[i]!
-        onLog?.(`  ${f.rel} → markitdown-ts ...`)
-        const startTime = Date.now()
-        try {
-          mkdirSync(path.dirname(f.dest), { recursive: true })
-          const result = await converter.convert(f.src)
-          const text = result?.markdown ?? ""
-          writeFileSync(f.dest, text, "utf-8")
-          injectColdFrontmatter(f.dest)
+    const converter = new MarkItDown()
+    const mdLog = path.join(logsDir, "markitdown-processed.ndjson")
+    for (const [i, f] of remainingMd.entries()) {
+      onLog?.(`  ${f.rel} → markitdown-ts ...`)
+      const startTime = Date.now()
+      try {
+        mkdirSync(path.dirname(f.dest), { recursive: true })
+        const result = await converter.convert(f.src)
+        const text = result?.markdown ?? ""
+        writeFileSync(f.dest, text, "utf-8")
+        injectColdFrontmatter(f.dest)
+        mdConverted++
+        recoverable.push({ src: f.src, dest: f.dest })
+        appendNdjson(mdLog, {
+          ts: isoNow(), status: "ok", source: f.rel,
+          output: f.dest.replace(destDir, "").replace(/^\//, ""),
+          engine: "markitdown-ts", pages: "",
+          duration_s: (Date.now() - startTime) / 1000,
+        })
+      } catch (err) {
+        if (writeStructuredFallbackMarkdown(f.src, f.dest, f.rel)) {
           mdConverted++
           recoverable.push({ src: f.src, dest: f.dest })
           appendNdjson(mdLog, {
             ts: isoNow(), status: "ok", source: f.rel,
             output: f.dest.replace(destDir, "").replace(/^\//, ""),
+            engine: "structured-fallback", pages: "",
+            duration_s: (Date.now() - startTime) / 1000,
+          })
+          onLog?.(`MarkItDown fallback converted: ${f.rel}`)
+        } else {
+          mdSkipped++
+          appendNdjson(mdLog, {
+            ts: isoNow(), status: "fail", source: f.rel,
+            output: f.dest.replace(destDir, "").replace(/^\//, ""),
             engine: "markitdown-ts", pages: "",
             duration_s: (Date.now() - startTime) / 1000,
           })
-        } catch (err) {
-          if (writeStructuredFallbackMarkdown(f.src, f.dest, f.rel)) {
-            mdConverted++
-            recoverable.push({ src: f.src, dest: f.dest })
-            appendNdjson(mdLog, {
-              ts: isoNow(), status: "ok", source: f.rel,
-              output: f.dest.replace(destDir, "").replace(/^\//, ""),
-              engine: "structured-fallback", pages: "",
-              duration_s: (Date.now() - startTime) / 1000,
-            })
-            onLog?.(`MarkItDown fallback converted: ${f.rel}`)
-          } else {
-            mdSkipped++
-            appendNdjson(mdLog, {
-              ts: isoNow(), status: "fail", source: f.rel,
-              output: f.dest.replace(destDir, "").replace(/^\//, ""),
-              engine: "markitdown-ts", pages: "",
-              duration_s: (Date.now() - startTime) / 1000,
-            })
-            onLog?.(`MarkItDown failed: ${f.rel} — ${err}`)
-          }
+          onLog?.(`MarkItDown failed: ${f.rel} — ${err}`)
         }
-        prog.file("MarkItDown", preCount + i + 1, total, f.rel)
-        await yieldToEL()
       }
+      prog.file("MarkItDown", preCount + i + 1, total, f.rel)
+      await yieldToEL()
     }
   }
 
@@ -282,8 +265,7 @@ export async function runOcrPhase(
 
   ocrSkipped += preSkipped.length
   const total = preSkipped.length + toProcess.length
-  for (let i = 0; i < preSkipped.length; i++) {
-    const ps = preSkipped[i]!
+  for (const [i, ps] of preSkipped.entries()) {
     onLog?.(`  ${ps.rel} → already converted, skipped`)
     appendNdjson(path.join(logsDir, "ocr-processed.ndjson"), {
       ts: isoNow(), status: "skip", source: ps.rel,
@@ -403,35 +385,10 @@ function importOutputExists(destDir: string, relDest: string): boolean {
   return convertedOutputExists(path.join(destDir, relDest))
 }
 
-function retryConverterMarkitdown(
-  srcFile: string,
-  destFile: string,
-  sourcePath: string,
-): boolean {
-  const binary = resolveBinary("markitdown-cli")
-  if (!binary) return false
-  try {
-    mkdirSync(path.dirname(destFile), { recursive: true })
-    const result = spawnSync(binary, ["--batch"], {
-      stdio: ["pipe", "pipe", "pipe"],
-      input: `SOURCE\t${sourcePath}\nFILE\t${srcFile}\t${destFile}\n`,
-      timeout: 120_000,
-    })
-    const stderr = (result.stderr || "").toString()
-    return stderr.includes("END\tok\t")
-  } catch {
-    return false
-  }
-}
-
 export interface VerifyResult {
   missing: number
   recovered: number
   stillMissing: number
-}
-
-function appendNdjson(path: string, obj: Record<string, unknown>): void {
-  appendFileSync(path, JSON.stringify(obj) + "\n", "utf-8")
 }
 
 function writeStructuredFallbackMarkdown(srcFile: string, destFile: string, relPath: string): boolean {
@@ -463,6 +420,10 @@ function commandOnPath(name: string): string | undefined {
     if (existsSync(full)) return full
   }
   return undefined
+}
+
+function appendNdjson(path: string, obj: Record<string, unknown>): void {
+  appendFileSync(path, JSON.stringify(obj) + "\n", "utf-8")
 }
 
 function convertTextPdfWithPdftotext(srcFile: string, destFile: string, relPath: string): boolean {
@@ -522,25 +483,6 @@ function convertTextPdfWithPdftotext(srcFile: string, destFile: string, relPath:
   return true
 }
 
-// ── Binary lookup ────────────────────────────────────────────────────────
-
-import { markitdownBin, ocrAvailable } from "../tools/detection"
-
-function resolveBinary(name: string): string | null {
-  // Check vendor dirs first (markitdown-cli)
-  if (name === "markitdown-cli") return markitdownBin() ?? null
-  // Fallback: Bun.which, then PATH
-  if (typeof Bun !== "undefined" && Bun.which) {
-    return Bun.which(name) ?? null
-  }
-  const pathDirs = (process.env.PATH || "").split(path.delimiter)
-  for (const dir of pathDirs) {
-    const full = path.join(dir, name)
-    if (existsSync(full)) return full
-  }
-  return null
-}
-
 type CopyDirectResult = "copied" | "skipped" | "failed"
 
 async function copyDirectRawFile(
@@ -575,139 +517,6 @@ async function copyDirectRawFile(
   return "failed"
 }
 
-// ── Converter batch (MarkItDown / OCR – same FIFO protocol) ───────────────
-
-interface BatchFileEntry {
-  src: string
-  rel: string
-  dest: string
-}
-
-interface ConverterResult {
-  converted: number
-  skipped: number
-}
-
-async function runConverterBatch(
-  engine: string,
-  binary: string,
-  files: BatchFileEntry[],
-  sourcePath: string,
-  destDir: string,
-  logFile: string,
-  prog: ProgressEmitter,
-  onLog?: (msg: string) => void,
-  timeoutMs = 300_000,
-): Promise<ConverterResult> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(binary, ["--batch"], {
-      stdio: ["pipe", "pipe", "pipe"],
-    })
-
-    let converted = 0
-    let skipped = 0
-    let currentRel = ""
-    let currentPage = ""
-    let endCount = 0
-    const total = files.length
-    let timedOut = false
-
-    const timer = setTimeout(() => {
-      timedOut = true
-      child.kill("SIGTERM")
-      onLog?.(`${engine} timed out after ${timeoutMs}ms — ${endCount}/${total} files processed`)
-    }, timeoutMs)
-
-    child.stdin!.write(`SOURCE\t${sourcePath}\n`)
-    for (const f of files) {
-      child.stdin!.write(`FILE\t${f.src}\t${f.dest}\n`)
-    }
-    child.stdin!.end()
-
-    const rl = createInterface({ input: child.stderr!, crlfDelay: Infinity })
-
-    rl.on("line", (raw: string) => {
-      const line = raw.trim()
-      if (!line) return
-
-      const tabIdx = line.indexOf("\t")
-      const type = tabIdx >= 0 ? line.slice(0, tabIdx) : line
-      const rest = tabIdx >= 0 ? line.slice(tabIdx + 1) : ""
-
-      switch (type) {
-        case "BEGIN": {
-          currentRel = rest
-          onLog?.(`  ${currentRel} → ${engine} ...`)
-          currentPage = ""
-          break
-        }
-        case "PROGRESS": {
-          currentPage = rest
-          break
-        }
-        case "END": {
-          const parts = rest.split("\t")
-          const endStatus = parts[0] ?? ""
-          const endRel = parts[1] ?? ""
-          const endDur = parts[2] ?? "0"
-
-          let outRel: string
-          if (engine === "ocr") {
-            const dir = path.dirname(endRel)
-            const stem = path.basename(endRel, path.extname(endRel))
-            outRel = dir === "." ? `${stem}.md` : `${dir}/${stem}.md`
-          } else {
-            outRel = markitdownOutputRelPath(endRel)
-          }
-          const outFull = path.join(destDir, outRel)
-
-          endCount++
-
-          if (endStatus === "ok") {
-            converted++
-            injectColdFrontmatter(outFull)
-            const pageFolder = outRel.replace(/\.md$/, "")
-            if (pageFolder) {
-              const fullPageFolder = path.join(destDir, pageFolder)
-              if (existsSync(fullPageFolder)) {
-                try {
-                  const pageFiles = readdirSync(fullPageFolder).filter((f) => f.startsWith("page-") && f.endsWith(".md")).sort()
-                  for (const pf of pageFiles) injectColdFrontmatter(path.join(fullPageFolder, pf))
-                } catch { /* page folder exists but may be unreadable */ }
-              }
-            }
-          } else {
-            skipped++
-          }
-
-          appendNdjson(logFile, {
-            ts: isoNow(),
-            status: endStatus === "ok" ? "ok" : "fail",
-            source: endRel, output: outRel, engine,
-            pages: currentPage || "", duration_s: Number.parseFloat(endDur) || 0,
-          })
-
-          prog.file(engine, endCount, total, endRel)
-          break
-        }
-      }
-    })
-
-    child.on("close", (code) => {
-      clearTimeout(timer)
-      if (timedOut) { resolve({ converted, skipped }); return }
-      if (code !== 0 && code !== null) {
-        onLog?.(`${engine} exited ${code} — ${endCount}/${total} files processed`)
-      }
-      resolve({ converted, skipped })
-    })
-
-    child.on("error", (err: Error) => {
-      clearTimeout(timer)
-      reject(err)
-    })
-  })
-}
 
 // ── Verify & recover (full source-tree scan, route-aware) ──────────────────
 
@@ -762,15 +571,20 @@ export async function verifyAndRecoverImport(
         break
       }
       case "markitdown": {
-        if (retryConverterMarkitdown(srcFile, destFile, sourcePath)) {
+        try {
+          mkdirSync(path.dirname(destFile), { recursive: true })
+          const converter = new MarkItDown()
+          const result = await converter.convert(srcFile)
+          const text = result?.markdown ?? ""
+          writeFileSync(destFile, text, "utf-8")
           injectColdFrontmatter(destFile)
-          onLog?.(`    Recovered (markitdown retry): ${relPath}`)
+          onLog?.(`    Recovered (markitdown-ts): ${relPath}`)
           ok = true
-        } else {
+        } catch {
           const fallbackDest = path.join(destDir, relPath)
           mkdirSync(path.dirname(fallbackDest), { recursive: true })
           if (await safeCopyAsync(srcFile, fallbackDest)) {
-            onLog?.(`    Recovered (source copy fallback, markitdown retry failed): ${relPath}`)
+            onLog?.(`    Recovered (source copy fallback, markitdown failed): ${relPath}`)
             ok = true
           }
         }
@@ -838,7 +652,6 @@ export async function copySource(
   const prog = new ProgressEmitter()
   prog.on((e) => { options?.onProgress?.(e.phase, e.current, e.total, e.relPath) })
 
-  const allRecoverable: { src: string; dest: string }[] = []
   const runPhase = (p: "direct" | "markitdown" | "ocr"): boolean => {
     const rp = options?.runPhase ?? "all"
     return rp === "all" || rp === p
@@ -847,19 +660,16 @@ export async function copySource(
   if (runPhase("direct")) {
     const dr = await runDirectPhase(classified.directFiles, prog, options?.onLog)
     res.copied += dr.copied; res.skipped += dr.skipped; res.failed += dr.failed
-    allRecoverable.push(...dr.recoverable)
   }
 
   if (runPhase("markitdown") && options?.markitdownChoice) {
     const mr = await runMarkitdownPhase(classified.markitdownFiles, sourcePath, destDir, prog, options?.onLog)
     res.mdConverted += mr.mdConverted; res.mdSkipped += mr.mdSkipped
-    allRecoverable.push(...mr.recoverable)
   }
 
   if (runPhase("ocr") && options?.ocrChoice) {
     const or = await runOcrPhase(classified.ocrFiles, sourcePath, destDir, prog, options?.onLog)
     res.ocrConverted += or.ocrConverted; res.ocrSkipped += or.ocrSkipped
-    allRecoverable.push(...or.recoverable)
   }
 
   res.totalCopied = res.copied + res.mdConverted + res.ocrConverted

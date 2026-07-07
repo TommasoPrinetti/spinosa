@@ -72,7 +72,8 @@ function init() {
       event.stopPropagation()
     }
 
-    makeEventListener(window, "keydown", onKeyDown, { capture: true })
+    const dispose = makeEventListener(window, "keydown", onKeyDown, { capture: true })
+    onCleanup(() => dispose())
   })
 
   const mount = (element: DialogElement, owner: Owner, onClose: (() => void) | undefined, layer: number) => {

@@ -322,7 +322,7 @@ def load_markitdown(required: bool):
         return MarkItDown(enable_plugins=enable_plugins)
     except ImportError as e:
         if required:
-            raise e
+            raise
         return None
 
 
@@ -337,7 +337,6 @@ def single_main(input_path: str, output_path: str):
         sys.exit(1)
 
     try:
-        ext = Path(input_path).suffix.lower()
         md = load_markitdown(required=ext not in FALLBACK_EXTENSIONS)
         pdf_pages = convert_pdf_pages(md, input_path)
         if pdf_pages:

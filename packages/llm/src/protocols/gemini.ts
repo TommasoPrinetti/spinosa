@@ -139,6 +139,7 @@ interface ParserState {
   readonly finishReason?: string
   readonly hasToolCalls: boolean
   readonly nextToolCallId: number
+  readonly nextReasoningId: number
   readonly usage?: Usage
   readonly lifecycle: Lifecycle.State
   readonly reasoningSignature?: string
@@ -380,11 +381,13 @@ const finish = (state: ParserState): ReadonlyArray<LLMEvent> =>
   state.finishReason || state.usage
     ? (() => {
         const events: LLMEvent[] = []
+        // Use the last-issued reasoning ID when finishing with an active reasoning signature
+        const reasoningId = state.nextReasoningId > 0 ? state.nextReasoningId - 1 : 0
         const lifecycle = state.reasoningSignature
           ? Lifecycle.reasoningEnd(
               state.lifecycle,
               events,
-              "reasoning-0",
+              `reasoning-${reasoningId}`,
               googleMetadata({ thoughtSignature: state.reasoningSignature }),
             )
           : state.lifecycle
@@ -410,32 +413,38 @@ const step = (state: ParserState, event: GeminiEvent) => {
 
   const events: LLMEvent[] = []
   let hasToolCalls = nextState.hasToolCalls
-  let lifecycle = nextState.lifecycle
   let nextToolCallId = nextState.nextToolCallId
+  let nextReasoningId = nextState.nextReasoningId
   let reasoningSignature = nextState.reasoningSignature
+  let reasoningActive = false
 
   for (const part of candidate.content.parts) {
-    if ("thoughtSignature" in part && part.thoughtSignature && "thought" in part && part.thought)
-      reasoningSignature = part.thoughtSignature
     if ("text" in part && part.text.length > 0) {
       if (part.thought) {
+        // Start a new reasoning block with a unique ID
         lifecycle = Lifecycle.reasoningDelta(
           lifecycle,
           events,
-          "reasoning-0",
+          `reasoning-${nextReasoningId}`,
           part.text,
           part.thoughtSignature ? googleMetadata({ thoughtSignature: part.thoughtSignature }) : undefined,
         )
+        reasoningActive = true
+        nextReasoningId++
         continue
       }
+      // End any active reasoning before emitting text; reasoningEnd is a no-op
+      // when no reasoning block is active, so it's safe to call unconditionally.
       lifecycle = Lifecycle.reasoningEnd(
         lifecycle,
         events,
-        "reasoning-0",
+        `reasoning-${reasoningActive ? nextReasoningId - 1 : 0}`,
         reasoningSignature ? googleMetadata({ thoughtSignature: reasoningSignature }) : undefined,
       )
+      reasoningActive = false
       lifecycle = Lifecycle.textDelta(lifecycle, events, "text-0", part.text)
       continue
+
     }
 
     if ("functionCall" in part) {
@@ -444,9 +453,10 @@ const step = (state: ParserState, event: GeminiEvent) => {
       lifecycle = Lifecycle.reasoningEnd(
         lifecycle,
         events,
-        "reasoning-0",
+        `reasoning-${reasoningActive ? nextReasoningId - 1 : 0}`,
         reasoningSignature ? googleMetadata({ thoughtSignature: reasoningSignature }) : undefined,
       )
+      reasoningActive = false
       lifecycle = Lifecycle.stepStart(lifecycle, events)
       events.push(
         LLMEvent.toolCall({
@@ -468,6 +478,7 @@ const step = (state: ParserState, event: GeminiEvent) => {
       hasToolCalls,
       lifecycle,
       nextToolCallId,
+      nextReasoningId,
       reasoningSignature,
       finishReason: candidate.finishReason ?? nextState.finishReason,
     },
@@ -491,7 +502,7 @@ export const protocol = Protocol.make({
   },
   stream: {
     event: Protocol.jsonEvent(GeminiEvent),
-    initial: () => ({ hasToolCalls: false, nextToolCallId: 0, lifecycle: Lifecycle.initial() }),
+    initial: () => ({ hasToolCalls: false, nextToolCallId: 0, nextReasoningId: 0, lifecycle: Lifecycle.initial() }),
     step,
     onHalt: finish,
   },

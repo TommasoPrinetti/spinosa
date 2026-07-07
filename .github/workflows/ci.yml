@@ -14,16 +14,7 @@ jobs:
 
       - name: Shell syntax check
         run: |
-          bash -n .bin/spinosa
-          bash -n .bin/lib/spinosa/*.sh
-          bash -n .bin/check-doc-contract.sh
-          bash -n .bin/check-startup.sh
-          bash -n .bin/validate-skills.sh
-          bash -n .bin/package-release.sh
-          bash -n .bin/publish-release.sh
-          bash -n .bin/build-spinosa-vendor.sh
-          bash -n install.sh
-
+          for f in .bin/spinosa .bin/*.sh .bin/lib/spinosa/*.sh install.sh; do bash -n "$f"; done
       - name: Startup contract check
         run: bash .bin/check-startup.sh
 

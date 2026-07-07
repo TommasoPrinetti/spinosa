@@ -55,7 +55,7 @@ export interface ListRef {
   setFilter: (value: string) => void
 }
 
-export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) {
+export function List<T>(props: ListProps<T> & { listRef?: (ref: ListRef) => void }) {
   const i18n = useI18n()
   let inputRef: HTMLInputElement | HTMLTextAreaElement | undefined
   const [store, setStore] = createStore({
@@ -196,7 +196,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
     }
   }
 
-  props.ref?.({
+  props.listRef?.({
     onKeyDown: handleKey,
     setScrollRef,
     setFilter: (value) => applyFilter(value, { ref: true }),

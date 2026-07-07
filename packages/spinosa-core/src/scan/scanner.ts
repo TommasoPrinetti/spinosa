@@ -4,12 +4,7 @@ import { findSourceFiles, classifySourceFile } from "../extension/classifier"
 import { fileExt } from "../constants"
 import { resolveUserPath } from "../utils/path"
 import type { ImportBatchManager } from "../import/batch"
-import {
-  markitdownAvailable,
-  ocrAvailable,
-  pypdfium2Available,
-  pypdfAvailable,
-} from "../tools/detection"
+import { ocrAvailable, pypdfium2Available, pypdfAvailable } from "../tools/detection"
 export { detectLlmTools } from "../tools/detection"
 
 export interface ScanCounts {
@@ -124,7 +119,7 @@ export async function detectDocumentTools(): Promise<ToolStatus> {
     pypdfAvailable(),
   ])
   return {
-    markitdown: markitdownAvailable(),
+    markitdown: true,
     pypdfium2,
     pypdf,
   }

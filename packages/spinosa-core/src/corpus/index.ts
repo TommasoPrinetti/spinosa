@@ -27,7 +27,7 @@ export function parseExtractionProgress(text: string): ExtractionProgress {
   }
 }
 
-export function parseCoverageStatus(text: string) {
+export function parseCoverageStatus(text: string): { setupStatus?: string; rawCopies?: string; maps?: string; dictionary?: string; knownGaps?: string } {
   const block = section(text, "Coverage Status")
   return {
     setupStatus: bulletValue(block, "Setup status"),
@@ -55,7 +55,7 @@ export function parseMapLevels(text: string): MapLevelRow[] {
   return rows
 }
 
-export function parseHealthMatrix(text: string) {
+export function parseHealthMatrix(text: string): string[] {
   const block = section(text, "Workspace Health Matrix")
   const lines: string[] = []
   let inDashboard = false
@@ -74,7 +74,7 @@ export function parseHealthMatrix(text: string) {
   return lines
 }
 
-export function parseDictionaryStatus(text: string) {
+export function parseDictionaryStatus(text: string): string | undefined {
   const block = section(text, "Dictionary Status")
   const trimmed = block.replace(/^## Dictionary Status\s*/m, "").trim()
   if (!trimmed || trimmed === "Pending fresh startup run.") return trimmed || undefined
@@ -118,7 +118,7 @@ export function buildMapTree(paths: string[]): MapTreeEntry[] {
   return entries
 }
 
-export function countDictionaryTerms(text: string) {
+export function countDictionaryTerms(text: string): number {
   let count = 0
   for (const line of text.split("\n")) {
     if (/^#{2,3}\s+/.test(line)) count++

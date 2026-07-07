@@ -8,7 +8,7 @@ export const MARKDOWN_EXTENSIONS = [
 
 export const NATIVE_EXTENSIONS = ["md"]
 
-export const BINARY_COPYABLE_EXTENSIONS: string[] = []
+export const BINARY_COPYABLE_EXTENSIONS: string[] = [] // intentionally empty for now — extension point
 
 export const MARKITDOWN_EXTENSIONS = [
   "docx", "pptx", "xlsx", "xls", "epub",

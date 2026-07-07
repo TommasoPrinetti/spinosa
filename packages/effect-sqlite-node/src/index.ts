@@ -1,4 +1,3 @@
-export * as NodeSqliteClient from "./index"
 
 import { DatabaseSync, type SQLInputValue } from "node:sqlite"
 import { identity } from "effect/Function"
@@ -62,8 +61,9 @@ export const make = (
         allowExtension: options.allowExtension,
         enableForeignKeyConstraints: true,
         open: true,
-      })
-      yield* Effect.addFinalizer(() => Effect.sync(() => db.close()))
+        create: options.create,
+        readwrite: options.readwrite,
+      } as ConstructorParameters<typeof DatabaseSync>[1])
 
       if (options.disableWAL !== true && options.readonly !== true) {
         db.exec("PRAGMA journal_mode = WAL;")
@@ -112,8 +112,17 @@ export const make = (
         executeValues(sql, params) {
           return runValues(sql, params)
         },
-        executeUnprepared(sql, params, transformRows) {
-          return this.execute(sql, params, transformRows)
+        executeUnprepared(sql, _params, transformRows) {
+          return Effect.try({
+            try: () => {
+              const result = db.exec(sql) as unknown as Array<Record<string, unknown>>
+              return transformRows ? transformRows(result) : result
+            },
+            catch: (cause) =>
+              new SqlError({
+                reason: classifySqliteError(cause, { message: "Failed to execute statement", operation: "execute" }),
+              }),
+          })
         },
         executeStream() {
           return Stream.die("executeStream not implemented")
@@ -131,15 +140,23 @@ export const make = (
 
     const semaphore = yield* Semaphore.make(1)
     const connection = yield* makeConnection
+    const transactionAcquirer = Effect.uninterruptibleMask((restore) =>
+      Effect.gen(function* () {
+        const fiber = Fiber.getCurrent()
+        if (!fiber) {
+          return yield* Effect.die("No fiber available for transaction acquirer")
+        }
+        const scope = Context.getUnsafe(fiber.context, Scope.Scope)
+        if (!scope) {
+          return yield* Effect.die("No scope available for transaction acquirer")
+        }
+        return yield* Effect.as(
+          Effect.tap(restore(semaphore.take(1)), () => Scope.addFinalizer(scope, semaphore.release(1))),
+          connection,
+        )
+      }),
+    )
     const acquirer = semaphore.withPermits(1)(Effect.succeed(connection))
-    const transactionAcquirer = Effect.uninterruptibleMask((restore) => {
-      const fiber = Fiber.getCurrent()!
-      const scope = Context.getUnsafe(fiber.context, Scope.Scope)
-      return Effect.as(
-        Effect.tap(restore(semaphore.take(1)), () => Scope.addFinalizer(scope, semaphore.release(1))),
-        connection,
-      )
-    })
 
     return Object.assign(
       (yield* Client.make({

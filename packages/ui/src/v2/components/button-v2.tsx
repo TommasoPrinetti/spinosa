@@ -20,7 +20,7 @@ export function ButtonV2(props: ButtonV2Props) {
       data-component="button-v2"
       data-size={split.size || "normal"}
       data-variant={split.variant || "neutral"}
-      data-icon={resolvedIcon()}
+      data-icon={resolvedIcon() || undefined}
       classList={{
         ...split.classList,
         [split.class ?? ""]: !!split.class,

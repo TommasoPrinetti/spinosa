@@ -26,19 +26,22 @@ export const dispatch = (tools: Tools, call: ToolCallPart): Effect.Effect<Dispat
   if (!tool.execute)
     return Effect.succeed(result(call, { type: "error", value: `Tool has no execute handler: ${call.name}` }))
 
-  return decodeAndExecute(tool, call).pipe(
+  return decodeAndExecute(tool, tool.execute, call).pipe(
     Effect.map((value) => result(call, value)),
     Effect.catchTag("LLM.ToolFailure", (failure) =>
       Effect.succeed(result(call, { type: "error", value: failure.message }, failure.error)),
     ),
   )
 }
-
-const decodeAndExecute = (tool: AnyTool, call: ToolCallPart): Effect.Effect<ToolSettlement, ToolFailure> =>
+const decodeAndExecute = (
+  tool: AnyTool,
+  execute: NonNullable<AnyTool["execute"]>,
+  call: ToolCallPart,
+): Effect.Effect<ToolSettlement, ToolFailure> =>
   tool._decode(call.input).pipe(
     Effect.mapError((error) => new ToolFailure({ message: `Invalid tool input: ${error.message}` })),
     Effect.flatMap((decoded) =>
-      tool.execute!(decoded, { id: call.id, name: call.name }).pipe(
+      execute(decoded, { id: call.id, name: call.name }).pipe(
         Effect.flatMap((value) =>
           tool._encode(value).pipe(
             Effect.mapError(
@@ -52,9 +55,9 @@ const decodeAndExecute = (tool: AnyTool, call: ToolCallPart): Effect.Effect<Tool
         Effect.map((encoded) => {
           if (tool._legacyResult && ToolResultValue.is(encoded))
             return { result: encoded, output: ToolOutput.fromResultValue(encoded) }
-          const output = tool._project(decoded, call.id, encoded)
-          const result = ToolOutput.toResultValue(output)
-          return result.type === "error" ? { result } : { result, output }
+          if (ToolResultValue.is(encoded))
+            return { result: encoded, output: ToolOutput.fromResultValue(encoded), ...encoded }
+          return { result: new ToolResultValue({ type: "success", value: encoded }) }
         }),
       ),
     ),
