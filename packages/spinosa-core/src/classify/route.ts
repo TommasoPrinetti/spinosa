@@ -27,11 +27,11 @@ export function classifyPrompt(prompt: string): RouteClass {
   return "Q2"
 }
 
-export function isNonFastPath(route: RouteClass) {
+export function isNonFastPath(route: RouteClass): boolean {
   return route !== "fast_path"
 }
 
-export function chainForRoute(route: RouteClass) {
+export function chainForRoute(route: RouteClass): string {
   switch (route) {
     case "Q1":
       return "searcher → writer → verifier → evaluator"

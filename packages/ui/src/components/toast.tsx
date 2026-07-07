@@ -140,10 +140,13 @@ export function showToast(options: ToastOptions | string) {
               <button
                 data-slot="toast-action"
                 onClick={() => {
-                  if (typeof action.onClick === "function") {
-                    action.onClick()
+                  try {
+                    if (typeof action.onClick === "function") {
+                      action.onClick()
+                    }
+                  } finally {
+                    toaster.dismiss(props.toastId)
                   }
-                  toaster.dismiss(props.toastId)
                 }}
               >
                 {action.label}

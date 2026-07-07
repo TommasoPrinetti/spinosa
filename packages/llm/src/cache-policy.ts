@@ -47,14 +47,14 @@ const makeHint = (ttlSeconds: number | undefined): CacheHint =>
 const markLastTool = (tools: ReadonlyArray<ToolDefinition>, hint: CacheHint): ReadonlyArray<ToolDefinition> => {
   if (tools.length === 0) return tools
   const last = tools.length - 1
-  if (tools[last]!.cache) return tools
+  if (tools[last]?.cache) return tools
   return tools.map((tool, i) => (i === last ? new ToolDefinition({ ...tool, cache: hint }) : tool))
 }
 
 const markLastSystem = (system: LLMRequest["system"], hint: CacheHint): LLMRequest["system"] => {
   if (system.length === 0) return system
   const last = system.length - 1
-  if (system[last]!.cache) return system
+  if (system[last]?.cache) return system
   return system.map((part, i) => (i === last ? { ...part, cache: hint } : part))
 }
 
@@ -66,12 +66,13 @@ const lastIndexOfRole = (messages: ReadonlyArray<Message>, role: Message["role"]
 // in tool-result-only messages too.
 const markMessageAt = (messages: ReadonlyArray<Message>, index: number, hint: CacheHint): ReadonlyArray<Message> => {
   if (index < 0 || index >= messages.length) return messages
-  const target = messages[index]!
+  const target = messages[index]
+  if (!target) return messages
   if (target.content.length === 0) return messages
   const lastTextIndex = target.content.findLastIndex((part) => part.type === "text")
   const markAt = lastTextIndex >= 0 ? lastTextIndex : target.content.length - 1
-  const existing = target.content[markAt]!
-  if ("cache" in existing && existing.cache) return messages
+  const existing = target.content[markAt]
+  if (!existing || ("cache" in existing && existing.cache)) return messages
   const nextContent = target.content.map((part, i) => (i === markAt ? ({ ...part, cache: hint } as ContentPart) : part))
   const next = new Message({ ...target, content: nextContent })
   // Single pass over `messages`, substituting the one updated entry. Long

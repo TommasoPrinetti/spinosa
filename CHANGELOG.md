@@ -8,6 +8,19 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.8.0-beta.12] — 2026-07-07
+
+### Fixed
+
+- Upgrade banner now infers release channel from the installed bundle version instead of user config, so a beta install never gets offered a stable upgrade.
+- In-TUI upgrade shows step-by-step toast progress and restarts the TUI on completion — no more spawning a separate CLI window.
+- Tool repair (`runReinstall`) uses the local `install.sh` with captured output instead of downloading from GitHub, keeping all progress visible inside the TUI.
+- `workspaceAsciiBannerText` correctly strips the `-spinosa` suffix from workspace names with dedup numbers (e.g. `corpus-spinosa-2` → `CORPUS-2`).
+- All Python vendor dependencies removed from the framework.  `markitdown-ts` and `ppu-paddle-ocr` handle document conversion and OCR as Bun/TS packages.  No more `pip install`, Python runtime, or vendor tarballs.
+- Worker no longer crashes on `effect` import (removed stale `Either` barrel import in `event.ts`).  RPC `call()` properly handles `postMessage` failures with `Promise.withResolvers()`.
+- `runReinstall` no longer hardcodes `"stable"` channel — inferred from bundle version like all other upgrade paths.
+- Three missing imports (`workspaceAsciiBannerText`, `runUpgrade`, `placeholders`) restored in `home.tsx` — fixes TUI crashes on workspace switch.
+
 ## [0.8.0-beta.10] — 2026-07-02
 
 ### Changed

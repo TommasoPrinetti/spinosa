@@ -64,7 +64,7 @@ Exact install URL: `https://github.com/TommasoPrinetti/spinosa/releases/download
 
 Set the channel for channel-less upgrade tooling in `~/.spinosa/metadata/config.yaml`: `beta: true` tracks beta prereleases, `beta: false` tracks stable releases. `SPINOSA_RELEASE_CHANNEL=beta|stable` remains an environment override.
 
-This updates `~/.spinosa/` (framework runtime, vendor Python tools). It does **not** update files inside your workspace folders.
+This updates `~/.spinosa/` (framework runtime). It does **not** update files inside your workspace folders.
 
 After upgrading, Spinosa offers to run `spinosa update` on registered workspaces. Accept that step unless you intentionally keep an older workspace framework.
 
@@ -114,7 +114,7 @@ Spinosa has **three layers**. Use the right command for each:
 
 | Layer | Command | What changes |
 |-------|---------|--------------|
-| Global CLI | `spinosa upgrade` | `~/.spinosa/versions/`, `~/.spinosa/bin/spinosa`, vendor Python tools |
+| Global CLI | `spinosa upgrade` | `~/.spinosa/versions/`, `~/.spinosa/bin/spinosa` |
 | Workspace framework | `spinosa update` | `AGENTS.md`, `.agents/`, `.bin/`, `docs/`, maps templates, etc. |
 | Vendor integration | automatic on `update` + manual Hermes merge | `.opencode/`, `.claude/`, `.codex/`, `.hermes/skills/`; merge `workspace.config.yaml` → `~/.hermes/config.yaml` |
 
@@ -171,6 +171,4 @@ PDFs are automatically classified as text-based (routed to MarkItDown) or image-
 | `NO_COLOR=1` | Disable ANSI colors in output |
 | `SPINOSA_HOME` | Override the installation directory (default: `~/.spinosa`) |
 | `SPINOSA_BIN_DIR` | Override the shim directory on PATH (default: `~/.local/bin`) |
-| `SPINOSA_MARKITDOWN_ENABLE_PLUGINS=1` | Enable installed MarkItDown plugins for conversion. Disabled by default. |
-| `SPINOSA_MARKITDOWN_EXTRA_EXTENSIONS` | Comma- or pipe-separated plugin extension list to route through MarkItDown first. |
 | `SPINOSA_NO_EMOJI=1` | Disable emoji in output |

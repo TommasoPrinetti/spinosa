@@ -269,8 +269,10 @@ export function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
 
   const resolved = Object.fromEntries(
     Object.entries(theme.theme)
-      .filter(([key]) => key !== "selectedListItemText" && key !== "backgroundMenu" && key !== "thinkingOpacity" && key !== "spinnerColor" && key !== "inactiveFactor")
       .map(([key, value]) => {
+        if (typeof value === 'object' && value !== null) {
+          return [key, resolveColor(value as ColorValue)]
+        }
         return [key, resolveColor(value as ColorValue)]
       }),
   ) as Partial<Record<ThemeColor, RGBA>>
@@ -371,8 +373,8 @@ export function terminalMode(colors: TerminalColors): "dark" | "light" | undefin
 }
 
 export function generateSystem(colors: TerminalColors, mode: "dark" | "light"): ThemeJson {
-  const bg = RGBA.fromHex(colors.defaultBackground ?? colors.palette[0]!)
-  const fg = RGBA.fromHex(colors.defaultForeground ?? colors.palette[7]!)
+  const bg = RGBA.fromHex(colors.defaultBackground ?? colors.palette[0] ?? ansiToRgba(0))
+  const fg = RGBA.fromHex(colors.defaultForeground ?? colors.palette[7] ?? ansiToRgba(7))
   const transparent = RGBA.fromValues(bg.r, bg.g, bg.b, 0)
   const isDark = mode == "dark"
 

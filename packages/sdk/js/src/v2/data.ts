@@ -1,4 +1,5 @@
 import type { Part, UserMessage } from "./client.js"
+import { randomUUID } from "node:crypto"
 
 export const message = {
   user(input: Omit<UserMessage, "role" | "time" | "id"> & { parts: Omit<Part, "id" | "sessionID" | "messageID">[] }): {
@@ -9,7 +10,7 @@ export const message = {
 
     const info: UserMessage = {
       ...rest,
-      id: "asdasd",
+      id: randomUUID(),
       time: {
         created: Date.now(),
       },
@@ -19,13 +20,12 @@ export const message = {
     return {
       info,
       parts: input.parts.map(
-        (part) =>
-          ({
-            ...part,
-            id: "asdasd",
-            messageID: info.id,
-            sessionID: info.sessionID,
-          }) as Part,
+        (part): Part => ({
+          ...part,
+          id: randomUUID(),
+          messageID: info.id,
+          sessionID: info.sessionID,
+        }),
       ),
     }
   },

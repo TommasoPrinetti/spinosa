@@ -44,8 +44,8 @@ def render_cells(data, width, height):
     bit_map = [[0, 3], [1, 4], [2, 5]]
     cells = [[0] * width for _ in range(height)]
 
-    series_list = data.get("series", [])
     if len(series_list) > 2:
+        print(f"Warning: truncating {len(series_list)} series to 2 for braille display", file=sys.stderr)
         series_list = series_list[:2]
 
     all_x = []
@@ -276,11 +276,15 @@ def main():
     parser.add_argument("--grid", action="store_true", help="Show grid lines")
     args = parser.parse_args()
 
-    if args.input:
-        with open(args.input) as f:
-            data = json.load(f)
-    else:
-        data = json.load(sys.stdin)
+    try:
+        if args.input:
+            with open(args.input) as f:
+                data = json.load(f)
+        else:
+            data = json.load(sys.stdin)
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        print(f"Error loading input: {e}", file=sys.stderr)
+        sys.exit(1)
 
     chart = render_chart(data, args.title, args.width, args.height, args.grid)
     print(chart)

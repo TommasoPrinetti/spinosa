@@ -1,12 +1,16 @@
 import type { CorpusIndexSummary, ExtractionProgress, MapLevelRow, MapTreeEntry } from "./types"
 
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+}
+
 function section(text: string, heading: string) {
-  const pattern = new RegExp(`## ${heading}[\\s\\S]*?(?=\\n## |$)`)
+  const pattern = new RegExp(`## ${escapeRegExp(heading)}[\\s\\S]*?(?=\\n## |$)`)
   return text.match(pattern)?.[0] ?? ""
 }
 
 function bulletValue(block: string, label: string) {
-  const match = block.match(new RegExp(`^-\\s*${label}:\\s*(.+)$`, "m"))
+  const match = block.match(new RegExp(`^-\\s*${escapeRegExp(label)}:\\s*(.+)$`, "m"))
   return match?.[1]?.trim()
 }
 

@@ -1,17 +1,9 @@
-import { existsSync, readdirSync, statSync, accessSync, constants } from "node:fs"
-import { homedir } from "node:os"
+import { existsSync, readdirSync, statSync } from "node:fs"
 import path from "node:path"
 import { detectLlmTools as coreDetectLlmTools } from "@opencode-ai/spinosa-core/tools/detection"
 import { resolveUserPath } from "@opencode-ai/spinosa-core/utils/path"
-import { formatBytes, pluralCount } from "@opencode-ai/spinosa-core/utils/string"
-import {
-  IMAGE_EXTENSIONS,
-  MARKDOWN_EXTENSIONS,
-  NATIVE_EXTENSIONS,
-  MARKITDOWN_EXTENSIONS,
-  AUDIO_VIDEO_EXTENSIONS,
-  fileExt,
-} from "@opencode-ai/spinosa-core/constants"
+import { pluralCount } from "@opencode-ai/spinosa-core/utils/string"
+import { fileExt } from "@opencode-ai/spinosa-core/constants"
 import { shouldSkipSourceFile, classifySourceFile } from "@opencode-ai/spinosa-core/extension/classifier"
 import { suggestWorkspacePath as coreSuggestWorkspacePath } from "@opencode-ai/spinosa-core/scan/scanner"
 import { detectDocumentTools as coreDetectDocumentTools } from "@opencode-ai/spinosa-core/scan/scanner"
@@ -79,18 +71,21 @@ async function scanByExtension(sourcePath: string): Promise<{
       if (!st.isFile()) continue
       if (shouldSkipSourceFile(fullPath)) { totals.ignored++; continue }
       const ext = fileExt(fullPath)
-      if (!ext) { totals.unknown++; continue }
-      const cls = await classifySourceFile(fullPath)
-      switch (cls) {
-        case "markdown": totals.markdown++; break
-        case "markitdown": totals.markitdown++; break
-        case "native": totals.native++; break
-        case "ocr_convertible": totals.ocr++; break
-        case "video": totals.video++; break
-        case "audio": totals.audio++; break
-        default: totals.unknown++; break
+      try {
+        const cls = await classifySourceFile(fullPath)
+        switch (cls) {
+          case "markdown": totals.markdown++; break
+          case "markitdown": totals.markitdown++; break
+          case "native": totals.native++; break
+          case "ocr_convertible": totals.ocr++; break
+          case "video": totals.video++; break
+          case "audio": totals.audio++; break
+          default: totals.unknown++; break
+        }
+      } catch {
+        // ignored — classifySourceFile may throw on unreadable files
+        totals.unknown++; continue
       }
-      totals.total++
       const existing = extMap.get(ext)
       if (existing) { existing.count++ }
       else { extMap.set(ext, { ext, count: 1, bytes: st.size }) }

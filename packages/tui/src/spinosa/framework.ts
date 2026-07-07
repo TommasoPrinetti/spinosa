@@ -1,29 +1,11 @@
 import { existsSync, readdirSync } from "node:fs"
 import { homedir } from "node:os"
 import path from "node:path"
+import { compareFrameworkVersions } from "@opencode-ai/spinosa-core/utils/version"
 const MARKER = path.join(".spinosa", "framework-files.tsv")
 
 function hasFrameworkMarker(root: string) {
   return existsSync(path.join(root, MARKER))
-}
-
-function compareFrameworkVersions(a: string, b: string): number {
-  const parse = (v: string) => {
-    const [base, ...rest] = v.split("-")
-    return { parts: base.split(".").map(Number), pre: rest.join("-") }
-  }
-  const va = parse(a)
-  const vb = parse(b)
-  for (let i = 0; i < Math.max(va.parts.length, vb.parts.length); i++) {
-    const na = va.parts[i] ?? 0
-    const nb = vb.parts[i] ?? 0
-    if (na !== nb) return na - nb
-  }
-  if (!va.pre && vb.pre) return 1
-  if (va.pre && !vb.pre) return -1
-  if (va.pre > vb.pre) return 1
-  if (va.pre < vb.pre) return -1
-  return 0
 }
 
 function discoverInstalledFramework(): string | undefined {
@@ -39,7 +21,6 @@ function discoverInstalledFramework(): string | undefined {
         if (!fwEntry.isDirectory() || !fwEntry.name.startsWith("spinosa-framework-")) continue
         const fwPath = path.join(versionBase, fwEntry.name)
         if (!hasFrameworkMarker(fwPath)) continue
-        const ver = fwEntry.name.replace("spinosa-framework-", "")
         if (!bestDir || compareFrameworkVersions(ver, bestVersion) > 0) {
           bestVersion = ver
           bestDir = fwPath

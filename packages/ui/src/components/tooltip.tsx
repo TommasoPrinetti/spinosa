@@ -148,8 +148,8 @@ export function Tooltip(props: TooltipProps) {
               onPointerDownOutside={(e) => {
                 if (ref === e.target || (e.target instanceof Node && ref?.contains(e.target))) {
                   justClickedTrigger = true
+                  e.preventDefault()
                 }
-                e.preventDefault()
               }}
             >
               {local.value}

@@ -163,7 +163,10 @@ const OpenAIResponsesWebSocketMessage = Schema.StructWithRest(
   [Schema.Record(Schema.String, Schema.Unknown)],
 )
 type OpenAIResponsesWebSocketMessage = Schema.Schema.Type<typeof OpenAIResponsesWebSocketMessage>
-const encodeWebSocketMessage = Schema.encodeSync(Schema.fromJsonString(OpenAIResponsesWebSocketMessage))
+const encodeWebSocketMessage = (message: OpenAIResponsesWebSocketMessage) =>
+  Schema.encodeEffect(Schema.fromJsonString(OpenAIResponsesWebSocketMessage))(message).pipe(
+    Effect.mapError((error) => ProviderShared.invalidRequest(error.message)),
+  )
 
 const OpenAIResponsesUsage = Schema.Struct({
   input_tokens: Schema.optional(Schema.Number),
@@ -456,9 +459,10 @@ const lowerMessages = Effect.fn("OpenAIResponses.lowerMessages")(function* (requ
 const lowerOptions = Effect.fn("OpenAIResponses.lowerOptions")(function* (request: LLMRequest) {
   const store = OpenAIOptions.store(request)
   const promptCacheKey = OpenAIOptions.promptCacheKey(request)
-  const effort = OpenAIOptions.reasoningEffort(request)
-  if (effort && !OpenAIOptions.isReasoningEffort(effort))
-    return yield* invalid(`OpenAI Responses does not support reasoning effort ${effort}`)
+  const rawEffort = OpenAIOptions.reasoningEffort(request)
+  if (rawEffort && !OpenAIOptions.isReasoningEffort(rawEffort))
+    return yield* invalid(`OpenAI Responses does not support reasoning effort ${rawEffort}`)
+  const effort = rawEffort as import("./utils/openai-options").OpenAIReasoningEffort | undefined
   const summary = OpenAIOptions.reasoningSummary(request)
   const include = OpenAIOptions.include(request)
   const verbosity = OpenAIOptions.textVerbosity(request)
@@ -677,6 +681,8 @@ const onOutputItemAdded = (state: ParserState, event: OpenAIResponsesEvent): Ste
     {
       ...state,
       lifecycle,
+      // Stale: hasFunctionCall is updated on response completion, not here.
+      // ToolStream already tracks the active tool call via ToolStream.start above.
       hasFunctionCall: state.hasFunctionCall,
       tools: ToolStream.start(state.tools, item.id, {
         id: item.call_id ?? item.id,

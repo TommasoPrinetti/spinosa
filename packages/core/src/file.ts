@@ -1,5 +1,3 @@
-export * as File from "./file"
-
 import { Revert } from "@opencode-ai/schema/revert"
 
 export const Diff = Revert.FileDiff

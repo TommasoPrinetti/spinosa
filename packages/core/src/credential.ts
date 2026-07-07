@@ -123,7 +123,10 @@ const layer = Layer.effect(
         if (!updates.label && !updates.value) return
         yield* db
           .update(CredentialTable)
-          .set({ label: updates.label, value: updates.value })
+          .set(Object.fromEntries(
+            Object.entries({ label: updates.label, value: updates.value })
+              .filter(([_, v]) => v !== undefined),
+          ))
           .where(eq(CredentialTable.id, id))
           .run()
           .pipe(Effect.orDie)

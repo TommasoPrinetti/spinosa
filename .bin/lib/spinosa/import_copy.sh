@@ -238,15 +238,15 @@ copy_source() {
 
         if [[ ${#_md_process_src[@]} -gt 0 ]]; then
           local _md_page="" _md_current_rel=""
-	          local _md_fifo _md_fifo_dir
-	          _md_fifo_dir="$(mktemp -d)"
+          local _md_fifo _md_fifo_dir
+          _md_fifo_dir="$(mktemp -d)"
 	          _md_fifo="${_md_fifo_dir}/fifo"
           spinosa_debug_md "MarkItDown batch starting — ${#_md_process_src[@]} files, fifo=$_md_fifo"
 
           _markitdown_cleanup() {
             spinner_stop >&2 2>/dev/null || true
             [[ -z "${_md_pid:-}" ]] || kill "$_md_pid" 2>/dev/null || true
-	            [[ -z "${_md_fifo_dir:-}" ]] || rm -rf "$_md_fifo_dir" 2>/dev/null || true
+            [[ -z "${_md_fifo_dir:-}" ]] || rm -rf "$_md_fifo_dir" 2>/dev/null || true
             printf '\n  Cancelled.\n' >&2
             exit 1
           }
@@ -478,15 +478,15 @@ copy_source() {
         if [[ ${#_ocr_process_src[@]} -gt 0 ]]; then
           local _ocr_page="" _ocr_page_counter=0
           local _current_rel="" _ocr_current_ext=""
-	          local _ocr_fifo _ocr_fifo_dir
-	          _ocr_fifo_dir="$(mktemp -d)"
-	          _ocr_fifo="${_ocr_fifo_dir}/fifo"
+          local _ocr_fifo _ocr_fifo_dir
+          _ocr_fifo_dir="$(mktemp -d)"
+          _ocr_fifo="${_ocr_fifo_dir}/fifo"
           spinosa_debug "Batch starting — ${#_ocr_process_src[@]} files, fifo=$_ocr_fifo"
 
           _ocr_cleanup() {
             spinner_stop >&2 2>/dev/null || true
             [[ -z "${_ocr_pid:-}" ]] || kill "$_ocr_pid" 2>/dev/null || true
-	            [[ -z "${_ocr_fifo_dir:-}" ]] || rm -rf "$_ocr_fifo_dir" 2>/dev/null || true
+            [[ -z "${_ocr_fifo_dir:-}" ]] || rm -rf "$_ocr_fifo_dir" 2>/dev/null || true
             printf '\n  Cancelled.\n' >&2
             exit 1
           }

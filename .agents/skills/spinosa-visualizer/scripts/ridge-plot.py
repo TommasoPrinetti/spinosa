@@ -43,7 +43,7 @@ def render(data, total_width=52, height=3, overlap=0.3):
         return ''
 
     # Global maximum across all series
-    max_val = max(v for s in series for v in s['values'])
+    max_val = max((v for s in series for v in s['values'] if s['values']), default=0)
     if max_val == 0:
         max_val = 1
 
@@ -170,12 +170,19 @@ def main():
     parser.add_argument('--overlap', type=float, default=0.3,
                         help='Overlap ratio 0.0-1.0 (default: 0.3)')
     args = parser.parse_args()
+    if not 0.0 <= args.overlap <= 1.0:
+        parser.error("--overlap must be between 0.0 and 1.0")
 
-    if args.input:
-        with open(args.input) as f:
-            data = json.load(f)
-    else:
-        data = json.load(sys.stdin)
+
+    try:
+        if args.input:
+            with open(args.input) as f:
+                data = json.load(f)
+        else:
+            data = json.load(sys.stdin)
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        print(f"Error loading input: {e}", file=sys.stderr)
+        sys.exit(1)
 
     if args.title is not None:
         data['title'] = args.title

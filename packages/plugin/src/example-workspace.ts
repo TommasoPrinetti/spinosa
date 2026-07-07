@@ -18,12 +18,14 @@ export const FolderWorkspacePlugin: Plugin = async ({ experimental_workspace }) 
       await mkdir(config.directory, { recursive: true })
     },
     async remove(config) {
-      await rm(config.directory!, { recursive: true, force: true })
+      if (!config.directory) return
+      await rm(config.directory, { recursive: true, force: true })
     },
     target(config) {
+      if (!config.directory) return { type: "local", directory: "/tmp" }
       return {
         type: "local",
-        directory: config.directory!,
+        directory: config.directory,
       }
     },
   })

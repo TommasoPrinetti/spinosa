@@ -31,9 +31,6 @@ SHADES = ['\u2591', '\u2592', '\u2593', '\u2588']
 
 
 def format_val(val, vmin, vmax):
-    span = vmax - vmin
-    if span <= 1 and vmin >= 0 and vmax <= 1:
-        return f"{val:.2f}"
     return f"{val:.2f}"
 
 
@@ -129,11 +126,15 @@ def main():
 
     show_numbers = args.show_numbers and not args.no_numbers
 
-    if args.input:
-        with open(args.input) as f:
-            obj = json.load(f)
-    else:
-        obj = json.load(sys.stdin)
+    try:
+        if args.input:
+            with open(args.input) as f:
+                obj = json.load(f)
+        else:
+            obj = json.load(sys.stdin)
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        print(f"Error loading input: {e}", file=sys.stderr)
+        sys.exit(1)
 
     draw_matrix(
         obj['data'], obj['row_labels'], obj['col_labels'],

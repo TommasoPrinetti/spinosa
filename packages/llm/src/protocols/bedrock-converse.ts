@@ -615,18 +615,16 @@ const step = (state: ParserState, event: BedrockEvent) =>
 
 const framing = BedrockEventStream.framing(ADAPTER)
 
-const onHalt = (state: ParserState): ReadonlyArray<LLMEvent> =>
-  state.pendingFinish
-    ? (() => {
-        const events: LLMEvent[] = []
-        Lifecycle.finish(state.lifecycle, events, {
-          reason:
-            state.pendingFinish.reason === "stop" && state.hasToolCalls ? "tool-calls" : state.pendingFinish.reason,
-          usage: state.pendingFinish.usage,
-        })
-        return events
-      })()
-    : []
+const onHalt = (state: ParserState): ReadonlyArray<LLMEvent> => {
+  if (!state.pendingFinish) return []
+  const events: LLMEvent[] = []
+  Lifecycle.finish(state.lifecycle, events, {
+    reason:
+      state.pendingFinish.reason === "stop" && state.hasToolCalls ? "tool-calls" : state.pendingFinish.reason,
+    usage: state.pendingFinish.usage,
+  })
+  return events
+}
 
 // =============================================================================
 // Protocol And Bedrock Route

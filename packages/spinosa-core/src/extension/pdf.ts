@@ -35,7 +35,7 @@ async function tryPdfinfo(pdfPath: string): Promise<number | null> {
       const n = Number.parseInt(m[1], 10)
       if (n > 0) return n
     }
-  } catch {}
+  } catch { /* pdfinfo not available or failed — fall through */ }
   return null
 }
 
@@ -48,7 +48,7 @@ async function tryPypdf(pdfPath: string): Promise<number | null> {
     ])
     const n = Number.parseInt(out, 10)
     if (n > 0) return n
-  } catch {}
+  } catch { /* pypdf not available or failed — fall through */ }
   return null
 }
 

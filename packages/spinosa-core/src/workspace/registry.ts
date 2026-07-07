@@ -278,10 +278,10 @@ preferred_llm_cli: "${preferredCli}"
 - This file never grants permission to edit \`raw/\`.
 `
 
-  Bun.write(contextPath, contextContent)
-  Bun.write(configPath, configContent)
+  await Bun.write(contextPath, contextContent)
+  await Bun.write(configPath, configContent)
 
   if (preferredCli === "Claude Code" && existsSync(agentsPath)) {
-    Bun.write(claudePath, Bun.file(agentsPath))
+    await Bun.write(claudePath, Bun.file(agentsPath))
   }
 }

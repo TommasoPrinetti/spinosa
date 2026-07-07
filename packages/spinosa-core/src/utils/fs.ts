@@ -13,7 +13,7 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs"
-import { copyFile as copyFileAsync, mkdir as mkdirAsync, rename as renameAsync, unlink as unlinkAsync, writeFile as writeFileAsync, readFile as readFileAsync } from "node:fs/promises"
+import { copyFile as copyFileAsync, mkdir as mkdirAsync } from "node:fs/promises"
 import { spawnSync } from "node:child_process"
 import path from "node:path"
 

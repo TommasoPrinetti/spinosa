@@ -394,6 +394,8 @@ export const Retried = Event.define({
   },
 })
 export type Retried = typeof Retried.Type
+const CompactionReason = Schema.Union([Schema.Literal("auto"), Schema.Literal("manual")])
+  
 
 export namespace Compaction {
   export const Started = Event.define({
@@ -402,7 +404,7 @@ export namespace Compaction {
     schema: {
       ...Base,
       messageID: SessionMessage.ID,
-      reason: Schema.Union([Schema.Literal("auto"), Schema.Literal("manual")]),
+      reason: CompactionReason,
     },
   })
   export type Started = typeof Started.Type
@@ -423,7 +425,7 @@ export namespace Compaction {
     schema: {
       ...Base,
       messageID: SessionMessage.ID,
-      reason: Started.data.fields.reason,
+      reason: CompactionReason,
       text: Schema.String,
       recent: Schema.String,
     },

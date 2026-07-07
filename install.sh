@@ -2,7 +2,7 @@
 # shellcheck shell=bash
 # ── install.sh — Spinosa Framework Installer (auto-re-execs with bash) ──────
 
-PINNED_VERSION="0.8.0-beta.11"
+PINNED_VERSION="0.8.0-beta.12"
 PINNED_TAG="beta"
 BUNDLED_BUN_VERSION="1.3.14"
 
@@ -83,6 +83,7 @@ spinosa_log() {
 
 _spinosa_install_err_trap() {
   local exit_code=$? line=$1
+  spinner_stop 2>/dev/null || true
   spinosa_log ERROR "aborted line=${line} exit=${exit_code} cmd=${BASH_COMMAND:-}"
   if [ "${INSTALL_COMPLETED:-0}" -eq 0 ] && [ -n "${VERSION:-}" ]; then
     if [ -d "${SPINOSA_HOME}/versions/${VERSION}" ] && ! version_install_complete "$VERSION"; then
@@ -298,13 +299,13 @@ detect_platform_suffix() {
   case "$(uname -s)" in
     Darwin) os="darwin" ;;
     Linux)  os="linux" ;;
-    *)      os="" ;;
+    *)      die "Unsupported OS for platform suffix: $(uname -s)" ;;
   esac
   case "$(uname -m)" in
     arm64|aarch64) arch="arm64" ;;
     x86_64|amd64)  arch="amd64" ;;
     i386|i686)     arch="i386" ;;
-    *)             arch="" ;;
+    *)             die "Unsupported architecture for platform suffix: $(uname -m)" ;;
   esac
   printf '%s-%s' "$os" "$arch"
 }
@@ -358,7 +359,7 @@ install_bundled_bun() {
     || die "Failed to download Bun ${BUNDLED_BUN_VERSION}"
   rm -rf "$bun_extract"
   mkdir -p "$bun_extract"
-  unzip -q "$bun_zip" -d "$bun_extract"
+  unzip -q "$bun_zip" -d "$bun_extract" || die "Failed to extract Bun — download may be corrupted. Try again."
   bun_src="$(find "$bun_extract" -type f -name bun -perm -111 | head -1)"
   [[ -n "$bun_src" ]] || die "Downloaded Bun archive did not contain executable bun"
   mkdir -p "${SPINOSA_HOME}/bin"
@@ -858,223 +859,6 @@ check_release_age() {
   ok "Release age verified: ${days_old} day(s) old (minimum: ${min_days})"
 }
 
-# Pinned legacy Python packages for MarkItDown page splitting.
-VENDOR_PIP_MARKITDOWN='markitdown[all]==0.1.6'
-VENDOR_PIP_RAPIDOCR='rapidocr==3.8.1'
-VENDOR_PIP_PYPDFIUM2='pypdfium2==5.9.0'
-VENDOR_PIP_PYPDF='pypdf==5.1.0'
-VENDOR_PIP_ONNX_VERSIONS='1.23.2 1.23.1 1.23.0 1.22.1 1.22.0'
-
-vendor_pip_fingerprint() {
-  printf '%s|%s|bun:%s|ppu-paddle-ocr:6.0.0' \
-    "$VENDOR_PIP_MARKITDOWN" "$VENDOR_PIP_PYPDF" "$BUNDLED_BUN_VERSION"
-}
-
-vendor_tarball_sha_from_checksums() {
-  local checksums_file="$1" suffix="$2"
-  awk -v f="spinosa-vendor-${suffix}.tar.gz" '$2 == f { print $1; exit }' "$checksums_file"
-}
-
-vendor_python_for_dir() {
-  local vendor_dir="$1"
-  local python_bin="${vendor_dir}/python/bin/python3"
-  if [[ ! -x "$python_bin" ]]; then
-    python_bin="${vendor_dir}/Python.framework/Versions/Current/bin/python3"
-  fi
-  [[ -x "$python_bin" ]] || return 1
-  printf '%s' "$python_bin"
-}
-
-read_vendor_metadata_field() {
-  local field="$1"
-  local file="${SPINOSA_METADATA_DIR}/vendor.yaml"
-  [[ -f "$file" ]] || return 1
-  awk -v k="$field" '$1 == k ":" { sub(/^[^:]*:[[:space:]]*/, ""); print; exit }' "$file"
-}
-
-write_vendor_metadata() {
-  local suffix="$1" tarball_sha="$2"
-  mkdir -p "$SPINOSA_METADATA_DIR"
-  cat > "${SPINOSA_METADATA_DIR}/vendor.yaml" << EOF
-platform_suffix: ${suffix}
-vendor_tarball_sha256: ${tarball_sha}
-pip_fingerprint: $(vendor_pip_fingerprint)
-updated: $(date -u +%Y-%m-%dT%H:%M:%SZ)
-EOF
-}
-
-vendor_tool_checks_pass() {
-  local vendor_dir="$1" tool
-  for tool in markitdown-cli; do
-    [[ -x "${vendor_dir}/${tool}" ]] || return 1
-    case "$tool" in
-      markitdown-cli)
-        "${vendor_dir}/${tool}" --check-markitdown >/dev/null 2>&1 || return 1
-        ;;
-    esac
-  done
-  return 0
-}
-
-vendor_packages_healthy() {
-  local vendor_dir="$1" python_bin
-  python_bin="$(vendor_python_for_dir "$vendor_dir")" || return 1
-  "$python_bin" -c 'from markitdown import MarkItDown; import pypdf' >/dev/null 2>&1
-}
-
-vendor_installed_pins_match() {
-  local vendor_dir="$1" python_bin pkg spec ver installed onnx_ver matched=0
-  python_bin="$(vendor_python_for_dir "$vendor_dir")" || return 1
-
-  for spec in "$VENDOR_PIP_MARKITDOWN" "$VENDOR_PIP_PYPDF"; do
-    pkg="${spec%%\[*}"
-    pkg="${pkg%%==*}"
-    ver="${spec#*==}"
-    installed="$("$python_bin" -m pip show "$pkg" 2>/dev/null | awk '/^Version:/{print $2; exit}')"
-    [[ "$installed" == "$ver" ]] || return 1
-  done
-
-  return 0
-}
-
-vendor_binaries_healthy() {
-  local framework_root="$1" vendor_dir="${2:-}"
-  local checksums_file="${framework_root}/metadata/vendor-checksums.txt"
-  [[ -f "$checksums_file" ]] || return 1
-
-  local suffix verified=0 failed=0 line expected_hash bin_name plat_suffix installed_bin
-  suffix="$(detect_platform_suffix)"
-  if [[ -z "$vendor_dir" ]]; then
-    vendor_dir="${SPINOSA_HOME}/vendor/spinosa-${suffix}"
-  fi
-
-  while IFS= read -r line; do
-    case "$line" in
-      ''|\#*) continue ;;
-    esac
-    expected_hash="$(printf '%s' "$line" | awk '{print $1}')"
-    bin_name="$(printf '%s' "$line" | awk '{print $2}')"
-    plat_suffix="$(printf '%s' "$line" | awk '{print $3}')"
-    [[ "$plat_suffix" == "$suffix" ]] || continue
-
-    installed_bin="${vendor_dir}/${bin_name}"
-    [[ -f "$installed_bin" ]] || installed_bin="${SPINOSA_HOME}/bin/${bin_name}"
-    [[ -f "$installed_bin" ]] || return 1
-
-    if verify_checksum "$installed_bin" "$expected_hash"; then
-      verified=$((verified + 1))
-    else
-      failed=$((failed + 1))
-    fi
-  done < "$checksums_file"
-
-  [[ "$failed" -eq 0 && "$verified" -gt 0 ]]
-}
-
-vendor_bundle_can_reuse() {
-  local checksums_file="$1" suffix="$2" vendor_dest="$3" framework_root="$4"
-  local expected_sha stored_sha stored_suffix stored_pip
-
-  [[ "$REINSTALL" -eq 0 ]] || return 1
-  [[ -d "$vendor_dest" ]] || return 1
-  [[ -f "$checksums_file" ]] || return 1
-
-  expected_sha="$(vendor_tarball_sha_from_checksums "$checksums_file" "$suffix")"
-  [[ -n "$expected_sha" ]] || return 1
-
-  if [[ -f "${SPINOSA_METADATA_DIR}/vendor.yaml" ]]; then
-    stored_sha="$(read_vendor_metadata_field vendor_tarball_sha256)" || return 1
-    stored_suffix="$(read_vendor_metadata_field platform_suffix)" || return 1
-    stored_pip="$(read_vendor_metadata_field pip_fingerprint)" || return 1
-    [[ "$stored_sha" == "$expected_sha" ]] || return 1
-    [[ "$stored_suffix" == "$suffix" ]] || return 1
-    [[ "$stored_pip" == "$(vendor_pip_fingerprint)" ]] || return 1
-  else
-    vendor_binaries_healthy "$framework_root" "$vendor_dest" || return 1
-    vendor_installed_pins_match "$vendor_dest" || return 1
-  fi
-
-  vendor_tool_checks_pass "$vendor_dest" || return 1
-  vendor_packages_healthy "$vendor_dest" || return 1
-  return 0
-}
-
-verify_vendor_binaries() {
-  local framework_root="$1" vendor_dir="${2:-}"
-  local checksums_file="${framework_root}/metadata/vendor-checksums.txt"
-
-  if [ ! -f "$checksums_file" ]; then
-    warn "No vendor checksums found in release — skipping binary verification"
-    return 0
-  fi
-
-  local suffix
-  suffix="$(detect_platform_suffix)"
-  if [ -z "$vendor_dir" ]; then
-    vendor_dir="${SPINOSA_HOME}/vendor/spinosa-${suffix}"
-  fi
-  info "Verifying vendor binary checksums..."
-  local verified=0 failed=0 line expected_hash bin_name plat_suffix installed_bin
-
-  while IFS= read -r line; do
-    case "$line" in
-      ''|\#*) continue ;;
-    esac
-
-    expected_hash="$(printf '%s' "$line" | awk '{print $1}')"
-    bin_name="$(printf '%s' "$line" | awk '{print $2}')"
-    plat_suffix="$(printf '%s' "$line" | awk '{print $3}')"
-
-    [ "$plat_suffix" = "$suffix" ] || continue
-
-    installed_bin="${vendor_dir}/${bin_name}"
-    [ -f "$installed_bin" ] || installed_bin="${SPINOSA_HOME}/bin/${bin_name}"
-    [ -f "$installed_bin" ] || continue
-
-    if verify_checksum "$installed_bin" "$expected_hash"; then
-      verified=$((verified + 1))
-    else
-      failed=$((failed + 1))
-      warn "Checksum mismatch: ${bin_name} (${plat_suffix})"
-    fi
-  done < "$checksums_file"
-
-  if [ "$failed" -gt 0 ]; then
-    die "${failed} vendor binary checksum(s) failed. Remove ${SPINOSA_HOME} and re-install, or use --no-bundled-tools."
-  fi
-
-  if [ "$verified" -gt 0 ]; then
-    ok "${verified} vendor binary checksum(s) verified"
-  fi
-}
-
-smoke_check_vendor_tools() {
-  local vendor_dir="$1"
-  local failed=0 tool
-
-  for tool in markitdown-cli; do
-    if [ ! -x "${vendor_dir}/${tool}" ]; then
-      warn "${tool} is not executable in vendor bundle"
-      failed=$((failed + 1))
-      continue
-    fi
-    case "$tool" in
-      markitdown-cli)
-        if "${vendor_dir}/${tool}" --check-markitdown >/dev/null 2>&1; then
-          ok "${tool} package check passed"
-        else
-          warn "${tool} package check failed"
-          failed=$((failed + 1))
-        fi
-        ;;
-    esac
-  done
-
-  if [ "$failed" -gt 0 ]; then
-    warn "Document conversion tools are partially unavailable. Retry with: spinosa upgrade --reinstall"
-  fi
-  return 0
-}
 
 # ══════════════════════════════════════════════════════════════════════════════
 # PROMPT & INSTALL FLOW
@@ -1207,7 +991,6 @@ handle_verify_only() {
   if [ -z "$fw_subdir" ]; then
     die "Could not find installed framework"
   fi
-  verify_vendor_binaries "$fw_subdir"
   ok "Verification complete"
   return 0
 }
@@ -1274,132 +1057,7 @@ download_and_verify() {
   fi
 }
 
-install_vendor_python_packages() {
-  local spinosa_python="$1" vendor_dir="$2"
-  local requirements_lock="${vendor_dir}/requirements.txt"
-  local pip_ok=0 onnx_ver pip_attempt _pip_start
 
-  if [[ -f "$requirements_lock" ]]; then
-    for pip_attempt in 1 2; do
-      spinner_stop 2>/dev/null || true
-      spinner_start "Installing locked vendor packages (attempt ${pip_attempt}/2)"
-      if "$spinosa_python" -m pip install \
-        --require-hashes \
-        -r "$requirements_lock" \
-        --quiet --timeout 120 2>&1; then
-        pip_ok=1
-        break
-      fi
-      if [[ "$pip_attempt" -lt 2 ]]; then
-        warn "Locked vendor package install attempt ${pip_attempt}/2 failed — retrying"
-        sleep 4
-      fi
-    done
-    [[ "$pip_ok" -eq 1 ]]
-    return
-  fi
-
-  _pip_start=$SECONDS
-  for onnx_ver in $VENDOR_PIP_ONNX_VERSIONS; do
-    [[ $((SECONDS - _pip_start)) -lt 300 ]] || break
-    pip_attempt=0
-    while [[ $pip_ok -eq 0 && $pip_attempt -lt 2 ]]; do
-      pip_attempt=$((pip_attempt + 1))
-      spinner_stop 2>/dev/null || true
-      spinner_start "Installing packages (onnxruntime ${onnx_ver}, attempt ${pip_attempt}/2)"
-      if "$spinosa_python" -m pip install \
-        "$VENDOR_PIP_MARKITDOWN" \
-        "$VENDOR_PIP_RAPIDOCR" \
-        "onnxruntime==${onnx_ver}" \
-        "$VENDOR_PIP_PYPDFIUM2" \
-        "$VENDOR_PIP_PYPDF" \
-        --quiet --timeout 120 --only-binary onnxruntime 2>&1; then
-        pip_ok=1
-        break
-      else
-        if [[ $pip_attempt -lt 2 ]]; then
-          warn "onnxruntime ${onnx_ver} attempt ${pip_attempt}/2 failed — retrying"
-          sleep 4
-        else
-          warn "onnxruntime ${onnx_ver} failed — trying older version"
-        fi
-      fi
-    done
-    [[ $pip_ok -eq 1 ]] && break
-  done
-  [[ "$pip_ok" -eq 1 ]]
-}
-
-install_vendor_bundles() {
-  local base_url="$1" tmpdir="$2" version="$3"
-  local suffix
-  suffix="$(detect_platform_suffix)"
-
-  local spinosa_vendor_dest="${SPINOSA_HOME}/vendor/spinosa-${suffix}"
-  local vendor_url="${base_url}/spinosa-vendor-${suffix}.tar.gz"
-  local vendor_tmp="${tmpdir}/spinosa-vendor-${suffix}.tar.gz"
-  local checksums_file="${tmpdir}/checksums.txt"
-  local fw_root="${SPINOSA_HOME}/versions/${version}/spinosa-framework-${version}"
-  local expected_vendor_sha=""
-
-  if [[ ! -f "$checksums_file" ]]; then
-    download "${base_url}/checksums.txt" "$checksums_file" || die "Failed to download checksums.txt — cannot verify vendor bundle"
-  fi
-
-  expected_vendor_sha="$(vendor_tarball_sha_from_checksums "$checksums_file" "$suffix")"
-
-  if vendor_bundle_can_reuse "$checksums_file" "$suffix" "$spinosa_vendor_dest" "$fw_root"; then
-    ok "Bundled document tools unchanged — reusing existing install"
-    write_vendor_metadata "$suffix" "$expected_vendor_sha"
-    smoke_check_vendor_tools "$spinosa_vendor_dest"
-    verify_vendor_binaries "$fw_root" "$spinosa_vendor_dest"
-    return 0
-  fi
-
-  download_and_verify "$vendor_url" "$vendor_tmp" "Spinosa vendor for ${suffix}" \
-    "checksums.txt" "spinosa-vendor-${suffix}.tar.gz" 3 3 || {
-    note "Vendor bundle download failed — continuing without MarkItDown support."
-    note "Run 'spinosa upgrade --reinstall' later to retry."
-    return 0
-  }
-
-  spinner_start "Installing Spinosa vendor (Python + wrappers)"
-  local vendor_extract_tmp="${tmpdir}/vendor-extract"
-  mkdir -p "$vendor_extract_tmp"
-  safe_untar "$vendor_tmp" "$vendor_extract_tmp" --strip-components=1
-  rm -rf "$spinosa_vendor_dest" 2>/dev/null || true
-  mkdir -p "$(dirname "$spinosa_vendor_dest")"
-  mv "$vendor_extract_tmp" "$spinosa_vendor_dest"
-  clean_macos_metadata "$spinosa_vendor_dest"
-  chmod +x "${spinosa_vendor_dest}/markitdown-cli" 2>/dev/null || true
-  spinner_stop
-
-  info "Installing vendor Python packages..."
-  spinosa_log INFO "vendor_dir=${spinosa_vendor_dest}"
-
-  local spinosa_python
-  spinosa_python="$(vendor_python_for_dir "$spinosa_vendor_dest" || true)"
-
-  if [[ -n "$spinosa_python" ]]; then
-    spinosa_log INFO "vendor_python=${spinosa_python}"
-    if install_vendor_python_packages "$spinosa_python" "$spinosa_vendor_dest"; then
-      spinner_stop "MarkItDown legacy PDF tools installed"
-      ok "Python MarkItDown fallback installed"
-    else
-      spinner_stop
-      warn "pip install failed — legacy MarkItDown conversion will not be available"
-      rm -f "${spinosa_vendor_dest}/markitdown-cli" 2>/dev/null || true
-    fi
-  else
-    warn "Bundled Python not found — legacy MarkItDown conversion will not be available"
-  fi
-
-  smoke_check_vendor_tools "$spinosa_vendor_dest"
-  verify_vendor_binaries "$fw_root" "$spinosa_vendor_dest"
-  if [[ -n "$expected_vendor_sha" ]]; then
-    write_vendor_metadata "$suffix" "$expected_vendor_sha"
-  fi
-}
 
 install_shims() {
   if [ "$PREFIX_MODE" -eq 1 ]; then
@@ -1650,29 +1308,29 @@ maybe_launch_dashboard() {
 # ══════════════════════════════════════════════════════════════════════════════
 
 main() {
-  local lockdir="${SPINOSA_HOME}/versions/.lock.${$}-${VERSION}"
-
   spinosa_log_init "install.sh" "$0" "$@"
   spinosa_log INFO "version=${VERSION} home=${SPINOSA_HOME} bin=${SPINOSA_BIN_DIR}"
 
   init_global_metadata
-
-  # Stale lock check: if lock dir is older than 30 min, reclaim it
-  if [ -d "$lockdir" ]; then
-    if [[ "$(find "$lockdir" -maxdepth 0 -mmin +30 2>/dev/null)" == "$lockdir" ]]; then
-      rm -rf "$lockdir"
-      info "Removed stale lock from previous install attempt"
-    else
-      die "Another installer is running for version ${VERSION}. Wait and retry, or remove: rm -rf '${lockdir}'"
-    fi
-  fi
-  mkdir -p "$(dirname "$lockdir")" && mkdir "$lockdir"
 
   if [[ "$YES" -eq 0 ]]; then
     print_banner
   fi
   detect_platform
   resolve_version
+
+  local lockdir="${SPINOSA_HOME}/versions/.lock.${$}-${VERSION}"
+
+  # Stale lock check: if lock dir is older than 30 min, reclaim it
+  if [ -d "$lockdir" ]; then
+    if [[ "$(find "$lockdir" -maxdepth 0 -mmin +30 2>/dev/null)" == "$lockdir" ]]; then
+      rm -rf "$lockdir"
+      info "Removed stale lock from previous install attempt"
+    fi
+  fi
+  mkdir -p "$(dirname "$lockdir")"
+  mkdir "$lockdir" 2>/dev/null || die "Another installer is running for version ${VERSION}. Wait and retry, or remove: rm -rf '${lockdir}'"
+
   check_release_age "$VERSION" "$MIN_DAYS"
 
   local base_url="https://github.com/${REPO}/releases/download/${RELEASE_DOWNLOAD_TAG}"
@@ -1736,10 +1394,7 @@ main() {
     die "spinosa CLI not found in archive"
   fi
 
-  # Vendor bundles
-  if [ "$SKIP_BUNDLED_TOOLS" -eq 0 ]; then
-    install_vendor_bundles "$base_url" "$tmpdir" "$VERSION"
-  fi
+  # Vendor bundles — no-op (Python vendor removed)
 
   install_shims
 

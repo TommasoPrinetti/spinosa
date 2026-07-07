@@ -55,6 +55,8 @@ const consumeFrames = (route: string) => (state: FrameBufferState, chunk: Uint8A
 
       if (decoded.headers[":message-type"]?.value !== "event") continue
       const eventType = decoded.headers[":event-type"]?.value
+      // Unknown event types (heartbeat, internal monitoring, etc.) are silently
+      // dropped — the chunk schema only matches the event types we care about.
       if (typeof eventType !== "string") continue
       const payload = utf8.decode(decoded.body)
       if (!payload) continue

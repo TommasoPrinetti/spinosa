@@ -7,8 +7,8 @@ export function sanitizeYaml(value: string): string {
 }
 
 export function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
   let value = bytes / 1024
-  if (value < 1) return `${value.toFixed(1)} KB`
   let unit = "KB"
   if (value >= 1024) { value /= 1024; unit = "MB" }
   if (value >= 1024) { value /= 1024; unit = "GB" }

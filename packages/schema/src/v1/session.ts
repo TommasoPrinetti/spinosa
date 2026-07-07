@@ -648,7 +648,7 @@ export const Diff = define({
   },
 })
 
-export const Error = define({
+const EventError = define({
   type: "session.error",
   schema: {
     sessionID: Schema.optional(SessionID),
@@ -660,7 +660,7 @@ export const Event = {
   ...events,
   PartDelta,
   Diff,
-  Error,
+  Error: EventError,
   Definitions: inventory(
     events.Created,
     events.Updated,
@@ -671,6 +671,6 @@ export const Event = {
     events.PartRemoved,
     PartDelta,
     Diff,
-    Error,
+    EventError,
   ),
 }

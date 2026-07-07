@@ -6,7 +6,14 @@ import { bundledLanguages, type BundledLanguage } from "shiki"
 import { createSimpleContext } from "./helper"
 import { getSharedHighlighter, registerCustomTheme, ThemeRegistrationResolved } from "@pierre/diffs"
 
-export const OpenCodeTheme = {
+export const OpenCodeTheme = ((t: Record<string, unknown>) => {
+  // Validate required fields for ThemeRegistrationResolved
+  const required = ["name", "colors", "tokenColors", "semanticTokenColors"] as const
+  for (const key of required) {
+    if (!(key in t)) throw new Error(`Theme missing required field: ${key}`)
+  }
+  return t as unknown as ThemeRegistrationResolved
+})({
   name: "OpenCode",
   bg: "var(--color-background-stronger)",
   fg: "var(--text-base)",
@@ -16,30 +23,6 @@ export const OpenCodeTheme = {
     "gitDecoration.addedResourceForeground": "var(--syntax-diff-add)",
     "gitDecoration.deletedResourceForeground": "var(--syntax-diff-delete)",
     "gitDecoration.modifiedResourceForeground": "var(--syntax-diff-unknown)",
-    // "gitDecoration.conflictingResourceForeground": "#ffca00",
-    // "gitDecoration.modifiedResourceForeground": "#1a76d4",
-    // "gitDecoration.untrackedResourceForeground": "#00cab1",
-    // "gitDecoration.ignoredResourceForeground": "#84848A",
-    // "terminal.titleForeground": "#adadb1",
-    // "terminal.titleInactiveForeground": "#84848A",
-    // "terminal.background": "#141415",
-    // "terminal.foreground": "#adadb1",
-    // "terminal.ansiBlack": "#141415",
-    // "terminal.ansiRed": "#ff2e3f",
-    // "terminal.ansiGreen": "#0dbe4e",
-    // "terminal.ansiYellow": "#ffca00",
-    // "terminal.ansiBlue": "#008cff",
-    // "terminal.ansiMagenta": "#c635e4",
-    // "terminal.ansiCyan": "#08c0ef",
-    // "terminal.ansiWhite": "#c6c6c8",
-    // "terminal.ansiBrightBlack": "#141415",
-    // "terminal.ansiBrightRed": "#ff2e3f",
-    // "terminal.ansiBrightGreen": "#0dbe4e",
-    // "terminal.ansiBrightYellow": "#ffca00",
-    // "terminal.ansiBrightBlue": "#008cff",
-    // "terminal.ansiBrightMagenta": "#c635e4",
-    // "terminal.ansiBrightCyan": "#08c0ef",
-    // "terminal.ansiBrightWhite": "#c6c6c8",
   },
   tokenColors: [
     {
@@ -51,7 +34,7 @@ export const OpenCodeTheme = {
     {
       scope: ["entity.other.attribute-name"],
       settings: {
-        foreground: "var(--syntax-property)", // maybe attribute
+        foreground: "var(--syntax-property)",
       },
     },
     {
@@ -214,7 +197,6 @@ export const OpenCodeTheme = {
         "string.regexp constant.character.escape",
         "string.regexp source.ruby.embedded",
         "string.regexp string.regexp.arbitrary-repitition",
-        "string.regexp constant.character.escape",
       ],
       settings: {
         foreground: "var(--syntax-regexp)",
@@ -261,7 +243,6 @@ export const OpenCodeTheme = {
       scope: "markup.italic",
       settings: {
         fontStyle: "italic",
-        // foreground: "",
       },
     },
     {
@@ -375,7 +356,7 @@ export const OpenCodeTheme = {
     "variable.constant": "var(--syntax-constant)",
     "variable.defaultLibrary": "var(--syntax-unknown)",
   },
-} as unknown as ThemeRegistrationResolved
+})
 
 registerCustomTheme("OpenCode", () => Promise.resolve(OpenCodeTheme))
 

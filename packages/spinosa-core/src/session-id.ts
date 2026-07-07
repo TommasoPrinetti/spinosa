@@ -1,4 +1,4 @@
-export function generateSessionId(date = new Date()) {
+export function generateSessionId(date = new Date()): string {
   const stamp = [
     date.getFullYear(),
     String(date.getMonth() + 1).padStart(2, "0"),

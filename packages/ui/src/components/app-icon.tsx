@@ -44,7 +44,7 @@ const themed: Partial<Record<IconName, { light: string; dark: string }>> = {
   },
 }
 
-const scheme = () => {
+const getColorScheme = () => {
   if (typeof document !== "object") return "light" as const
   if (document.documentElement.dataset.colorScheme === "dark") return "dark" as const
   return "light" as const
@@ -56,10 +56,10 @@ export type AppIconProps = Omit<ComponentProps<"img">, "src"> & {
 
 export const AppIcon: Component<AppIconProps> = (props) => {
   const [local, rest] = splitProps(props, ["id", "class", "classList", "alt", "draggable"])
-  const [mode, setMode] = createSignal(scheme())
+  const [mode, setMode] = createSignal(getColorScheme())
 
   onMount(() => {
-    const sync = () => setMode(scheme())
+    const sync = () => setMode(getColorScheme())
     const observer = new MutationObserver(sync)
     observer.observe(document.documentElement, {
       attributes: true,

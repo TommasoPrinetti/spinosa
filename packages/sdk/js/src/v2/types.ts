@@ -1,1 +1,1 @@
-export * from "./gen/types.gen"
+export * from "./gen/types.gen.js"

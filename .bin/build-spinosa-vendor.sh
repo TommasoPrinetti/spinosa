@@ -215,6 +215,7 @@ build_platform() {
     python_checksums="$(mktemp "${TMPDIR:-/tmp}/python-checksums-${platform}-XXXXXX.txt")"
 
     # Ensure temps are removed on exit from this build
+    trap - EXIT 2>/dev/null || true
     trap 'rm -f "$python_tar" "$python_checksums" 2>/dev/null || true' EXIT
 
     log "Downloading standalone Python..."

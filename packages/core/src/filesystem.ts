@@ -9,6 +9,9 @@ import { PositiveInt, RelativePath } from "./schema"
 import { FileSystemSearch } from "./filesystem/search"
 import { Entry, FileSystem, FindInput, Match } from "@opencode-ai/schema/filesystem"
 export { Entry, Match, Submatch } from "@opencode-ai/schema/filesystem"
+// NOTE: Entry, Match are re-exported from @opencode-ai/schema/filesystem.
+// These shadow the imported names above to create the desired public API surface.
+// Local module code uses them as types from FileSystem (line 10).
 
 export const ReadInput = Schema.Struct({
   path: RelativePath,
@@ -81,7 +84,7 @@ const baseLayer = Layer.effect(
         if (info.type !== "File") return yield* Effect.die(new Error("Path is not a file"))
         return {
           content: yield* fs.readFile(target.real).pipe(Effect.orDie),
-          mime: FSUtil.mimeType(target.real),
+          mime: yield* Effect.sync(() => FSUtil.mimeType(target.real)),
         }
       }),
       list: Effect.fn("FileSystem.list")(function* (input = {}) {
@@ -98,7 +101,7 @@ const baseLayer = Layer.effect(
                 const relative = path.relative(target.directory, absolute)
                 return [
                   Entry.make({
-                    path: RelativePath.make(relative + (item.type === "directory" ? path.sep : "")),
+                    path: RelativePath.make(relative + (item.type === "directory" ? "/" : "")),
                     type: item.type,
                   }),
                 ]

@@ -2,7 +2,7 @@ import path from "node:path"
 import { chainForRoute, classifyPrompt, type RouteClass } from "../classify/route"
 import { generateSessionId } from "../session-id"
 
-export async function readGoalTemplate(workspacePath: string) {
+export async function readGoalTemplate(workspacePath: string): Promise<string | undefined> {
   const file = Bun.file(path.join(workspacePath, ".agents", "references", "goal-artifact-template.md"))
   if (await file.exists()) return file.text()
   return undefined
@@ -13,7 +13,7 @@ export function buildGoalArtifactBody(input: {
   cleanedPrompt: string
   route: RouteClass
   now?: Date
-}) {
+}): string {
   const created = (input.now ?? new Date()).toISOString()
   const chain = chainForRoute(input.route)
   const firstAgent =
@@ -89,7 +89,7 @@ outputs:
 `
 }
 
-export async function writeGoalArtifact(workspacePath: string, cleanedPrompt: string) {
+export async function writeGoalArtifact(workspacePath: string, cleanedPrompt: string): Promise<{ sessionId: string; route: RouteClass; goalPath: string }> {
   const sessionId = generateSessionId()
   const route = classifyPrompt(cleanedPrompt)
   const body = buildGoalArtifactBody({ sessionId, cleanedPrompt, route })
@@ -104,7 +104,7 @@ export function orchestratorPreamble(input: {
   route: RouteClass
   sessionId?: string
   goalPath?: string
-}) {
+}): string {
   const lines = [
     "<system-reminder>",
     "You are the Spinosa orchestrator for this workspace. Follow AGENTS.md: frame routes with goal artifacts, dispatch sub-agents, verify before delivery.",

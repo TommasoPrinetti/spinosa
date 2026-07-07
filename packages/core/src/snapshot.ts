@@ -4,7 +4,7 @@ import { makeLocationNode } from "./effect/app-node"
 import path from "path"
 import { Context, Effect, Layer, Schema } from "effect"
 import { Config } from "./config"
-import { File } from "./file"
+import { Diff as FileDiff } from "./file"
 import { FSUtil } from "./fs-util"
 import { Git } from "./git"
 import { Global } from "./global"
@@ -58,14 +58,14 @@ export interface Interface {
    * Generate structured per-file diffs between two captured trees. `context`
    * controls unchanged lines around each unified diff hunk.
    */
-  readonly diff: (input: DiffInput) => Effect.Effect<readonly File.Diff[], Error>
+  readonly diff: (input: DiffInput) => Effect.Effect<readonly FileDiff[], Error>
 
   /**
    * Preview the filesystem result of a selective restore without modifying the
    * worktree. Each project-relative path maps to the tree it would be restored
    * from.
    */
-  readonly preview: (input: PreviewInput) => Effect.Effect<readonly File.Diff[], Error>
+  readonly preview: (input: PreviewInput) => Effect.Effect<readonly FileDiff[], Error>
 
   /**
    * Restore selected project-relative paths from their associated trees. A path

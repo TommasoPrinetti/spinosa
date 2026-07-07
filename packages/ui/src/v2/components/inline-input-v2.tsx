@@ -49,15 +49,21 @@ export function InlineInputV2(props: InlineInputV2Props) {
         ...local.classList,
         [local.class ?? ""]: !!local.class,
       }}
-      style={{
-        ...(typeof local.style === "object" && local.style != null ? local.style : {}),
-        ...(local.labelWidth != null
-          ? {
-              "--inline-input-v2-label-width":
-                typeof local.labelWidth === "number" ? `${local.labelWidth}px` : local.labelWidth,
-            }
-          : {}),
-      }}
+      style={
+        typeof local.style === "string"
+          ? local.labelWidth != null
+            ? `${local.style};--inline-input-v2-label-width:${typeof local.labelWidth === "number" ? `${local.labelWidth}px` : local.labelWidth}`
+            : local.style
+          : ({
+              ...(typeof local.style === "object" && local.style != null ? local.style : {}),
+              ...(local.labelWidth != null
+                ? {
+                    "--inline-input-v2-label-width":
+                      typeof local.labelWidth === "number" ? `${local.labelWidth}px` : local.labelWidth,
+                  }
+                : {}),
+            } as JSX.CSSProperties)
+      }
     >
       <div data-slot="inline-input-v2-prefix">
         <span data-slot="inline-input-v2-prefix-text">{local.prefix}</span>

@@ -1,7 +1,7 @@
 import { Toast as Kobalte, toaster } from "@kobalte/core/toast"
 import type { ToastRootProps, ToastCloseButtonProps, ToastTitleProps, ToastDescriptionProps } from "@kobalte/core/toast"
 import type { ComponentProps, JSX } from "solid-js"
-import { Show, children } from "solid-js"
+import { Show } from "solid-js"
 import { Portal } from "solid-js/web"
 import { ButtonV2 } from "./button-v2"
 import "./toast-v2.css"
@@ -97,7 +97,7 @@ export interface ToastV2Options {
 
 export function showToastV2(options: ToastV2Options | string) {
   const opts = typeof options === "string" ? { description: options } : options
-  const resolvedIcon = children(() => opts.icon)
+  const resolvedIcon = () => opts.icon
   return toaster.show((props) => (
     <ToastV2 toastId={props.toastId} duration={opts.duration} persistent={opts.persistent}>
       <div data-slot="toast-v2-header">

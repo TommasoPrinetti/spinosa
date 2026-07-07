@@ -83,7 +83,7 @@ export function Select<T>(props: SelectProps<T> & Omit<ButtonProps, "children">)
   })
 
   return (
-    // @ts-ignore
+// @ts-expect-error: Kobalte Select generic params require explicit type args for complex option shapes
     <Kobalte<T, { category: string; options: T[] }>
       {...others}
       data-component="select"

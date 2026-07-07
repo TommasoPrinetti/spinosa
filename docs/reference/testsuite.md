@@ -43,7 +43,7 @@ flowchart LR
 |--------|-----|
 | **macOS arm64** (primary) | Default user platform; system **bash 3.2** — must pass |
 | **macOS amd64** (optional) | Intel Mac regressions |
-| **Linux amd64 or arm64 VM** | Cross-platform vendor Python, paths, glibc |
+| **Linux amd64 or arm64 VM** | Cross-platform glibc |
 
 ### Shell
 
@@ -110,7 +110,6 @@ bash -n install.sh
 bash -n .bin/spinosa
 bash -n .bin/package-release.sh
 bash -n .bin/publish-release.sh
-bash -n .bin/build-spinosa-vendor.sh
 
 # Contract / hygiene
 bash .bin/check-startup.sh
@@ -123,7 +122,6 @@ bash .bin/test-safe-copy.sh
 bash .bin/test-import-routing.sh
 bash .bin/test-onboarding-verify.sh
 bash .bin/test-pdf-classifier.sh
-bash .bin/test-install-vendor-reuse.sh
 ```
 
 **Pass criteria:** every command exits 0; no `FAIL` in output.
@@ -247,7 +245,7 @@ spinosa new "$CORPUS" --extensions md,txt --cli other --launch copy --no-color
 
 Uses the canonical corpus at `SPINOSA_TEST_VAULT` (default: `/Users/tommasoprinetti/Downloads/TEST-VAULT`).
 
-**Prerequisites:** Phase B install complete; `spinosa doctor` shows MarkItDown + RapidOCR available (vendor on PATH).
+**Prerequisites:** Phase B install complete; `spinosa doctor` shows MarkItDown + OCR available.
 
 ```bash
 cd /path/to/spinosa-main
@@ -395,15 +393,11 @@ curl -sL "https://api.github.com/repos/TommasoPrinetti/spinosa/releases/tags/vX.
   python3 -c "import json,sys; r=json.load(sys.stdin); [print(a['name'], a['state'], a['size']) for a in r['assets']]"
 ```
 
-**Seven assets**, all `uploaded`:
+**Three assets**, all `uploaded`:
 
 - `spinosa-framework-X.Y.Z.tar.gz`
 - `install.sh`
 - `checksums.txt`
-- `spinosa-vendor-darwin-arm64.tar.gz`
-- `spinosa-vendor-darwin-amd64.tar.gz`
-- `spinosa-vendor-linux-amd64.tar.gz`
-- `spinosa-vendor-linux-arm64.tar.gz`
 
 ### G1. Latest pointer smoke test
 
@@ -499,7 +493,6 @@ Warnings (cloud storage, Hermes merge, workspace behind CLI) are **not** blocker
 | `.bin/test-import-routing.sh` | Import routing |
 | `.bin/test-onboarding-verify.sh` | Onboarding verification |
 | `.bin/test-pdf-classifier.sh` | PDF classification |
-| `.bin/test-install-vendor-reuse.sh` | Vendor reuse logic |
 | `.bin/test-new-test-vault.sh` | `spinosa new` against TEST-VAULT (`subset` / `mixed` / `full`) |
 
 **Publish command** (only after full sign-off):

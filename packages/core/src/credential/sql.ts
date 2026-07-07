@@ -7,8 +7,8 @@ export const CredentialTable = sqliteTable("credential", {
   integration_id: text().$type<Credential.Info["integrationID"]>(),
   label: text().notNull(),
   value: text({ mode: "json" }).$type<Credential.Value>().notNull(),
-  connector_id: text(),
-  method_id: text(),
+  connector_id: text(), // Reserved for future per-connector credential scoping
+  method_id: text(), // Reserved for future per-method credential scoping
   active: integer({ mode: "boolean" }),
   ...Timestamps,
 })

@@ -49,10 +49,12 @@ export const upgradeIfNeeded: <TEffectHKT extends QueryEffectHKTBase>(
     for (let v = version; v < MIGRATIONS_TABLE_VERSIONS.sqlite; v++) {
       const upgradeFn = upgradeFunctions[v]
       if (!upgradeFn) {
-        return yield* new EffectDrizzleError({
-          message: `No upgrade path from migration table version ${v} to ${v + 1}`,
-          cause: { version: v },
-        })
+        return yield* Effect.fail(
+          new EffectDrizzleError({
+            message: `No upgrade path from migration table version ${v} to ${v + 1}`,
+            cause: { version: v },
+          }),
+        )
       }
       yield* upgradeFn(migrationsTable, session, localMigrations)
     }

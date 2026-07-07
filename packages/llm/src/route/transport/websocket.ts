@@ -214,7 +214,7 @@ export interface JsonPrepared {
 
 export interface JsonInput<Body, Message> {
   readonly toMessage: (body: Body | Record<string, unknown>) => Effect.Effect<Message, LLMError>
-  readonly encodeMessage: (message: Message) => string
+  readonly encodeMessage: (message: Message) => Effect.Effect<string, LLMError>
 }
 
 export type JsonPatch<Body, Message> = Partial<JsonInput<Body, Message>>
@@ -234,7 +234,7 @@ export const json = <Body, Message>(input: JsonInput<Body, Message>): JsonTransp
       return {
         url: yield* webSocketUrl(parts.url),
         headers: parts.headers,
-        message: input.encodeMessage(yield* input.toMessage(parts.jsonBody)),
+        message: yield* input.encodeMessage(yield* input.toMessage(parts.jsonBody)),
       }
     }),
   frames: (prepared, _request, runtime) => {

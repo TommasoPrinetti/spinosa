@@ -1,1 +1,1 @@
-export type PluginOptions = Readonly<Record<string, any>>
+export type PluginOptions = Readonly<Record<string, unknown>>

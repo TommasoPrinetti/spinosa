@@ -26,7 +26,7 @@ const patterns = [
 export const isContextOverflow = (message: string) =>
   patterns.some((pattern) => pattern.test(message)) || /^4(00|13)\s*(status code)?\s*\(no body\)/i.test(message)
 
-export const isContextOverflowFailure = (failure: unknown) =>
+export const isContextOverflowFailure = (failure: unknown): failure is LLMError | ProviderErrorEvent =>
   failure instanceof LLMError
     ? failure.reason._tag === "InvalidRequest" && failure.reason.classification === "context-overflow"
     : Schema.is(ProviderErrorEvent)(failure) && failure.classification === "context-overflow"

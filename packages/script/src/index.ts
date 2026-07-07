@@ -37,9 +37,9 @@ const VERSION = await (async () => {
   const version = await fetch("https://registry.npmjs.org/opencode-ai/latest")
     .then((res) => {
       if (!res.ok) throw new Error(res.statusText)
-      return res.json()
+      return res.json() as unknown as { version: string }
     })
-    .then((data: any) => data.version)
+    .then((data) => data.version)
   const [major, minor, patch] = version.split(".").map((x: string) => Number(x) || 0)
   const t = env.OPENCODE_BUMP?.toLowerCase()
   if (t === "major") return `${major + 1}.0.0`

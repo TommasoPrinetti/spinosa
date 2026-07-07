@@ -1,5 +1,5 @@
 import { Popover as Kobalte } from "@kobalte/core/popover"
-import { ComponentProps, JSXElement, ParentProps, Show, createEffect, splitProps, ValidComponent } from "solid-js"
+import { ComponentProps, JSXElement, ParentProps, Show, createEffect, onCleanup, splitProps, ValidComponent } from "solid-js"
 import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { useI18n } from "../context/i18n"
@@ -96,9 +96,12 @@ export function Popover<T extends ValidComponent = "div">(props: PopoverProps<T>
       close("outside")
     }
 
-    makeEventListener(window, "keydown", onKeyDown, { capture: true })
-    makeEventListener(window, "pointerdown", onPointerDown, { capture: true })
-    makeEventListener(window, "focusin", onFocusIn, { capture: true })
+    const disposers = [
+      makeEventListener(window, "keydown", onKeyDown, { capture: true }),
+      makeEventListener(window, "pointerdown", onPointerDown, { capture: true }),
+      makeEventListener(window, "focusin", onFocusIn, { capture: true }),
+    ]
+    onCleanup(() => disposers.forEach((d) => d()))
   })
 
   const content = () => (

@@ -264,6 +264,7 @@ cmd_upgrade() {
   info "Downloading installer..."
 
   local tmpdir
+  trap 'rm -rf "$tmpdir" 2>/dev/null || true' EXIT INT TERM
   tmpdir="$(mktemp -d)"
   local installer="${tmpdir}/install-spinosa.sh"
 
