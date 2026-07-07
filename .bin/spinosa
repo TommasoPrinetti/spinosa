@@ -7,6 +7,14 @@ fi
 set -euo pipefail
 ORIGINAL_ARGS=("$@")
 
+# ── Dev tree detection ──────────────────────────────────────────────────────
+# When SPINOSA_FRAMEWORK_ROOT points to a local dev repo, re-exec through the
+# development TUI instead of using the installed opencode binary.  The dev TUI
+# picks up all local source changes in packages/tui/ and packages/spinosa-core/.
+if [[ -n "${SPINOSA_FRAMEWORK_ROOT:-}" ]] && [[ -d "${SPINOSA_FRAMEWORK_ROOT}/packages/opencode" ]]; then
+  exec bun run --cwd "${SPINOSA_FRAMEWORK_ROOT}/packages/opencode" --conditions=browser src/index.ts "${ORIGINAL_ARGS[@]}"
+fi
+
 # ── spinosa — CLI entry point ────────────────────────────────────────────────
 # Usage: spinosa [command]
 #
@@ -133,13 +141,18 @@ resolve_framework_root() {
 FRAMEWORK_ROOT="$(resolve_framework_root)"
 SPINOSA_BANNER_PRINTED=0
 
-# ── No arguments: open the TUI ──────────────────────────────────────────
+# ── No arguments: open the bundled TUI ────────────────────────────────────
 if [[ $# -eq 0 ]]; then
+  # Check if @spinosa/tui is installed globally
+  if command -v npx >/dev/null 2>&1 && npx --yes @spinosa/tui --version >/dev/null 2>&1; then
+    exec npx @spinosa/tui "$@"
+  fi
+  # Check for system opencode as fallback
   if command -v opencode >/dev/null 2>&1; then
     exec opencode "$@"
   fi
-  printf '\n  %sOpenCode is required for the Spinosa TUI.%s\n' "${Y}" "${RESET}" >&2
-  printf '  Install OpenCode, then run %sspinosa%s again.\n' "${BOLD}" "${RESET}"
+  printf '\n  %sSpinosa TUI is not installed.%s\n' "${Y}" "${RESET}" >&2
+  printf '  Run %sbun install -g @spinosa/tui%s to install it.\n' "${BOLD}" "${RESET}"
   printf '  Or use %sspinosa cli%s for the terminal dashboard.\n' "${BOLD}" "${RESET}"
   printf '\n'
   exit 1

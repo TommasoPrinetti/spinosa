@@ -117,6 +117,22 @@ if [[ -d "${FRAMEWORK_DIR}/packages/spinosa-core/node_modules" ]]; then
   rm -rf "${FRAMEWORK_DIR}/packages/spinosa-core/node_modules"
   echo "  Stripped generated: packages/spinosa-core/node_modules"
 fi
+if [[ -d "${FRAMEWORK_DIR}/packages/opencode/test" ]]; then
+  rm -rf "${FRAMEWORK_DIR}/packages/opencode/test"
+  echo "  Stripped generated: packages/opencode/test"
+fi
+if [[ -d "${FRAMEWORK_DIR}/packages/tui/test" ]]; then
+  rm -rf "${FRAMEWORK_DIR}/packages/tui/test"
+  echo "  Stripped generated: packages/tui/test"
+fi
+if [[ -d "${FRAMEWORK_DIR}/packages/opencode/node_modules" ]]; then
+  rm -rf "${FRAMEWORK_DIR}/packages/opencode/node_modules"
+  echo "  Stripped generated: packages/opencode/node_modules"
+fi
+if [[ -d "${FRAMEWORK_DIR}/packages/tui/node_modules" ]]; then
+  rm -rf "${FRAMEWORK_DIR}/packages/tui/node_modules"
+  echo "  Stripped generated: packages/tui/node_modules"
+fi
 
 echo "  Copied: $copied_count paths"
 echo "  Excluded: $excluded_count user/generated paths"

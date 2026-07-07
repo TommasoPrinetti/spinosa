@@ -25,7 +25,8 @@
       "packages/server",
       "packages/spinosa-core",
       "packages/tui",
-      "packages/ui"
+      "packages/ui",
+      "spinosa-tui"
     ],
     "catalog": {
       "@effect/opentelemetry": "4.0.0-beta.83",
@@ -125,5 +126,10 @@
   },
   "devDependencies": {
     "@types/mime-types": "3.0.1"
+  },
+  "dependencies": {
+    "@ff-labs/fff-bun": "0.9.4",
+    "@opentui/core": "catalog:",
+    "@parcel/watcher": "2.5.1"
   }
 }
