@@ -33,6 +33,7 @@ export interface ScanBytes {
 
 export interface ToolStatus {
   markitdown: boolean
+  ocr: boolean
   pypdfium2: boolean
   pypdf: boolean
 }
@@ -114,12 +115,14 @@ export async function scanSource(
 }
 
 export async function detectDocumentTools(): Promise<ToolStatus> {
-  const [pypdfium2, pypdf] = await Promise.all([
+  const [ocr, pypdfium2, pypdf] = await Promise.all([
+    ocrAvailable(),
     pypdfium2Available(),
     pypdfAvailable(),
   ])
   return {
     markitdown: true,
+    ocr,
     pypdfium2,
     pypdf,
   }

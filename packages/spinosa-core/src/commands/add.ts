@@ -20,12 +20,14 @@ import { injectColdFrontmatter, convertedOutputExists, removeConvertedOutput } f
 import { scanSource } from "../scan/scanner"
 import { fileExt } from "../constants"
 import { runPpuOcrBatch } from "../import/ppu-ocr"
+import type { PpuOcrFile } from "../import/ppu-ocr"
 import { MarkItDown } from "markitdown-ts"
 
 export interface AddFilesOptions {
   workspacePath: string
   sourcePath: string
   sourceIsDir?: boolean
+  subfolder?: string
   extensions?: string
   overwrite?: boolean
   onProgress?: (message: string) => void
@@ -70,14 +72,22 @@ async function runBatchOcr(
   _sourcePath: string,
   files: { srcFile: string; destFile: string; relPath: string }[],
 ): Promise<{ converted: string[]; failed: string[] }> {
-  // intentionally discarded — re-computed via convertedOutputExists below
-  const converted = files.filter((f) => convertedOutputExists(f.destFile)).map((f) => f.relPath)
-  const failed = files.filter((f) => !convertedOutputExists(f.destFile)).map((f) => f.relPath)
-  return { converted, failed }
+  const toProcess: PpuOcrFile[] = files
+    .filter((f) => !convertedOutputExists(f.destFile))
+    .map((f) => ({ src: f.srcFile, rel: f.relPath, dest: f.destFile }))
+  if (toProcess.length === 0) return { converted: files.map((f) => f.relPath), failed: [] }
+  try {
+    await runPpuOcrBatch(toProcess)
+    const converted = files.filter((f) => convertedOutputExists(f.destFile)).map((f) => f.relPath)
+    const failed = files.filter((f) => !convertedOutputExists(f.destFile)).map((f) => f.relPath)
+    return { converted, failed }
+  } catch {
+    return { converted: [], failed: files.map((f) => f.relPath) }
+  }
 }
 
 export async function addFiles(options: AddFilesOptions): Promise<AddFilesResult> {
-  const { workspacePath, sourcePath, sourceIsDir, extensions, overwrite, onProgress } = options
+  const { workspacePath, sourcePath, sourceIsDir, subfolder, extensions, overwrite, onProgress } = options
   const rawDir = path.join(workspacePath, "raw")
 
   if (!existsSync(rawDir)) {
@@ -85,7 +95,7 @@ export async function addFiles(options: AddFilesOptions): Promise<AddFilesResult
   }
 
   if (sourceIsDir) {
-    return addFilesFromDir(sourcePath, rawDir, extensions, overwrite, onProgress)
+    return addFilesFromDir(sourcePath, rawDir, subfolder, extensions, overwrite, onProgress)
   }
   return addSingleFile(sourcePath, rawDir, overwrite, onProgress)
 }
@@ -93,6 +103,7 @@ export async function addFiles(options: AddFilesOptions): Promise<AddFilesResult
 async function addFilesFromDir(
   sourcePath: string,
   rawDir: string,
+  subfolder?: string,
   extensions?: string,
   overwrite?: boolean,
   onProgress?: (msg: string) => void,
@@ -121,7 +132,7 @@ async function addFilesFromDir(
     if (klass === "ignored" || klass === "unknown") continue
     if (!ext || !importBatches.isSelected(ext)) continue
 
-    const relPath = path.relative(sourcePath, file)
+    const relPath = subfolder ? path.join(subfolder, path.relative(sourcePath, file)) : path.relative(sourcePath, file)
 
     switch (klass) {
       case "markdown":
@@ -181,7 +192,7 @@ async function addFilesFromDir(
   onProgress?.(`Importing ${markdownFiles.length} text files...`)
 
   for (const file of markdownFiles) {
-    const relPath = path.relative(sourcePath, file)
+    const relPath = subfolder ? path.join(subfolder, path.relative(sourcePath, file)) : path.relative(sourcePath, file)
     const destRel = markdownRawRelPath(relPath)
     const destFile = path.join(rawDir, destRel)
 
@@ -206,7 +217,7 @@ async function addFilesFromDir(
   onProgress?.(`Importing ${nativeFiles.length} native files...`)
 
   for (const file of nativeFiles) {
-    const relPath = path.relative(sourcePath, file)
+    const relPath = subfolder ? path.join(subfolder, path.relative(sourcePath, file)) : path.relative(sourcePath, file)
     const destFile = path.join(rawDir, relPath)
 
     mkdirSync(path.dirname(destFile), { recursive: true })
@@ -232,7 +243,7 @@ async function addFilesFromDir(
   onProgress?.(`Importing ${avFiles.length} media files...`)
 
   for (const file of avFiles) {
-    const relPath = path.relative(sourcePath, file)
+    const relPath = subfolder ? path.join(subfolder, path.relative(sourcePath, file)) : path.relative(sourcePath, file)
     const destFile = path.join(rawDir, relPath)
 
     mkdirSync(path.dirname(destFile), { recursive: true })

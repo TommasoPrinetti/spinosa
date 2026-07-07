@@ -3,6 +3,7 @@ import { homedir } from "node:os"
 import path from "node:path"
 import { spawn, type ChildProcess } from "node:child_process"
 import { readBundledFrameworkVersion } from "./service"
+import type { ReleaseChannel } from "@opencode-ai/spinosa-core/system/channels"
 import { tuiLog } from "./log"
 import { resolveFrameworkBin, resolveFrameworkRoot } from "@opencode-ai/spinosa-core/framework/discovery"
 import { createWorkspace } from "@opencode-ai/spinosa-core/commands/create"
@@ -391,7 +392,7 @@ export async function runUpgrade(input?: {
   tuiLog("runUpgrade (TS)")
   try {
     const result = await upgradeFramework({
-      channel: input?.channel ?? "stable",
+      channel: (input?.channel ?? "stable") as ReleaseChannel,
       yes: true,
       onPhase: (_phase, msg) => input?.onStdout?.(msg + "\n"),
     })
@@ -432,6 +433,12 @@ export async function runReinstall(input?: {
   }
   input?.onStdout?.(`Reinstalling vendor tools for v${version}...\n`)
   return new Promise<CliRunResult>((resolve) => {
+    let timedOut = false
+    const timer = setTimeout(() => {
+      timedOut = true
+      child.kill("SIGTERM")
+      resolve({ exitCode: 124, stdout, stderr: "Reinstall timed out after 120s." })
+    }, 120_000)
     const child = spawn("bash", [localInstaller, "--reinstall", "--version", version, "--yes", "--no-launch", "--no-bundled-tools"], {
       stdio: ["ignore", "pipe", "pipe"],
     })
@@ -440,22 +447,29 @@ export async function runReinstall(input?: {
     child.stdout.on("data", (chunk: Buffer) => {
       const text = chunk.toString("utf-8")
       stdout += text
-      input?.onStdout?.(text)
+      // Strip ANSI escape codes and spinner control chars for clean TUI display
+      const clean = text.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "").replace(/\r/g, "\n").replace(/\n{2,}/g, "\n").trim()
+      if (clean) input?.onStdout?.(clean + "\n")
     })
     child.stderr.on("data", (chunk: Buffer) => {
       const text = chunk.toString("utf-8")
       stderr += text
-      input?.onStderr?.(text)
+      const clean = text.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "").replace(/\r/g, "\n").replace(/\n{2,}/g, "\n").trim()
+      if (clean) input?.onStderr?.(clean + "\n")
     })
-    child.on("close", (code) => {
+    const done = (code: number | null) => {
+      clearTimeout(timer)
+      if (timedOut) return
       if (code === 0) {
         input?.onStdout?.(`Reinstall complete.\n`)
         resolve({ exitCode: 0, stdout, stderr })
       } else {
         resolve({ exitCode: code ?? 1, stdout, stderr })
       }
-    })
+    }
+    child.on("close", (code) => done(code))
     child.on("error", (err) => {
+      clearTimeout(timer)
       resolve({ exitCode: 1, stdout, stderr: err.message })
     })
   })

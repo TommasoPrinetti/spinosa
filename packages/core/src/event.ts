@@ -49,8 +49,12 @@ export class InvalidDurableEventError extends Schema.TaggedErrorClass<InvalidDur
 
 const decodeSerializedEvent = (event: SerializedEvent): Effect.Effect<Payload, InvalidDurableEventError> => {
   const definition = Durable.get(event.type)
-  if (!definition?.durable) {
+  if (!definition) {
     return Effect.fail(new InvalidDurableEventError({ type: event.type, message: `Unknown durable event type ${event.type}` }))
+  }
+  const version = definition.durable?.version
+  if (!version) {
+    return Effect.fail(new InvalidDurableEventError({ type: event.type, message: `Event type ${event.type} is not durable` }))
   }
   return Effect.sync(() => ({
     id: event.id,
