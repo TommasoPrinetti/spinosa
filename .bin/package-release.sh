@@ -113,26 +113,12 @@ if [[ -f "${FRAMEWORK_DIR}/docs/reference/testsuite.md" ]]; then
   rm -f "${FRAMEWORK_DIR}/docs/reference/testsuite.md"
   echo "  Stripped maintainer-only: docs/reference/testsuite.md"
 fi
-if [[ -d "${FRAMEWORK_DIR}/packages/spinosa-core/node_modules" ]]; then
-  rm -rf "${FRAMEWORK_DIR}/packages/spinosa-core/node_modules"
-  echo "  Stripped generated: packages/spinosa-core/node_modules"
-fi
-if [[ -d "${FRAMEWORK_DIR}/packages/opencode/test" ]]; then
-  rm -rf "${FRAMEWORK_DIR}/packages/opencode/test"
-  echo "  Stripped generated: packages/opencode/test"
-fi
-if [[ -d "${FRAMEWORK_DIR}/packages/tui/test" ]]; then
-  rm -rf "${FRAMEWORK_DIR}/packages/tui/test"
-  echo "  Stripped generated: packages/tui/test"
-fi
-if [[ -d "${FRAMEWORK_DIR}/packages/opencode/node_modules" ]]; then
-  rm -rf "${FRAMEWORK_DIR}/packages/opencode/node_modules"
-  echo "  Stripped generated: packages/opencode/node_modules"
-fi
-if [[ -d "${FRAMEWORK_DIR}/packages/tui/node_modules" ]]; then
-  rm -rf "${FRAMEWORK_DIR}/packages/tui/node_modules"
-  echo "  Stripped generated: packages/tui/node_modules"
-fi
+# Strip test/ and node_modules from all shipped packages (including nested like sdk/js)
+while IFS= read -r -d '' dir; do
+  rel="${dir#${FRAMEWORK_DIR}/}"
+  rm -rf "$dir"
+  echo "  Stripped generated: ${rel}"
+done < <(find "${FRAMEWORK_DIR}/packages" -maxdepth 4 -type d \( -name node_modules -o -name test \) -not -path "*/node_modules/*" -print0)
 
 echo "  Copied: $copied_count paths"
 echo "  Excluded: $excluded_count user/generated paths"
