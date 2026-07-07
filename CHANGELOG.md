@@ -8,6 +8,17 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed (beta.12 re-release)
+
+- OCR in `addFiles` flow was a no-op stub — now calls `runPpuOcrBatch` to actually process images.
+- Multi-folder "new workspace": additional source paths imported via `runAdd` with `subfolder` option, files land in `raw/<foldername>/`.
+- Progress counter shown during OCR: status line updates with `5/65 filename → OCR ...` in real-time.
+- `ToolStatus` now includes `ocr: boolean` field, `detectDocumentTools` properly checks `ppu-paddle-ocr` availability.
+- `finishProvider` error handling: launch failures show in TUI log instead of silent.
+- `workspaceAsciiBannerText` strips `-spinosa` suffix including numbered variants (e.g. `-spinosa-28`).
+- Type errors fixed: `search.ts` prefix scope, `event.ts` decodeSerializedEvent null guard, `framework.ts` `ver`/`compareFrameworkVersions` issues, `theme/index.ts` `ansiToRgba` return type, missing imports in `onboarding.tsx` and `cli-bridge.ts`.
+- `runReinstall`: 120s timeout, ANSI-stripped output, no more `stdio: inherit` leaking CLI into TUI.
+
 ## [0.8.0-beta.12] — 2026-07-07
 
 ### Fixed

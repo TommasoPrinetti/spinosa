@@ -21,7 +21,8 @@ function discoverInstalledFramework(): string | undefined {
         if (!fwEntry.isDirectory() || !fwEntry.name.startsWith("spinosa-framework-")) continue
         const fwPath = path.join(versionBase, fwEntry.name)
         if (!hasFrameworkMarker(fwPath)) continue
-        if (!bestDir || compareFrameworkVersions(ver, bestVersion) > 0) {
+        const ver = fwEntry.name.replace("spinosa-framework-", "")
+        if (!bestDir || (compareFrameworkVersions(ver, bestVersion) ?? 0) > 0) {
           bestVersion = ver
           bestDir = fwPath
         }

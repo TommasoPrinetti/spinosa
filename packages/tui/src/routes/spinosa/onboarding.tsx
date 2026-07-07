@@ -6,7 +6,7 @@ import { useRoute } from "../../context/route"
 import { useSpinosaWorkspace } from "../../context/spinosa-workspace"
 import { Toast } from "../../ui/toast"
 import { ProgressEmitter } from "@opencode-ai/spinosa-core/progress/progress"
-import { PHASES, prepareNew, runNewPhase, completeNew, runReinstall, runStartup, type NewWorkspacePhase } from "../../spinosa/cli-bridge"
+import { PHASES, prepareNew, runNewPhase, completeNew, runReinstall, runStartup, runAdd, type NewWorkspacePhase } from "../../spinosa/cli-bridge"
 import { readBundledFrameworkVersion, isPrereleaseFrameworkVersion, readStartupPrompt, writePreferredCli } from "../../spinosa/service"
 import { CenteredColumn } from "../../component/centered-column"
 import { OPENCODE_BASE_MODE, useOpencodeKeymap, useOpencodeModeStack } from "../../keymap"
@@ -317,7 +317,7 @@ export function Onboarding() {
     const llmTools = detectLlmTools()
 
     const results: ToolCheckResult[] = [
-      { label: "PPU PaddleOCR", status: toolStatus.rapidocr ? "available" : "missing", detail: "scanned PDFs and images" },
+      { label: "PPU PaddleOCR", status: toolStatus.ocr ? "available" : "missing", detail: "scanned PDFs and images" },
       { label: "MarkItDown", status: toolStatus.markitdown ? "available" : "missing", detail: "Office docs, EPUB, HTML, text PDFs" },
       { label: "pdftoppm", status: toolStatus.pypdfium2 ? "available" : "missing", detail: "scanned PDF page rendering" },
       { label: "pdftotext", status: toolStatus.pypdf ? "available" : "missing", detail: "text PDF splitting" },
@@ -500,9 +500,14 @@ export function Onboarding() {
 
       // Phase B: Import phases (direct → markitdown → OCR)
       const sharedProg = new ProgressEmitter()
+      let progCounter = ""
+      sharedProg.on((e) => { progCounter = `${e.current}/${e.total}` })
 
       const onPhaseLog = (msg: string) => {
-        if (msg.startsWith("  ")) { setProcessingStatus(msg.trim()); return }
+        if (msg.startsWith("  ")) {
+          const label = progCounter ? `${progCounter} ${msg.trim()}` : msg.trim()
+          setProcessingStatus(label); return
+        }
         appendLogLine(msg)
       }
 
@@ -542,6 +547,21 @@ export function Onboarding() {
       })
 
       if (result.success) {
+        // Import additional source paths into the workspace
+        const workspacePath = ctx.workspacePath
+        for (let i = 1; i < resolved.length; i++) {
+          const extra = resolved[i]!
+          appendLogLine(`Importing additional source: ${extra}`)
+          const addResult = await runAdd(workspacePath, extra, {
+            dir: true,
+            onStdout,
+          })
+          if (addResult.exitCode !== 0) {
+            appendLogLine(`  ⚠ Partial import for ${extra}: ${addResult.stderr}`)
+          } else {
+            appendLogLine(`  ✓ Imported ${extra}`)
+          }
+        }
         setProcessingDone(true)
         setGateLabel("PROCEED")
         setGateAction(() => () => { setWaitingForGate(false); setStep("provider") })
@@ -559,31 +579,36 @@ export function Onboarding() {
   }
 
   const finishProvider = async (cliValue: string) => {
-    const workspacePath = createdWorkspace()
-    if (workspacePath) {
-      await writePreferredCli(workspacePath, cliValue)
-    }
-    setSelectedCli(CLI_OPTIONS.findIndex((o) => o.value === cliValue))
+    try {
+      const workspacePath = createdWorkspace()
+      if (workspacePath) {
+        await writePreferredCli(workspacePath, cliValue)
+      }
+      setSelectedCli(CLI_OPTIONS.findIndex((o) => o.value === cliValue))
 
-    if (cliValue === "spinosa") {
-      if (workspacePath) {
-        const prompt = await readStartupPrompt(workspacePath)
-        spinosa.queuePrompt({
-          input: prompt ?? "Error: startup-prompt.md not found. Run the startup indexing workflow manually.",
-          parts: [],
-          autoSubmit: true,
-        })
-        await spinosa.openWorkspace(workspacePath)
-        navigate({ type: "workspace" })
+      if (cliValue === "spinosa") {
+        if (workspacePath) {
+          const prompt = await readStartupPrompt(workspacePath)
+          spinosa.queuePrompt({
+            input: prompt ?? "Error: startup-prompt.md not found. Run the startup indexing workflow manually.",
+            parts: [],
+            autoSubmit: true,
+          })
+          await spinosa.openWorkspace(workspacePath)
+          navigate({ type: "workspace" })
+        }
+      } else {
+        if (workspacePath) {
+          await runStartup(workspacePath, { cli: cliValue, launch: launchForCli(cliValue) })
+        }
+        goHome()
       }
-    } else {
-      if (workspacePath) {
-        await runStartup(workspacePath, { cli: cliValue, launch: launchForCli(cliValue) })
-      }
-      goHome()
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      appendLogLine(`Failed to launch ${cliValue}: ${msg}`)
+      setStep("error")
     }
   }
-
   const finish = async () => {
     const workspacePath = createdWorkspace()
     if (workspacePath) {
@@ -701,7 +726,7 @@ export function Onboarding() {
           consume(); return
         }
         if (event.name === "return") {
-          void finishProvider(CLI_OPTIONS[selectedCli()]!.value)
+          void finishProvider(CLI_OPTIONS[selectedCli()]!.value).catch((err) => appendLogLine(`Provider error: ${err instanceof Error ? err.message : String(err)}`))
           consume(); return
         }
       }

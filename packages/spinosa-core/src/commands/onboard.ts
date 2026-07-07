@@ -400,7 +400,7 @@ updated: ${today()}
 - Files skipped during direct copy: ${copyResult.skipped}
 - MarkItDown converted: ${copyResult.mdConverted}
 - MarkItDown mode: ${markitdownMode}
-- OCR (RapidOCR) converted: ${copyResult.ocrConverted}
+- OCR (ppu-paddle-ocr) converted: ${copyResult.ocrConverted}
 - OCR mode: ${ocrMode}
 
 ## Handoff

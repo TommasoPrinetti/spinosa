@@ -373,8 +373,8 @@ export function terminalMode(colors: TerminalColors): "dark" | "light" | undefin
 }
 
 export function generateSystem(colors: TerminalColors, mode: "dark" | "light"): ThemeJson {
-  const bg = RGBA.fromHex(colors.defaultBackground ?? colors.palette[0] ?? ansiToRgba(0))
-  const fg = RGBA.fromHex(colors.defaultForeground ?? colors.palette[7] ?? ansiToRgba(7))
+  const bg = colors.defaultBackground ? RGBA.fromHex(colors.defaultBackground) : colors.palette[0] ? RGBA.fromHex(colors.palette[0]) : ansiToRgba(0)
+  const fg = colors.defaultForeground ? RGBA.fromHex(colors.defaultForeground) : colors.palette[7] ? RGBA.fromHex(colors.palette[7]) : ansiToRgba(7)
   const transparent = RGBA.fromValues(bg.r, bg.g, bg.b, 0)
   const isDark = mode == "dark"
 
