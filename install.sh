@@ -812,7 +812,10 @@ resolve_version() {
     RELEASE_DOWNLOAD_TAG="$channel"
     info "Latest ${channel} version: ${VERSION}"
   elif [ "$VERSION_EXPLICIT" -eq 1 ]; then
-    RELEASE_DOWNLOAD_TAG="v${VERSION}"
+    # Use channel tag (beta/stable) for the download URL — the release
+    # tag is a moving pointer, not per-version. Per-version tags
+    # (vX.Y.Z) exist for stable releases only.
+    RELEASE_DOWNLOAD_TAG="$PINNED_TAG"
   else
     RELEASE_DOWNLOAD_TAG="$PINNED_TAG"
   fi
