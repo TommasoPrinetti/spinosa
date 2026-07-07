@@ -155,6 +155,7 @@ if [[ -f "${FRAMEWORK_ROOT}/packages/spinosa-core/bin/spinosa.ts" ]]; then
   fi
   if [[ -n "$SPINOSA_BUN" ]]; then
     export PATH="${FRAMEWORK_ROOT}/node_modules/.bin:${PATH}"
+    export SPINOSA_FRAMEWORK_ROOT="${FRAMEWORK_ROOT}"
     exec "$SPINOSA_BUN" run "${FRAMEWORK_ROOT}/packages/spinosa-core/bin/spinosa.ts" "${ORIGINAL_ARGS[@]}"
   fi
 fi
