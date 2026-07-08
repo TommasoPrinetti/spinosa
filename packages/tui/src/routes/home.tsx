@@ -133,9 +133,19 @@ export function Home() {
         },
       })
       if (result.success) {
-        toast.show({ variant: "success", message: "Upgrade complete! Restarting…" })
+        const wsList = result.workspaceUpgradeNeeded
+        if (wsList.length > 0) {
+          const wsNames = wsList.map((p) => p.split("/").pop() || p).join(", ")
+          toast.show({
+            variant: "success",
+            message: `Upgrade complete! ${wsList.length} workspace(s) need updating: ${wsNames}. Run 'spinosa update' to sync them.`,
+            duration: 5000,
+          })
+        } else {
+          toast.show({ variant: "success", message: "Upgrade complete!" })
+        }
         // Give toast time to render, then restart the TUI
-        await new Promise((r) => setTimeout(r, 1500))
+        await new Promise((r) => setTimeout(r, 3000))
         exit()
       } else {
         toast.show({ variant: "error", message: "Upgrade failed" })

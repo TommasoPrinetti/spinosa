@@ -8,6 +8,7 @@ import {
   readdirSync,
   renameSync,
 } from "node:fs"
+import { createHash } from "node:crypto"
 import path from "node:path"
 import { spawnSync } from "node:child_process"
 import { safeCopy, copyDirContents, cleanMacMetadata, isCloudStoragePath } from "../utils/fs"
@@ -158,6 +159,35 @@ function finalizeLegacyLogs(workspacePath: string): void {
   } catch { /* best effort */ }
 }
 
+// ── Framework checksum tracking (replace_if_unmodified enforcement) ─────────
+
+const CHECKSUMS_RELPATH = ".spinosa/framework-checksums.json"
+
+interface FrameworkChecksums {
+  [relativePath: string]: string
+}
+
+function readFrameworkChecksums(wsPath: string): FrameworkChecksums {
+  const p = path.join(wsPath, CHECKSUMS_RELPATH)
+  if (!existsSync(p)) return {}
+  try {
+    return JSON.parse(readFileSync(p, "utf-8"))
+  } catch {
+    return {}
+  }
+}
+
+function writeFrameworkChecksums(wsPath: string, checksums: FrameworkChecksums): void {
+  const p = path.join(wsPath, CHECKSUMS_RELPATH)
+  mkdirSync(path.dirname(p), { recursive: true })
+  writeFileSync(p, JSON.stringify(checksums, null, 2) + "\n")
+}
+
+function sha256File(filePath: string): string {
+  const content = readFileSync(filePath)
+  return createHash("sha256").update(content).digest("hex")
+}
+
 export async function updateWorkspace(options: UpdateOptions): Promise<UpdateResult> {
   const { workspacePath, frameworkRoot, dryRun = false, onPhase } = options
   const phase = onPhase ?? ((_p: string, _d: string) => {})
@@ -194,6 +224,9 @@ export async function updateWorkspace(options: UpdateOptions): Promise<UpdateRes
   const processedPaths = new Set(
     fwEntries.filter((e) => e.role && !e.role.startsWith("#")).map((e) => e.path),
   )
+
+  // Load stored checksums for replace_if_unmodified detection
+  const storedChecksums = readFrameworkChecksums(workspacePath)
 
   const changedPaths: string[] = []
   let added = 0
@@ -245,6 +278,18 @@ export async function updateWorkspace(options: UpdateOptions): Promise<UpdateRes
     const srcStat = statSync(src)
     const dstStat = statSync(dst)
 
+
+    // replace_if_unmodified: skip if user modified since last update
+    if (entry.policy === "replace_if_unmodified" && srcStat.isFile() && dstStat.isFile()) {
+      const storedHash = storedChecksums[entry.path]
+      if (storedHash !== undefined) {
+        const currentHash = sha256File(dst)
+        if (currentHash !== storedHash) {
+          skipped++
+          continue
+        }
+      } // no stored hash → first update with tracking → proceed
+    }
     if (srcStat.isFile() && dstStat.isFile() && filesMatch(src, dst)) {
       skipped++
       continue
@@ -348,6 +393,22 @@ export async function updateWorkspace(options: UpdateOptions): Promise<UpdateRes
       phase("5", "Sync agent mirrors")
       spawnSync("bash", [syncScript], { stdio: "ignore" })
     }
+  }
+
+  // ── Generate framework file checksums (for next update's replace_if_unmodified) ──
+  if (!dryRun) {
+    phase("5", "Record file checksums")
+    const newChecksums: FrameworkChecksums = {}
+    for (const entry of fwEntries) {
+      if (entry.role === "user_state" || entry.policy === "exclude_from_update") continue
+      const fullPath = path.join(workspacePath, entry.path)
+      if (!existsSync(fullPath)) continue
+      const s = statSync(fullPath)
+      if (s.isFile()) {
+        newChecksums[entry.path] = sha256File(fullPath)
+      }
+    }
+    writeFrameworkChecksums(workspacePath, newChecksums)
   }
 
   return {
