@@ -1,17 +1,30 @@
 import type { ChildProcess } from "node:child_process"
-import { existsSync } from "node:fs"
-import { TextareaRenderable } from "@opentui/core"
+import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs"
+import path from "node:path"
+import { spawn } from "node:child_process"
+import { TextareaRenderable, TextAttributes } from "@opentui/core"
 import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show } from "solid-js"
+import { createStore } from "solid-js/store"
 import { useTheme } from "../../context/theme"
 import { useRoute } from "../../context/route"
 import { useSpinosaWorkspace } from "../../context/spinosa-workspace"
 import { Toast } from "../../ui/toast"
-import { runAdd } from "../../spinosa/cli-bridge"
-import { tuiLog } from "../../spinosa/log"
+import { scanAndClassifySource, processDirectCopy, processMarkitdown, processOcr } from "@opencode-ai/spinosa-core/import/pipeline"
+import { ProgressEmitter } from "@opencode-ai/spinosa-core/progress/progress"
+import { ImportBatchManager } from "@opencode-ai/spinosa-core/import/batch"
+import { tuiLog, logStep, logAction, logTool, logGate, logError } from "../../spinosa/log"
 import { CenteredColumn } from "../../component/centered-column"
 import { OPENCODE_BASE_MODE, useOpencodeKeymap, useOpencodeModeStack } from "../../keymap"
-import { buttonBackground, buttonBorder, buttonText } from "../../util/button"
-import { buildImportScanPreview, resolveUserPath } from "../../spinosa/onboarding-preview"
+import { useExit } from "../../context/exit"
+import { buttonBackground, buttonText } from "../../util/button"
+import {
+  buildImportScanPreview,
+  detectDocumentTools,
+  resolveUserPath,
+} from "../../spinosa/onboarding-preview"
+import type { CliRunResult } from "../../spinosa/types"
+import { readBundledFrameworkVersion, isPrereleaseFrameworkVersion } from "../../spinosa/service"
+import { resolveFrameworkRoot } from "@opencode-ai/spinosa-core/framework/discovery"
 import {
   blurIfFocused,
   createWorkflowGuard,
@@ -21,6 +34,7 @@ import {
   type ImportOption,
   LogScrollbox,
   LogoSummary,
+  ProgressBar,
   stripAnsi,
   ToggleLine,
   WizardActionButton,
@@ -30,7 +44,13 @@ import {
   yieldToEventLoop,
 } from "./wizard-ui"
 
-type WizardStep = "path" | "scan" | "imports" | "processing" | "done" | "error"
+type WizardStep = "path" | "tools" | "scan" | "direct" | "markitdown" | "ocr" | "done" | "error"
+
+type ToolCheckResult = {
+  label: string
+  status: "checking" | "available" | "missing"
+  detail?: string
+}
 
 type SourcePathEntry = {
   id: number
@@ -38,13 +58,95 @@ type SourcePathEntry = {
 
 let nextSourceId = 1
 
+/**
+ * Reinstall vendor tools via install.sh.
+ * Duplicated from onboarding.tsx; kept as a local helper to avoid cross-module coupling.
+ */
+async function runReinstall(input?: {
+  channel?: string
+  onStdout?: (chunk: string) => void
+  onStderr?: (chunk: string) => void
+}): Promise<CliRunResult> {
+  tuiLog("runReinstall (bash)")
+
+  const fwRoot = resolveFrameworkRoot()
+  if (!fwRoot) {
+    const msg = "Framework root not found — cannot reinstall vendor tools."
+    input?.onStderr?.(msg + "\n")
+    return { exitCode: 1, stdout: "", stderr: msg }
+  }
+
+  const localInstaller = path.join(fwRoot, "install.sh")
+  if (!existsSync(localInstaller)) {
+    const msg = "install.sh not found in framework root."
+    input?.onStderr?.(msg + "\n")
+    return { exitCode: 1, stdout: "", stderr: msg }
+  }
+
+  const version = await readBundledFrameworkVersion()
+  if (!version) {
+    const msg = "Could not read bundled framework version."
+    input?.onStderr?.(msg + "\n")
+    return { exitCode: 1, stdout: "", stderr: msg }
+  }
+
+  input?.onStdout?.(`Reinstalling vendor tools for v${version}...\n`)
+
+  return new Promise<CliRunResult>((resolve) => {
+    let timedOut = false
+    let stdout = ""
+    let stderr = ""
+
+    const timer = setTimeout(() => {
+      timedOut = true
+      child.kill("SIGTERM")
+      resolve({ exitCode: 124, stdout, stderr: "Reinstall timed out after 120s." })
+    }, 120_000)
+
+    const child = spawn("bash", [localInstaller, "--reinstall", "--version", version, "--yes", "--no-launch", "--no-bundled-tools"], {
+      stdio: ["ignore", "pipe", "pipe"],
+    })
+
+    child.stdout.on("data", (chunk: Buffer) => {
+      const text = chunk.toString("utf-8")
+      stdout += text
+      const clean = text.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "").replace(/\r/g, "\n").replace(/\n{2,}/g, "\n").trim()
+      if (clean) input?.onStdout?.(clean + "\n")
+    })
+    child.stderr.on("data", (chunk: Buffer) => {
+      const text = chunk.toString("utf-8")
+      stderr += text
+      const clean = text.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "").replace(/\r/g, "\n").replace(/\n{2,}/g, "\n").trim()
+      if (clean) input?.onStderr?.(clean + "\n")
+    })
+
+    const done = (code: number | null) => {
+      clearTimeout(timer)
+      if (timedOut) return
+      if (code === 0) {
+        input?.onStdout?.("Reinstall complete.\n")
+        resolve({ exitCode: 0, stdout, stderr })
+      } else {
+        resolve({ exitCode: code ?? 1, stdout, stderr })
+      }
+    }
+    child.on("close", (code) => done(code))
+    child.on("error", (err) => {
+      clearTimeout(timer)
+      resolve({ exitCode: 1, stdout, stderr: err.message })
+    })
+  })
+}
+
 export function AddFiles() {
   const { theme } = useTheme()
   const { navigate } = useRoute()
   const spinosa = useSpinosaWorkspace()
   const keymap = useOpencodeKeymap()
   const modeStack = useOpencodeModeStack()
+  const exit = useExit()
 
+  // ── Core state ────────────────────────────────────────────────────────────
   const [step, setStep] = createSignal<WizardStep>("path")
   const [sourcePaths, setSourcePaths] = createSignal<SourcePathEntry[]>([{ id: 0 }])
   const [logLines, setLogLines] = createSignal<string[]>([])
@@ -52,35 +154,73 @@ export function AddFiles() {
   const [importOptions, setImportOptions] = createSignal<ImportOption[]>([])
   const [selectedImport, setSelectedImport] = createSignal(0)
   const [focusedSource, setFocusedSource] = createSignal(0)
-  const [hoveredBack, setHoveredBack] = createSignal(false)
-  const [scanProgress, setScanProgress] = createSignal(0)
-  const [scanTotal, setScanTotal] = createSignal(0)
+  const [hoveredButton, setHoveredButton] = createSignal<string | null>(null)
   const [processingDone, setProcessingDone] = createSignal(false)
   const [gateLabel, setGateLabel] = createSignal("")
   const [gateAction, setGateAction] = createSignal<() => void>(() => {})
   const [waitingForGate, setWaitingForGate] = createSignal(false)
+  const [toolChecks, setToolChecks] = createSignal<ToolCheckResult[]>([])
+  const [scanDone, setScanDone] = createSignal(false)
+  const [progCurrent, setProgCurrent] = createSignal(0)
+  const [progTotal, setProgTotal] = createSignal(1)
+  const [processingStatus, setProcessingStatus] = createSignal("")
+  const [processingFile, setProcessingFile] = createSignal("")
+  const [failedCount, setFailedCount] = createSignal(0)
+  const [importSummary, setImportSummary] = createSignal("")
+  const [pathValidities, setPathValidities] = createStore<Record<number, "unchecked" | "valid" | "invalid">>({})
+
+  const SPINNER_FRAMES = ["|", "/", "—", "\\"]
+  const [spinIdx, setSpinIdx] = createSignal(0)
+  let spinTimer: ReturnType<typeof setInterval> | undefined
+  const spinOn = () => { if (!spinTimer) spinTimer = setInterval(() => setSpinIdx((i) => (i + 1) % 4), 200) }
+  const spinOff = () => { if (spinTimer) { clearInterval(spinTimer); spinTimer = undefined; setSpinIdx(0) } }
+
   const workflow = createWorkflowGuard()
   let activeChild: ChildProcess | undefined
   let sourceInput: TextareaRenderable | undefined
   const sourceInputs = new Map<number, TextareaRenderable>()
   const pathSnapshot = new Map<number, string>()
+  let gateResolve: (() => void) | undefined
+  let abortProcessing = false
 
+  // ── Derived ───────────────────────────────────────────────────────────────
   const selectedExtensions = createMemo(() =>
     importOptions()
       .filter((item) => item.selected)
       .map((item) => item.ext),
   )
 
-  const totalSteps = 5
-  const stepIndex = createMemo(() => {
-    if (step() === "path") return 1
-    if (step() === "scan") return 2
-    if (step() === "imports") return 3
-    if (step() === "processing") return 4
-    if (step() === "done") return 5
-    return 5
+  const toolActionLabel = createMemo(() => {
+    const checks = toolChecks()
+    if (checks.length === 0) return ""
+    if (checks.some((t) => t.status === "checking")) return "Checking..."
+    if (checks.some((t) => t.status === "missing")) return "Repair tools"
+    return "Start scanning"
   })
 
+  const toolAllReady = createMemo(() => {
+    const checks = toolChecks()
+    return checks.length > 0 && checks.every((t) => t.status === "available")
+  })
+
+  const totalSteps = 7
+  const stepIndex = createMemo(() => {
+    if (step() === "path") return 1
+    if (step() === "tools") return 2
+    if (step() === "scan") return 3
+    if (step() === "direct") return 4
+    if (step() === "markitdown") return 5
+    if (step() === "ocr") return 6
+    if (step() === "done") return 7
+    return 7
+  })
+
+  const hasValidPaths = createMemo(() => {
+    const entries = sourcePaths()
+    return entries.some((e) => pathValidities[e.id] === "valid")
+  })
+
+  // ── Log helpers ───────────────────────────────────────────────────────────
   const appendLogLine = (...lines: string[]) =>
     setLogLines((prev) => {
       const result = [...prev]
@@ -98,6 +238,7 @@ export function AddFiles() {
 
   const clearLog = () => setLogLines([])
 
+  // ── Path input management ─────────────────────────────────────────────────
   const readPathText = (id: number) => {
     const live = sourceInputs.get(id)?.plainText?.trim()
     if (live) return live
@@ -176,14 +317,29 @@ export function AddFiles() {
       .map((e) => readPathText(e.id))
       .filter(Boolean)
       .map((p) => resolveUserPath(p))
-      .filter((p): p is string => Boolean(p))
+      .filter((p: string | undefined): p is string => Boolean(p))
 
+  const validateSinglePath = (p: string): "valid" | "invalid" => {
+    try {
+      if (!existsSync(p)) return "invalid"
+      const st = statSync(p)
+      if (st.isFile()) return "valid"
+      if (st.isDirectory()) return readdirSync(p).length > 0 ? "valid" : "invalid"
+      return "invalid"
+    } catch {
+      return "invalid"
+    }
+  }
+
+  // ── Navigation & lifecycle ────────────────────────────────────────────────
   const killActiveChild = () => {
     if (activeChild && !activeChild.killed) activeChild.kill("SIGTERM")
     activeChild = undefined
   }
 
   const stopActiveWork = () => {
+    if (gateResolve) { gateResolve(); gateResolve = undefined }
+    abortProcessing = true
     workflow.bump()
     killActiveChild()
     setBusy(false)
@@ -196,95 +352,300 @@ export function AddFiles() {
     goHome()
   }
 
+  const handleBackPress = () => {
+    if (step() === "path") leavePathStep()
+    else moveBack()
+  }
+
   const moveBack = () => {
+    const from = step()
     stopActiveWork()
-    if (step() === "scan") {
-      setStep("path")
-      return
-    }
-    if (step() === "imports") {
-      setStep("scan")
-      return
-    }
-    if (step() === "processing") {
-      setStep("imports")
-      return
-    }
-    if (step() === "error") {
-      setStep(importOptions().length > 0 ? "imports" : "path")
+    if (from === "tools") { logAction("back", "tools to path"); setStep("path"); return }
+    if (from === "scan") { logAction("back", "scan to tools"); setStep("tools"); return }
+    if (from === "direct" || from === "markitdown" || from === "ocr") { logAction("back", `${from} to scan`); setStep("scan"); return }
+    if (from === "error") {
+      setStep(importOptions().length > 0 ? "scan" : "path")
     }
   }
 
+  // ── Gate helper ───────────────────────────────────────────────────────────
+  const gate = (label = "Continue") => new Promise<void>((resolve) => {
+    gateResolve = resolve
+    logGate(label)
+    setGateLabel(label)
+    setGateAction(() => () => { logAction("gate-click", label); setWaitingForGate(false); gateResolve = undefined; resolve() })
+    setWaitingForGate(true)
+  })
+
+  // ── Tools check ───────────────────────────────────────────────────────────
+  const runToolCheck = async () => {
+    logStep("tools", "Checking document processing tools")
+    const checks: ToolCheckResult[] = [
+      { label: "PPU PaddleOCR", status: "checking", detail: "scanned PDFs and images" },
+      { label: "MarkItDown", status: "checking", detail: "Office docs, EPUB, HTML, text PDFs" },
+      { label: "pdftoppm", status: "checking", detail: "scanned PDF page rendering" },
+      { label: "pdftotext", status: "checking", detail: "text PDF splitting" },
+    ]
+    setToolChecks(checks)
+    setStep("tools")
+    spinOn()
+
+    await delay(80)
+    const toolStatus = await detectDocumentTools()
+    const results: ToolCheckResult[] = [
+      { label: "PPU PaddleOCR", status: toolStatus.ocr ? "available" : "missing", detail: "scanned PDFs and images" },
+      { label: "MarkItDown", status: toolStatus.markitdown ? "available" : "missing", detail: "Office docs, EPUB, HTML, text PDFs" },
+      { label: "pdftoppm", status: toolStatus.pypdfium2 ? "available" : "missing", detail: "scanned PDF page rendering" },
+      { label: "pdftotext", status: toolStatus.pypdf ? "available" : "missing", detail: "text PDF splitting" },
+    ]
+    setToolChecks(results)
+    for (const r of results) logTool(r.label, r.status, r.detail)
+    spinOff()
+  }
+
+  const handleToolAction = () => {
+    const checks = toolChecks()
+    const needsRepair = checks.some((t) => t.status === "missing")
+    if (needsRepair) {
+      logAction("repair-tools", `${checks.filter(t => t.status === "missing").length} tools missing`)
+      void runToolRepair()
+    } else if (checks.every((t) => t.status === "available")) {
+      logAction("start-scan", "All tools ready")
+      void startScan()
+    }
+  }
+
+  const runToolRepair = async () => {
+    logAction("repair", "Tools missing — repairing")
+    setToolChecks((prev) => prev.map((t) => t.status === "missing" ? { ...t, status: "checking" as const } : t))
+    spinOn()
+    await delay(80)
+    const bv = await readBundledFrameworkVersion()
+    const channel = bv && isPrereleaseFrameworkVersion(bv) ? "beta" : "stable"
+    await runReinstall({
+      channel,
+      onStdout: (chunk) => {
+        const clean = stripAnsi(chunk)
+        if (clean) appendLogLine(clean)
+      },
+      onStderr: (chunk) => {
+        const clean = stripAnsi(chunk)
+        if (clean) appendLogLine(clean)
+      },
+    })
+    await delay(200)
+    const toolStatus = await detectDocumentTools()
+    const results = [
+      { label: "PPU PaddleOCR", status: toolStatus.ocr ? "available" : "missing", detail: "scanned PDFs and images" },
+      { label: "MarkItDown", status: toolStatus.markitdown ? "available" : "missing", detail: "Office docs, EPUB, HTML, text PDFs" },
+      { label: "pdftoppm", status: toolStatus.pypdfium2 ? "available" : "missing", detail: "scanned PDF page rendering" },
+      { label: "pdftotext", status: toolStatus.pypdf ? "available" : "missing", detail: "text PDF splitting" },
+    ] as ToolCheckResult[]
+    setToolChecks(results)
+    for (const r of results) logTool(r.label, r.status, r.detail)
+    appendLogLine("Tool repair complete.")
+    spinOff()
+  }
+
+  // ── Scan ──────────────────────────────────────────────────────────────────
   const startScan = async () => {
-    const gen = workflow.bump()
-    killActiveChild()
-    setBusy(true)
     snapshotSourcePaths()
     const resolved = allPathsResolved()
     if (resolved.length === 0) {
-      if (workflow.active(gen)) {
-        setBusy(false)
-        setStep("error")
-      }
+      appendLogLine("At least one valid source path is required.")
+      setStep("error")
       return
     }
     clearLog()
-    if (!workflow.active(gen)) return
+    setScanDone(false)
     setStep("scan")
     await yieldToEventLoop()
-    if (!workflow.active(gen)) return
+    await delay(1000)
 
     try {
       let mergedOptions: ImportOption[] = []
-      let allLines: string[] = []
-
       for (const src of resolved) {
-        if (!workflow.active(gen)) return
         appendLogLine(`Scanning: ${src}`)
         const scanPreview = await buildImportScanPreview(src)
-        if (!workflow.active(gen)) return
-
         for (const opt of scanPreview.importOptions) {
           const existing = mergedOptions.find((m) => m.ext === opt.ext)
           if (existing) existing.count += opt.count
           else mergedOptions.push({ ...opt })
         }
-
-        allLines.push(...generateScanLines(scanPreview))
       }
-
-      if (!workflow.active(gen)) return
       setImportOptions(mergedOptions)
-      setScanTotal(allLines.length)
-      setScanProgress(0)
-
-      for (let i = 0; i < allLines.length; i++) {
-        if (!workflow.active(gen)) return
-        appendLogLine(allLines[i]!)
-        setScanProgress(i + 1)
-        await delay(30)
-      }
-
-      if (!workflow.active(gen)) return
-      await delay(400)
-      if (!workflow.active(gen)) return
-      setGateLabel("Continue")
-      setGateAction(() => () => {
-        setWaitingForGate(false)
-        setStep("imports")
-      })
-      setWaitingForGate(true)
+      clearLog()
+      setScanDone(true)
+      logAction("scan-done", `${mergedOptions.length} file types found`)
     } catch (err) {
-      if (!workflow.active(gen)) return
+      logError("startScan", err)
       appendLogLine(`Scan failed: ${err instanceof Error ? err.message : String(err)}`)
       setStep("error")
-    } finally {
-      if (workflow.active(gen)) setBusy(false)
     }
   }
 
+  // ── Processing ────────────────────────────────────────────────────────────
+  const startProcessing = async () => {
+    if (busy()) return
+    const resolved = allPathsResolved()
+    if (resolved.length === 0) {
+      appendLogLine("At least one valid source path is required.")
+      setStep("error")
+      return
+    }
+
+    const workspacePath = spinosa.activePath
+    if (!workspacePath) {
+      appendLogLine("No active workspace selected.")
+      setStep("error")
+      return
+    }
+
+    setBusy(true)
+    clearLog()
+    setFailedCount(0)
+    setProcessingDone(false)
+    setProgCurrent(0)
+    setProgTotal(1)
+    setProcessingStatus("Starting...")
+    setProcessingFile("")
+    abortProcessing = false
+    gateResolve = undefined
+    spinOn()
+    await delay(200)
+
+    const rawDir = path.join(workspacePath, "raw")
+    mkdirSync(rawDir, { recursive: true })
+
+    const batchManager = new ImportBatchManager()
+    batchManager.parseExtensionsFromFlag(selectedExtensions().join(","))
+
+    let totalFailed = 0
+    let totalDirect = 0
+    let totalMd = 0
+    let totalOcr = 0
+    let dirConverted = 0
+    let mdConverted = 0
+    let ocrConverted = 0
+
+    try {
+      for (const src of resolved) {
+        if (abortProcessing) break
+        appendLogLine(`Processing: ${src}`)
+
+        const classified = await scanAndClassifySource(src, rawDir, batchManager)
+        if (!classified) {
+          appendLogLine(`No importable files in: ${src}`)
+          continue
+        }
+
+        // ── Phase A: Direct copy ────────────────────────────────────────────
+        setStep("direct")
+        const sharedProg = new ProgressEmitter()
+        sharedProg.on((e) => {
+          if (e.total > 0) setProgTotal(e.total)
+          if (e.current >= 0) setProgCurrent(e.current)
+          if (e.relPath) setProcessingFile(e.relPath)
+        })
+
+        const onPhaseLog = (msg: string) => {
+          if (msg.startsWith("  ")) {
+            setProcessingStatus(msg.trim())
+            return
+          }
+          appendLogLine(msg)
+        }
+
+        const directCount = classified.directFiles.length
+        setProgTotal(directCount > 0 ? directCount : 1)
+        setProgCurrent(0)
+        setProcessingStatus(`Direct copy — ${directCount} files`)
+        totalDirect += directCount
+        await delay(500)
+        const dr = await processDirectCopy(classified.directFiles, sharedProg, onPhaseLog)
+        if (dr.failed > 0) totalFailed += dr.failed
+        if (abortProcessing) { spinOff(); setBusy(false); return }
+        dirConverted += dr.converted
+
+        // ── Phase B: MarkItDown ─────────────────────────────────────────────
+        const mdCount = classified.markitdownFiles.length
+        if (mdCount > 0) {
+          setStep("markitdown")
+          await gate("Continue to MarkItDown")
+          if (abortProcessing) { spinOff(); setBusy(false); return }
+
+          setProgTotal(mdCount || 1)
+          setProgCurrent(0)
+          setProcessingStatus("MarkItDown conversion...")
+          totalMd += mdCount
+          await delay(500)
+          const mr = await processMarkitdown(classified.markitdownFiles, classified.logsDir, sharedProg, onPhaseLog)
+          if (mr.failed > 0) totalFailed += mr.failed
+          if (abortProcessing) { spinOff(); setBusy(false); return }
+          mdConverted += mr.converted
+        } else {
+          appendLogLine("No files require MarkItDown conversion.")
+        }
+
+        // ── Phase C: OCR ────────────────────────────────────────────────────
+        const ocrCount = classified.ocrFiles.length
+        if (ocrCount > 0) {
+          setStep("ocr")
+          await gate("Continue to OCR")
+          if (abortProcessing) { spinOff(); setBusy(false); return }
+
+          setProgTotal(ocrCount || 1)
+          setProgCurrent(0)
+          setProcessingStatus("OCR...")
+          totalOcr += ocrCount
+          await delay(500)
+          const or = await processOcr(classified.ocrFiles, classified.logsDir, sharedProg, onPhaseLog)
+          if (or.failed > 0) totalFailed += or.failed
+          if (abortProcessing) { spinOff(); setBusy(false); return }
+          ocrConverted += or.converted
+        } else {
+          appendLogLine("No files require OCR.")
+        }
+      }
+
+      setFailedCount(totalFailed)
+      setImportSummary(
+        `${dirConverted}/${totalDirect} copied · ${mdConverted}/${totalMd} markitdown · ${ocrConverted}/${totalOcr} ocr` +
+        (totalFailed > 0 ? ` · ${totalFailed} failed` : ""),
+      )
+      setProcessingDone(true)
+      setStep("done")
+    } catch (err) {
+      logError("startProcessing", err)
+      appendLogLine(`Error: ${err instanceof Error ? err.message : String(err)}`)
+      setStep("error")
+    } finally {
+      spinOff()
+      setBusy(false)
+    }
+  }
+
+  // ── Finish ────────────────────────────────────────────────────────────────
+  const finish = () => {
+    spinosa.refresh()
+    goHome()
+  }
+
+  // ── Toggle helpers ────────────────────────────────────────────────────────
+  const toggleImport = (index: number) =>
+    setImportOptions((items) =>
+      items.map((item, itemIndex) => (itemIndex === index ? { ...item, selected: !item.selected } : item)),
+    )
+
+  const toggleAllImports = () => {
+    const shouldEnableAll = importOptions().some((item) => !item.selected)
+    setImportOptions((items) => items.map((item) => ({ ...item, selected: shouldEnableAll })))
+  }
+
+  // ── Path step navigation ──────────────────────────────────────────────────
   const continueFromPath = async () => {
     if (busy()) return
+    logAction("continue", "Path step → Tools step")
     snapshotSourcePaths()
     const resolved = allPathsResolved()
     if (resolved.length === 0) {
@@ -299,124 +660,64 @@ export function AddFiles() {
         return
       }
     }
-    await startScan()
+    await runToolCheck()
   }
 
-  const continueFromImports = () => {
+  const continueFromScan = () => {
     if (selectedExtensions().length === 0) {
       appendLogLine("Select at least one file type to continue.")
+      logError("continueFromScan", "No file types selected")
       setStep("error")
       return
     }
+    logAction("continue", `Scan → Processing (${selectedExtensions().length} types: ${selectedExtensions().join(",")})`)
     void startProcessing()
   }
 
-  const startProcessing = async () => {
-    if (busy()) return
-    const gen = workflow.bump()
-    killActiveChild()
-    setBusy(true)
-    clearLog()
-    setStep("processing")
-    setProcessingDone(false)
-    await yieldToEventLoop()
-    if (!workflow.active(gen)) return
-
-    const resolved = allPathsResolved()
-    if (resolved.length === 0) {
-      if (workflow.active(gen)) {
-        appendLogLine("At least one valid source path is required.")
-        setBusy(false)
-        setStep("error")
-      }
-      return
-    }
-
-    const workspacePath = spinosa.activePath
-    if (!workspacePath) {
-      if (workflow.active(gen)) {
-        appendLogLine("No active workspace selected.")
-        setBusy(false)
-        setStep("error")
-      }
-      return
-    }
-
-    const extensions = selectedExtensions().join(",")
-    tuiLog(`startProcessing extensions=${extensions} sources=${JSON.stringify(resolved)}`)
-    let allOk = true
-    try {
-      for (let i = 0; i < resolved.length; i++) {
-        if (!workflow.active(gen)) return
-        appendLogLine(`[${i + 1}/${resolved.length}] Importing: ${resolved[i]}`)
-        tuiLog(`runAdd[${i}] source=${resolved[i]}`)
-        const result = await runAdd(workspacePath, resolved[i], {
-          dir: true,
-          extensions,
-          cli: "opencode",
-          onSpawn: (child) => {
-            activeChild = child
-          },
-          onStdout: (chunk) => {
-            if (!workflow.active(gen)) return
-            const clean = stripAnsi(chunk)
-            if (clean) appendLogLine(clean)
-          },
-          onStderr: (chunk) => {
-            if (!workflow.active(gen)) return
-            const clean = stripAnsi(chunk)
-            if (clean) appendLogLine(clean)
-          },
-        })
-        activeChild = undefined
-        tuiLog(`runAdd[${i}] done exitCode=${result.exitCode} stdout=${result.stdout.length}B stderr=${result.stderr.length}B`)
-        if (!workflow.active(gen)) return
-        if (result.exitCode !== 0) {
-          allOk = false
-          if (result.stderr && logLines().length === 0) appendLogLine(result.stderr)
-          else if (!result.stderr && logLines().length === 0) appendLogLine(`Exit code ${result.exitCode}`)
-          setStep("error")
-          break
-        }
-      }
-
-      if (allOk && workflow.active(gen)) {
-        setProcessingDone(true)
-        setStep("done")
-      }
-    } finally {
-      killActiveChild()
-      if (workflow.active(gen)) setBusy(false)
-    }
-  }
-
-  const finish = () => {
-    spinosa.refresh()
-    goHome()
-  }
-
-  const toggleImport = (index: number) =>
-    setImportOptions((items) =>
-      items.map((item, itemIndex) => (itemIndex === index ? { ...item, selected: !item.selected } : item)),
-    )
-
-  const toggleAllImports = () => {
-    const shouldEnableAll = importOptions().some((item) => !item.selected)
-    setImportOptions((items) => items.map((item) => ({ ...item, selected: shouldEnableAll })))
-  }
-
-  const handleBackPress = () => {
-    if (step() === "path") leavePathStep()
-    else moveBack()
-  }
-
+  // ── Mount (keymap + timers) ──────────────────────────────────────────────
   onMount(() => {
     focusSourceInput()
+
+    // Auto-add new path input when last input has content
+    const autoAddTimer = setInterval(() => {
+      if (step() !== "path") return
+      const entries = sourcePaths()
+      if (entries.length === 0) return
+      const last = entries[entries.length - 1]
+      const input = sourceInputs.get(last.id)
+      if (!input || input.isDestroyed) return
+      if (input.plainText?.trim()?.length > 0) {
+        addSourcePath()
+      }
+    }, 300)
+
+    // Path validation: periodically re-validate all path inputs
+    const validateTimer = setInterval(() => {
+      if (step() !== "path") return
+      for (const entry of sourcePaths()) {
+        const text = readPathText(entry.id)
+        if (!text) {
+          setPathValidities(entry.id, "unchecked")
+          continue
+        }
+        const resolved = resolveUserPath(text)
+        if (!resolved) {
+          setPathValidities(entry.id, "invalid")
+          continue
+        }
+        setPathValidities(entry.id, validateSinglePath(resolved))
+      }
+    }, 400)
+
     const off = keymap.intercept("key", ({ event, consume }) => {
       if (modeStack.current() !== OPENCODE_BASE_MODE) return
-      setHoveredBack(false)
+      setHoveredButton(null)
 
-      if ((event.ctrl && event.name === "c") || event.name === "escape") {
+      if (event.ctrl && event.name === "c") {
+        exit()
+        consume(); return
+      }
+      if (event.name === "escape") {
         if (step() === "path") leavePathStep()
         else moveBack()
         consume(); return
@@ -424,7 +725,7 @@ export function AddFiles() {
 
       if (busy()) return
 
-      if (waitingForGate() && (step() === "scan" || step() === "processing") && event.name === "return") {
+      if (waitingForGate() && (step() === "direct" || step() === "markitdown" || step() === "ocr") && event.name === "return") {
         gateAction()()
         consume(); return
       }
@@ -450,7 +751,7 @@ export function AddFiles() {
             consume(); return
           }
           if (event.name === "down" || event.name === "j") {
-            setFocusedSource((v) => Math.min(pathsLen + 2, v + 1))
+            setFocusedSource((v) => Math.min(pathsLen + 1, v + 1))
             consume(); return
           }
           if (event.name === "return") {
@@ -459,8 +760,6 @@ export function AddFiles() {
               const entry = sourcePaths()[focus]
               if (entry) focusSourceEntry(entry.id)
             } else if (focus === pathsLen) {
-              addSourcePath()
-            } else if (focus === pathsLen + 1) {
               leavePathStep()
             } else {
               void continueFromPath()
@@ -470,7 +769,7 @@ export function AddFiles() {
         }
       }
 
-      if (step() === "imports") {
+      if (step() === "scan" && scanDone()) {
         const listLength = importOptions().length + 1
         if (event.name === "up" || event.name === "k") {
           setSelectedImport((value) => Math.max(0, value - 1))
@@ -490,7 +789,7 @@ export function AddFiles() {
           consume(); return
         }
         if (event.name === "return") {
-          continueFromImports()
+          continueFromScan()
           consume(); return
         }
       }
@@ -505,12 +804,16 @@ export function AddFiles() {
         consume(); return
       }
     })
+
     onCleanup(() => {
+      clearInterval(autoAddTimer)
+      clearInterval(validateTimer)
       stopActiveWork()
       off()
     })
   })
 
+  // ── Step-transition effects ───────────────────────────────────────────────
   createEffect(
     on(
       step,
@@ -521,6 +824,7 @@ export function AddFiles() {
     ),
   )
 
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <CenteredColumn>
       <box flexGrow={1} alignItems="center" paddingLeft={2} paddingRight={2}>
@@ -528,19 +832,19 @@ export function AddFiles() {
         <box width="100%" maxWidth={72} flexDirection="column" gap={1}>
           <box flexDirection="row" alignItems="center" gap={1}>
             <box
-              paddingLeft={1}
-              paddingRight={1}
-              paddingTop={0}
-              paddingBottom={0}
-              backgroundColor={buttonBackground(theme, hoveredBack())}
+              paddingLeft={2}
+              paddingRight={2}
+              paddingTop={1}
+              paddingBottom={1}
+              backgroundColor={buttonBackground(theme, hoveredButton() === "back")}
               onMouseOver={() => {
                 blurSourceInputs()
-                setHoveredBack(true)
+                setHoveredButton("back")
               }}
-              onMouseOut={() => setHoveredBack(false)}
+              onMouseOut={() => setHoveredButton(null)}
               onMouseDown={() => deferPress(handleBackPress)}
             >
-              <text fg={buttonText(theme, hoveredBack(), theme.text)}>←</text>
+              <text fg={buttonText(theme, hoveredButton() === "back", theme.text)}>← Back</text>
             </box>
             <text fg={theme.text}>
               <span style={{ bold: true }}>Add files to workspace</span>
@@ -549,9 +853,9 @@ export function AddFiles() {
           <text fg={theme.textMuted}>
             Step {stepIndex()} of {totalSteps}
             {step() === "path" ? " — choose source folders" : ""}
+            {step() === "tools" ? " — checking document tools" : ""}
             {step() === "scan" ? " — scanning source" : ""}
-            {step() === "imports" ? " — choose file types to import" : ""}
-            {step() === "processing" ? " — importing files" : ""}
+            {step() === "direct" ? " — direct copy" : step() === "markitdown" ? " — MarkItDown" : step() === "ocr" ? " — OCR" : ""}
             {step() === "done" ? " — import complete" : ""}
             {step() === "error" ? " — fix the issue and retry" : ""}
           </text>
@@ -604,6 +908,22 @@ export function AddFiles() {
                         paddingRight={1}
                         paddingTop={0}
                         paddingBottom={0}
+                      >
+                        <text fg={
+                          pathValidities[entry.id] === "valid"
+                            ? theme.success
+                            : pathValidities[entry.id] === "invalid"
+                              ? theme.error
+                              : theme.textMuted
+                        }>
+                          {pathValidities[entry.id] === "valid" ? "●" : pathValidities[entry.id] === "invalid" ? "●" : "○"}
+                        </text>
+                      </box>
+                      <box
+                        paddingLeft={1}
+                        paddingRight={1}
+                        paddingTop={0}
+                        paddingBottom={0}
                         backgroundColor={theme.backgroundPanel}
                         onMouseOver={() => blurSourceInputs()}
                         onMouseDown={() => deferPress(() => removeSourcePath(entry.id))}
@@ -614,124 +934,150 @@ export function AddFiles() {
                   )}
                 </For>
               </box>
-              <box
-                paddingTop={1}
-                paddingBottom={1}
-                paddingLeft={1}
-                paddingRight={1}
-                backgroundColor={buttonBackground(theme, focusedSource() === sourcePaths().length)}
-                border={focusedSource() === sourcePaths().length ? ["left"] : []}
-                borderColor={buttonBorder(theme, focusedSource() === sourcePaths().length, theme.borderActive)}
-                onMouseOver={() => {
-                  blurSourceInputs()
-                  setFocusedSource(sourcePaths().length)
-                }}
-                onMouseDown={() => deferPress(addSourcePath)}
-              >
-                <text fg={buttonText(theme, focusedSource() === sourcePaths().length, theme.primary)}>
-                  + Add another path
-                </text>
-              </box>
             </WizardPanel>
             <WizardActionRow>
               <WizardActionButton
                 theme={theme}
                 label="Back"
-                primary={focusedSource() === sourcePaths().length + 1}
+                primary={focusedSource() === sourcePaths().length}
                 onHover={() => {
                   blurSourceInputs()
-                  setFocusedSource(sourcePaths().length + 1)
+                  setFocusedSource(sourcePaths().length)
                 }}
                 onPress={leavePathStep}
               />
               <box flexGrow={1} />
-              <WizardActionButton
-                theme={theme}
-                label="Continue"
-                primary={focusedSource() === sourcePaths().length + 2}
-                onHover={() => {
-                  blurSourceInputs()
-                  setFocusedSource(sourcePaths().length + 2)
-                }}
-                onPress={() => void continueFromPath()}
-              />
-            </WizardActionRow>
-          </Show>
-
-          <Show when={step() === "scan" || step() === "processing"}>
-            <WizardPanel theme={theme}>
-              <Show when={step() === "scan"}>
-                <text fg={theme.textMuted}>
-                  {scanProgress() > 0 ? `Scanning... (${scanProgress()}/${scanTotal()})` : "Reading source folder..."}
-                </text>
-              </Show>
-              <Show when={step() === "processing" && !processingDone()}>
-                <text fg={theme.textMuted}>Importing files...</text>
-              </Show>
-              <LogScrollbox theme={theme} lines={logLines()} />
-            </WizardPanel>
-            <WizardActionRow>
-              <WizardActionButton theme={theme} label="Back" onPress={moveBack} />
-              <box flexGrow={1} />
-              <Show when={waitingForGate()}>
-                <WizardGateButton theme={theme} label={gateLabel()} action={() => gateAction()()} />
+              <Show when={hasValidPaths()}>
+                <WizardActionButton
+                  theme={theme}
+                  label="Continue"
+                  primary={focusedSource() === sourcePaths().length + 1}
+                  onHover={() => {
+                    blurSourceInputs()
+                    setFocusedSource(sourcePaths().length + 1)
+                  }}
+                  onPress={() => void continueFromPath()}
+                />
               </Show>
             </WizardActionRow>
           </Show>
 
-          <Show when={step() === "imports"}>
+          <Show when={step() === "tools" || step() === "scan" || step() === "direct" || step() === "markitdown" || step() === "ocr"}>
             <WizardPanel theme={theme}>
-              <text fg={theme.textMuted}>Selectable file-type batches</text>
-              <text fg={theme.textMuted}>Select at least one file type. Audio and video start off unchecked.</text>
-              <box flexDirection="column" gap={1}>
-                <box
-                  paddingTop={1}
-                  paddingBottom={1}
-                  paddingLeft={1}
-                  paddingRight={1}
-                  backgroundColor={buttonBackground(theme, selectedImport() === 0)}
-                  onMouseOver={() => setSelectedImport(0)}
-                  onMouseDown={() => deferPress(toggleAllImports)}
-                >
-                  <ToggleLine
-                    theme={theme}
-                    selected={selectedImport() === 0}
-                    enabled={importOptions().every((item) => item.selected)}
-                    label="All supported files"
-                    count={importOptions().reduce((sum, item) => sum + item.count, 0)}
-                  />
-                </box>
-                <box flexDirection="row" flexWrap="wrap" gap={1}>
-                  <For each={importOptions()}>
-                    {(item, index) => (
-                      <box
-                        width={22}
-                        paddingTop={1}
-                        paddingBottom={1}
-                        paddingLeft={1}
-                        paddingRight={1}
-                        backgroundColor={buttonBackground(theme, selectedImport() === index() + 1)}
-                        onMouseOver={() => setSelectedImport(index() + 1)}
-                        onMouseDown={() => deferPress(() => toggleImport(index()))}
-                      >
-                        <ToggleLine
-                          theme={theme}
-                          selected={selectedImport() === index() + 1}
-                          enabled={item.selected}
-                          label={`.${item.ext}`}
-                          count={item.count}
-                        />
-                      </box>
-                    )}
+              <Show when={step() === "tools"}>
+                <text fg={theme.textMuted}>Document processing tools</text>
+                <box flexDirection="column" gap={1} paddingTop={1}>
+                  <For each={toolChecks()}>
+                    {(check) => {
+                      const icon = check.status === "available" ? "●" : check.status === "missing" ? "●" : SPINNER_FRAMES[spinIdx()]
+                      const color = check.status === "available" ? theme.success : check.status === "missing" ? theme.error : theme.textMuted
+                      return (
+                        <box flexDirection="row" gap={1} alignItems="center" paddingLeft={1} paddingRight={1}>
+                          <text fg={color} attributes={check.status === "checking" ? undefined : TextAttributes.BOLD}>{icon}</text>
+                          <text fg={check.status === "checking" ? theme.textMuted : theme.text}> {check.label}</text>
+                          <text fg={theme.textMuted} attributes={TextAttributes.DIM}>{check.detail ?? ""}</text>
+                        </box>
+                      )
+                    }}
                   </For>
                 </box>
-              </box>
-              <text fg={theme.textMuted}>↑↓ move · space toggle · a toggle all · enter continue</text>
+                <Show when={logLines().length > 0}>
+                  <box height={1} />
+                  <LogScrollbox theme={theme} lines={logLines()} />
+                </Show>
+              </Show>
+              <Show when={step() === "scan"}>
+                <Show when={!scanDone()}>
+                  <text fg={theme.textMuted}>Scanning source folder...</text>
+                  <Show when={logLines().length > 0}>
+                    <box height={1} />
+                    <LogScrollbox theme={theme} lines={logLines()} />
+                  </Show>
+                </Show>
+                <Show when={scanDone()}>
+                  <text fg={theme.textMuted}>Select file types to import</text>
+                  <box flexDirection="column" gap={1} paddingTop={1}>
+                    <box
+                      paddingLeft={1}
+                      paddingRight={1}
+                      paddingTop={1}
+                      paddingBottom={1}
+                      backgroundColor={buttonBackground(theme, selectedImport() === 0)}
+                      onMouseOver={() => setSelectedImport(0)}
+                      onMouseDown={() => deferPress(toggleAllImports)}
+                    >
+                      <ToggleLine
+                        theme={theme}
+                        selected={selectedImport() === 0}
+                        enabled={importOptions().every((item) => item.selected)}
+                        label="All supported files"
+                        count={importOptions().reduce((sum, item) => sum + item.count, 0)}
+                      />
+                    </box>
+                    <box flexDirection="column" gap={1}>
+                      <For each={importOptions()}>
+                        {(item, index) => (
+                          <box
+                            paddingLeft={1}
+                            paddingRight={1}
+                            paddingTop={1}
+                            paddingBottom={1}
+                            backgroundColor={buttonBackground(theme, selectedImport() === index() + 1)}
+                            onMouseOver={() => setSelectedImport(index() + 1)}
+                            onMouseDown={() => deferPress(() => toggleImport(index()))}
+                          >
+                            <ToggleLine
+                              theme={theme}
+                              selected={selectedImport() === index() + 1}
+                              enabled={item.selected}
+                              label={`.${item.ext}`}
+                              count={item.count}
+                            />
+                          </box>
+                        )}
+                      </For>
+                    </box>
+                  </box>
+                  <text fg={theme.textMuted}>↑↓ move · space toggle · a toggle all · enter continue</text>
+                </Show>
+              </Show>
+              <Show when={step() === "direct" || step() === "markitdown" || step() === "ocr"}>
+                <Show when={!processingDone()}>
+                  <ProgressBar
+                    theme={theme}
+                    current={progCurrent()}
+                    total={progTotal()}
+                    status={processingStatus()}
+                    fileName={processingFile()}
+                    barWidth={20}
+                  />
+                </Show>
+              </Show>
             </WizardPanel>
             <WizardActionRow>
               <WizardActionButton theme={theme} label="Back" onPress={moveBack} />
               <box flexGrow={1} />
-              <WizardActionButton theme={theme} label="Continue" primary onPress={() => void continueFromImports()} />
+              <Show when={step() === "tools" && toolActionLabel() !== "" && !toolChecks().some((t) => t.status === "checking")}>
+                <WizardActionButton
+                  theme={theme}
+                  label={toolActionLabel()}
+                  primary={toolAllReady()}
+                  onPress={handleToolAction}
+                />
+              </Show>
+              <Show when={step() === "scan" && scanDone()}>
+                <WizardActionButton
+                  theme={theme}
+                  label="Continue"
+                  primary
+                  onPress={() => void continueFromScan()}
+                />
+              </Show>
+              <Show when={step() === "direct" || step() === "markitdown" || step() === "ocr"}>
+                <Show when={waitingForGate()}>
+                  <WizardGateButton theme={theme} label={gateLabel()} action={() => gateAction()()} />
+                </Show>
+              </Show>
             </WizardActionRow>
           </Show>
 
@@ -741,6 +1087,16 @@ export function AddFiles() {
                 <box gap={1}>
                   <LogoSummary theme={theme} label="Files imported." />
                   <text fg={theme.textMuted}>Selected file types have been added to the workspace.</text>
+                  <Show when={importSummary() !== ""}>
+                    <box paddingTop={1} flexDirection="column" gap={0}>
+                      <text fg={theme.textMuted}>{importSummary()}</text>
+                    </box>
+                  </Show>
+                  <Show when={failedCount() > 0}>
+                    <box paddingTop={1} flexDirection="column" gap={0}>
+                      <text fg={theme.textMuted}>{failedCount()} file{failedCount() === 1 ? "" : "s"} failed — check logs for details</text>
+                    </box>
+                  </Show>
                 </box>
               </Show>
               <Show when={step() === "error"}>
@@ -754,7 +1110,12 @@ export function AddFiles() {
             </WizardPanel>
             <WizardActionRow>
               <Show when={step() === "done"}>
-                <WizardActionButton theme={theme} label="Back to homepage" primary onPress={finish} />
+                <WizardActionButton
+                  theme={theme}
+                  label="Back to workspace"
+                  primary
+                  onPress={finish}
+                />
               </Show>
               <Show when={step() === "error"}>
                 <WizardActionButton theme={theme} label="Back" onPress={moveBack} />

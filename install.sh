@@ -373,12 +373,25 @@ install_bun_dependencies() {
   local fw_root="$1"
   local bun_bin="${SPINOSA_HOME}/bin/bun"
   [[ -x "$bun_bin" ]] || die "Bundled Bun missing at ${bun_bin}"
+
+  # Allow skipping npm dependency install entirely (CI / air-gapped)
+  if [ "${SPINOSA_SKIP_DEPS:-}" = "1" ]; then
+    note "SPINOSA_SKIP_DEPS=1 — skipping bun install (deps must be managed externally)"
+    return 0
+  fi
+
+  # Show a helpful message on first install — bun install downloads hundreds of
+  # packages and can take 2-3 minutes on a fresh install.
+  if [ ! -d "${fw_root}/node_modules" ]; then
+    note "Downloading npm packages — this may take 2-3 minutes on first install"
+  fi
+
   spinner_start "Installing dependencies"
   if (cd "$fw_root" && "$bun_bin" install --production >/dev/null 2>&1); then
     spinner_stop "Dependencies installed"
   else
     spinner_stop
-    die "Dependency install failed. See ${SPINOSA_HOME}/logs/spinosa.log"
+    die "Dependency install failed. See ${SPINOSA_HOME}/logs/spinosa.log for details. If the network is unreliable, set SPINOSA_SKIP_DEPS=1 to skip this step and manage dependencies separately."
   fi
 
   # Ensure all workspace packages are resolvable as @opencode-ai/* symlinks.

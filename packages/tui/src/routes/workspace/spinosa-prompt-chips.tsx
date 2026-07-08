@@ -3,7 +3,9 @@ import { useTheme } from "../../context/theme"
 import { useToast } from "../../ui/toast"
 import { useRoute } from "../../context/route"
 import { useSpinosaWorkspace } from "../../context/spinosa-workspace"
-import { runUpdate } from "../../spinosa/cli-bridge"
+
+import { updateWorkspace } from "@opencode-ai/spinosa-core/commands/update"
+import { resolveFrameworkRoot } from "@opencode-ai/spinosa-core/framework/discovery"
 import {
   readBundledFrameworkVersion,
   workspaceNeedsFrameworkUpdate,
@@ -48,19 +50,16 @@ export function SpinosaPromptChips() {
       message: "Updating workspace…",
       duration: 30000,
     })
-    const result = await runUpdate(workspacePath, {
-      onStdout: (chunk) => {
-        const line = chunk.trim()
+    const result = await updateWorkspace({
+      workspacePath,
+      frameworkRoot: resolveFrameworkRoot() ?? "",
+      onPhase: (_phase, detail) => {
+        const line = detail.trim()
         if (!line) return
         setUpdateLabel(line.replace(/^[#>\s]+/, "").slice(0, 22))
       },
-      onStderr: (chunk) => {
-        const line = chunk.trim()
-        if (!line) return
-        setUpdateLabel(line.slice(0, 22))
-      },
     })
-    if (result.exitCode === 0) {
+    if (result.success) {
       const version = bundledVersion() ?? (await readBundledFrameworkVersion())
       if (version) {
         await writeWorkspaceFrameworkVersion(workspacePath, version)
@@ -68,7 +67,7 @@ export function SpinosaPromptChips() {
     }
     spinosa.refresh()
 
-    if (result.exitCode === 0) {
+    if (result.success) {
       setBusyAction("completed")
       setUpdateLabel("Updated workspace!")
       setTimeout(() => {
@@ -81,11 +80,10 @@ export function SpinosaPromptChips() {
     setBusyAction(undefined)
     setUpdateLabel("Updating workspace…")
 
-    const message = [result.stdout, result.stderr].filter(Boolean).join("\n").trim() || "Workspace update failed"
     toast.show({
       title: "Workspace update failed",
       variant: "error",
-      message,
+      message: "Workspace update failed",
       duration: 10000,
     })
   }

@@ -17,7 +17,7 @@ import { runStartup as tsRunStartup } from "@opencode-ai/spinosa-core/commands/s
 import { resolveFrameworkRoot } from "@opencode-ai/spinosa-core/framework/discovery"
 import { spawn } from "node:child_process"
 import { tuiLog, logStep, logAction, logPhase, logTool, logResult, logError, logGate } from "../../spinosa/log"
-import { getSigintHandler, setSigintHandler } from "../../ui/dialog"
+import { useExit } from "../../context/exit"
 import type { CliRunResult } from "../../spinosa/types"
 import { readBundledFrameworkVersion, isPrereleaseFrameworkVersion, readStartupPrompt, writePreferredCli } from "../../spinosa/service"
 import { CenteredColumn } from "../../component/centered-column"
@@ -183,6 +183,7 @@ export function Onboarding() {
   const spinosa = useSpinosaWorkspace()
   const keymap = useOpencodeKeymap()
   const modeStack = useOpencodeModeStack()
+  const exit = useExit()
 
   const [step, setStep] = createSignal<WizardStep>("path")
   const [sourcePaths, setSourcePaths] = createSignal<SourcePathEntry[]>([{ id: 0 }])
@@ -841,13 +842,8 @@ let nameInput: TextareaRenderable | undefined
       }
     }, 400)
 
-    // Ctrl+C routing: wrap the dialog sigintHandler to also handle wizard back-navigation.
-    // This runs BEFORE app.tsx's destroyRenderer check (sigintHandler is the gate).
-    const prevSigintHandler = getSigintHandler()
-    setSigintHandler(() => {
-      if (step() !== "path") { handleBackPress(); return true }
-      return prevSigintHandler?.() ?? false
-    })
+    // Ctrl+C closes the TUI (SIGINT) — handled in the keymap intercept above.
+    // No back-navigation wrapping: SIGINT always terminates the session.
 
     // Sync workspace name from textarea
     const nameSyncTimer = setInterval(() => {
@@ -859,7 +855,11 @@ let nameInput: TextareaRenderable | undefined
       if (modeStack.current() !== OPENCODE_BASE_MODE) return
       setHoveredButton(null)
 
-      if ((event.ctrl && event.name === "c") || event.name === "escape") {
+      if (event.ctrl && event.name === "c") {
+        exit()
+        consume(); return
+      }
+      if (event.name === "escape") {
         if (step() === "path") leavePathStep()
         else moveBack()
         consume(); return
@@ -977,7 +977,6 @@ let nameInput: TextareaRenderable | undefined
     })
     onCleanup(() => {
       clearInterval(autoAddTimer)
-      setSigintHandler(prevSigintHandler)
       stopActiveWork()
       off()
     })

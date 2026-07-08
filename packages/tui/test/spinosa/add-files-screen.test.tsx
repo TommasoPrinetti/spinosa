@@ -48,6 +48,9 @@ test("renders the dedicated add-files screen marker copy", async () => {
       current: () => "base",
     }),
   }))
+mock.module("../../src/context/exit", () => ({
+  useExit: () => () => {},
+}))
   mock.module("../../src/ui/toast", () => ({
     Toast: () => null,
   }))

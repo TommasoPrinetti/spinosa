@@ -5,18 +5,18 @@ import { ImportBatchManager } from "../import/batch"
 import {
   copySource,
   verifyAndRecoverImport,
-  runDirectPhase,
-  runMarkitdownPhase,
-  runOcrPhase,
+  processDirectCopy,
+  processMarkitdown,
+  processOcr,
   scanAndClassifySource,
-  type CopyResult,
+  type PhaseResult,
 } from "../import/pipeline"
 import { ProgressEmitter } from "../progress/progress"
 import { writeSetupFiles } from "../workspace/registry"
 import { writeWorkspaceStatus } from "../workspace/meta"
 import { generateStartupPrompt } from "./startup"
 import { preferredCliName, buildLaunchCommand } from "../handoff/builder"
-import { copyToClipboard } from "../handoff/runner"
+import { copyToClipboard, runCliWithPrompt } from "../handoff/runner"
 
 export type OnboardingPhase =
   | "scan"
@@ -38,7 +38,6 @@ export type OnboardingHandoffResult =
   | "run_requested"
   | "run_failed_command_copied"
 
-export type AddMode = "new_source" | "extend"
 
 export interface OnboardingOptions {
   workspacePath: string
@@ -56,58 +55,29 @@ export interface OnboardingResult {
   success: boolean
   scanCounts?: ScanCounts & ScanBytes
   toolStatus?: ToolStatus
-  copyResult?: CopyImportResult
   cli?: string
   handoffResult?: OnboardingHandoffResult
   blockedPhase?: OnboardingPhase
   blockerReason?: string
 }
 
-export interface CopyImportResult {
-  total: number
-  copied: number
-  skipped: number
-  failed: number
-  mdConverted: number
-  ocrConverted: number
-  imported: number
-}
 
 export interface OnboardingSummary {
   projectTitle: string
   workspacePath: string
   scanCounts: ScanCounts & ScanBytes
-  copyResult: CopyImportResult
+  copyResult: { total: number; imported: number; copied: number; skipped: number; mdConverted: number; ocrConverted: number }
   cli: string
   handoffAction: string
   handoffResult: OnboardingHandoffResult
   toolStatus: ToolStatus
 }
 
-export interface AddOnboardingOptions {
-  workspacePath: string
-  frameworkRoot: string
-  sourcePath: string
-  addMode: AddMode
-  flagExtensions?: string
-  onPhase?: (phase: OnboardingPhase, message: string) => void
-}
 
 function today(): string {
   return new Date().toISOString().slice(0, 10)
 }
 
-function toCopyImportResult(cr: CopyResult, total: number): CopyImportResult {
-  return {
-    total,
-    copied: cr.copied,
-    skipped: cr.skipped + cr.mdSkipped + cr.ocrSkipped,
-    failed: cr.failed,
-    mdConverted: cr.mdConverted,
-    ocrConverted: cr.ocrConverted,
-    imported: cr.totalCopied,
-  }
-}
 
 // ── Shared context for phased onboarding ─────────────────────────────────
 
@@ -122,11 +92,10 @@ export interface OnboardingContext {
   rawDir: string
   copyableCount: number
 }
-
 export interface PhaseAccumulator {
-  direct: { copied: number; skipped: number; failed: number }
-  markitdown: { mdConverted: number; mdSkipped: number }
-  ocr: { ocrConverted: number; ocrSkipped: number }
+  direct: PhaseResult
+  markitdown: PhaseResult
+  ocr: PhaseResult
 }
 
 // ── Phase A: Prepare (scan, batch selection, tool validation) ─────────────
@@ -165,40 +134,6 @@ export async function prepareOnboarding(
   return { workspacePath, frameworkRoot, sourcePath, projectTitle, scanCounts, toolStatus, batches, rawDir, copyableCount }
 }
 
-// ── Phase B: Run one import phase ─────────────────────────────────────────
-
-export async function runImportPhase(
-  ctx: OnboardingContext,
-  phase: "direct" | "markitdown" | "ocr",
-  progOrCallback?: ProgressEmitter | OnboardingOptions["onCopyProgress"],
-  onLog?: (msg: string) => void,
-): Promise<
-  | { copied: number; skipped: number; failed: number }
-  | { mdConverted: number; mdSkipped: number }
-  | { ocrConverted: number; ocrSkipped: number }
-> {
-  const classified = await scanAndClassifySource(ctx.sourcePath, ctx.rawDir, ctx.batches)
-  if (!classified || classified.directFiles.length + classified.markitdownFiles.length + classified.ocrFiles.length === 0) {
-    return phase === "direct" ? { copied: 0, skipped: 0, failed: 0 } : { mdConverted: 0, mdSkipped: 0 }
-  }
-
-  const prog = progOrCallback instanceof ProgressEmitter
-    ? progOrCallback
-    : (() => {
-        const p = new ProgressEmitter()
-        if (typeof progOrCallback === "function") p.on((e) => { progOrCallback(e.phase, e.current, e.total, e.relPath) })
-        return p
-      })()
-
-  if (phase === "direct") {
-    return runDirectPhase(classified.directFiles, prog, onLog)
-  }
-  if (phase === "markitdown") {
-    return runMarkitdownPhase(classified.markitdownFiles, ctx.sourcePath, ctx.rawDir, prog, onLog)
-  }
-  return runOcrPhase(classified.ocrFiles, ctx.sourcePath, ctx.rawDir, prog, onLog)
-}
-
 // ── Phase C: Finalize (verification, CLI, prompt, summary) ────────────────
 
 export async function completeOnboarding(
@@ -216,20 +151,8 @@ export async function completeOnboarding(
     (msg: string) => onPhase?.("import", msg),
   )
 
-  const copyResult: CopyResult = {
-    copied: acc.direct.copied,
-    skipped: acc.direct.skipped + acc.markitdown.mdSkipped + acc.ocr.ocrSkipped,
-    failed: acc.direct.failed,
-    mdConverted: acc.markitdown.mdConverted,
-    mdSkipped: acc.markitdown.mdSkipped,
-    ocrConverted: acc.ocr.ocrConverted,
-    ocrSkipped: acc.ocr.ocrSkipped,
-    totalCopied: acc.direct.copied + acc.markitdown.mdConverted + acc.ocr.ocrConverted + verifyResult.recovered,
-    stillMissing: verifyResult.stillMissing,
-  }
-  const importResult = toCopyImportResult(copyResult, ctx.copyableCount)
-
-  if (importResult.imported === 0) {
+  const imported = acc.direct.converted + acc.markitdown.converted + acc.ocr.converted + verifyResult.recovered
+  if (imported === 0) {
     return { success: false, blockedPhase: "verification", blockerReason: "No files were delivered to raw/" }
   }
 
@@ -249,7 +172,6 @@ export async function completeOnboarding(
 
   let handoffResult: OnboardingHandoffResult = "prompt_copied"
   if (flagLaunch === "run" && cli !== "other") {
-    const { runCliWithPrompt } = await import("../handoff/runner")
     if (runCliWithPrompt(ctx.workspacePath, cli, startupPrompt)) {
       handoffResult = "run_requested"
     } else {
@@ -266,7 +188,14 @@ export async function completeOnboarding(
     projectTitle: ctx.projectTitle,
     workspacePath: ctx.workspacePath,
     scanCounts: ctx.scanCounts,
-    copyResult: importResult,
+    copyResult: {
+      total: ctx.copyableCount,
+      imported,
+      copied: acc.direct.converted,
+      skipped: acc.direct.skipped + acc.markitdown.skipped + acc.ocr.skipped,
+      mdConverted: acc.markitdown.converted,
+      ocrConverted: acc.ocr.converted,
+    },
     cli: cliLabel,
     handoffAction: flagLaunch === "run" ? "Run launch command now" : "Copy launch command",
     handoffResult,
@@ -277,13 +206,12 @@ export async function completeOnboarding(
     success: true,
     scanCounts: ctx.scanCounts,
     toolStatus: ctx.toolStatus,
-    copyResult: importResult,
     cli,
     handoffResult,
   }
 }
 
-// ── Legacy wrapper: runs prepare → all 3 phases → complete ───────────────
+// ── Legacy wrapper: scans once, dispatches all 3 phase runners, then finalizes ─
 
 export async function runOnboarding(
   options: OnboardingOptions,
@@ -295,59 +223,28 @@ export async function runOnboarding(
   const { onPhase, onCopyProgress } = options
   const phase = onPhase ?? (() => {})
 
+  const prog = typeof onCopyProgress === "function"
+    ? (() => { const p = new ProgressEmitter(); p.on((e) => onCopyProgress(e.phase, e.current, e.total, e.relPath)); return p })()
+    : undefined
+
+  const classified = await scanAndClassifySource(ctx.sourcePath, ctx.rawDir, ctx.batches)
+  if (!classified) {
+    return { success: false, blockedPhase: "scan", blockerReason: "Failed to scan source" }
+  }
+  const onImportLog = (msg: string) => onPhase?.("import", msg)
+
   phase("direct", "Copying files...")
-  const dr = await runImportPhase(ctx, "direct", onCopyProgress, (msg) => onPhase?.("import", msg)) as { copied: number; skipped: number; failed: number }
+  const dr = await processDirectCopy(classified.directFiles, prog, onImportLog)
+
   phase("markitdown", "Converting with MarkItDown...")
-  const mr = await runImportPhase(ctx, "markitdown", onCopyProgress, (msg) => onPhase?.("import", msg)) as { mdConverted: number; mdSkipped: number }
-  const or = await runImportPhase(ctx, "ocr", onCopyProgress, (msg) => onPhase?.("import", msg)) as { ocrConverted: number; ocrSkipped: number }
+  const mr = await processMarkitdown(classified.markitdownFiles, classified.logsDir, prog, onImportLog)
+
+  phase("ocr", "Processing OCR...")
+  const or = await processOcr(classified.ocrFiles, classified.logsDir, prog, onImportLog)
+
   return completeOnboarding(ctx, { direct: dr, markitdown: mr, ocr: or }, options)
 }
 
-export async function runAddOnboarding(
-  options: AddOnboardingOptions,
-): Promise<OnboardingResult> {
-  const { workspacePath, sourcePath, flagExtensions, onPhase } = options
-  const phase = onPhase ?? (() => {})
-
-  const batches = new ImportBatchManager()
-
-  phase("scan", "Scanning source directory...")
-  if (!existsSync(sourcePath)) {
-    return { success: false, blockedPhase: "scan", blockerReason: `Source directory does not exist: ${sourcePath}` }
-  }
-  const scanCounts = await scanSource(sourcePath, batches)
-
-  phase("batch_selection", "Selecting import batches...")
-  if (flagExtensions) {
-    batches.parseExtensionsFromFlag(flagExtensions)
-  }
-  if (!batches.validateExtensionsAgainstScan("")) {
-    batches.selectAll()
-  }
-
-  const rawDir = path.join(workspacePath, "raw")
-  mkdirSync(rawDir, { recursive: true })
-
-  phase("import", "Importing and converting source files...")
-  const toolStatus = await detectDocumentTools()
-  const copyResult = await copySource(sourcePath, rawDir, {
-    markitdownChoice: toolStatus.markitdown,
-    ocrChoice: true,
-    batchManager: batches,
-  })
-  const importResult = toCopyImportResult(copyResult, scanCounts.total)
-
-  phase("verification", "Verifying import delivery...")
-  if (importResult.imported === 0 && importResult.skipped > 0) {
-    phase("complete", "No new files to import (all duplicates)")
-  }
-
-  return {
-    success: true,
-    scanCounts,
-    copyResult: importResult,
-  }
-}
 
 async function writeOnboardingSummary(summary: OnboardingSummary): Promise<void> {
   const {

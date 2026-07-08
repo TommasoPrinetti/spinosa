@@ -29,24 +29,25 @@ type LogEvent =
 
 let logFile: string | undefined
 
+const LOG_DIR = path.join(homedir(), ".spinosa", "logs")
+
 function logPath(): string {
   if (logFile) return logFile
-  const ws = activeWorkspacePath
-  const logDir = ws
-    ? path.join(ws, ".spinosa", "logs")
-    : path.join(homedir(), ".spinosa", "logs")
-  mkdirSync(logDir, { recursive: true })
-  logFile = path.join(logDir, "tui.ndjson")
+  mkdirSync(LOG_DIR, { recursive: true })
+  logFile = path.join(LOG_DIR, "tui.ndjson")
   return logFile
 }
 
 function logEntry(level: LogLevel, event: LogEvent, data: Record<string, unknown>) {
   try {
-    const entry = {
+    const entry: Record<string, unknown> = {
       ts: new Date().toISOString(),
       level,
       event,
-      ...data,
+    }
+    if (activeWorkspacePath) entry.ws = activeWorkspacePath
+    for (const [k, v] of Object.entries(data)) {
+      entry[k] = v
     }
     appendFileSync(logPath(), JSON.stringify(entry) + "\n")
   } catch {

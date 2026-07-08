@@ -15,8 +15,6 @@ export const MARKITDOWN_EXTENSIONS = [
   "html", "htm", "msg", "zip", "json", "csv", "xml",
 ]
 
-export const STRUCTURED_FALLBACK_EXTENSIONS = ["csv", "json", "xml"]
-
 export const IMAGE_EXTENSIONS = [
   "jpg", "jpeg", "png", "gif", "webp",
   "heic", "heif", "tif", "tiff", "bmp", "svg",
