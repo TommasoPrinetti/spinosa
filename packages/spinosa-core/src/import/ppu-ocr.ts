@@ -18,6 +18,15 @@ export interface PpuOcrBatchResult {
 }
 
 let servicePromise: Promise<PaddleOcrService> | undefined
+let service: PaddleOcrService | undefined
+
+export async function disposePpuOcr(): Promise<void> {
+  if (service) {
+    await service.destroy()
+    service = undefined
+    servicePromise = undefined
+  }
+}
 
 function titleFromRel(relPath: string): string {
   const stem = path.basename(relPath, path.extname(relPath))
@@ -114,11 +123,12 @@ async function ppuService(onLog?: (line: string) => void): Promise<PaddleOcrServ
         const { PaddleOcrService: OcrService } = await import("ppu-paddle-ocr")
         if (needsPolyfill) delete (globalThis as Record<string, unknown>).document
         onLog?.("PPU PaddleOCR: step 2 - import OK, constructing...")
-        const service = new OcrService({ processing: { engine: "canvas-native" } })
+        const instance = new OcrService({ processing: { engine: "canvas-native" } })
         onLog?.("PPU PaddleOCR: step 3 - constructed, initializing...")
-        await service.initialize()
+        await instance.initialize()
         onLog?.("PPU PaddleOCR: step 4 - ready")
-        return service
+        service = instance
+        return instance
       } catch (err) {
         if (needsPolyfill) delete (globalThis as Record<string, unknown>).document
         onLog?.(`PPU PaddleOCR: FAILED at ${err instanceof Error ? err.name : "unknown"} — ${err instanceof Error ? err.message : String(err)}`)
@@ -217,28 +227,34 @@ export async function runPpuOcrBatch(
   }
   const total = files.length
 
-  for (let i = 0; i < files.length; i++) {
-    const file = files[i]!
-    options?.onLog?.(`  ${file.rel} → OCR ...`)
-    try {
-      const ext = fileExt(file.src)
-      const ok = ext === "pdf"
-        ? await ocrPdf(service, file, (page, pageTotal) => options?.onPageProgress?.(i + 1, total, file.rel, `${page}/${pageTotal}`))
-        : await ocrImage(service, file)
-      if (ok) {
-        converted++
-        injectColdFrontmatter(file.dest)
-        injectPageDirFrontmatter(file.dest)
-      } else {
+  try {
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i]!
+      options?.onLog?.(`  ${file.rel} → OCR ...`)
+      try {
+        const ext = fileExt(file.src)
+        const ok = ext === "pdf"
+          ? await ocrPdf(service, file, (page, pageTotal) => options?.onPageProgress?.(i + 1, total, file.rel, `${page}/${pageTotal}`))
+          : await ocrImage(service, file)
+        if (ok) {
+          converted++
+          injectColdFrontmatter(file.dest)
+          injectPageDirFrontmatter(file.dest)
+        } else {
+          skipped++
+        }
+      } catch (err) {
         skipped++
+        options?.onLog?.(`PPU PaddleOCR failed: ${file.rel} - ${err}`)
       }
-    } catch (err) {
-      skipped++
-      options?.onLog?.(`PPU PaddleOCR failed: ${file.rel} - ${err}`)
+      options?.onProgress?.(i + 1, total, file.rel)
+      const { promise, resolve } = Promise.withResolvers<void>()
+      setTimeout(resolve, 0)
+      await promise
     }
-    options?.onProgress?.(i + 1, total, file.rel)
-    await new Promise((resolve) => setTimeout(resolve, 0))
-  }
 
-  return { converted, skipped }
+    return { converted, skipped }
+  } finally {
+    await disposePpuOcr()
+  }
 }

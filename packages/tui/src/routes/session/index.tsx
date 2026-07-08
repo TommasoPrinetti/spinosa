@@ -1252,7 +1252,7 @@ export function Session() {
               zIndex={10}
               onMouseOver={() => setBackHover(true)}
               onMouseOut={() => setBackHover(false)}
-              onMouseUp={() => navigate({ type: "home" })}
+              onMouseUp={() => navigate({ type: "workspace" })}
               paddingLeft={2}
               paddingRight={2}
               paddingTop={1}

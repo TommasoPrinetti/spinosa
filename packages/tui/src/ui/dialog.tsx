@@ -7,20 +7,7 @@ import { useToast } from "./toast"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { useBindings, useOpencodeModeStack } from "../keymap"
 import { useClipboard } from "../context/clipboard"
-
-/** Module-level SIGINT fallback: set by the dialog provider, called by app.tsx before destroying the renderer. */
-export let sigintHandler: (() => boolean) | undefined
-let onSigint: (() => boolean) | undefined
-
-/** Set the SIGINT handler — called by onboarding to wrap it with wizard back-navigation. */
-export function setSigintHandler(fn: (() => boolean) | undefined) {
-  sigintHandler = fn
-}
-
-/** Read the current SIGINT handler. */
-export function getSigintHandler(): (() => boolean) | undefined {
-  return sigintHandler
-}
+import { useExit } from "../context/exit"
 
 export function Dialog(
   props: ParentProps<{
@@ -89,6 +76,7 @@ function init() {
 
   const renderer = useRenderer()
   const modeStack = useOpencodeModeStack()
+  const exit = useExit()
 
   createEffect(() => {
     if (store.stack.length === 0) return
@@ -133,32 +121,14 @@ function init() {
       },
       {
         key: "ctrl+c",
-        desc: "Close dialog",
+        desc: "Quit",
         group: "Dialog",
         cmd: () => {
-          if (renderer.getSelection()) {
-            renderer.clearSelection()
-          }
-          const current = store.stack.at(-1)
-          current?.onClose?.()
-          setStore("stack", store.stack.slice(0, -1))
-          refocus()
+          exit()
         },
       },
     ],
   }))
-
-  // SIGINT fallback: app.tsx calls this before destroying the renderer.
-  // Returns true when a dialog was dismissed (Ctrl+C consumed).
-  onSigint = () => {
-    if (store.stack.length === 0) return false
-    const current = store.stack.at(-1)
-    current?.onClose?.()
-    setStore("stack", store.stack.slice(0, -1))
-    refocus()
-    return true
-  }
-  sigintHandler = onSigint
 
   return {
     clear() {

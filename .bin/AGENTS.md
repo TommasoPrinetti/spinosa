@@ -28,6 +28,5 @@ Mechanical scripts for CLI setup, release packaging, and validation. Human-maint
 | `spinosa` | CLI entry point; creates workspaces, runs upgrade and uninstall |
 | `check-startup.sh` | Legacy developer validation helper |
 | `sync-agents.sh` | Legacy agent sync script |
-| `lib/metrics.sh` | Shared Unicode metric helpers for reports and session ledgers |
 
 

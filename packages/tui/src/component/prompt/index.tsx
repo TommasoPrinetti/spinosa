@@ -1089,11 +1089,6 @@ export function Prompt(props: PromptProps) {
         outboundText = prepared.text
         if (prepared.framed && prepared.goalPath && prepared.sessionId) {
           spinosa.setLastRoute(prepared.sessionId, prepared.goalPath)
-          toast.show({
-            title: "Route framed",
-            message: `${prepared.route} · ${prepared.sessionId}`,
-            variant: "info",
-          })
         }
       } catch (error) {
         console.log("Spinosa submit preparation failed:", error)
