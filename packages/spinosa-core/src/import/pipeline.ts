@@ -626,17 +626,17 @@ export async function copySource(
     return rp === "all" || rp === p
   }
 
-  if (runPhase("direct")) {
+  if (runPhase("direct") && classified.directFiles.length > 0) {
     const dr = await processDirectCopy(classified.directFiles, prog, options?.onLog)
     res.copied += dr.converted; res.skipped += dr.skipped; res.failed += dr.failed
   }
 
-  if (runPhase("markitdown") && options?.markitdownChoice) {
+  if (runPhase("markitdown") && classified.markitdownFiles.length > 0 && options?.markitdownChoice) {
     const mr = await processMarkitdown(classified.markitdownFiles, classified.logsDir, prog, options?.onLog)
     res.mdConverted += mr.converted; res.mdSkipped += mr.skipped
   }
 
-  if (runPhase("ocr") && options?.ocrChoice) {
+  if (runPhase("ocr") && classified.ocrFiles.length > 0 && options?.ocrChoice) {
     const or = await processOcr(classified.ocrFiles, classified.logsDir, prog, options?.onLog)
     res.ocrConverted += or.converted; res.ocrSkipped += or.skipped
   }
