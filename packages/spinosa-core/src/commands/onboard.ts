@@ -231,16 +231,36 @@ export async function runOnboarding(
   if (!classified) {
     return { success: false, blockedPhase: "scan", blockerReason: "Failed to scan source" }
   }
+
+  // Log classification breakdown for diagnostics
+  onPhase?.("import",
+    `Classified: ${classified.directFiles.length} direct, ${classified.markitdownFiles.length} markitdown, ${classified.ocrFiles.length} ocr` +
+    (classified.markitdownFiles.length > 0 ? ` (markitdown files: ${classified.markitdownFiles.map(f => f.rel).join(", ")})` : "")
+  )
   const onImportLog = (msg: string) => onPhase?.("import", msg)
+
+  let mr: PhaseResult = { converted: 0, skipped: 0, failed: 0, recoverable: [] }
+  let or: PhaseResult = { converted: 0, skipped: 0, failed: 0, recoverable: [] }
 
   phase("direct", "Copying files...")
   const dr = await processDirectCopy(classified.directFiles, prog, onImportLog)
+  onPhase?.("import", `Direct copy: ${dr.converted} files`)
 
-  phase("markitdown", "Converting with MarkItDown...")
-  const mr = await processMarkitdown(classified.markitdownFiles, classified.logsDir, prog, onImportLog)
+  if (classified.markitdownFiles.length > 0) {
+    phase("markitdown", "Converting with MarkItDown...")
+    mr = await processMarkitdown(classified.markitdownFiles, classified.logsDir, prog, onImportLog)
+    onPhase?.("import", `MarkItDown: ${mr.converted} files`)
+  } else {
+    onPhase?.("import", "MarkItDown: 0 files (none to convert)")
+  }
 
-  phase("ocr", "Processing OCR...")
-  const or = await processOcr(classified.ocrFiles, classified.logsDir, prog, onImportLog)
+  if (classified.ocrFiles.length > 0) {
+    phase("ocr", "Processing OCR...")
+    or = await processOcr(classified.ocrFiles, classified.logsDir, prog, onImportLog)
+    onPhase?.("import", `OCR: ${or.converted} files`)
+  } else {
+    onPhase?.("import", "OCR: 0 files (none to convert)")
+  }
 
   return completeOnboarding(ctx, { direct: dr, markitdown: mr, ocr: or }, options)
 }
