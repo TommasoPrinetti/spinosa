@@ -389,16 +389,19 @@ async function cmdUpgrade(args: string[]) {
   let targetVersion = "latest"
   let autoYes = false
   let reinstall = false
+  let channel: string | undefined
 
   while (args.length > 0) {
     const a = args.shift()!
     switch (a) {
       case "--version": targetVersion = args.shift() ?? "latest"; break
+      case "--channel": channel = args.shift() ?? "stable"; break
       case "--yes": case "-y": autoYes = true; break
       case "--reinstall": reinstall = true; break
       case "--help": case "-h":
         console.log(`  Usage: spinosa upgrade [options]`)
-        console.log(`    --version X.Y.Z   Specific version`)
+        console.log(`    --version X.Y.Z   Specific version or "latest"`)
+        console.log(`    --channel NAME    Release channel (stable or beta)`)
         console.log(`    --yes             Skip confirmation`)
         console.log(`    --reinstall       Reinstall current version`)
         process.exit(0)
@@ -408,6 +411,7 @@ async function cmdUpgrade(args: string[]) {
 
   const result = await upgradeFramework({
     version: targetVersion !== "latest" ? targetVersion : undefined,
+    channel: channel as any,
     reinstall,
     yes: autoYes,
     onPhase: (_phase, msg) => note(msg),
