@@ -14,6 +14,7 @@ import {
   importRouteForFile,
 } from "../extension/classifier"
 import { safeCopyAsync } from "../utils/fs"
+import { spinosaLogInfo } from "../utils/log"
 import type { FileClass, ImportRoute } from "../extension/types"
 import { injectColdFrontmatter, convertedOutputExists } from "./frontmatter"
 import type { ImportBatchManager } from "./batch"
@@ -87,6 +88,18 @@ export async function scanAndClassifySource(
     const ext = fileExt(fp)
     entries.push({ filePath: fp, relPath: rel, ext, klass: await classifySourceFile(fp) })
   }
+
+  // Log each file's classification for diagnostics
+  for (const e of entries) {
+    spinosaLogInfo("classify", `file=${e.relPath} ext=${e.ext} class=${e.klass}`)
+  }
+  // Log classification summary
+  const markdown = entries.filter(e => e.klass === "markdown").length
+  const native = entries.filter(e => e.klass === "native").length
+  const md = entries.filter(e => e.klass === "markitdown").length
+  const ocr = entries.filter(e => e.klass === "ocr_convertible").length
+  const other = entries.filter(e => !["markdown", "native", "markitdown", "ocr_convertible"].includes(e.klass)).length
+  spinosaLogInfo("classify", `summary: ${entries.length} total, ${native} native, ${markdown} markdown, ${md} markitdown, ${ocr} ocr_convertible, ${other} other`)
 
   const logsDir = path.resolve(destDir, "..", ".logs")
   mkdirSync(logsDir, { recursive: true })
