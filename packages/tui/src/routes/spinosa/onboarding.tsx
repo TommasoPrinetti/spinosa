@@ -666,6 +666,8 @@ let nameInput: TextareaRenderable | undefined
       if (!classified) { setStep("error"); return }
       let mr: PhaseResult = { converted: 0, skipped: 0, failed: 0, recoverable: [] }
       let or: PhaseResult = { converted: 0, skipped: 0, failed: 0, recoverable: [] }
+      const totalMd = classified.markitdownFiles.length
+      const totalOcr = classified.ocrFiles.length
       // Phase B1: Direct copy
       const totalDirect = classified.directFiles.length
       appendLogLine(`[diag] direct=${totalDirect} markitdown=${classified.markitdownFiles.length} ocr=${classified.ocrFiles.length}`)
@@ -682,12 +684,11 @@ let nameInput: TextareaRenderable | undefined
       if (classified.markitdownFiles.length > 0) {
         await gate("Continue to MarkItDown")
         setStep("markitdown")
-        const totalMd = classified.markitdownFiles.length
         setProgTotal(totalMd)
         setProgCurrent(0)
         setProcessingStatus("Preparing MarkItDown conversion...")
         await delay(1000)
-        const mr = await processMarkitdown(classified.markitdownFiles, classified.logsDir, sharedProg, onPhaseLog)
+        mr = await processMarkitdown(classified.markitdownFiles, classified.logsDir, sharedProg, onPhaseLog)
         if (mr.failed > 0) totalFailed += mr.failed
         if (abortProcessing) { spinOff(); setBusy(false); return }
         setProcessingStatus(`MarkItDown complete — ${totalMd} files`)
@@ -699,12 +700,11 @@ let nameInput: TextareaRenderable | undefined
       if (classified.ocrFiles.length > 0) {
         await gate("Continue to OCR")
         setStep("ocr")
-        const totalOcr = classified.ocrFiles.length
         setProgTotal(totalOcr)
         setProgCurrent(0)
         setProcessingStatus("Preparing OCR...")
         await delay(1000)
-        const or = await processOcr(classified.ocrFiles, classified.logsDir, sharedProg, onPhaseLog)
+        or = await processOcr(classified.ocrFiles, classified.logsDir, sharedProg, onPhaseLog)
         if (or.failed > 0) totalFailed += or.failed
         if (abortProcessing) { spinOff(); setBusy(false); return }
       } else {
