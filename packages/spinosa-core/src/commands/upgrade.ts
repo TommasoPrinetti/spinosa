@@ -13,6 +13,7 @@ import { installedReleaseVersion, resolveFrameworkRoot } from "../framework/disc
 import { compareFrameworkVersions } from "../utils/version"
 import { ensureGlobalMetadata, discoverRegisteredWorkspaces } from "../workspace/registry"
 import { readWorkspaceMeta } from "../workspace/meta"
+import { spinosaLogInfo } from "../utils/log"
 
 export interface UpgradeOptions {
   version?: string
@@ -119,6 +120,7 @@ export async function upgradeFramework(
   options: UpgradeOptions,
 ): Promise<UpgradeResult> {
   const explicitChannel = !!options.channel
+  spinosaLogInfo("upgrade", `channel=${options.channel ?? "default"} version=${options.version ?? "latest"} reinstall=${options.reinstall}`)
   const channel = options.channel ?? (await spinosaReleaseChannel())
 
   if (explicitChannel) {
@@ -247,8 +249,8 @@ export async function upgradeFramework(
 }
 
 export async function checkUpgradeAvailable(): Promise<AutoUpgradeResult> {
+  spinosaLogInfo("upgrade", "checkUpgradeAvailable start")
   if (process.env.SPINOSA_NO_UPGRADE_CHECK === "1") {
-    return { available: false }
   }
 
   const autoUpgrade = await readConfigValue("auto_upgrade")

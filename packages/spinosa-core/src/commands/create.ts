@@ -4,6 +4,7 @@ import { spawnSync } from "node:child_process"
 import { safeCopy, safeCopyTree, copyDirContents, cleanMacMetadata } from "../utils/fs"
 import { registerWorkspace, writeSetupFiles } from "../workspace/registry"
 import { writeWorkspaceStatus } from "../workspace/meta"
+import { spinosaLogInfo } from "../utils/log"
 
 export interface CreateWorkspaceOptions {
   corpusPath: string
@@ -56,6 +57,7 @@ function frameworkVersion(frameworkRoot: string): string {
 export async function createWorkspace(options: CreateWorkspaceOptions): Promise<CreateWorkspaceResult> {
   const { corpusPath, frameworkRoot, extensions, preferredCli, launch, onProgress } = options
   const progress = onProgress ?? (() => {})
+  spinosaLogInfo("create", `corpusPath=${corpusPath} frameworkRoot=${frameworkRoot}`)
 
   const resolvedCorpus = path.resolve(corpusPath)
   const corpusName = path.basename(resolvedCorpus)

@@ -2,6 +2,7 @@ import { existsSync, readdirSync, statSync } from "node:fs"
 import path from "node:path"
 import { buildLaunchCommand } from "../handoff/builder"
 import { copyToClipboard } from "../handoff/runner"
+import { spinosaLogInfo } from "../utils/log"
 
 export interface StartupOptions {
   workspacePath: string
@@ -146,11 +147,11 @@ async function readDir(dirPath: string): Promise<{ name: string; isDirectory: bo
   }
   return entries
 }
-
 export async function runStartup(
   options: StartupOptions,
 ): Promise<{ prompt: string; launchCommand: string }> {
   const { workspacePath, frameworkRoot, preferredCli, projectName, sourceLocation } = options
+  spinosaLogInfo("startup", `workspacePath=${workspacePath} projectName=${projectName}`)
   const cli = preferredCli ?? "opencode"
   const title = projectName ?? path.basename(workspacePath)
 

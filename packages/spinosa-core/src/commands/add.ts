@@ -21,6 +21,7 @@ import { scanSource } from "../scan/scanner"
 import { fileExt } from "../constants"
 import { runPpuOcrBatch } from "../import/ppu-ocr"
 import type { PpuOcrFile } from "../import/ppu-ocr"
+import { spinosaLogInfo } from "../utils/log"
 import { MarkItDown } from "markitdown-ts"
 
 export interface AddFilesOptions {
@@ -89,6 +90,7 @@ async function runBatchOcr(
 export async function addFiles(options: AddFilesOptions): Promise<AddFilesResult> {
   const { workspacePath, sourcePath, sourceIsDir, subfolder, extensions, overwrite, onProgress } = options
   const rawDir = path.join(workspacePath, "raw")
+  spinosaLogInfo("add", `sourcePath=${sourcePath} workspacePath=${workspacePath} sourceIsDir=${sourceIsDir}`)
 
   if (!existsSync(rawDir)) {
     mkdirSync(rawDir, { recursive: true })

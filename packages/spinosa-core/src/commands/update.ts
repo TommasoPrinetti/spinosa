@@ -191,6 +191,7 @@ function sha256File(filePath: string): string {
 export async function updateWorkspace(options: UpdateOptions): Promise<UpdateResult> {
   const { workspacePath, frameworkRoot, dryRun = false, onPhase } = options
   const phase = onPhase ?? ((_p: string, _d: string) => {})
+  spinosaLogInfo("update", `workspacePath=${workspacePath} dryRun=${dryRun}`)
 
   const fwManifestPath = path.join(frameworkRoot, ".spinosa", "framework-files.tsv")
   const retiredManifestPath = path.join(frameworkRoot, ".spinosa", "retired-framework-files.tsv")
