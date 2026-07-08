@@ -1,11 +1,11 @@
 import type { ParentProps } from "solid-js"
 import { MAIN_CONTENT_MAX_WIDTH } from "../util/layout"
 
-export function CenteredColumn(props: ParentProps<{ flexGrow?: number; minHeight?: number }>) {
+export function CenteredColumn(props: ParentProps<{ maxWidth?: number; flexGrow?: number; minHeight?: number }>) {
   return (
     <box flexGrow={props.flexGrow ?? 1} minHeight={props.minHeight ?? 0} alignItems="center" width="100%">
       <box
-        maxWidth={MAIN_CONTENT_MAX_WIDTH}
+        maxWidth={props.maxWidth ?? MAIN_CONTENT_MAX_WIDTH}
         width="100%"
         flexGrow={1}
         minHeight={props.minHeight ?? 0}

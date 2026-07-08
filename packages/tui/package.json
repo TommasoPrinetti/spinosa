@@ -9,7 +9,7 @@
     "test": "bun test --timeout 30000 --only-failures",
     "test:spinosa": "bun test test/spinosa/",
     "verify:spinosa": "bun run scripts/verify-spinosa.ts",
-    "typecheck": "tsgo --noEmit"
+    "check:imports": "bun run scripts/check-imports.ts",
   },
   "exports": {
     ".": "./src/index.tsx",

@@ -31,9 +31,9 @@ describe("onboarding preview", () => {
     expect(preview.preflightRows.some((row) => row.label === "Workspace")).toBe(true)
     expect(preview.scanRows.some((row) => row.label === "Source scan")).toBe(true)
     expect(preview.importOptions).toEqual([
-      { ext: "docx", count: 1, selected: true },
-      { ext: "md", count: 1, selected: true },
-      { ext: "mp3", count: 1, selected: false },
+      { ext: "docx", count: 1, bytes: expect.any(Number), selected: true },
+      { ext: "md", count: 1, bytes: expect.any(Number), selected: true },
+      { ext: "mp3", count: 1, bytes: expect.any(Number), selected: false },
     ])
   })
 
@@ -49,8 +49,8 @@ describe("onboarding preview", () => {
     expect(preview.projectName).toBe("imports")
     expect(preview.scanRows.some((row) => row.label === "Source scan")).toBe(true)
     expect(preview.importOptions).toEqual([
-      { ext: "docx", count: 1, selected: true },
-      { ext: "md", count: 1, selected: true },
+      { ext: "docx", count: 1, bytes: expect.any(Number), selected: true },
+      { ext: "md", count: 1, bytes: expect.any(Number), selected: true },
     ])
   })
 })

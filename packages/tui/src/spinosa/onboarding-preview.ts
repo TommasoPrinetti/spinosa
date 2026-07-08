@@ -12,6 +12,7 @@ import type { ToolStatus as CoreToolStatus } from "@opencode-ai/spinosa-core/sca
 export type OnboardingImportOption = {
   ext: string
   count: number
+  bytes: number
   selected: boolean
 }
 
@@ -127,7 +128,8 @@ function extToImportOptions(extMap: Map<string, ExtEntry>): OnboardingImportOpti
     options.push({
       ext,
       count: entry.count,
-      selected: !isAv, // audio/video deselected by default
+      bytes: entry.bytes,
+      selected: !isAv,
     })
   }
   options.sort((a, b) => a.ext.localeCompare(b.ext))

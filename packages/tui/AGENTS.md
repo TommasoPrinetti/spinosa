@@ -49,7 +49,7 @@ bun run verify:spinosa    # tests + typecheck + maturity checklist
 src/
   app.tsx                 application root, provider tree, renderer lifecycle
   index.tsx               public exports
-  spinosa/                service, cli-bridge, parse-goal, parse-corpus, artifact-watcher, types
+  spinosa/                service, bash, parse-goal, parse-corpus, artifact-watcher, types
   routes/
     spinosa/              workspace-picker, startup-hub, onboarding
     workspace/            shell
