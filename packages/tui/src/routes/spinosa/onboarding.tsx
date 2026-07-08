@@ -11,7 +11,7 @@ import { ProgressEmitter } from "@opencode-ai/spinosa-core/progress/progress"
 import { createWorkspace } from "@opencode-ai/spinosa-core/commands/create"
 import { prepareOnboarding, completeOnboarding } from "@opencode-ai/spinosa-core/commands/onboard"
 import type { OnboardingContext, PhaseAccumulator, OnboardingResult } from "@opencode-ai/spinosa-core/commands/onboard"
-import { scanAndClassifySource, processDirectCopy, processMarkitdown, processOcr } from "@opencode-ai/spinosa-core/import/pipeline"
+import { scanAndClassifySource, processDirectCopy, processMarkitdown, processOcr, type PhaseResult } from "@opencode-ai/spinosa-core/import/pipeline"
 import { addFiles } from "@opencode-ai/spinosa-core/commands/add"
 import { runStartup as tsRunStartup } from "@opencode-ai/spinosa-core/commands/startup"
 import { resolveFrameworkRoot } from "@opencode-ai/spinosa-core/framework/discovery"
@@ -664,8 +664,9 @@ let nameInput: TextareaRenderable | undefined
 
       const classified = await scanAndClassifySource(ctx.sourcePath, ctx.rawDir, ctx.batches)
       if (!classified) { setStep("error"); return }
+      let mr: PhaseResult = { converted: 0, skipped: 0, failed: 0, recoverable: [] }
+      let or: PhaseResult = { converted: 0, skipped: 0, failed: 0, recoverable: [] }
       // Phase B1: Direct copy
-      setStep("direct")
       const totalDirect = classified.directFiles.length
       appendLogLine(`[diag] direct=${totalDirect} markitdown=${classified.markitdownFiles.length} ocr=${classified.ocrFiles.length}`)
       // Seed the denominator; the progress listener also drives it from emitter events.
@@ -678,30 +679,37 @@ let nameInput: TextareaRenderable | undefined
       if (abortProcessing) { spinOff(); setBusy(false); return }
       setProcessingStatus(`Direct copy complete — ${totalDirect} files`)
       await delay(1000)
-      await gate("Continue to MarkItDown")
-      // Phase B2: MarkItDown
-      setStep("markitdown")
-      const totalMd = classified.markitdownFiles.length
-      setProgTotal(totalMd || 1)
-      setProgCurrent(0)
-      setProcessingStatus("Preparing MarkItDown conversion...")
-      await delay(1000)
-      const mr = await processMarkitdown(classified.markitdownFiles, classified.logsDir, sharedProg, onPhaseLog)
-      if (mr.failed > 0) totalFailed += mr.failed
-      if (abortProcessing) { spinOff(); setBusy(false); return }
-      setProcessingStatus(`MarkItDown complete — ${totalMd} files`)
-      await delay(1000)
-      await gate("Continue to OCR")
-      // Phase B3: OCR
-      setStep("ocr")
-      const totalOcr = classified.ocrFiles.length
-      setProgTotal(totalOcr || 1)
-      setProgCurrent(0)
-      setProcessingStatus("Preparing OCR...")
-      await delay(1000)
-      const or = await processOcr(classified.ocrFiles, classified.logsDir, sharedProg, onPhaseLog)
-      if (or.failed > 0) totalFailed += or.failed
-      if (abortProcessing) { spinOff(); setBusy(false); return }
+      if (classified.markitdownFiles.length > 0) {
+        await gate("Continue to MarkItDown")
+        setStep("markitdown")
+        const totalMd = classified.markitdownFiles.length
+        setProgTotal(totalMd)
+        setProgCurrent(0)
+        setProcessingStatus("Preparing MarkItDown conversion...")
+        await delay(1000)
+        const mr = await processMarkitdown(classified.markitdownFiles, classified.logsDir, sharedProg, onPhaseLog)
+        if (mr.failed > 0) totalFailed += mr.failed
+        if (abortProcessing) { spinOff(); setBusy(false); return }
+        setProcessingStatus(`MarkItDown complete — ${totalMd} files`)
+        await delay(1000)
+      } else {
+        appendLogLine("MarkItDown: 0 files to convert — skipping")
+      }
+
+      if (classified.ocrFiles.length > 0) {
+        await gate("Continue to OCR")
+        setStep("ocr")
+        const totalOcr = classified.ocrFiles.length
+        setProgTotal(totalOcr)
+        setProgCurrent(0)
+        setProcessingStatus("Preparing OCR...")
+        await delay(1000)
+        const or = await processOcr(classified.ocrFiles, classified.logsDir, sharedProg, onPhaseLog)
+        if (or.failed > 0) totalFailed += or.failed
+        if (abortProcessing) { spinOff(); setBusy(false); return }
+      } else {
+        appendLogLine("OCR: 0 files to convert — skipping")
+      }
       // Phase C: Finalize (verification)
       setStep("verification")
       setProcessingStatus("Verifying import...")
