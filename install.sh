@@ -387,7 +387,7 @@ install_bun_dependencies() {
   fi
 
   spinner_start "Installing dependencies"
-  if (cd "$fw_root" && "$bun_bin" install --production >/dev/null 2>&1); then
+  if (cd "$fw_root" && PATH="$(dirname "$bun_bin"):$PATH" "$bun_bin" install --production >/dev/null 2>&1); then
     spinner_stop "Dependencies installed"
   else
     spinner_stop

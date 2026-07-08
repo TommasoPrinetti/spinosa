@@ -20,6 +20,7 @@ export * from "./utils/path"
 export * from "./utils/fs"
 export * from "./utils/version"
 export * from "./utils/string"
+export * from "./utils/log"
 
 // --- extension
 export * from "./extension/types"
