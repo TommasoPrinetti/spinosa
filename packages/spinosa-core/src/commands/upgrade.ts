@@ -295,10 +295,12 @@ export async function checkUpgradeAvailable(): Promise<AutoUpgradeResult> {
     return { available: false }
   }
 
-  writeVersionCache(channel, latest, 0)
-
   const latestCmp = compareFrameworkVersions(latest, installedVersion)
   const available = latestCmp !== undefined && latestCmp > 0
+
+  // Cache: no-upgrade skips re-check for 1h (matches bash behavior pattern)
+  const skipUntil = available ? 0 : Math.floor(Date.now() / 1000) + 3600
+  writeVersionCache(channel, latest, skipUntil)
 
   return {
     available,

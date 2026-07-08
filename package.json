@@ -106,7 +106,7 @@
     "@opentui/solid": "catalog:",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
-    "@napi-rs/canvas": "1.0.2",
+    "@napi-rs/canvas": "1.0.2"
   },
   "patchedDependencies": {
     "@ff-labs/fff-bun@0.9.3": "patches/@ff-labs%2Ffff-bun@0.9.3.patch",
