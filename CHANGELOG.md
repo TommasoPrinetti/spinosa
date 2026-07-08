@@ -6,6 +6,18 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 **Release policy:** versions are published only with explicit maintainer approval.
 
+## [0.8.0-beta.16] — 2026-07-08
+
+### Fixed
+
+- `replace_if_unmodified` update policy now actually enforced: user-modified framework files are skipped during `spinosa update` via SHA-256 checksum tracking.
+- `spinosa uninstall` confirm prompt no longer has a 100ms delay on macOS bash 3.2.
+
+### Changed
+
+- Version cache now skips re-checking for 1 hour when no upgrade is available, reducing GitHub fetches on repeated TUI home mounts.
+- TUI upgrade flow now shows a toast listing workspaces that need updating before restarting.
+
 ## [0.8.0-beta.13] — 2026-07-07
 
 ### Changed

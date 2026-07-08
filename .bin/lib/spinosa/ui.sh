@@ -101,7 +101,7 @@ flush_pending_input() {
 
   # Drain any buffered keystrokes — short timeout, no stty changes.
   # Caller must restore stty to cooked mode before calling this.
-  read -t 0.1 -n 100 2>/dev/null || true
+  read -t 0 -n 100 2>/dev/null || true
 }
 
 
