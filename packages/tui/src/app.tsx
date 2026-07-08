@@ -22,7 +22,7 @@ import {
   on,
 } from "solid-js"
 import { TuiPathsProvider, TuiStartupProvider, TuiTerminalEnvironmentProvider, useTuiStartup } from "./context/runtime"
-import { DialogProvider, useDialog } from "./ui/dialog"
+import { DialogProvider, useDialog, sigintHandler } from "./ui/dialog"
 import { DialogProvider as DialogProviderList } from "./component/dialog-provider"
 import { ErrorComponent } from "./component/error-component"
 import { PluginRouteMissing } from "./component/plugin-route-missing"
@@ -225,7 +225,10 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
       )
       yield* Effect.addFinalizer(() => Effect.sync(TuiAudio.dispose))
       const shutdown = yield* Deferred.make<unknown>()
-      const onProcessSignal = () => destroyRenderer(renderer)
+      const onProcessSignal = () => {
+        if (sigintHandler?.()) return // dialog dismissed, keep alive
+        destroyRenderer(renderer)
+      }
       for (const signal of ["SIGHUP", "SIGINT"] as const) {
         yield* Effect.acquireRelease(
           Effect.sync(() => process.on(signal, onProcessSignal)),

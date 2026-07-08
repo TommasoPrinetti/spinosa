@@ -1,12 +1,24 @@
-import { existsSync } from "node:fs"
-import { TextareaRenderable } from "@opentui/core"
+import path from "node:path"
+import { existsSync, readdirSync, statSync } from "node:fs"
+import { TextareaRenderable, TextAttributes } from "@opentui/core"
 import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show } from "solid-js"
+import { createStore } from "solid-js/store"
 import { useTheme } from "../../context/theme"
 import { useRoute } from "../../context/route"
 import { useSpinosaWorkspace } from "../../context/spinosa-workspace"
 import { Toast } from "../../ui/toast"
 import { ProgressEmitter } from "@opencode-ai/spinosa-core/progress/progress"
-import { PHASES, prepareNew, runNewPhase, completeNew, runReinstall, runStartup, runAdd, type NewWorkspacePhase } from "../../spinosa/cli-bridge"
+import { createWorkspace } from "@opencode-ai/spinosa-core/commands/create"
+import { prepareOnboarding, completeOnboarding } from "@opencode-ai/spinosa-core/commands/onboard"
+import type { OnboardingContext, PhaseAccumulator, OnboardingResult } from "@opencode-ai/spinosa-core/commands/onboard"
+import { scanAndClassifySource, processDirectCopy, processMarkitdown, processOcr } from "@opencode-ai/spinosa-core/import/pipeline"
+import { addFiles } from "@opencode-ai/spinosa-core/commands/add"
+import { runStartup as tsRunStartup } from "@opencode-ai/spinosa-core/commands/startup"
+import { resolveFrameworkRoot } from "@opencode-ai/spinosa-core/framework/discovery"
+import { spawn } from "node:child_process"
+import { tuiLog, logStep, logAction, logPhase, logTool, logResult, logError, logGate } from "../../spinosa/log"
+import { getSigintHandler, setSigintHandler } from "../../ui/dialog"
+import type { CliRunResult } from "../../spinosa/types"
 import { readBundledFrameworkVersion, isPrereleaseFrameworkVersion, readStartupPrompt, writePreferredCli } from "../../spinosa/service"
 import { CenteredColumn } from "../../component/centered-column"
 import { OPENCODE_BASE_MODE, useOpencodeKeymap, useOpencodeModeStack } from "../../keymap"
@@ -28,6 +40,7 @@ import {
   type ImportOption,
   LogScrollbox,
   LogoSummary,
+  ProgressBar,
   stripAnsi,
   ToggleLine,
   WizardActionButton,
@@ -37,7 +50,7 @@ import {
   yieldToEventLoop,
 } from "./wizard-ui"
 
-type WizardStep = "path" | "tools" | "scan" | "imports" | "setup" | "direct" | "markitdown" | "ocr" | "verification" | "provider" | "done" | "error"
+type WizardStep = "path" | "name" | "tools" | "scan" | "imports" | "setup" | "direct" | "markitdown" | "ocr" | "verification" | "provider" | "done" | "error"
 
 type ToolCheckResult = {
   label: string
@@ -82,6 +95,88 @@ function launchForCli(cliValue: string): string {
   return "run"
 }
 
+
+/**
+ * Reinstall vendor tools via install.sh.
+ * The only remaining bash-spawned operation used by the TUI.
+ */
+async function runReinstall(input?: {
+  channel?: string
+  onStdout?: (chunk: string) => void
+  onStderr?: (chunk: string) => void
+}): Promise<CliRunResult> {
+  tuiLog("runReinstall (bash)")
+
+  const fwRoot = resolveFrameworkRoot()
+  if (!fwRoot) {
+    const msg = "Framework root not found — cannot reinstall vendor tools."
+    input?.onStderr?.(msg + "\n")
+    return { exitCode: 1, stdout: "", stderr: msg }
+  }
+
+  const localInstaller = path.join(fwRoot, "install.sh")
+  if (!existsSync(localInstaller)) {
+    const msg = "install.sh not found in framework root."
+    input?.onStderr?.(msg + "\n")
+    return { exitCode: 1, stdout: "", stderr: msg }
+  }
+
+  const version = await readBundledFrameworkVersion()
+  if (!version) {
+    const msg = "Could not read bundled framework version."
+    input?.onStderr?.(msg + "\n")
+    return { exitCode: 1, stdout: "", stderr: msg }
+  }
+
+  input?.onStdout?.(`Reinstalling vendor tools for v${version}...\n`)
+
+  return new Promise<CliRunResult>((resolve) => {
+    let timedOut = false
+    let stdout = ""
+    let stderr = ""
+
+    const timer = setTimeout(() => {
+      timedOut = true
+      child.kill("SIGTERM")
+      resolve({ exitCode: 124, stdout, stderr: "Reinstall timed out after 120s." })
+    }, 120_000)
+
+    const child = spawn("bash", [localInstaller, "--reinstall", "--version", version, "--yes", "--no-launch", "--no-bundled-tools"], {
+      stdio: ["ignore", "pipe", "pipe"],
+    })
+
+    child.stdout.on("data", (chunk: Buffer) => {
+      const text = chunk.toString("utf-8")
+      stdout += text
+      // Strip ANSI escape codes and spinner control chars for clean TUI display
+      const clean = text.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "").replace(/\r/g, "\n").replace(/\n{2,}/g, "\n").trim()
+      if (clean) input?.onStdout?.(clean + "\n")
+    })
+    child.stderr.on("data", (chunk: Buffer) => {
+      const text = chunk.toString("utf-8")
+      stderr += text
+      const clean = text.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "").replace(/\r/g, "\n").replace(/\n{2,}/g, "\n").trim()
+      if (clean) input?.onStderr?.(clean + "\n")
+    })
+
+    const done = (code: number | null) => {
+      clearTimeout(timer)
+      if (timedOut) return
+      if (code === 0) {
+        input?.onStdout?.("Reinstall complete.\n")
+        resolve({ exitCode: 0, stdout, stderr })
+      } else {
+        resolve({ exitCode: code ?? 1, stdout, stderr })
+      }
+    }
+    child.on("close", (code) => done(code))
+    child.on("error", (err) => {
+      clearTimeout(timer)
+      resolve({ exitCode: 1, stdout, stderr: err.message })
+    })
+  })
+}
+
 export function Onboarding() {
   const { theme } = useTheme()
   const { navigate } = useRoute()
@@ -100,11 +195,36 @@ export function Onboarding() {
   const [focusedSource, setFocusedSource] = createSignal(0)
   const [preview, setPreview] = createSignal<NewWorkspacePreview | undefined>()
   const [toolChecks, setToolChecks] = createSignal<ToolCheckResult[]>([])
+  const toolActionLabel = createMemo(() => {
+    const checks = toolChecks()
+    if (checks.length === 0) return ""
+    if (checks.some((t) => t.status === "checking")) return "Checking..."
+    if (checks.some((t) => t.status === "missing")) return "Repair tools"
+    return "Start scanning"
+  })
+  const toolAllReady = createMemo(() => {
+    const checks = toolChecks()
+    return checks.length > 0 && checks.every((t) => t.status === "available")
+  })
   const [hoveredButton, setHoveredButton] = createSignal<string | null>(null)
   const [scanProgress, setScanProgress] = createSignal(0)
   const [scanTotal, setScanTotal] = createSignal(0)
   const [processingDone, setProcessingDone] = createSignal(false)
+  const [progCurrent, setProgCurrent] = createSignal(0)
+  const [progTotal, setProgTotal] = createSignal(1)
+  const [failedCount, setFailedCount] = createSignal(0)
+  const [processingFile, setProcessingFile] = createSignal("")
+  const [scanDone, setScanDone] = createSignal(false)
+  function formatBytes(b: number): string {
+    if (b >= 1_000_000_000) return `${(b / 1_000_000_000).toFixed(1)} GB`
+    if (b >= 1_000_000) return `${(b / 1_000_000).toFixed(1)} MB`
+    if (b >= 1_000) return `${(b / 1_000).toFixed(1)} KB`
+    return `${b} B`
+  }
   const [processingStatus, setProcessingStatus] = createSignal("")
+  const [importSummary, setImportSummary] = createSignal("")
+  const [workspaceName, setWorkspaceName] = createSignal("")
+  const [pathValidities, setPathValidities] = createStore<Record<number, "unchecked" | "valid" | "invalid">>({})
   const SPINNER_FRAMES = ["|", "/", "—", "\\"]
   const [spinIdx, setSpinIdx] = createSignal(0)
   let spinTimer: ReturnType<typeof setInterval> | undefined
@@ -117,6 +237,7 @@ export function Onboarding() {
   let gateResolve: (() => void) | undefined
   let sourceInput: TextareaRenderable | undefined
   let pendingPaths: string[] | undefined
+let nameInput: TextareaRenderable | undefined
 
   const selectedExtensions = createMemo(() =>
     importOptions()
@@ -124,18 +245,19 @@ export function Onboarding() {
       .map((item) => item.ext),
   )
 
-  const totalSteps = 10
+  const totalSteps = 11
   const stepIndex = createMemo(() => {
     if (step() === "path") return 1
-    if (step() === "tools") return 2
-    if (step() === "scan") return 3
-    if (step() === "imports") return 4
-    if (step() === "setup") return 5
-    if (step() === "direct") return 6
-    if (step() === "markitdown") return 7
-    if (step() === "ocr") return 8
-    if (step() === "verification") return 9
-    if (step() === "provider") return 10
+    if (step() === "name") return 2
+    if (step() === "tools") return 3
+    if (step() === "scan") return 4
+    if (step() === "imports") return 5
+    if (step() === "setup") return 6
+    if (step() === "direct") return 7
+    if (step() === "markitdown") return 8
+    if (step() === "ocr") return 9
+    if (step() === "verification") return 10
+    if (step() === "provider") return 11
     if (step() === "done") return totalSteps
     return totalSteps
   })
@@ -157,10 +279,6 @@ export function Onboarding() {
 
   const clearLog = () => setLogLines([])
 
-  const applyProcessingPhase = (phase: NewWorkspacePhase) => {
-    if (phase === "setup") { clearLog(); setStep("setup"); return }
-    if (phase === "verification") { clearLog(); setStep("verification"); return }
-  }
 
   const focusSourceInput = () => {
     queueMicrotask(() => {
@@ -248,7 +366,32 @@ export function Onboarding() {
       .map((p) => resolveUserPath(p))
       .filter((p): p is string => Boolean(p))
 
-  const goHome = () => navigate({ type: "workspace" })
+  const validateSinglePath = (p: string): "valid" | "invalid" => {
+    try {
+      if (!existsSync(p)) return "invalid"
+      const st = statSync(p)
+      if (st.isFile()) return "valid"
+      if (st.isDirectory()) return readdirSync(p).length > 0 ? "valid" : "invalid"
+      return "invalid"
+    } catch {
+      return "invalid"
+    }
+  }
+
+  const defaultWorkspaceName = createMemo(() => {
+    const resolved = allPathsResolved()
+    if (resolved.length === 0) return "workspace"
+    const first = resolved[0]!
+    const base = path.basename(first)
+    return base || "workspace"
+  })
+
+  const hasValidPaths = createMemo(() => {
+    const entries = sourcePaths()
+    return entries.some((e) => pathValidities[e.id] === "valid")
+  })
+
+  const goHome = () => navigate({ type: "home" })
   const leavePathStep = () => {
     goHome()
   }
@@ -266,11 +409,12 @@ export function Onboarding() {
   }
 
   const moveBack = () => {
+    const from = step()
     stopActiveWork()
-    if (step() === "tools") { setStep("path"); return }
-    if (step() === "scan") { setStep("path"); return }
-    if (step() === "imports") { setStep("scan"); return }
-    if (step() === "setup" || step() === "direct" || step() === "markitdown" || step() === "ocr" || step() === "verification") { setStep("imports"); return }
+    if (step() === "name") { logAction("back", `from ${step()} to path`); setStep("path"); return }
+    if (step() === "tools") { logAction("back", `from ${step()} to name`); setStep("name"); return }
+    if (step() === "scan") { logAction("back", `from ${step()} to path`); setStep("path"); return }
+    if (step() === "setup" || step() === "direct" || step() === "markitdown" || step() === "ocr" || step() === "verification") { logAction("back", `from ${step()} to imports`); setStep("imports"); return }
     if (step() === "provider") {
       setGateLabel("Choose provider")
       setGateAction(() => () => {
@@ -300,22 +444,18 @@ export function Onboarding() {
   ]
 
   const runToolCheck = async () => {
-    clearLog()
-    const checks = generateToolCheckLines()
+    logStep("tools", "Checking document processing tools")
+    const checks: ToolCheckResult[] = [
+      { label: "PPU PaddleOCR", status: "checking", detail: "scanned PDFs and images" },
+      { label: "MarkItDown", status: "checking", detail: "Office docs, EPUB, HTML, text PDFs" },
+      { label: "pdftoppm", status: "checking", detail: "scanned PDF page rendering" },
+      { label: "pdftotext", status: "checking", detail: "text PDF splitting" },
+    ]
     setToolChecks(checks)
     setStep("tools")
 
-    appendLogLine("Checking document processing tools...")
-
-    for (let i = 0; i < checks.length; i++) {
-      await delay(80)
-      appendLogLine(renderToolSummaryLine({ ...checks[i]!, status: "checking" }))
-    }
-
-    await delay(200)
+    await delay(80)
     const toolStatus = await detectDocumentTools()
-    const llmTools = detectLlmTools()
-
     const results: ToolCheckResult[] = [
       { label: "PPU PaddleOCR", status: toolStatus.ocr ? "available" : "missing", detail: "scanned PDFs and images" },
       { label: "MarkItDown", status: toolStatus.markitdown ? "available" : "missing", detail: "Office docs, EPUB, HTML, text PDFs" },
@@ -323,108 +463,89 @@ export function Onboarding() {
       { label: "pdftotext", status: toolStatus.pypdf ? "available" : "missing", detail: "text PDF splitting" },
     ]
     setToolChecks(results)
+    for (const r of results) logTool(r.label, r.status, r.detail)
+  }
 
-    setLogLines([])
-    for (const result of results) {
-      await delay(60)
-      appendLogLine(renderToolSummaryLine(result))
-    }
-
-    if (llmTools.length > 0) {
-      await delay(40)
-      appendLogLine(`Tools detected: ${llmTools.join(", ")}`)
-    }
-
-    const needsRepair = results.some((r) => r.status === "missing")
-    if (needsRepair) {
-      await delay(100)
-      appendLogLine("")
-      appendLogLine("Some tools missing — repairing...")
-      // Infer channel from the installed bundle: prerelease → beta, otherwise → stable
-      const bv = await readBundledFrameworkVersion()
-      const channel = bv && isPrereleaseFrameworkVersion(bv) ? "beta" : "stable"
-      await runReinstall({
-        channel,
-        onStdout: (chunk) => {
-          const clean = stripAnsi(chunk)
-          if (clean) appendLogLine(clean)
-        },
-        onStderr: (chunk) => {
-          const clean = stripAnsi(chunk)
-          if (clean) appendLogLine(clean)
-        },
-      })
-      await delay(200)
-      appendLogLine("")
-      appendLogLine("Tool repair complete.")
-    }
-
-    await delay(300)
-    setGateLabel("Start scanning")
-    setGateAction(() => () => {
-      setWaitingForGate(false)
-      void startScan()
+  const runToolRepair = async () => {
+    logAction("repair", "Tools missing — repairing")
+    // Set all missing tools back to checking
+    setToolChecks((prev) => prev.map((t) => t.status === "missing" ? { ...t, status: "checking" as const } : t))
+    await delay(80)
+    const bv = await readBundledFrameworkVersion()
+    const channel = bv && isPrereleaseFrameworkVersion(bv) ? "beta" : "stable"
+    await runReinstall({
+      channel,
+      onStdout: (chunk) => {
+        const clean = stripAnsi(chunk)
+        if (clean) appendLogLine(clean)
+      },
+      onStderr: (chunk) => {
+        const clean = stripAnsi(chunk)
+        if (clean) appendLogLine(clean)
+      },
     })
-    setWaitingForGate(true)
+    // Re-check after repair
+    await delay(200)
+    const toolStatus = await detectDocumentTools()
+    const results = [
+      { label: "PPU PaddleOCR", status: toolStatus.ocr ? "available" : "missing", detail: "scanned PDFs and images" },
+      { label: "MarkItDown", status: toolStatus.markitdown ? "available" : "missing", detail: "Office docs, EPUB, HTML, text PDFs" },
+      { label: "pdftoppm", status: toolStatus.pypdfium2 ? "available" : "missing", detail: "scanned PDF page rendering" },
+      { label: "pdftotext", status: toolStatus.pypdf ? "available" : "missing", detail: "text PDF splitting" },
+    ] as ToolCheckResult[]
+    setToolChecks(results)
+    for (const r of results) logTool(r.label, r.status, r.detail)
+    appendLogLine("Tool repair complete.")
+  }
+
+  const handleToolAction = () => {
+    const checks = toolChecks()
+    const needsRepair = checks.some((t) => t.status === "missing")
+    if (needsRepair) {
+      logAction("repair-tools", `${checks.filter(t => t.status === "missing").length} tools missing`)
+      void runToolRepair()
+    } else if (checks.every((t) => t.status === "available")) {
+      logAction("start-scan", "All tools ready")
+      void startScan()
+    }
   }
 
   const startScan = async () => {
     const resolved = pendingPaths
-    if (!resolved || resolved.length === 0) { setStep("error"); return }
+    if (!resolved || resolved.length === 0) { logError("startScan", "No pending paths"); setStep("error"); return }
+    logStep("scan", "Scanning source folder")
     clearLog()
+    setScanDone(false)
     setStep("scan")
     await yieldToEventLoop()
 
     try {
       let mergedOptions: ImportOption[] = []
-      let allLines: string[] = []
-
       for (const src of resolved) {
         appendLogLine(`Scanning: ${src}`)
-        const scanPreview = await (async () => {
-          const nextPreview = await buildNewWorkspacePreview(src)
-          setPreview(nextPreview)
-          return nextPreview
-        })()
-
+        const scanPreview = await buildNewWorkspacePreview(src)
+        setPreview(scanPreview)
         for (const opt of scanPreview.importOptions) {
           const existing = mergedOptions.find((m) => m.ext === opt.ext)
-          if (existing) {
-            existing.count += opt.count
-          } else {
-            mergedOptions.push({ ...opt })
-          }
+          if (existing) { existing.count += opt.count; existing.bytes += opt.bytes }
+          else { mergedOptions.push({ ...opt }) }
         }
-
-        const lines = generateScanLines(scanPreview)
-        allLines.push(...lines)
       }
-
       setImportOptions(mergedOptions)
-      setScanTotal(allLines.length)
-      setScanProgress(0)
-
-      for (let i = 0; i < allLines.length; i++) {
-        appendLogLine(allLines[i]!)
-        setScanProgress(i + 1)
-        await delay(30)
-      }
-
-      await delay(400)
-      setGateLabel("Continue")
-      setGateAction(() => () => {
-        setWaitingForGate(false)
-        setStep("imports")
-      })
-      setWaitingForGate(true)
+      clearLog()
+      setScanDone(true)
+      logAction("scan-done", `${mergedOptions.length} file types found`)
     } catch (err) {
+      logError("startScan", err)
       appendLogLine(`Scan failed: ${err instanceof Error ? err.message : String(err)}`)
       setStep("error")
     }
   }
 
+
   const continueFromPath = async () => {
     if (busy()) return
+    logAction("continue", "Path step → Name step")
     snapshotSourcePaths()
     const resolved = allPathsResolved()
     if (resolved.length === 0) {
@@ -439,24 +560,34 @@ export function Onboarding() {
         return
       }
     }
-    // Save resolved paths — textarea will be unmounted when step leaves "path"
     pendingPaths = resolved
-    await runToolCheck()
+    if (!workspaceName()) setWorkspaceName(defaultWorkspaceName())
+    logStep("name", `Sources: ${resolved.join(", ")}`)
+    setStep("name")
+  }
+
+  const continueFromName = () => {
+    logAction("continue", "Name step → Tools step")
+    void runToolCheck()
   }
 
   const continueFromImports = () => {
     if (selectedExtensions().length === 0) {
       appendLogLine("Select at least one file type to continue.")
+      logError("continueFromImports", "No file types selected")
       setStep("error")
       return
     }
+    logAction("continue", `Imports → Processing (${selectedExtensions().length} types: ${selectedExtensions().join(",")})`)
     startProcessing()
   }
 
-  const gate = () => new Promise<void>((resolve) => {
+
+  const gate = (label = "Continue") => new Promise<void>((resolve) => {
     gateResolve = resolve
-    setGateLabel("Continue")
-    setGateAction(() => () => { setWaitingForGate(false); gateResolve = undefined; resolve() })
+    logGate(label)
+    setGateLabel(label)
+    setGateAction(() => () => { logAction("gate-click", label); setWaitingForGate(false); gateResolve = undefined; resolve() })
     setWaitingForGate(true)
   })
 
@@ -470,99 +601,143 @@ export function Onboarding() {
     }
     setBusy(true)
     clearLog()
-    setStep("setup")
+    setFailedCount(0)
     setProcessingDone(false)
+    setProgCurrent(0)
+    setProgTotal(1)
+    setProcessingFile("")
+    setProcessingStatus("Starting...")
     abortProcessing = false
     gateResolve = undefined
     spinOn()
-    await yieldToEventLoop()
-
+    await delay(200)
     const extensions = selectedExtensions().join(",")
-
     const primarySource = resolved[0]!
     const plannedWorkspace = preview()?.workspacePath ?? suggestWorkspacePath(primarySource)
     if (plannedWorkspace) setCreatedWorkspace(plannedWorkspace)
+    let totalFailed = 0
+
+    const sharedProg = new ProgressEmitter()
+    sharedProg.on((e) => {
+      // Use the emitter as the source of truth for both numerator and denominator
+      // so the bar self-corrects even if the pre-set total was wrong/empty.
+      if (e.total > 0) setProgTotal(e.total)
+      if (e.current >= 0) setProgCurrent(e.current)
+      if (e.relPath) setProcessingFile(e.relPath)
+    })
+    const onPhaseLog = (msg: string) => {
+      if (msg.startsWith("  ")) {
+        // Per-file progress lines (e.g. "file → OCR ...") are shown as the
+        // status only; the emitter already drives processingFile, so setting it
+        // here too would duplicate the same text as a second line.
+        const label = msg.trim()
+        setProcessingStatus(label)
+        return
+      }
+      appendLogLine(msg)
+    }
 
     try {
-      const onStdout = (chunk: string) => {
-        const lines = stripAnsi(chunk).split(/\r?\n/g).map(l => l.trim()).filter(Boolean)
-        for (const raw of lines) appendLogLine(raw)
-      }
-
-      // Phase A: Prepare (creates workspace, scans, validates tools)
-      const ctx = await prepareNew(primarySource, {
+      // Phase A: Create workspace + scan + classify
+      setProcessingStatus("Creating workspace...")
+      const frameworkRoot = resolveFrameworkRoot()
+      if (!frameworkRoot) { setStep("error"); return }
+      const wsResult = await createWorkspace({
+        corpusPath: primarySource,
+        frameworkRoot,
         extensions,
-        onPhase: (phase) => { applyProcessingPhase(phase) },
-        onStdout,
+        preferredCli: "opencode",
+        launch: "copy",
+        onProgress: (msg) => { appendLogLine(msg) },
       })
-      if (!ctx) { setStep("error"); return }
+      if (!wsResult.success) { setStep("error"); return }
+      const ctx: OnboardingContext = await prepareOnboarding({
+        workspacePath: wsResult.workspacePath,
+        frameworkRoot,
+        sourcePath: primarySource,
+        projectTitle: path.basename(primarySource),
+        flagExtensions: extensions,
+      }) as OnboardingContext
+      if ("success" in ctx && !ctx.success) { setStep("error"); return }
       setCreatedWorkspace(ctx.workspacePath)
 
-      // Phase B: Import phases (direct → markitdown → OCR)
-      const sharedProg = new ProgressEmitter()
-      let progCounter = ""
-      sharedProg.on((e) => { progCounter = `${e.current}/${e.total}` })
-
-      const onPhaseLog = (msg: string) => {
-        if (msg.startsWith("  ")) {
-          const label = progCounter ? `${progCounter} ${msg.trim()}` : msg.trim()
-          setProcessingStatus(label); return
-        }
-        appendLogLine(msg)
-      }
-
+      const classified = await scanAndClassifySource(ctx.sourcePath, ctx.rawDir, ctx.batches)
+      if (!classified) { setStep("error"); return }
       // Phase B1: Direct copy
       setStep("direct")
-      setProcessingStatus("")
-      clearLog()
-      appendLogLine("Starting direct copy...")
-      const dr: any = await runNewPhase(ctx, PHASES.DIRECT_COPY, sharedProg, onPhaseLog)
-      appendLogLine(`✓ Direct copy done (${(dr as any).copied ?? "?"} copied, ${(dr as any).skipped ?? "?"} skipped, ${(dr as any).failed ?? "?"} failed)`)
-      if (abortProcessing) { setStep("imports"); return }
-      await gate()
-
+      const totalDirect = classified.directFiles.length
+      appendLogLine(`[diag] direct=${totalDirect} markitdown=${classified.markitdownFiles.length} ocr=${classified.ocrFiles.length}`)
+      // Seed the denominator; the progress listener also drives it from emitter events.
+      setProgTotal(totalDirect > 0 ? totalDirect : 1)
+      setProgCurrent(0)
+      setProcessingStatus("Preparing direct copy...")
+      await delay(1000)
+      const dr = await processDirectCopy(classified.directFiles, sharedProg, onPhaseLog)
+      if (dr.failed > 0) totalFailed += dr.failed
+      if (abortProcessing) { spinOff(); setBusy(false); return }
+      setProcessingStatus(`Direct copy complete — ${totalDirect} files`)
+      await delay(1000)
+      await gate("Continue to MarkItDown")
       // Phase B2: MarkItDown
       setStep("markitdown")
-      setProcessingStatus("")
-      clearLog()
-      appendLogLine("Starting MarkItDown conversion...")
-      const mr: any = await runNewPhase(ctx, PHASES.MARKITDOWN, sharedProg, onPhaseLog)
-      appendLogLine(`✓ MarkItDown done (${(mr as any).mdConverted ?? "?"} converted, ${(mr as any).mdSkipped ?? "?"} skipped)`)
-      if (abortProcessing) { setStep("imports"); return }
-      await gate()
-
+      const totalMd = classified.markitdownFiles.length
+      setProgTotal(totalMd || 1)
+      setProgCurrent(0)
+      setProcessingStatus("Preparing MarkItDown conversion...")
+      await delay(1000)
+      const mr = await processMarkitdown(classified.markitdownFiles, classified.logsDir, sharedProg, onPhaseLog)
+      if (mr.failed > 0) totalFailed += mr.failed
+      if (abortProcessing) { spinOff(); setBusy(false); return }
+      setProcessingStatus(`MarkItDown complete — ${totalMd} files`)
+      await delay(1000)
+      await gate("Continue to OCR")
       // Phase B3: OCR
       setStep("ocr")
-      setProcessingStatus("")
-      clearLog()
-      appendLogLine("Starting OCR...")
-      const or: any = await runNewPhase(ctx, PHASES.OCR, sharedProg, onPhaseLog)
-      appendLogLine(`✓ OCR done (${(or as any).ocrConverted ?? "?"} converted, ${(or as any).ocrSkipped ?? "?"} skipped)`)
-      if (abortProcessing) { setStep("imports"); return }
-
-      // Phase C: Finalize (verification, CLI, prompt, summary)
-      const result = await completeNew(ctx, { direct: dr, markitdown: mr, ocr: or }, {
-        onPhase: (phase) => { applyProcessingPhase(phase) },
-        onStdout,
+      const totalOcr = classified.ocrFiles.length
+      setProgTotal(totalOcr || 1)
+      setProgCurrent(0)
+      setProcessingStatus("Preparing OCR...")
+      await delay(1000)
+      const or = await processOcr(classified.ocrFiles, classified.logsDir, sharedProg, onPhaseLog)
+      if (or.failed > 0) totalFailed += or.failed
+      if (abortProcessing) { spinOff(); setBusy(false); return }
+      // Phase C: Finalize (verification)
+      setStep("verification")
+      setProcessingStatus("Verifying import...")
+      const result = await completeOnboarding(ctx, { direct: dr, markitdown: mr, ocr: or }, {
+        workspacePath: ctx.workspacePath,
+        frameworkRoot,
+        sourcePath: ctx.sourcePath,
+        projectTitle: ctx.projectTitle,
+        onPhase: (_phase, msg) => {
+          setProcessingStatus(msg)
+          appendLogLine(msg)
+        },
       })
 
       if (result.success) {
-        // Import additional source paths into the workspace
-        const workspacePath = ctx.workspacePath
+        // Import additional source paths
         for (let i = 1; i < resolved.length; i++) {
           const extra = resolved[i]!
-          appendLogLine(`Importing additional source: ${extra}`)
-          const addResult = await runAdd(workspacePath, extra, {
-            dir: true,
-            onStdout,
+          setProcessingStatus(`Importing: ${extra}`)
+          const addFileResult = await addFiles({
+            workspacePath: ctx.workspacePath,
+            sourcePath: extra,
+            sourceIsDir: true,
+            onProgress: (msg) => appendLogLine(msg),
           })
-          if (addResult.exitCode !== 0) {
-            appendLogLine(`  ⚠ Partial import for ${extra}: ${addResult.stderr}`)
-          } else {
-            appendLogLine(`  ✓ Imported ${extra}`)
+          if (!addFileResult.success) {
+            appendLogLine(`  ⚠ Partial import for ${extra}`)
           }
         }
+
+        setFailedCount(totalFailed)
+        setImportSummary(
+          `${dr.converted}/${totalDirect} copied · ${mr.converted}/${totalMd} markitdown · ${or.converted}/${totalOcr} ocr` +
+          (totalFailed > 0 ? ` · ${totalFailed} failed` : ""),
+        )
         setProcessingDone(true)
+        setProcessingStatus("All done")
         setGateLabel("PROCEED")
         setGateAction(() => () => { setWaitingForGate(false); setStep("provider") })
         setWaitingForGate(true)
@@ -578,7 +753,9 @@ export function Onboarding() {
     }
   }
 
+
   const finishProvider = async (cliValue: string) => {
+    logAction("finish-provider", `CLI: ${cliValue}`)
     try {
       const workspacePath = createdWorkspace()
       if (workspacePath) {
@@ -599,11 +776,13 @@ export function Onboarding() {
         }
       } else {
         if (workspacePath) {
-          await runStartup(workspacePath, { cli: cliValue, launch: launchForCli(cliValue) })
+          await tsRunStartup({ workspacePath, frameworkRoot: resolveFrameworkRoot() ?? "", preferredCli: cliValue })
         }
         goHome()
       }
+      logAction("finish-done", `Workspace: ${workspacePath}, CLI: ${cliValue}`)
     } catch (err) {
+      logError("finishProvider", err)
       const msg = err instanceof Error ? err.message : String(err)
       appendLogLine(`Failed to launch ${cliValue}: ${msg}`)
       setStep("error")
@@ -630,6 +809,52 @@ export function Onboarding() {
 
   onMount(() => {
     focusSourceInput()
+
+    // Auto-add new path input when last input has content
+    const autoAddTimer = setInterval(() => {
+      if (step() !== "path") return
+      const entries = sourcePaths()
+      if (entries.length === 0) return
+      const last = entries[entries.length - 1]
+      const input = sourceInputs.get(last.id)
+      if (!input || input.isDestroyed) return
+      if (input.plainText?.trim()?.length > 0) {
+        addSourcePath()
+      }
+    }, 300)
+
+    // Path validation: periodically re-validate all path inputs
+    const validateTimer = setInterval(() => {
+      if (step() !== "path") return
+      for (const entry of sourcePaths()) {
+        const text = readPathText(entry.id)
+        if (!text) {
+          setPathValidities(entry.id, "unchecked")
+          continue
+        }
+        const resolved = resolveUserPath(text)
+        if (!resolved) {
+          setPathValidities(entry.id, "invalid")
+          continue
+        }
+        setPathValidities(entry.id, validateSinglePath(resolved))
+      }
+    }, 400)
+
+    // Ctrl+C routing: wrap the dialog sigintHandler to also handle wizard back-navigation.
+    // This runs BEFORE app.tsx's destroyRenderer check (sigintHandler is the gate).
+    const prevSigintHandler = getSigintHandler()
+    setSigintHandler(() => {
+      if (step() !== "path") { handleBackPress(); return true }
+      return prevSigintHandler?.() ?? false
+    })
+
+    // Sync workspace name from textarea
+    const nameSyncTimer = setInterval(() => {
+      if (step() !== "name") return
+      if (!nameInput || nameInput.isDestroyed) return
+      setWorkspaceName(nameInput.plainText?.trim() ?? defaultWorkspaceName())
+    }, 300)
     const off = keymap.intercept("key", ({ event, consume }) => {
       if (modeStack.current() !== OPENCODE_BASE_MODE) return
       setHoveredButton(null)
@@ -668,7 +893,7 @@ export function Onboarding() {
             consume(); return
           }
           if (event.name === "down" || event.name === "j") {
-            setFocusedSource((v) => Math.min(pathsLen + 2, v + 1))
+            setFocusedSource((v) => Math.min(pathsLen + 1, v + 1))
             consume(); return
           }
           if (event.name === "return") {
@@ -677,8 +902,6 @@ export function Onboarding() {
               const entry = sourcePaths()[focus]
               if (entry) focusSourceEntry(entry.id)
             } else if (focus === pathsLen) {
-              addSourcePath()
-            } else if (focus === pathsLen + 1) {
               leavePathStep()
             } else {
               void continueFromPath()
@@ -688,7 +911,18 @@ export function Onboarding() {
         }
       }
 
-      if (step() === "imports") {
+      if (step() === "name") {
+        if (event.name === "return") {
+          continueFromName()
+          consume(); return
+        }
+        if (event.name === "escape") {
+          moveBack()
+          consume(); return
+        }
+      }
+
+      if (step() === "scan" && scanDone()) {
         const listLength = importOptions().length + 1
         if (event.name === "up" || event.name === "k") {
           setSelectedImport((value) => Math.max(0, value - 1))
@@ -742,6 +976,8 @@ export function Onboarding() {
       }
     })
     onCleanup(() => {
+      clearInterval(autoAddTimer)
+      setSigintHandler(prevSigintHandler)
       stopActiveWork()
       off()
     })
@@ -752,6 +988,13 @@ export function Onboarding() {
       step,
       (current, previous) => {
         if (current === "path" && current !== previous) focusSourceInput()
+        if (current === "name" && current !== previous) {
+          queueMicrotask(() => {
+            if (!nameInput || nameInput.isDestroyed) return
+            nameInput.focus()
+            nameInput.gotoLineEnd()
+          })
+        }
       },
       { defer: true },
     ),
@@ -764,10 +1007,10 @@ export function Onboarding() {
         <box width="100%" maxWidth={72} flexDirection="column" gap={1}>
           <box flexDirection="row" alignItems="center" gap={1}>
             <box
-              paddingLeft={1}
-              paddingRight={1}
-              paddingTop={0}
-              paddingBottom={0}
+              paddingLeft={2}
+              paddingRight={2}
+              paddingTop={1}
+              paddingBottom={1}
               backgroundColor={buttonBackground(theme, hoveredButton() === "back")}
               onMouseOver={() => {
                 blurSourceInputs()
@@ -776,7 +1019,7 @@ export function Onboarding() {
               onMouseOut={() => setHoveredButton(null)}
               onMouseDown={() => deferPress(handleBackPress)}
             >
-              <text fg={buttonText(theme, hoveredButton() === "back", theme.text)}>←</text>
+              <text fg={buttonText(theme, hoveredButton() === "back", theme.text)}>← Back</text>
             </box>
             <text fg={theme.text}>
               <span style={{ bold: true }}>Create Spinosa workspace</span>
@@ -784,7 +1027,7 @@ export function Onboarding() {
           </box>
           <text fg={theme.textMuted}>
             Step {stepIndex()} of {totalSteps}
-            {step() === "path" ? " — choose the source folder" : ""}
+            {step() === "name" ? " — name your workspace" : ""}
             {step() === "tools" ? " — checking document tools" : ""}
             {step() === "scan" ? " — scanning source" : ""}
             {step() === "imports" ? " — choose file types to import" : ""}
@@ -845,6 +1088,22 @@ export function Onboarding() {
                         paddingRight={1}
                         paddingTop={0}
                         paddingBottom={0}
+                      >
+                        <text fg={
+                          pathValidities[entry.id] === "valid"
+                            ? theme.success
+                            : pathValidities[entry.id] === "invalid"
+                              ? theme.error
+                              : theme.textMuted
+                        }>
+                          {pathValidities[entry.id] === "valid" ? "●" : pathValidities[entry.id] === "invalid" ? "●" : "○"}
+                        </text>
+                      </box>
+                      <box
+                        paddingLeft={1}
+                        paddingRight={1}
+                        paddingTop={0}
+                        paddingBottom={0}
                         backgroundColor={theme.backgroundPanel}
                         onMouseOver={() => blurSourceInputs()}
                         onMouseDown={() => deferPress(() => removeSourcePath(entry.id))}
@@ -855,135 +1114,215 @@ export function Onboarding() {
                   )}
                 </For>
               </box>
-              <box
-                paddingTop={1}
-                paddingBottom={1}
-                paddingLeft={1}
-                paddingRight={1}
-                backgroundColor={buttonBackground(theme, focusedSource() === sourcePaths().length)}
-                border={focusedSource() === sourcePaths().length ? ["left"] : []}
-                borderColor={buttonBorder(theme, focusedSource() === sourcePaths().length, theme.borderActive)}
-                onMouseOver={() => {
+            </WizardPanel>
+            <WizardActionRow>
+              <WizardActionButton
+                theme={theme}
+                label="Back"
+                primary={focusedSource() === sourcePaths().length}
+                onHover={() => {
                   blurSourceInputs()
                   setFocusedSource(sourcePaths().length)
                 }}
-                onMouseDown={() => deferPress(addSourcePath)}
-              >
-                <text fg={buttonText(theme, focusedSource() === sourcePaths().length, theme.primary)}>
-                  + Add another path
-                </text>
+                onPress={leavePathStep}
+              />
+              <box flexGrow={1} />
+              <Show when={hasValidPaths()}>
+                <WizardActionButton
+                  theme={theme}
+                  label="Continue"
+                  primary={focusedSource() === sourcePaths().length + 1}
+                  onHover={() => {
+                    blurSourceInputs()
+                    setFocusedSource(sourcePaths().length + 1)
+                  }}
+                  onPress={() => void continueFromPath()}
+                />
+              </Show>
+            </WizardActionRow>
+          </Show>
+
+          <Show when={step() === "name"}>
+            <WizardPanel theme={theme} accent>
+              <text fg={theme.textMuted}>Workspace name</text>
+              <text fg={theme.textMuted}>
+                The folder will be created as a sibling of the source with `-spinosa` appended.
+              </text>
+              <box paddingTop={1} alignItems="stretch">
+                <textarea
+                  ref={(value: TextareaRenderable) => {
+                    value.traits = { status: "NAME" }
+                    nameInput = value
+                  }}
+                  initialValue={workspaceName() || defaultWorkspaceName()}
+                  placeholder="Enter workspace name"
+                  placeholderColor={theme.textMuted}
+                  textColor={theme.text}
+                  focusedTextColor={theme.text}
+                  cursorColor={theme.primary}
+                  minHeight={1}
+                  maxHeight={1}
+                  onSubmit={() => {}}
+                />
               </box>
             </WizardPanel>
             <WizardActionRow>
               <WizardActionButton
                 theme={theme}
                 label="Back"
-                primary={focusedSource() === sourcePaths().length + 1}
-                onHover={() => {
-                  blurSourceInputs()
-                  setFocusedSource(sourcePaths().length + 1)
-                }}
-                onPress={leavePathStep}
+                onPress={moveBack}
               />
               <box flexGrow={1} />
               <WizardActionButton
                 theme={theme}
                 label="Continue"
-                primary={focusedSource() === sourcePaths().length + 2}
-                onHover={() => {
-                  blurSourceInputs()
-                  setFocusedSource(sourcePaths().length + 2)
-                }}
-                onPress={() => void continueFromPath()}
+                primary
+                onPress={continueFromName}
               />
             </WizardActionRow>
           </Show>
-
           <Show when={step() === "tools" || step() === "scan" || step() === "setup" || step() === "direct" || step() === "markitdown" || step() === "ocr" || step() === "verification"}>
             <WizardPanel theme={theme}>
               <Show when={step() === "tools"}>
-                <text fg={theme.textMuted}>Checking document processing tools...</text>
-                <LogScrollbox theme={theme} lines={logLines()} />
-              </Show>
-              <Show when={step() === "scan"}>
-                <text fg={theme.textMuted}>
-                  {scanProgress() > 0 ? `Scanning... (${scanProgress()}/${scanTotal()})` : "Reading source folder..."}
-                </text>
-                <LogScrollbox theme={theme} lines={logLines()} />
-              </Show>
-              <Show when={step() === "setup" || step() === "direct" || step() === "markitdown" || step() === "ocr" || step() === "verification"}>
-                <text fg={theme.textMuted}>
-                  {!processingDone() ? `${SPINNER_FRAMES[spinIdx()]} ` : ""}
-                  {step() === "setup" ? "Creating workspace..." : step() === "direct" ? "Direct copy" : step() === "markitdown" ? "MarkItDown conversion" : step() === "ocr" ? "OCR processing" : step() === "verification" ? "Verifying import..." : "All done"}
-                </text>
-                <Show when={processingStatus() !== ""}>
-                  <text fg={theme.textMuted}>  {processingStatus()}</text>
-                </Show>
-                <LogScrollbox theme={theme} lines={logLines()} />
-              </Show>
-            </WizardPanel>
-            <WizardActionRow>
-              <WizardActionButton theme={theme} label="Back" onPress={moveBack} />
-              <box flexGrow={1} />
-              <Show when={waitingForGate()}>
-                <WizardGateButton theme={theme} label={gateLabel()} action={() => gateAction()()} />
-              </Show>
-            </WizardActionRow>
-          </Show>
-
-          <Show when={step() === "imports"}>
-            <WizardPanel theme={theme}>
-              <text fg={theme.textMuted}>Selectable file-type batches</text>
-              <text fg={theme.textMuted}>Select at least one file type. Audio and video start off unchecked.</text>
-              <box flexDirection="column" gap={1}>
-                <box
-                  paddingTop={1}
-                  paddingBottom={1}
-                  paddingLeft={1}
-                  paddingRight={1}
-                  backgroundColor={buttonBackground(theme, selectedImport() === 0)}
-                  onMouseOver={() => setSelectedImport(0)}
-                  onMouseDown={() => deferPress(toggleAllImports)}
-                >
-                  <ToggleLine
-                    theme={theme}
-                    selected={selectedImport() === 0}
-                    enabled={importOptions().every((item) => item.selected)}
-                    label="All supported files"
-                    count={importOptions().reduce((sum, item) => sum + item.count, 0)}
-                  />
-                </box>
-                <box flexDirection="row" flexWrap="wrap" gap={1}>
-                  <For each={importOptions()}>
-                    {(item, index) => (
-                <box
-                  width={22}
-                  paddingTop={1}
-                  paddingBottom={1}
-                  paddingLeft={1}
-                  paddingRight={1}
-                  backgroundColor={buttonBackground(theme, selectedImport() === index() + 1)}
-                  onMouseOver={() => setSelectedImport(index() + 1)}
-                  onMouseDown={() => deferPress(() => toggleImport(index()))}
-                >
-                        <ToggleLine
-                          theme={theme}
-                          selected={selectedImport() === index() + 1}
-                          enabled={item.selected}
-                          label={`.${item.ext}`}
-                          count={item.count}
-                        />
-                      </box>
-                    )}
+                <text fg={theme.textMuted}>Document processing tools</text>
+                <box flexDirection="column" gap={1} paddingTop={1}>
+                  <For each={toolChecks()}>
+                    {(check) => {
+                      const icon = check.status === "available" ? "●" : check.status === "missing" ? "●" : SPINNER_FRAMES[spinIdx()]
+                      const color = check.status === "available" ? theme.success : check.status === "missing" ? theme.error : theme.textMuted
+                      return (
+                        <box flexDirection="row" gap={1} alignItems="center" paddingLeft={1} paddingRight={1}>
+                          <text fg={color} attributes={check.status === "checking" ? undefined : TextAttributes.BOLD}>{icon}</text>
+                          <text fg={check.status === "checking" ? theme.textMuted : theme.text}> {check.label}</text>
+                          <text fg={theme.textMuted} attributes={TextAttributes.DIM}>{check.detail ?? ""}</text>
+                        </box>
+                      )
+                    }}
                   </For>
                 </box>
-              </box>
-              <text fg={theme.textMuted}>↑↓ move · space toggle · a toggle all · enter continue</text>
+                <Show when={logLines().length > 0}>
+                  <box height={1} />
+                  <LogScrollbox theme={theme} lines={logLines()} />
+                </Show>
+              </Show>
+              <Show when={step() === "scan"}>
+                <Show when={!scanDone()}>
+                  <text fg={theme.textMuted}>Scanning source folder...</text>
+                  <Show when={logLines().length > 0}>
+                    <box height={1} />
+                    <LogScrollbox theme={theme} lines={logLines()} />
+                  </Show>
+                </Show>
+                <Show when={scanDone()}>
+                  <text fg={theme.textMuted}>Select file types to import</text>
+                  <box flexDirection="column" gap={1} paddingTop={1}>
+                    <box
+                      paddingLeft={1}
+                      paddingRight={1}
+                      paddingTop={1}
+                      paddingBottom={1}
+                      backgroundColor={buttonBackground(theme, selectedImport() === 0)}
+                      onMouseOver={() => setSelectedImport(0)}
+                      onMouseDown={() => deferPress(toggleAllImports)}
+                    >
+                      <box flexDirection="row" gap={1} alignItems="center">
+                        <text fg={buttonText(theme, selectedImport() === 0, theme.primary)}>
+                          {importOptions().every((item) => item.selected) ? "◎" : "○"}
+                        </text>
+                        <text fg={buttonText(theme, selectedImport() === 0, theme.text)}>
+                          <span style={{ bold: selectedImport() === 0 }}>All supported files</span>
+                        </text>
+                        <text fg={buttonText(theme, selectedImport() === 0, theme.textMuted)}>
+                          {importOptions().reduce((sum, item) => sum + item.count, 0)} files
+                        </text>
+                      </box>
+                    </box>
+                    <box flexDirection="column" gap={1}>
+                      <For each={importOptions()}>
+                        {(item, index) => {
+                          const i = index() + 1
+                          const active = () => selectedImport() === i
+                          return (
+                            <box
+                              paddingLeft={1}
+                              paddingRight={1}
+                              paddingTop={1}
+                              paddingBottom={1}
+                              backgroundColor={buttonBackground(theme, active())}
+                              onMouseOver={() => setSelectedImport(i)}
+                              onMouseDown={() => deferPress(() => toggleImport(index()))}
+                            >
+                              <box flexDirection="row" gap={1} alignItems="center">
+                                <text fg={buttonText(theme, active(), theme.primary)} width={2}>
+                                  {item.selected ? "●" : "○"}
+                                </text>
+                                <text fg={buttonText(theme, active(), theme.text)} width={10}>
+                                  .{item.ext}
+                                </text>
+                                <text fg={buttonText(theme, active(), theme.textMuted)} width={10}>
+                                  {item.count} file{item.count === 1 ? "" : "s"}
+                                </text>
+                                <text fg={buttonText(theme, active(), theme.textMuted)}>
+                                  {formatBytes(item.bytes)}
+                                </text>
+                              </box>
+                            </box>
+                          )
+                        }}
+                      </For>
+                    </box>
+                  </box>
+                  <text fg={theme.textMuted}>↑↓ move · space toggle · a toggle all · enter continue</text>
+                </Show>
+              </Show>
+              <Show when={step() === "setup" || step() === "direct" || step() === "markitdown" || step() === "ocr" || step() === "verification"}>
+                <Show when={!processingDone()}>
+                  <ProgressBar
+                    theme={theme}
+                    current={progCurrent()}
+                    total={progTotal()}
+                    status={processingStatus()}
+                    fileName={processingFile()}
+                    barWidth={20}
+                  />
+                </Show>
+                <Show when={processingDone()}>
+                  <text fg={theme.success}>● Import complete</text>
+                  <Show when={importSummary() !== ""}>
+                    <box paddingTop={1} flexDirection="column" gap={0}>
+                      <text fg={theme.textMuted}>{importSummary()}</text>
+                    </box>
+                  </Show>
+                  <Show when={failedCount() > 0}>
+                    <box paddingTop={1} flexDirection="column" gap={0}>
+                      <text fg={theme.textMuted}>{failedCount()} file{failedCount() === 1 ? "" : "s"} failed — check logs for details</text>
+                    </box>
+                  </Show>
+                </Show>
+              </Show>
             </WizardPanel>
             <WizardActionRow>
               <WizardActionButton theme={theme} label="Back" onPress={moveBack} />
               <box flexGrow={1} />
-              <WizardActionButton theme={theme} label="Continue" primary onPress={() => void continueFromImports()} />
+              <Show when={step() === "tools" && toolActionLabel() !== "" && !toolChecks().some((t) => t.status === "checking")}>
+                <WizardActionButton
+                  theme={theme}
+                  label={toolActionLabel()}
+                  primary={toolAllReady()}
+                  onPress={handleToolAction}
+                />
+              </Show>
+              <Show when={step() === "scan" && scanDone()}>
+                <WizardActionButton
+                  theme={theme}
+                  label="Continue"
+                  primary
+                  onPress={() => void continueFromImports()}
+                />
+              </Show>
+              <Show when={step() !== "tools" && step() !== "scan" && waitingForGate()}>
+                <WizardGateButton theme={theme} label={gateLabel()} action={() => gateAction()()} />
+              </Show>
             </WizardActionRow>
           </Show>
 

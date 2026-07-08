@@ -6,11 +6,9 @@ export function resolveWorkspaceDisplayName(workspacePath: string, projectName?:
   return path.basename(workspacePath) || workspacePath
 }
 
-/** Strip the conventional `-spinosa` suffix before rendering the home ASCII banner. */
+/** Show the full workspace name including `-spinosa` suffix so the user identifies it as the Spinosa version of the original folder. */
 export function workspaceAsciiBannerText(workspacePath: string) {
   const name = path.basename(workspacePath) || workspacePath
   const trimmed = name.trim()
-  if (!trimmed) return undefined
-  const withoutSuffix = trimmed.replace(/-spinosa$/i, "")
-  return (withoutSuffix || trimmed).toUpperCase()
+  return trimmed?.toUpperCase() ?? undefined
 }

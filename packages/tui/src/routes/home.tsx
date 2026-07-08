@@ -23,9 +23,7 @@ import { DialogSpinosaWorkspacePicker } from "../component/dialog-spinosa-worksp
 import { OPENCODE_BASE_MODE, useOpencodeKeymap, useOpencodeModeStack } from "../keymap"
 import { readBundledFrameworkVersion, compareFrameworkVersions, isPrereleaseFrameworkVersion } from "../spinosa/service"
 import { workspaceAsciiBannerText } from "../spinosa/workspace-name"
-import { resolveReleaseVersionForChannel } from "@opencode-ai/spinosa-core/system/channels"
-import type { ReleaseChannel } from "@opencode-ai/spinosa-core/system/channels"
-import { runUpgrade } from "../spinosa/cli-bridge"
+import { upgradeFramework } from "@opencode-ai/spinosa-core/commands/upgrade"
 import { buttonBackground, buttonText } from "../util/button"
 
 let once = false
@@ -127,24 +125,20 @@ export function Home() {
     const channel: ReleaseChannel = bv && isPrereleaseFrameworkVersion(bv) ? "beta" : "stable"
     const progressMsgs: string[] = []
     try {
-      const result = await runUpgrade({
+      const result = await upgradeFramework({
         channel,
-        onStdout: (msg) => {
-          progressMsgs.push(msg.trim())
-          toast.show({ variant: "info", message: msg.trim(), duration: 0 })
-        },
-        onStderr: (msg) => {
-          progressMsgs.push(msg.trim())
-          toast.show({ variant: "warning", message: msg.trim(), duration: 0 })
+        yes: true,
+        onPhase: (_phase, msg) => {
+          toast.show({ variant: "info", message: msg, duration: 0 })
         },
       })
-      if (result.exitCode === 0) {
+      if (result.success) {
         toast.show({ variant: "success", message: "Upgrade complete! Restarting…" })
         // Give toast time to render, then restart the TUI
         await new Promise((r) => setTimeout(r, 1500))
         exit()
       } else {
-        toast.show({ variant: "error", message: result.stderr || "Upgrade failed" })
+        toast.show({ variant: "error", message: "Upgrade failed" })
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)

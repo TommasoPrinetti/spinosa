@@ -14,7 +14,6 @@ import {
 import { isSpinosaWorkspace, readWorkspaceMeta } from "../spinosa/service"
 import type { SpinosaWorkspaceMeta } from "../spinosa/types"
 import { setActiveWorkspacePath, tuiLog } from "../spinosa/log"
-
 export const { use: useSpinosaWorkspace, provider: SpinosaWorkspaceProvider } = createSimpleContext({
   name: "SpinosaWorkspace",
   init: () => {
@@ -58,6 +57,11 @@ export const { use: useSpinosaWorkspace, provider: SpinosaWorkspaceProvider } = 
     }
 
     const showPicker = () => {
+      // Save the current route before navigating away (so the dialog's onClose can restore it)
+      const currentRoute = route.data
+      if (currentRoute.type === "workspace" && currentRoute.sessionID) {
+        kv.set(SPINOSA_LAST_SESSION_KV, currentRoute.sessionID)
+      }
       route.navigate({ type: "workspace" })
       setPickerRequested(true)
     }

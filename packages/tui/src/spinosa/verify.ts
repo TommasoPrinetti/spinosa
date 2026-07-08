@@ -86,7 +86,6 @@ export async function runSpinosaMaturityChecks(fixturePath = fixtureWorkspacePat
   const modules = [
     "orchestrator.ts",
     "route-recovery.ts",
-    "cli-bridge.ts",
     "goal-artifact.ts",
     "workspace-bind.tsx",
   ]

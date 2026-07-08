@@ -1,7 +1,7 @@
 import { createEffect, createMemo, createResource, createSignal, For, onCleanup, onMount, Show } from "solid-js"
 import { TextAttributes } from "@opentui/core"
-import { join } from "node:path"
-import { rmSync } from "node:fs"
+import { dirname, join } from "node:path"
+import { rmSync, statSync } from "node:fs"
 import { useTheme } from "../../context/theme"
 import { useRoute } from "../../context/route"
 import { Logo } from "../../component/logo"
@@ -9,25 +9,23 @@ import { usePluginRuntime } from "../../plugin/runtime"
 import { OPENCODE_BASE_MODE, useOpencodeKeymap, useOpencodeModeStack } from "../../keymap"
 import { Toast } from "../../ui/toast"
 import { CenteredColumn } from "../../component/centered-column"
-import { MAIN_CONTENT_MAX_WIDTH } from "../../util/layout"
+import { MAIN_CONTENT_MAX_WIDTH, SESSION_CHAT_MAX_WIDTH } from "../../util/layout"
 import { buttonBackground, buttonBorder, buttonText } from "../../util/button"
 import {
   listRegisteredWorkspaces,
-  isSpinosaWorkspace,
   readBundledFrameworkVersion,
   readWorkspaceMeta,
-  countRawMarkdownFiles,
   unregisterWorkspace,
+  countRawMarkdownFiles,
   workspaceNeedsFrameworkUpdate,
   writeWorkspaceFrameworkVersion,
 } from "../../spinosa/service"
-import { runUpdate } from "../../spinosa/cli-bridge"
+import { updateWorkspace } from "@opencode-ai/spinosa-core/commands/update"
+import { resolveFrameworkRoot } from "@opencode-ai/spinosa-core/framework/discovery"
 import { setupStatusLabel } from "../../spinosa/status-labels"
 import type { SpinosaSetupStatus } from "../../spinosa/types"
 import { truncatePathTail } from "../../spinosa/truncate-path"
-import { fixtureWorkspacePath } from "../../spinosa/verify"
 import { useSpinosaWorkspace } from "../../context/spinosa-workspace"
-import { useTuiPaths } from "../../context/runtime"
 import { getWorkspaceLaunchDecision } from "../../spinosa/workspace-launch"
 import { resolveWorkspaceDisplayName } from "../../spinosa/workspace-name"
 
@@ -54,6 +52,19 @@ type ManagerActionID = "update-all" | "open" | "update" | "delete"
 const MANAGER_VISIBLE_ROWS = 8
 const MANAGER_ALL_ID = "__all__"
 
+type SelectSortColumn = "name" | "folder" | "status" | "version" | "accessed"
+type SelectSortDir = "asc" | "desc"
+
+type SelectWorkspaceRow = {
+  path: string
+  name: string
+  parentFolder: string
+  status: SpinosaSetupStatus
+  version: string
+  needsUpdate: boolean
+  lastAccessed: number
+}
+
 function workspaceCategoryLabel(status: SpinosaSetupStatus) {
   switch (status) {
     case "workspace_started":
@@ -67,6 +78,36 @@ function workspaceCategoryLabel(status: SpinosaSetupStatus) {
   }
 }
 
+function relativeTime(timestamp: number): string {
+  if (timestamp <= 0) return "unknown"
+  const now = Date.now()
+  const diff = now - timestamp
+  const seconds = Math.floor(diff / 1000)
+  const minutes = Math.floor(seconds / 60)
+  const hours = Math.floor(minutes / 60)
+  const days = Math.floor(hours / 24)
+
+  if (seconds < 60) return "just now"
+  if (minutes < 60) return `${minutes}m ago`
+  if (hours < 24) return `${hours}h ago`
+  if (days < 7) return `${days}d ago`
+  if (days < 30) return `${Math.floor(days / 7)}w ago`
+  if (days < 365) return `${Math.floor(days / 30)}mo ago`
+  return `${Math.floor(days / 365)}y ago`
+}
+
+function getParentFolder(workspacePath: string): string {
+  return dirname(workspacePath)
+}
+
+function getLastAccessed(workspacePath: string): number {
+  try {
+    return statSync(join(workspacePath, ".spinosa", "workspace")).mtimeMs
+  } catch {
+    return 0
+  }
+}
+
 export function WorkspacePicker() {
   const { theme } = useTheme()
   const { navigate } = useRoute()
@@ -74,7 +115,6 @@ export function WorkspacePicker() {
   const keymap = useOpencodeKeymap()
   const modeStack = useOpencodeModeStack()
   const spinosa = useSpinosaWorkspace()
-  const paths = useTuiPaths()
 
   const [step, setStep] = createSignal<PickerStep>("home")
   const [selected, setSelected] = createSignal(0)
@@ -92,7 +132,6 @@ export function WorkspacePicker() {
   const [updateLabel, setUpdateLabel] = createSignal("")
   let statusResetTimer: ReturnType<typeof setTimeout> | undefined
 
-  const [registered] = createResource(() => listRegisteredWorkspaces())
   const [bundledVersion] = createResource(() => (step() === "manager" ? "bundled" : undefined), () => readBundledFrameworkVersion())
 
   const [managerRows, { refetch: refetchManager }] = createResource<WorkspaceRow[], string>(
@@ -123,34 +162,70 @@ export function WorkspacePicker() {
     setStartupPath(undefined)
   }
 
-  const selectOptions = () => {
-    const items: HomeOption[] = []
-    let hint = 1
+  const [sortColumn, setSortColumn] = createSignal<SelectSortColumn>("name")
+  const [sortDir, setSortDir] = createSignal<SelectSortDir>("asc")
 
-    const add = (id: string, title: string, description: string, run: HomeOption["run"]) => {
-      items.push({ id, title, description, hint: String(hint), run })
-      hint++
+  const toggleSort = (column: SelectSortColumn) => {
+    if (sortColumn() === column) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"))
+    } else {
+      setSortColumn(column)
+      setSortDir("asc")
     }
-
-    if (isSpinosaWorkspace(paths.cwd)) {
-      add("cwd", "Current directory", paths.cwd, () => pickWorkspace(paths.cwd))
-    }
-
-    const fixture = fixtureWorkspacePath()
-    if (isSpinosaWorkspace(fixture)) {
-      add("fixture", "Fixture workspace (verify)", fixture, () => pickWorkspace(fixture))
-    }
-
-    for (const workspace of registered() ?? []) {
-      add(workspace.path, resolveWorkspaceDisplayName(workspace.path, workspace.projectName), workspace.path, () =>
-        pickWorkspace(workspace.path),
-      )
-    }
-
-    add("generic", "OpenCode only", "Use OpenCode without a Spinosa workspace", () => spinosa.useGenericMode())
-
-    return items
   }
+
+  const [selectRows] = createResource<SelectWorkspaceRow[], string>(
+    () => (step() === "select" ? "select-rows" : undefined),
+    async () => {
+      const workspaces = await listRegisteredWorkspaces()
+      const bundled = await readBundledFrameworkVersion()
+      const rows: SelectWorkspaceRow[] = []
+      for (const ws of workspaces) {
+        const meta = await readWorkspaceMeta(ws.path)
+        rows.push({
+          path: ws.path,
+          name: resolveWorkspaceDisplayName(ws.path, meta?.projectName ?? ws.projectName),
+          parentFolder: getParentFolder(ws.path),
+          status: meta?.setupStatus || "unknown",
+          version: meta?.frameworkVersion || "unknown",
+          needsUpdate: workspaceNeedsFrameworkUpdate(meta?.frameworkVersion, bundled),
+          lastAccessed: getLastAccessed(ws.path),
+        })
+      }
+      return rows
+    },
+  )
+
+  const sortedSelectRows = createMemo(() => {
+    const rows = selectRows() ?? []
+    const col = sortColumn()
+    const dir = sortDir()
+    const sorted = [...rows]
+    sorted.sort((a, b) => {
+      let cmp = 0
+      switch (col) {
+        case "name":
+          cmp = a.name.localeCompare(b.name)
+          break
+        case "folder":
+          cmp = a.parentFolder.localeCompare(b.parentFolder)
+          break
+        case "status":
+          cmp = a.status.localeCompare(b.status)
+          break
+        case "version":
+          cmp = a.version.localeCompare(b.version)
+          break
+        case "accessed":
+          cmp = a.lastAccessed - b.lastAccessed
+          break
+      }
+      return dir === "desc" ? -cmp : cmp
+    })
+    return sorted
+  })
+
+  const selectNavCount = createMemo(() => sortedSelectRows().length + 2) // rows + New workspace + OpenCode only
 
   const pickWorkspace = async (workspacePath: string) => {
     const launch = await getWorkspaceLaunchDecision(workspacePath)
@@ -198,23 +273,22 @@ export function WorkspacePicker() {
     setUpdating(wsPath)
     setUpdateLabel("Starting…")
     try {
-      const result = await runUpdate(wsPath, {
-        onStdout: (chunk) => {
-          const line = chunk.trim()
-          if (line) setUpdateLabel(line.slice(0, 18))
-        },
-        onStderr: (chunk) => {
-          const line = chunk.trim()
+      const fwRoot = resolveFrameworkRoot()
+      const result = await updateWorkspace({
+        workspacePath: wsPath,
+        frameworkRoot: fwRoot ?? "",
+        onPhase: (_phase, detail) => {
+          const line = detail.trim()
           if (line) setUpdateLabel(line.slice(0, 18))
         },
       })
-      if (result.exitCode === 0) {
+      if (result.success) {
         const version = bundledVersion() ?? (await readBundledFrameworkVersion())
         if (version) {
           await writeWorkspaceFrameworkVersion(wsPath, version)
         }
       }
-      setUpdateLabel(result.exitCode === 0 ? "✔ Done" : "✗ Failed")
+      setUpdateLabel(result.success ? "✔ Done" : "✗ Failed")
     } catch {
       setUpdateLabel("✗ Failed")
     }
@@ -227,19 +301,18 @@ export function WorkspacePicker() {
     setUpdating(MANAGER_ALL_ID)
     try {
       let failures = 0
+      const fwRoot = resolveFrameworkRoot()
       for (const [index, row] of rows.entries()) {
         const prefix = `${index + 1}/${rows.length} ${row.name}`
-        const result = await runUpdate(row.path, {
-          onStdout: (chunk) => {
-            const line = chunk.trim()
-            if (line) setUpdateLabel(`${prefix} · ${line.slice(0, 18)}`)
-          },
-          onStderr: (chunk) => {
-            const line = chunk.trim()
+        const result = await updateWorkspace({
+          workspacePath: row.path,
+          frameworkRoot: fwRoot ?? "",
+          onPhase: (_phase, detail) => {
+            const line = detail.trim()
             if (line) setUpdateLabel(`${prefix} · ${line.slice(0, 18)}`)
           },
         })
-        if (result.exitCode === 0) {
+        if (result.success) {
           const version = bundledVersion() ?? (await readBundledFrameworkVersion())
           if (version) {
             await writeWorkspaceFrameworkVersion(row.path, version)
@@ -254,6 +327,7 @@ export function WorkspacePicker() {
     }
     scheduleStatusReset(3000)
   }
+
 
   const scheduleStatusReset = (delayMs: number) => {
     if (statusResetTimer) clearTimeout(statusResetTimer)
@@ -382,9 +456,15 @@ export function WorkspacePicker() {
   }
 
   const runSelect = () => {
-    const items = selectOptions()
-    const item = items[selected()]
-    if (item) void item.run()
+    const rows = sortedSelectRows()
+    const idx = selected()
+    if (idx < rows.length) {
+      void pickWorkspace(rows[idx].path)
+    } else if (idx === rows.length) {
+      navigate({ type: "onboarding" })
+    } else if (idx === rows.length + 1) {
+      spinosa.useGenericMode()
+    }
   }
 
   onMount(() => {
@@ -413,7 +493,6 @@ export function WorkspacePicker() {
         }
         return
       }
-
       if (step() === "select" && startupPath()) {
         if (event.name === "up" || event.name === "k") {
           setStartupSelected((v) => Math.max(0, v - 1))
@@ -444,22 +523,16 @@ export function WorkspacePicker() {
       }
 
       if (step() === "select") {
-        const list = selectOptions()
+        const maxIdx = selectNavCount() - 1
         if (event.name === "up" || event.name === "k") {
           setSelected((v) => Math.max(0, v - 1))
           consume(); return
         }
         if (event.name === "down" || event.name === "j") {
-          setSelected((v) => Math.min(list.length - 1, v + 1))
+          setSelected((v) => Math.min(maxIdx, v + 1))
           consume(); return
         }
         if (event.name === "return") {
-          runSelect()
-          consume(); return
-        }
-        const index = list.findIndex((item) => item.hint === event.name)
-        if (index >= 0) {
-          setSelected(index)
           runSelect()
           consume(); return
         }
@@ -652,39 +725,154 @@ export function WorkspacePicker() {
           </Show>
 
           <Show when={!startupPath()}>
-            <Show when={registered.loading}>
+            <Show when={selectRows.loading}>
               <text fg={theme.textMuted}>Loading registered workspaces…</text>
             </Show>
-            <box width="100%" maxWidth={MAIN_CONTENT_MAX_WIDTH} flexDirection="column" gap={1} flexShrink={0}>
-              <For each={selectOptions()}>
-                {(item, index) => (
+            <Show when={selectRows()}>
+              {(rows) => (
+                <box width="100%" maxWidth={SESSION_CHAT_MAX_WIDTH} flexDirection="column" flexShrink={0}>
+                  {/* ── table header row (clickable) ── */}
                   <box
-                    paddingLeft={2}
-                    paddingRight={2}
+                    paddingLeft={1}
+                    paddingRight={1}
                     paddingTop={1}
                     paddingBottom={1}
-                    backgroundColor={buttonBackground(theme, selected() === index())}
-                    border={["left"]}
-                    borderColor={buttonBorder(theme, selected() === index(), theme.borderActive)}
-                    onMouseOver={() => setSelected(index())}
-                    onMouseDown={() => void item.run()}
+                    backgroundColor={theme.backgroundPanel}
+                    flexDirection="row"
+                    gap={1}
                   >
-                    <text fg={buttonText(theme, selected() === index(), theme.primary)}>
-                      <span style={{ bold: selected() === index() }}>
-                        [{item.hint}] {item.title}
-                      </span>
-                    </text>
-                    <text fg={buttonText(theme, selected() === index(), theme.textMuted)}>{item.description}</text>
+                    <box
+                      width={28}
+                      onMouseDown={() => toggleSort("name")}
+                    >
+                      <text fg={theme.textMuted}>
+                        Name{sortColumn() === "name" ? (sortDir() === "asc" ? " ↑" : " ↓") : ""}
+                      </text>
+                    </box>
+                    <box
+                      width={22}
+                      onMouseDown={() => toggleSort("folder")}
+                    >
+                      <text fg={theme.textMuted}>
+                        Parent{sortColumn() === "folder" ? (sortDir() === "asc" ? " ↑" : " ↓") : ""}
+                      </text>
+                    </box>
+                    <box
+                      width={12}
+                      onMouseDown={() => toggleSort("status")}
+                    >
+                      <text fg={theme.textMuted}>
+                        Status{sortColumn() === "status" ? (sortDir() === "asc" ? " ↑" : " ↓") : ""}
+                      </text>
+                    </box>
+                    <box
+                      width={10}
+                      onMouseDown={() => toggleSort("version")}
+                    >
+                      <text fg={theme.textMuted}>
+                        Version{sortColumn() === "version" ? (sortDir() === "asc" ? " ↑" : " ↓") : ""}
+                      </text>
+                    </box>
+                    <box
+                      width={18}
+                      onMouseDown={() => toggleSort("accessed")}
+                    >
+                      <text fg={theme.textMuted}>
+                        Accessed{sortColumn() === "accessed" ? (sortDir() === "asc" ? " ↑" : " ↓") : ""}
+                      </text>
+                    </box>
                   </box>
-                )}
-              </For>
+
+                  {/* ── table rows ── */}
+                  <Show when={rows().length === 0}>
+                    <text fg={theme.textMuted}>No registered workspaces.</text>
+                  </Show>
+                  <For each={sortedSelectRows()}>
+                    {(row, index) => {
+                      const active = () => selected() === index()
+                      return (
+                        <box
+                          paddingLeft={1}
+                          paddingRight={1}
+                          backgroundColor={active() ? theme.backgroundElement : index() % 2 === 0 ? theme.backgroundPanel : "transparent"}
+                          border={["left"]}
+                          borderColor={active() ? theme.borderActive : theme.border}
+                          flexDirection="row"
+                          gap={1}
+                          onMouseOver={() => setSelected(index())}
+                          onMouseDown={() => { setSelected(index()); void pickWorkspace(row.path) }}
+                        >
+                          <text fg={theme.text} width={28}>
+                            <span style={{ bold: active() }}>{row.name}</span>
+                          </text>
+                          <text fg={theme.textMuted} width={22}>
+                            {truncatePathTail(row.parentFolder, 20)}
+                          </text>
+                          <text fg={theme.textMuted} width={12}>
+                            {setupStatusLabel(row.status)}
+                          </text>
+                          <text fg={theme.textMuted} width={10}>
+                            v{row.version}{row.needsUpdate ? " ⚠" : ""}
+                          </text>
+                          <text fg={theme.textMuted} width={18}>
+                            {relativeTime(row.lastAccessed)}
+                          </text>
+                        </box>
+                      )
+                    }}
+                  </For>
+                </box>
+              )}
+            </Show>
+
+            {/* ── detached actions ── */}
+            <box height={1} />
+            <box
+              paddingLeft={2}
+              paddingRight={2}
+              paddingTop={1}
+              paddingBottom={1}
+              marginTop={1}
+              backgroundColor={buttonBackground(theme, selected() === sortedSelectRows().length)}
+              border={["left"]}
+              borderColor={buttonBorder(theme, selected() === sortedSelectRows().length, theme.borderActive)}
+              maxWidth={MAIN_CONTENT_MAX_WIDTH}
+              width="100%"
+              onMouseDown={() => { setSelected(sortedSelectRows().length); navigate({ type: "onboarding" }) }}
+              onMouseOver={() => setSelected(sortedSelectRows().length)}
+            >
+              <text fg={buttonText(theme, selected() === sortedSelectRows().length, theme.primary)}>
+                <span style={{ bold: selected() === sortedSelectRows().length }}>+ New workspace</span>
+              </text>
+              <text fg={buttonText(theme, selected() === sortedSelectRows().length, theme.textMuted)}>
+                Create a new Spinosa workspace from a source folder
+              </text>
+            </box>
+            <box
+              paddingLeft={2}
+              paddingRight={2}
+              paddingTop={1}
+              paddingBottom={1}
+              backgroundColor={buttonBackground(theme, selected() === sortedSelectRows().length + 1)}
+              border={["left"]}
+              borderColor={buttonBorder(theme, selected() === sortedSelectRows().length + 1, theme.borderActive)}
+              maxWidth={MAIN_CONTENT_MAX_WIDTH}
+              width="100%"
+              onMouseDown={() => { setSelected(sortedSelectRows().length + 1); spinosa.useGenericMode() }}
+              onMouseOver={() => setSelected(sortedSelectRows().length + 1)}
+            >
+              <text fg={buttonText(theme, selected() === sortedSelectRows().length + 1, theme.text)}>
+                <span style={{ bold: selected() === sortedSelectRows().length + 1 }}>OpenCode only</span>
+              </text>
+              <text fg={buttonText(theme, selected() === sortedSelectRows().length + 1, theme.textMuted)}>
+                Use OpenCode without a Spinosa workspace
+              </text>
             </box>
           </Show>
-
           <box height={1} />
           <Show when={!startupPath()}>
             <text fg={theme.textMuted} attributes={TextAttributes.DIM}>
-              ↑↓ move · enter select · number keys jump · esc back
+              ↑↓ move · enter select · esc back
             </text>
           </Show>
         </Show>

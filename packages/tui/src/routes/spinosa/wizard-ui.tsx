@@ -1,12 +1,15 @@
-import { createSignal, For, onCleanup, onMount, Show } from "solid-js"
+import { createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
+import { TextAttributes } from "@opentui/core"
 import type { Theme } from "../../context/theme"
 import { SplitBorder } from "../../ui/border"
 import { buttonBackground, buttonBorder, buttonText } from "../../util/button"
+import { Locale } from "../../util/locale"
 import type { ImportScanPreview, NewWorkspacePreview } from "../../spinosa/onboarding-preview"
 
 export type ImportOption = {
   ext: string
   count: number
+  bytes: number
   selected: boolean
 }
 
@@ -115,7 +118,7 @@ export function WizardActionButton(props: {
       backgroundColor={buttonBackground(props.theme, active())}
       border={["left"]}
       customBorderChars={SplitBorder.customBorderChars}
-      borderColor={buttonBorder(props.theme, active(), props.primary ? props.theme.primary : props.theme.border)}
+      borderColor={buttonBorder(props.theme, active(), props.primary ? props.theme.success : props.theme.border)}
       onMouseOver={() => {
         props.onHover?.()
         setHover(true)
@@ -123,7 +126,7 @@ export function WizardActionButton(props: {
       onMouseOut={() => setHover(false)}
       onMouseDown={() => deferPress(props.onPress)}
     >
-      <text fg={buttonText(props.theme, active(), props.primary ? props.theme.primary : props.theme.textMuted)}>
+      <text fg={buttonText(props.theme, active(), props.primary ? props.theme.success : props.theme.textMuted)}>
         <span style={{ bold: props.primary || active() }}>{props.label}</span>
       </text>
     </box>
@@ -198,5 +201,38 @@ export function LogoSummary(props: { theme: Theme; label: string }) {
     <text fg={props.theme.text}>
       <span style={{ bold: true }}>{props.label}</span>
     </text>
+  )
+}
+
+export function ProgressBar(props: {
+  theme: Theme
+  current: number
+  total: number
+  status: string
+  fileName: string
+  barWidth?: number
+}) {
+  const total = createMemo(() => (props.total > 0 ? props.total : 1))
+  const pct = createMemo(() => Math.min(props.current / total(), 1))
+  const blocks = () => props.barWidth ?? 20
+  const filled = () => Math.round(pct() * blocks())
+  const bar = () => "█".repeat(filled()) + "░".repeat(blocks() - filled())
+  return (
+    <box flexDirection="column" gap={1} paddingTop={1}>
+      <box flexDirection="row" gap={0} alignItems="center">
+        <text fg={props.theme.text}>
+          {bar()} {Math.round(pct() * 100)}%
+        </text>
+        <text fg={props.theme.textMuted} attributes={TextAttributes.DIM}>
+          {" "}{props.current} of {total()}
+        </text>
+      </box>
+      <Show when={props.status !== ""}>
+        <text fg={props.theme.textMuted} wrapMode="none" overflow="hidden">{Locale.truncate(props.status, 80)}</text>
+      </Show>
+      <Show when={props.fileName !== ""}>
+        <text fg={props.theme.textMuted} attributes={TextAttributes.DIM} wrapMode="none" overflow="hidden">{Locale.truncate(props.fileName, 80)}</text>
+      </Show>
+    </box>
   )
 }
