@@ -26,11 +26,10 @@ afterAll(() => {
 
 describe("E2E: Workspace creation flow", () => {
   test("resolveFrameworkRoot finds the repo root", () => {
-    // This is the function that was broken (double prefix)
     const root = resolveFrameworkRoot()
     expect(root).toBeTruthy()
     // Verify the marker exists at the expected path
-    const marker = path.join(root!, "framework", "spinosa", "framework-files.tsv")
+    const marker = path.join(root!, "workspace-template", ".spinosa", "workspace-files.tsv")
     expect(existsSync(marker)).toBe(true)
   })
 
@@ -52,23 +51,23 @@ describe("E2E: Workspace creation flow", () => {
     const ws = result.workspacePath
     expect(validateWorkspace(ws)).toBe(true)
 
-    // Check new framework paths
-    expect(existsSync(path.join(ws, "framework", "spinosa", "workspace"))).toBe(true)
-    expect(existsSync(path.join(ws, "framework", "spinosa", "manifest.tsv"))).toBe(true)
-    expect(existsSync(path.join(ws, "framework", "AGENTS.md"))).toBe(true)
-    expect(existsSync(path.join(ws, "framework", "startup-prompt.md"))).toBe(true)
+    // Check canonical workspace paths
+    expect(existsSync(path.join(ws, ".spinosa", "workspace"))).toBe(true)
+    expect(existsSync(path.join(ws, "AGENTS.md"))).toBe(true)
+    expect(existsSync(path.join(ws, "startup-prompt.md"))).toBe(true)
+    expect(existsSync(path.join(ws, ".bin", "spinosa"))).toBe(true)
+    expect(existsSync(path.join(ws, ".agents"))).toBe(true)
 
     // Check user-state directories
-    expect(existsSync(path.join(ws, "framework", "raw"))).toBe(true)
-    expect(existsSync(path.join(ws, "framework", "raw", ".gitkeep"))).toBe(true)
-    expect(existsSync(path.join(ws, "framework", "maps"))).toBe(true)
-    expect(existsSync(path.join(ws, "framework", "logs"))).toBe(true)
-    expect(existsSync(path.join(ws, "framework", "agent_reports"))).toBe(true)
-    expect(existsSync(path.join(ws, "framework", "trash"))).toBe(true)
+    expect(existsSync(path.join(ws, "raw"))).toBe(true)
+    expect(existsSync(path.join(ws, "raw", ".gitkeep"))).toBe(true)
+    expect(existsSync(path.join(ws, "maps"))).toBe(true)
+    expect(existsSync(path.join(ws, "logs"))).toBe(true)
+    expect(existsSync(path.join(ws, "agent_reports"))).toBe(true)
+    expect(existsSync(path.join(ws, ".trash"))).toBe(true)
 
-    // Check old paths should NOT exist
-    expect(existsSync(path.join(ws, ".spinosa"))).toBe(false)
-    expect(existsSync(path.join(ws, ".bin"))).toBe(false)
+    // Check deleted legacy workspace layout should NOT exist
+    expect(existsSync(path.join(ws, "framework", "spinosa", "workspace"))).toBe(false)
   })
 
   test("readWorkspaceMeta returns correct metadata", async () => {
@@ -85,7 +84,7 @@ describe("E2E: Workspace creation flow", () => {
 
     const meta = await readWorkspaceMeta(result.workspacePath)
     expect(meta).toBeTruthy()
-    expect(meta!.projectName).toBe("my-project")
+    expect(meta!.projectName).toBe("e2e-meta-test")
     expect(meta!.setupStatus).toBe("not_started")
   })
 

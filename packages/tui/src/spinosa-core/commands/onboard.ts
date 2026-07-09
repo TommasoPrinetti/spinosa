@@ -272,6 +272,8 @@ export async function runOnboarding(
   } else {
     spinosaLogInfo("onboard", "phase=ocr skipped (0 files)")
   }
+
+  return completeOnboarding(ctx, { direct: dr, markitdown: mr, ocr: or }, options)
 }
 
 

@@ -85,6 +85,7 @@ import { destroyRenderer } from "./util/renderer"
 import { cliErrorMessage, errorFormat } from "./util/error"
 import { AddFiles } from "./routes/spinosa/add-files"
 import { Onboarding } from "./routes/spinosa/onboarding"
+import { WorkspacePicker } from "./routes/spinosa/workspace-picker"
 
 const appGlobalBindingCommands = [
   "session.list",
@@ -297,7 +298,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                             }
                                           : input.args.prompt
                                             ? { type: "workspace" }
-                                            : { type: "workspace" }
+                                            : undefined
                                     }
                                   >
                                     <SpinosaWorkspaceProvider>
@@ -1111,6 +1112,9 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         <box flexGrow={1} minHeight={0} flexDirection="column">
           <Show when={route.data.type === "workspace"}>
             <Workspace />
+          </Show>
+          <Show when={route.data.type === "workspace-picker"}>
+            <WorkspacePicker />
           </Show>
           <Show when={route.data.type === "onboarding"}>
             <Onboarding />

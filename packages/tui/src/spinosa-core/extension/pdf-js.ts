@@ -53,7 +53,7 @@ export async function pdfRenderPageToPng(pdfPath: string, pageNumber: number, dp
   const viewport = pg.getViewport({ scale: dpi / 72 })
   const canvas = createCanvas(viewport.width, viewport.height)
   const ctx = canvas.getContext("2d")
-  await pg.render({ canvasContext: ctx, viewport }).promise
+  await pg.render({ canvasContext: ctx as unknown as CanvasRenderingContext2D, viewport }).promise
   return canvas.toBuffer("image/png")
 }
 

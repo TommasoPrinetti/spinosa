@@ -1,10 +1,10 @@
 import { existsSync, mkdirSync, writeFileSync, readFileSync } from "node:fs"
 import path from "node:path"
-import { spawnSync } from "node:child_process"
 import { copyDirContents, cleanMacMetadata } from "../utils/fs"
 import { registerWorkspace, writeSetupFiles } from "../workspace/registry"
 import { writeWorkspaceStatus } from "../workspace/meta"
 import { spinosaLogInfo } from "../utils/log"
+import { resolveTemplateRootFromFrameworkRoot } from "../framework/discovery"
 
 export interface CreateWorkspaceOptions {
   corpusPath: string
@@ -58,21 +58,14 @@ export async function createWorkspace(options: CreateWorkspaceOptions): Promise<
   mkdirSync(path.join(workspacePath, ".spinosa"), { recursive: true })
 
   // ── Step 1: Copy workspace-template/ → workspace root ───────────────
-  const srcTemplate = path.join(frameworkRoot, "workspace-template")
-  if (!existsSync(srcTemplate)) {
+  const srcTemplate = resolveTemplateRootFromFrameworkRoot(frameworkRoot)
+  if (!srcTemplate || !existsSync(srcTemplate)) {
     return { workspacePath, projectName, success: false }
   }
   progress("Copying workspace template...")
   copyDirContents(srcTemplate, workspacePath)
 
   cleanMacMetadata(workspacePath)
-
-  // ── Step 2: Run sync-agents to generate .codex, .opencode, .claude, .hermes ──
-  progress("Syncing vendor agent folders...")
-  const syncAgents = path.join(workspacePath, ".bin", "sync-agents.sh")
-  if (existsSync(syncAgents)) {
-    spawnSync("bash", [syncAgents], { stdio: "ignore" })
-  }
 
   // ── Step 3: Create user-state directories (with .gitkeep) ──────────
   progress("Creating user-state directories...")

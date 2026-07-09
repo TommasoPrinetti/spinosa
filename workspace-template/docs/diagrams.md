@@ -159,7 +159,7 @@ flowchart TB
         MIRRORS[.opencode/ .claude/ .codex/\nvendor agent + skill mirrors]
         HERMES[.hermes/\nskills + references mirror]
         REF[.agents/references/\ntemplates + classification]
-        FILES[.spinosa/framework-files.tsv\nfile manifest]
+        FILES[workspace-template/.spinosa/workspace-files.tsv\nfile manifest]
     end
 
     subgraph UserState ["User state (per workspace)"]

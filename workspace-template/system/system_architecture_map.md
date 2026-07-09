@@ -83,7 +83,7 @@ Answer report (agent_reports/NN_*.md)
 ## File Layers
 
 ```txt
-Framework (template — always_replace / replace_if_unmodified via framework-files.tsv):
+Framework (template — always_replace / replace_if_unmodified via workspace-files.tsv):
   AGENTS.md, startup-prompt.md, .agents/, .bin/, docs/, system/templates
 
 User state (per workspace — never_replace):

@@ -13,17 +13,11 @@ jobs:
       - uses: actions/checkout@v4
       - name: Shell syntax check
         run: |
-          for f in framework/bin/spinosa framework/bin/*.sh framework/bin/lib/spinosa/*.sh install.sh; do bash -n "$f"; done
-      - name: Startup contract check
-        run: bash framework/bin/check-startup.sh
-      - name: Doc contract check
-        run: bash framework/bin/check-doc-contract.sh
-      - name: Skill validation
-        run: bash framework/bin/validate-skills.sh
+          for f in workspace-template/.bin/spinosa install.sh; do bash -n "$f"; done
       - name: Manifest integrity
         run: |
-          test -f framework/spinosa/framework-files.tsv
-          test -f RELEASE_GUIDE.md
+          test -f workspace-template/.spinosa/workspace-files.tsv
+          test -f workspace-template/.bin/spinosa
 
   typecheck:
     runs-on: ubuntu-latest
@@ -39,4 +33,5 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-bun
       - name: Run tests
-        run: bun test --filter './packages/spinosa-core' --filter './packages/tui'
+        run: bun test test/spinosa
+        working-directory: packages/tui

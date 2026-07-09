@@ -6,7 +6,7 @@ import { useTheme } from "../../context/theme"
 import { useRoute } from "../../context/route"
 import { Logo } from "../../component/logo"
 import { usePluginRuntime } from "../../plugin/runtime"
-import { OPENCODE_BASE_MODE, useOpencodeKeymap, useOpencodeModeStack } from "../../keymap"
+import { useOpencodeKeymap, useOpencodeModeStack } from "../../keymap"
 import { Toast } from "../../ui/toast"
 import { CenteredColumn } from "../../component/centered-column"
 import { MAIN_CONTENT_MAX_WIDTH, SESSION_CHAT_MAX_WIDTH } from "../../util/layout"
@@ -20,7 +20,7 @@ import {
   workspaceNeedsFrameworkUpdate,
   writeWorkspaceFrameworkVersion,
 } from "../../spinosa/service"
-import { updateWorkspace } from "../../spinosa-core/commands/update"
+import { updateWorkspace as updateWorkspaceFiles } from "../../spinosa-core/commands/update"
 import { resolveFrameworkRoot } from "../../spinosa-core/framework/discovery"
 import { setupStatusLabel } from "../../spinosa/status-labels"
 import type { SpinosaSetupStatus } from "../../spinosa/types"
@@ -108,12 +108,16 @@ function getLastAccessed(workspacePath: string): number {
   }
 }
 
+function isConfirmKey(name: string): boolean {
+  return name === "return" || name === "enter"
+}
+
 export function WorkspacePicker() {
   const { theme } = useTheme()
   const { navigate } = useRoute()
   const pluginRuntime = usePluginRuntime()
   const keymap = useOpencodeKeymap()
-  const modeStack = useOpencodeModeStack()
+  useOpencodeModeStack()
   const spinosa = useSpinosaWorkspace()
 
   const [step, setStep] = createSignal<PickerStep>("home")
@@ -221,7 +225,7 @@ export function WorkspacePicker() {
           break
       }
       return dir === "desc" ? -cmp : cmp
-    })
+    }, { priority: 10 })
     return sorted
   })
 
@@ -268,13 +272,13 @@ export function WorkspacePicker() {
     }
   }
 
-  const updateWorkspace = async (wsPath: string) => {
+  const updateSelectedWorkspace = async (wsPath: string) => {
     if (updating()) return
     setUpdating(wsPath)
     setUpdateLabel("Starting…")
     try {
       const fwRoot = resolveFrameworkRoot()
-      const result = await updateWorkspace({
+      const result = await updateWorkspaceFiles({
         workspacePath: wsPath,
         frameworkRoot: fwRoot ?? "",
         onPhase: (_phase, detail) => {
@@ -304,7 +308,7 @@ export function WorkspacePicker() {
       const fwRoot = resolveFrameworkRoot()
       for (const [index, row] of rows.entries()) {
         const prefix = `${index + 1}/${rows.length} ${row.name}`
-        const result = await updateWorkspace({
+        const result = await updateWorkspaceFiles({
           workspacePath: row.path,
           frameworkRoot: fwRoot ?? "",
           onPhase: (_phase, detail) => {
@@ -398,7 +402,7 @@ export function WorkspacePicker() {
       run: () => {
         const row = selectedManagerRow()
         if (!row) return
-        void updateWorkspace(row.path)
+        void updateSelectedWorkspace(row.path)
       },
     },
     {
@@ -469,8 +473,6 @@ export function WorkspacePicker() {
 
   onMount(() => {
     const off = keymap.intercept("key", ({ event, consume }) => {
-      if (modeStack.current() !== OPENCODE_BASE_MODE) return
-
       if (step() === "home") {
         const list = homeOptions()
         if (event.name === "up" || event.name === "k") {
@@ -481,7 +483,7 @@ export function WorkspacePicker() {
           setSelected((v) => Math.min(list.length - 1, v + 1))
           consume(); return
         }
-        if (event.name === "return") {
+        if (isConfirmKey(event.name)) {
           runSelected()
           consume(); return
         }
@@ -502,7 +504,7 @@ export function WorkspacePicker() {
           setStartupSelected((v) => Math.min(1, v + 1))
           consume(); return
         }
-        if (event.name === "return") {
+        if (isConfirmKey(event.name)) {
           if (startupSelected() === 0) void launchStartupInChat()
           else void openChatDirectly()
           consume(); return
@@ -524,6 +526,11 @@ export function WorkspacePicker() {
 
       if (step() === "select") {
         const maxIdx = selectNavCount() - 1
+        if (/^[1-9]$/.test(event.name)) {
+          const row = sortedSelectRows()[Number.parseInt(event.name, 10) - 1]
+          if (row) void pickWorkspace(row.path)
+          consume(); return
+        }
         if (event.name === "up" || event.name === "k") {
           setSelected((v) => Math.max(0, v - 1))
           consume(); return
@@ -532,7 +539,7 @@ export function WorkspacePicker() {
           setSelected((v) => Math.min(maxIdx, v + 1))
           consume(); return
         }
-        if (event.name === "return") {
+        if (isConfirmKey(event.name)) {
           runSelect()
           consume(); return
         }
@@ -576,7 +583,7 @@ export function WorkspacePicker() {
         }
         if (event.name === "u") {
           const row = selectedManagerRow()
-          if (row) void updateWorkspace(row.path)
+          if (row) void updateSelectedWorkspace(row.path)
           consume(); return
         }
         if (event.name === "d") {
@@ -584,7 +591,7 @@ export function WorkspacePicker() {
           if (row) void deleteWorkspace(row.path)
           consume(); return
         }
-        if (event.name === "return") {
+        if (isConfirmKey(event.name)) {
           if (managerFocus() === "actions") {
             const action = actions[managerAction()]
             if (action && !action.disabled) void action.run()
@@ -872,7 +879,7 @@ export function WorkspacePicker() {
           <box height={1} />
           <Show when={!startupPath()}>
             <text fg={theme.textMuted} attributes={TextAttributes.DIM}>
-              ↑↓ move · enter select · esc back
+              ↑↓ move · 1-9 open · enter select · esc back
             </text>
           </Show>
         </Show>

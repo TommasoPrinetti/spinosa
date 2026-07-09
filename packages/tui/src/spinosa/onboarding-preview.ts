@@ -70,6 +70,7 @@ async function scanByExtension(sourcePath: string): Promise<{
         continue
       }
       if (!st.isFile()) continue
+      totals.total++
       if (shouldSkipSourceFile(fullPath)) { totals.ignored++; continue }
       const ext = fileExt(fullPath)
       try {
@@ -88,7 +89,7 @@ async function scanByExtension(sourcePath: string): Promise<{
         totals.unknown++; continue
       }
       const existing = extMap.get(ext)
-      if (existing) { existing.count++ }
+      if (existing) { existing.count++; existing.bytes += st.size }
       else { extMap.set(ext, { ext, count: 1, bytes: st.size }) }
     }
   }

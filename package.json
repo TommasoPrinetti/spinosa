@@ -8,7 +8,6 @@
   "scripts": {
     "dev": "bun run --cwd packages/opencode --conditions=browser src/index.ts",
     "postinstall": "bun run --cwd packages/core fix-node-pty",
-    "sync-agents": "echo 'sync-agents removed — agent dirs pre-baked in workspace-template'",
     "typecheck": "bun run --cwd packages/core typecheck && bun run --cwd packages/sdk typecheck && bun run --cwd packages/tui typecheck && bun run --cwd packages/opencode typecheck"
   },
   "workspaces": {

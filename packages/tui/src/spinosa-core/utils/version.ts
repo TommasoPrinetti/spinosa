@@ -94,5 +94,7 @@ export function resolveBundledFrameworkVersion(
 ): string | undefined {
   const metadata = metadataVersion?.trim()
   if (metadata && metadata !== "dev") return metadata
-  return parseInstallPinnedVersion(installScript)
+  const pinned = parseInstallPinnedVersion(installScript)
+  if (pinned === "__VERSION__") return "dev"
+  return pinned
 }

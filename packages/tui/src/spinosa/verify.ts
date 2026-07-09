@@ -86,8 +86,8 @@ export async function runSpinosaMaturityChecks(fixturePath = fixtureWorkspacePat
   const modules = [
     "orchestrator.ts",
     "route-recovery.ts",
-    "goal-artifact.ts",
     "workspace-bind.tsx",
+    "../spinosa-core/artifacts/goal.ts",
   ]
   for (const file of modules) {
     const full = path.resolve(path.dirname(fileURLToPath(import.meta.url)), file)

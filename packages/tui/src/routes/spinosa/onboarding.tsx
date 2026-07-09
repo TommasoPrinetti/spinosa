@@ -994,6 +994,8 @@ let nameInput: TextareaRenderable | undefined
     })
     onCleanup(() => {
       clearInterval(autoAddTimer)
+      clearInterval(validateTimer)
+      clearInterval(nameSyncTimer)
       stopActiveWork()
       off()
     })

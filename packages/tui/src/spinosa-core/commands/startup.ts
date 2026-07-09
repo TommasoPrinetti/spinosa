@@ -25,13 +25,14 @@ export interface AddResult {
 export async function generateStartupPrompt(
   projectTitle: string,
   root: string,
-  sourcePath: string | undefined,
+  _sourcePath: string | undefined,
   preferredCli: string,
   frameworkRoot: string,
 ): Promise<string> {
   let prompt = ""
 
-  const templateFile = Bun.file(path.join(frameworkRoot, "startup-prompt.md"))
+  const templateRoot = resolveTemplateRoot(frameworkRoot)
+  const templateFile = Bun.file(path.join(templateRoot, "startup-prompt.md"))
   if (await templateFile.exists()) {
     prompt = await templateFile.text()
   }
@@ -40,7 +41,7 @@ export async function generateStartupPrompt(
   prompt += `- **Project title:** ${projectTitle}\n`
   prompt += `- **Workspace root:** ${root}\n`
   prompt += `- **Preferred CLI:** ${preferredCli}\n`
-  prompt += `- **Onboarding summary:** framework/spinosa/onboarding-summary.md\n\n`
+  prompt += `- **Onboarding summary:** .spinosa/onboarding-summary.md\n\n`
   prompt += `## Corpus Boundary\n\n`
   prompt += `- Treat raw/ as the only source corpus.\n`
   prompt += `- Do not inspect, validate, mention, or rely on the original import folder.\n`
@@ -81,7 +82,7 @@ Read these files first, in this order:
 4. startup-prompt.md (for extraction format and map structure reference)
 5. system/dictionary.md
 6. system/workspace_index.md
-7. framework/spinosa/add-summary.md
+7. .spinosa/add-summary.md
 
 Tasks to perform:
 
@@ -99,7 +100,7 @@ Tasks to perform:
    - Update theme maps with cross-cutting concepts from the new files.
 7. Update system/workspace_index.md to reflect the expanded corpus.
 8. Run spinosa-verifier on new content to truth-check claims and passages.
-9. Run framework/bin/check-startup.sh to validate workspace integrity.
+9. Run the built-in Spinosa verifier or TUI health checks to validate workspace integrity.
 
 Corpus boundary:
 - Treat raw/ as the only source corpus.
@@ -115,6 +116,11 @@ Finished means:
 
 Do not re-index files that are already mapped. Only process additions.
 `
+}
+
+function resolveTemplateRoot(frameworkRoot: string): string {
+  const nested = path.join(frameworkRoot, "workspace-template")
+  return existsSync(path.join(nested, ".spinosa", "workspace-files.tsv")) ? nested : frameworkRoot
 }
 
 async function readDirRecursive(dirPath: string): Promise<string[]> {

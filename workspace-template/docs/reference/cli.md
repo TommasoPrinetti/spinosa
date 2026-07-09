@@ -75,7 +75,7 @@ Sync **workspace framework files** to match the installed CLI version.
 - Overwrites release-managed workspace files from the installed framework
 - Preserves user-state paths such as `raw/`, `system/context.md`, `system/dictionary.md`, and `.spinosa/memory/orchestrator-notes.md`
 - Removes retired or no-longer-managed framework files recorded in the workspace manifest
-- Regenerates vendor mirrors via `.bin/sync-agents.sh` (`.opencode/`, `.claude/`, `.codex/`, `.hermes/skills/`, etc.)
+- Keeps pre-baked vendor mirrors current from `workspace-template/` (`.opencode/`, `.claude/`, `.codex/`, `.hermes/skills/`, etc.)
 - Blocked if installed CLI is **older** than the workspace declares — run `spinosa upgrade` first
 
 Examples:

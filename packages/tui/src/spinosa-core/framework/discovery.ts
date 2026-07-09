@@ -1,6 +1,6 @@
 import { comparePrereleaseTokens } from "../utils/version"
 
-import { existsSync, readFileSync, readdirSync } from "node:fs"
+import { existsSync, readFileSync, readdirSync, realpathSync } from "node:fs"
 import { homedir } from "node:os"
 import path from "node:path"
 
@@ -15,6 +15,21 @@ export function hasFrameworkMarker(root: string): boolean {
   return existsSync(path.join(root, MARKER))
       || existsSync(path.join(root, LEGACY_MARKER))
       || existsSync(path.join(root, ANCIENT_MARKER))
+}
+
+function normalizeExistingRoot(root: string): string {
+  try {
+    return realpathSync(root)
+  } catch {
+    return root
+  }
+}
+
+export function resolveTemplateRootFromFrameworkRoot(root: string): string | undefined {
+  const nested = path.join(root, "workspace-template")
+  if (existsSync(path.join(nested, ".spinosa", "workspace-files.tsv"))) return nested
+  if (existsSync(path.join(root, ".spinosa", "workspace-files.tsv"))) return root
+  return undefined
 }
 function compareFrameworkVersions(a: string, b: string): number {
   const parse = (v: string) => {
@@ -65,8 +80,8 @@ function discoverInstalledFramework(): string | undefined {
 }
 
 export function resolveFrameworkRoot(): string | undefined {
-  const env = process.env.SPINOSA_TEMPLATE_ROOT
-  if (env && hasFrameworkMarker(env)) return env
+  const env = process.env.SPINOSA_TEMPLATE_ROOT ?? process.env.SPINOSA_FRAMEWORK_ROOT
+  if (env && hasFrameworkMarker(env)) return normalizeExistingRoot(env)
 
   const candidates = [
     process.cwd(),
@@ -77,23 +92,30 @@ export function resolveFrameworkRoot(): string | undefined {
   if (installed) candidates.push(installed)
 
   for (const candidate of candidates) {
-    if (hasFrameworkMarker(candidate)) return candidate
+    if (hasFrameworkMarker(candidate)) return normalizeExistingRoot(candidate)
   }
   return undefined
 }
 export function resolveFrameworkBin(): string | undefined {
   const root = resolveFrameworkRoot()
   if (!root) return undefined
-  const bin = path.join(root, "workspace-template", ".bin", "spinosa")
+  const templateRoot = resolveTemplateRootFromFrameworkRoot(root)
+  if (!templateRoot) return undefined
+  const bin = path.join(templateRoot, ".bin", "spinosa")
   return existsSync(bin) ? bin : undefined
 }
 
 export async function readFrameworkFile(relativePath: string): Promise<string | undefined> {
   const root = resolveFrameworkRoot()
   if (!root) return undefined
-  const file = Bun.file(path.join(root, relativePath))
-  if (!(await file.exists())) return undefined
-  return file.text()
+  const directFile = Bun.file(path.join(root, relativePath))
+  if (await directFile.exists()) return directFile.text()
+
+  const templateRoot = resolveTemplateRootFromFrameworkRoot(root)
+  if (!templateRoot) return undefined
+  const templateFile = Bun.file(path.join(templateRoot, relativePath))
+  if (!(await templateFile.exists())) return undefined
+  return templateFile.text()
 }
 
 export function installedReleaseVersion(frameworkRoot: string | undefined): string {

@@ -4,6 +4,14 @@ import path from "node:path"
 import { resolveWorkspaceDisplayName } from "../workspace-name"
 import type { SpinosaRegisteredWorkspace } from "../types"
 
+function spinosaHome(): string {
+  return process.env.SPINOSA_HOME ?? path.join(homedir(), ".spinosa")
+}
+
+function metadataPath(...segments: string[]): string {
+  return path.join(spinosaHome(), "metadata", ...segments)
+}
+
 export function registryEscape(value: string): string {
   return value.replace(/%/g, "%25").replace(/\|/g, "%7C")
 }
@@ -13,7 +21,7 @@ export function registryUnescape(value: string): string {
 }
 
 export function ensureGlobalMetadata(): void {
-  const metadataDir = path.join(homedir(), ".spinosa", "metadata")
+  const metadataDir = metadataPath()
   mkdirSync(metadataDir, { recursive: true })
 
   const configPath = path.join(metadataDir, "config.yaml")
@@ -23,18 +31,21 @@ export function ensureGlobalMetadata(): void {
 }
 
 export async function loadRegistry(configPath?: string): Promise<{ path: string; project: string }[]> {
-  const registry = configPath ?? path.join(homedir(), ".spinosa", "metadata", "workspaces.txt")
+  const registry = configPath ?? metadataPath("workspaces.txt")
   const file = Bun.file(registry)
   if (!(await file.exists())) return []
 
   const lines = (await file.text()).split(/\r?\n/).filter(Boolean)
   const results: { path: string; project: string }[] = []
+  const seen = new Set<string>()
 
   for (const line of lines) {
     const [rawPath, rawProject] = line.split("|")
     if (!rawPath) continue
     const workspacePath = registryUnescape(rawPath)
     if (!existsSync(path.join(workspacePath, ".spinosa", "workspace"))) continue
+    if (seen.has(workspacePath)) continue
+    seen.add(workspacePath)
     results.push({
       path: workspacePath,
       project: registryUnescape(rawProject ?? ""),
@@ -45,7 +56,7 @@ export async function loadRegistry(configPath?: string): Promise<{ path: string;
 }
 
 export async function registerWorkspace(workspacePath: string, project: string): Promise<void> {
-  const registry = path.join(homedir(), ".spinosa", "metadata", "workspaces.txt")
+  const registry = metadataPath("workspaces.txt")
   const encodedPath = registryEscape(workspacePath)
   const encodedProject = registryEscape(project)
 
@@ -69,7 +80,7 @@ export async function registerWorkspace(workspacePath: string, project: string):
 }
 
 export async function unregisterWorkspace(workspacePath: string): Promise<void> {
-  const registry = path.join(homedir(), ".spinosa", "metadata", "workspaces.txt")
+  const registry = metadataPath("workspaces.txt")
   const file = Bun.file(registry)
   if (!(await file.exists())) return
 
@@ -142,14 +153,14 @@ function walkWorkspaceMarker(dir: string, depth: number, seen: Set<string>, resu
 export async function discoverRegisteredWorkspaces(): Promise<string[]> {
   ensureGlobalMetadata()
 
-  const registryPath = path.join(homedir(), ".spinosa", "metadata", "workspaces.txt")
+  const registryPath = metadataPath("workspaces.txt")
   const registryFile = Bun.file(registryPath)
   if (await registryFile.exists()) {
     const entries = await loadRegistry(registryPath)
     if (entries.length > 0) return entries.map((e) => e.path)
   }
 
-  const cachePath = path.join(homedir(), ".spinosa", "metadata", "workspace_cache.txt")
+  const cachePath = metadataPath("workspace_cache.txt")
   const cacheFile = Bun.file(cachePath)
   if (await cacheFile.exists()) {
     const text = await cacheFile.text()

@@ -5,15 +5,13 @@ import {
   statSync,
   writeFileSync,
   rmSync,
-  readdirSync,
-  renameSync,
 } from "node:fs"
 import { createHash } from "node:crypto"
 import path from "node:path"
-import { spawnSync } from "node:child_process"
 import { safeCopy, copyDirContents, cleanMacMetadata, isCloudStoragePath } from "../utils/fs"
 import { compareFrameworkVersions } from "../utils/version"
 import { writeWorkspaceFrameworkVersion } from "../workspace/meta"
+import { spinosaLogInfo } from "../utils/log"
 
 export interface UpdateOptions {
   workspacePath: string
@@ -53,6 +51,7 @@ function readFrameworkFilesTsv(tsvPath: string): FrameworkEntry[] {
     const filePath = parts[0] ?? ""
     const role = parts[1] ?? ""
     const policy = parts[2] ?? ""
+    if (filePath === "path" && role === "role") continue
     if (role && !role.startsWith("#")) {
       entries.push({ path: filePath, role, policy })
     }
@@ -74,28 +73,17 @@ function readWorkspaceManifest(manifestPath: string): ManifestEntry[] {
   return entries
 }
 
-function readRetiredFilesTsv(tsvPath: string): string[] {
-  if (!existsSync(tsvPath)) return []
-  const content = readFileSync(tsvPath, "utf-8")
-  const paths: string[] = []
-  for (const line of content.split("\n")) {
-    const trimmed = line.trim()
-    if (!trimmed) continue
-    const parts = trimmed.split("\t")
-    const relPath = parts[0] ?? ""
-    if (relPath && relPath !== "path") {
-      paths.push(relPath)
-    }
-  }
-  return paths
-}
-
 function frameworkVersion(root: string): string {
   const versionPath = path.join(root, "metadata", "version")
   if (existsSync(versionPath)) {
     return readFileSync(versionPath, "utf-8").trim()
   }
   return "dev"
+}
+
+function templateRoot(root: string): string {
+  const nested = path.join(root, "workspace-template")
+  return existsSync(path.join(nested, ".spinosa", "workspace-files.tsv")) ? nested : root
 }
 
 function readWorkspaceFrameworkVersion(workspacePath: string): string | undefined {
@@ -123,45 +111,9 @@ function filesMatch(a: string, b: string): boolean {
   }
 }
 
-function shouldSyncAgentMirrors(changedPaths: string[]): boolean {
-  for (const p of changedPaths) {
-    if (p === "AGENTS.md" || p.startsWith("framework/agents/")) return true
-  }
-  return false
-}
+// ── Template checksum tracking (replace_if_unmodified enforcement) ─────────
 
-function migrateLegacyLogs(workspacePath: string): void {
-  const logsDir = path.join(workspacePath, "logs")
-  const dotLogsDir = path.join(workspacePath, ".logs")
-  if (!existsSync(logsDir)) return
-
-  if (!existsSync(dotLogsDir)) {
-    mkdirSync(dotLogsDir, { recursive: true })
-  }
-  for (const entry of readdirSync(logsDir)) {
-    const src = path.join(logsDir, entry)
-    const dst = path.join(dotLogsDir, entry)
-    if (!existsSync(dst)) {
-      try { renameSync(src, dst) } catch { /* best effort */ }
-    }
-  }
-}
-
-function finalizeLegacyLogs(workspacePath: string): void {
-  const logsDir = path.join(workspacePath, "logs")
-  if (!existsSync(logsDir)) return
-  try {
-    const remaining = readdirSync(logsDir)
-    const filtered = remaining.filter((n) => n !== ".DS_Store" && !n.startsWith("._"))
-    if (filtered.length === 0) {
-      rmSync(logsDir, { force: true, recursive: true })
-    }
-  } catch { /* best effort */ }
-}
-
-// ── Framework checksum tracking (replace_if_unmodified enforcement) ─────────
-
-const CHECKSUMS_RELPATH = "framework/spinosa/framework-checksums.json"
+const CHECKSUMS_RELPATH = ".spinosa/framework-checksums.json"
 
 interface FrameworkChecksums {
   [relativePath: string]: string
@@ -193,8 +145,8 @@ export async function updateWorkspace(options: UpdateOptions): Promise<UpdateRes
   const phase = onPhase ?? ((_p: string, _d: string) => {})
   spinosaLogInfo("update", `workspacePath=${workspacePath} dryRun=${dryRun}`)
 
-  const fwManifestPath = path.join(frameworkRoot, ".spinosa", "framework-files.tsv")
-  const retiredManifestPath = path.join(frameworkRoot, ".spinosa", "retired-framework-files.tsv")
+  const sourceTemplateRoot = templateRoot(frameworkRoot)
+  const fwManifestPath = path.join(sourceTemplateRoot, ".spinosa", "workspace-files.tsv")
   const wsManifestPath = path.join(workspacePath, ".spinosa", "manifest.tsv")
 
   if (!existsSync(fwManifestPath)) {
@@ -203,7 +155,6 @@ export async function updateWorkspace(options: UpdateOptions): Promise<UpdateRes
 
   const fwEntries = readFrameworkFilesTsv(fwManifestPath)
   const wsManifest = readWorkspaceManifest(wsManifestPath)
-  const retiredPaths = readRetiredFilesTsv(retiredManifestPath)
 
   const installedVersion = frameworkVersion(frameworkRoot)
   const workspaceVersion = readWorkspaceFrameworkVersion(workspacePath)
@@ -235,21 +186,15 @@ export async function updateWorkspace(options: UpdateOptions): Promise<UpdateRes
   let removed = 0
   let skipped = 0
 
-  // Phase 0: migrate legacy logs/ → .logs/
-  phase("0", "Migrate legacy logs to .logs")
-  if (!dryRun) {
-    migrateLegacyLogs(workspacePath)
-  }
-
-  // Phase 1-2: ADD + REPLACE from framework-files.tsv
-  phase("1", `Process ${fwEntries.length} framework paths`)
+  // Phase 1-2: ADD + REPLACE from workspace-files.tsv
+  phase("1", `Process ${fwEntries.length} template paths`)
   for (const entry of fwEntries) {
     if (entry.policy === "never_replace" || entry.policy === "exclude_from_update") {
       skipped++
       continue
     }
 
-    const src = path.join(frameworkRoot, entry.path)
+    const src = path.join(sourceTemplateRoot, entry.path)
     const dst = path.join(workspacePath, entry.path)
 
     if (!existsSync(src)) {
@@ -339,28 +284,6 @@ export async function updateWorkspace(options: UpdateOptions): Promise<UpdateRes
     }
   }
 
-  // Phase 4: remove retired framework files
-  phase("4", "Remove retired framework files")
-  for (const relPath of retiredPaths) {
-    const target = path.join(workspacePath, relPath)
-    if (!existsSync(target)) continue
-
-    if (dryRun) {
-      removed++
-    } else {
-      try {
-        rmSync(target, { force: true, recursive: true })
-        removed++
-      } catch { /* best effort */ }
-    }
-  }
-
-  // Phase 5: finalize logs migration
-  phase("5", "Finalize legacy logs cleanup")
-  if (!dryRun) {
-    finalizeLegacyLogs(workspacePath)
-  }
-
   // Regenerate manifest.tsv
   phase("5", "Regenerate manifest")
   if (!dryRun) {
@@ -387,16 +310,7 @@ export async function updateWorkspace(options: UpdateOptions): Promise<UpdateRes
     cleanMacMetadata(workspacePath)
   }
 
-  // Sync agent mirrors if AGENTS.md or framework/agents/ changed
-  if (!dryRun && shouldSyncAgentMirrors(changedPaths)) {
-    const syncScript = path.join(workspacePath, "framework", "bin", "sync-agents.sh")
-    if (existsSync(syncScript)) {
-      phase("5", "Sync agent mirrors")
-      spawnSync("bash", [syncScript], { stdio: "ignore" })
-    }
-  }
-
-  // ── Generate framework file checksums (for next update's replace_if_unmodified) ──
+  // ── Generate template file checksums (for next update's replace_if_unmodified) ──
   if (!dryRun) {
     phase("5", "Record file checksums")
     const newChecksums: FrameworkChecksums = {}

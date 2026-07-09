@@ -18,7 +18,6 @@ const HOME = homedir()
 
 const TCC_SKIP_DIRS: string[] = [
   "/System",
-  "/private",
   ...(HOME ? [`${HOME}/Music`] : []),
   ...(HOME ? [`${HOME}/Library/Calendar`] : []),
   ...(HOME ? [`${HOME}/Library/Calendars`] : []),

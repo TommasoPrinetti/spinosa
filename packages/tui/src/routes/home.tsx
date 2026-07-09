@@ -24,6 +24,7 @@ import { OPENCODE_BASE_MODE, useOpencodeKeymap, useOpencodeModeStack } from "../
 import { readBundledFrameworkVersion, compareFrameworkVersions, isPrereleaseFrameworkVersion } from "../spinosa/service"
 import { workspaceAsciiBannerText } from "../spinosa/workspace-name"
 import { upgradeFramework } from "../spinosa-core/commands/upgrade"
+import { resolveReleaseVersionForChannel, type ReleaseChannel } from "../spinosa-core/system/channels"
 import { buttonBackground, buttonText } from "../util/button"
 
 let once = false
@@ -123,7 +124,6 @@ export function Home() {
     setUpgrading(true)
     const bv = bundledVersion()
     const channel: ReleaseChannel = bv && isPrereleaseFrameworkVersion(bv) ? "beta" : "stable"
-    const progressMsgs: string[] = []
     try {
       const result = await upgradeFramework({
         channel,
@@ -133,9 +133,9 @@ export function Home() {
         },
       })
       if (result.success) {
-        const wsList = result.workspaceUpgradeNeeded
+        const wsList = result.workspaceUpgradesNeeded
         if (wsList.length > 0) {
-          const wsNames = wsList.map((p) => p.split("/").pop() || p).join(", ")
+          const wsNames = wsList.map((p: string) => p.split("/").pop() || p).join(", ")
           toast.show({
             variant: "success",
             message: `Upgrade complete! ${wsList.length} workspace(s) need updating: ${wsNames}. Run 'spinosa update' to sync them.`,

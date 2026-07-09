@@ -224,7 +224,7 @@ agent: spinosa-evaluator
 input: [goal_artifact_path, all produced artifact paths, verifier outcome, session_id]
 ```
 
-Also run `.bin/check-startup.sh` — canonical automated checker for startup structure, YAML shape, wikilink resolution, and key-passage line references.
+If available, use the Spinosa TUI health checks to validate startup structure, YAML shape, wikilink resolution, and key-passage line references.
 
 ---
 

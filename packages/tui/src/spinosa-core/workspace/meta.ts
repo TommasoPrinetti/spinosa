@@ -113,17 +113,17 @@ export async function writeWorkspaceStatus(workspacePath: string, status: string
 }
 
 export async function readOrchestratorNotes(workspacePath: string): Promise<string | undefined> {
-  return readTextFile(workspacePath, "framework/spinosa/memory/orchestrator-notes.md")
+  return readTextFile(workspacePath, ".spinosa/memory/orchestrator-notes.md")
 }
 
 export async function writeOrchestratorNotes(workspacePath: string, content: string): Promise<void> {
-  const target = path.join(workspacePath, "framework", "spinosa", "memory", "orchestrator-notes.md")
+  const target = path.join(workspacePath, ".spinosa", "memory", "orchestrator-notes.md")
   await Bun.write(target, content)
 }
 
 export async function writePreferredCli(workspacePath: string, cli: string): Promise<void> {
-  const configPath = path.join(workspacePath, "framework", "system", "configuration.md")
-  const text = await readTextFile(workspacePath, "framework/system/configuration.md")
+  const configPath = path.join(workspacePath, "system", "configuration.md")
+  const text = await readTextFile(workspacePath, "system/configuration.md")
   if (!text) return
 
   const updated = text.replace(/^(preferred_llm_cli:\s*).+$/m, `$1${cli}`)
@@ -131,7 +131,7 @@ export async function writePreferredCli(workspacePath: string, cli: string): Pro
 }
 
 export async function readStartupPrompt(workspacePath: string): Promise<string | undefined> {
-  return readTextFile(workspacePath, "framework/startup-prompt.md")
+  return readTextFile(workspacePath, "startup-prompt.md")
 }
 
 export function artifactExists(workspacePath: string, relativePath: string): boolean {
@@ -143,10 +143,10 @@ export function getFrameworkHealth(workspacePath: string): { label: string; ok: 
   const required = [
     "AGENTS.md",
     "startup-prompt.md",
-    "framework/agents/references/classification.md",
-    "framework/agents/references/goal-artifact-template.md",
-    "framework/system/configuration.md",
-    "framework/system/context.md",
+    ".agents/references/classification.md",
+    ".agents/references/goal-artifact-template.md",
+    "system/configuration.md",
+    "system/context.md",
   ]
   for (const relative of required) {
     checks.push({
@@ -159,7 +159,7 @@ export function getFrameworkHealth(workspacePath: string): { label: string; ok: 
     checks.push({
       label: relative,
       ok: existsSync(path.join(workspacePath, relative)),
-      detail: "run framework/bin/sync-agents.sh if missing",
+      detail: "agent mirrors should be pre-baked in workspace-template",
     })
   }
   return checks

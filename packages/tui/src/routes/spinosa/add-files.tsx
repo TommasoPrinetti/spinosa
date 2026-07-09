@@ -401,7 +401,7 @@ export function AddFiles() {
     spinOff()
   }
 
-  const handleToolAction = () => { if (busy()) return
+  const handleToolAction = () => { blurSourceInputs(); if (busy()) return
     const checks = toolChecks()
     const needsRepair = checks.some((t) => t.status === "missing")
     if (needsRepair) {

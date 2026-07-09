@@ -203,4 +203,4 @@ All paths write the same session-scoped artifact filenames declared in the goal 
 
 ## Skills (fallback mode)
 
-If native spawn is unavailable, the orchestrator uses Task-tool spawn or reads a fallback skill file — a SKILL.md containing the same instructions in a self-contained format. Skills mirror the agents they back up and live in `.agents/skills/` (synced to `.hermes/skills/` and other vendor `skills/` dirs by `bash .bin/sync-agents.sh`). Hermes users merge `.hermes/workspace.config.yaml` into `~/.hermes/config.yaml` (sets `skills.external_dirs` and `terminal.cwd`).
+If native spawn is unavailable, the orchestrator uses Task-tool spawn or reads a fallback skill file — a SKILL.md containing the same instructions in a self-contained format. Skills mirror the agents they back up and live in `.agents/skills/`; vendor mirrors under `.hermes/skills/` and other vendor `skills/` dirs are pre-baked in the workspace template. Hermes users merge `.hermes/workspace.config.yaml` into `~/.hermes/config.yaml` (sets `skills.external_dirs` and `terminal.cwd`).

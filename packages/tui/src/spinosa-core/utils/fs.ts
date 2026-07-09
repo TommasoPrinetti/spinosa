@@ -164,7 +164,7 @@ export function copyDirContents(src: string, dest: string): void {
     const fwReal = path.resolve(frameworkRoot)
     if (srcReal === fwReal) {
       throw new Error(
-        "Refusing to copy framework root as a directory; check framework/spinosa/framework-files.tsv for blank or unsafe paths.",
+        "Refusing to copy framework root as a directory; check workspace-template/.spinosa/workspace-files.tsv for blank or unsafe paths.",
       )
     }
   }

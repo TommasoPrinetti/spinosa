@@ -9,6 +9,12 @@ async function renderWorkspaceForRoute(input: {
     useRouteData: () => ({ type: "workspace", sessionID: input.sessionID }),
     useRoute: () => ({ navigate() {} }),
   }))
+  mock.module("../../src/context/kv", () => ({
+    useKV: () => ({
+      get: (_key: string, defaultValue?: unknown) => defaultValue,
+      set() {},
+    }),
+  }))
   mock.module("../../src/spinosa/workspace-bind", () => ({
     SpinosaWorkspaceBinder: () => <text>binder</text>,
   }))

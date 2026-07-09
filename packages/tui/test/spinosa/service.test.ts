@@ -15,7 +15,7 @@ import {
   workspaceNeedsFrameworkUpdate,
   writeWorkspaceFrameworkVersion,
 } from "../../src/spinosa/service"
-import { parseOrchestratorCounter } from "../../src/spinosa/parse-goal"
+import { parseOrchestratorCounter } from "../../src/spinosa-core/artifacts/parser"
 
 const fixture = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "fixtures/workspace-started")
 
@@ -53,7 +53,7 @@ describe("service fixture workspace", () => {
     expect(workspaceNeedsFrameworkUpdate("0.1.0", "0.2.0")).toBe(true)
     expect(workspaceNeedsFrameworkUpdate("0.2.0", "0.2.0")).toBe(false)
     expect(workspaceNeedsFrameworkUpdate("unknown", "0.2.0")).toBe(false)
-    expect(workspaceNeedsFrameworkUpdate("dev", "0.2.0")).toBe(false)
+    expect(workspaceNeedsFrameworkUpdate("dev", "0.2.0")).toBe(true)
   })
 
   test("rewrites the workspace framework version marker", async () => {

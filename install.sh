@@ -454,8 +454,8 @@ _realpath() {
   fi
 }
 
-# SECURITY: Keep in sync with framework/bin/lib/spinosa/core.sh safe_untar().
-# Any change to archive safety checks must be applied to BOTH files.
+# SECURITY: Keep archive safety checks centralized here unless a new runtime
+# extraction path is introduced; if so, keep both implementations in parity.
 safe_untar() {
   local archive="$1" dest="$2"
   shift 2
@@ -688,7 +688,8 @@ version_dir_has_framework() {
   local version="$1"
   local fw_dir="${SPINOSA_HOME}/versions/${version}"
   [ -d "$fw_dir" ] || return 1
-  find "$fw_dir" -maxdepth 1 -type d -name 'spinosa-framework-*' 2>/dev/null | grep -q .
+  [ -f "${fw_dir}/workspace-template/.spinosa/workspace-files.tsv" ] || return 1
+  [ -f "${fw_dir}/workspace-template/.bin/spinosa" ] || return 1
 }
 
 version_install_complete() {
@@ -842,9 +843,8 @@ resolve_version() {
     RELEASE_DOWNLOAD_TAG="$channel"
     info "Latest ${channel} version: ${VERSION}"
   elif [ "$VERSION_EXPLICIT" -eq 1 ]; then
-    # Use channel tag (beta/stable) for the download URL — the release
-    # tag is a moving pointer, not per-version. Per-version tags
-    # (vX.Y.Z) exist for stable releases only.
+    # Explicit versions install from immutable vX.Y.Z source tags; keep the
+    # pinned installer tag for channel metadata and release-age checks.
     RELEASE_DOWNLOAD_TAG="$PINNED_TAG"
   else
     RELEASE_DOWNLOAD_TAG="$PINNED_TAG"
@@ -1015,10 +1015,8 @@ handle_verify_only() {
     die "No Spinosa installation found at ${SPINOSA_HOME}"
   fi
   local fw_dir="${SPINOSA_HOME}/versions/${existing_version}"
-  local fw_subdir
-  fw_subdir="$(find "$fw_dir" -maxdepth 1 -type d -name 'spinosa-framework-*' 2>/dev/null | head -1)" || true
-  if [ -z "$fw_subdir" ]; then
-    die "Could not find installed framework"
+  if ! version_dir_has_framework "$existing_version"; then
+    die "Installed Spinosa v${existing_version} is missing workspace-template files"
   fi
   ok "Verification complete"
   return 0
@@ -1026,11 +1024,10 @@ handle_verify_only() {
 
 handle_dry_run() {
   [ "$DRY_RUN" -eq 1 ] || return 1
-  local base_url="$1"
+  local archive_url="$1"
   local archive_name="$2"
   info "Dry run — would download:"
-  info "  ${base_url}/${archive_name}"
-  info "  ${base_url}/checksums.txt"
+  info "  ${archive_url}"
   info "Would install to: ${SPINOSA_HOME}/versions/${VERSION}/"
   info "Would create shim: ${SPINOSA_BIN_DIR}/spinosa"
   echo ""
@@ -1376,7 +1373,7 @@ main() {
 
   should_install "$VERSION" || { rm -rf "$lockdir"; return 0; }
   handle_verify_only "$SPINOSA_HOME" && { rm -rf "$lockdir"; return 0; }
-  handle_dry_run "$base_url" "$archive_name" && { rm -rf "$lockdir"; return 0; }
+  handle_dry_run "$archive_url" "$archive_name" && { rm -rf "$lockdir"; return 0; }
 
   mkdir -p "${SPINOSA_HOME}/bin"
   mkdir -p "${SPINOSA_BIN_DIR}"

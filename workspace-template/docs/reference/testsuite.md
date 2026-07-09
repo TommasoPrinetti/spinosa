@@ -100,35 +100,24 @@ export RLWRAP_EXEC=1                # skip rlwrap re-exec in scripts
 
 ## Phase A — Automated gate (blocking)
 
-Run from repo root **before** `publish-release.sh`:
+Run from repo root before pushing a release tag:
 
 ```bash
 cd /path/to/spinosa-main
 
 # Syntax
 bash -n install.sh
-bash -n .bin/spinosa
-bash -n .bin/package-release.sh
-bash -n .bin/publish-release.sh
+bash -n workspace-template/.bin/spinosa
 
-# Contract / hygiene
-bash .bin/check-startup.sh
-bash .bin/check-doc-contract.sh
-bash .bin/validate-skills.sh
-
-# Unit-style bash tests
-bash .bin/test-doctor.sh
-bash .bin/test-safe-copy.sh
-bash .bin/test-import-routing.sh
-bash .bin/test-onboarding-verify.sh
-bash .bin/test-pdf-classifier.sh
+# Spinosa TUI flow tests
+(cd packages/tui && bun test test/spinosa)
 ```
 
 **Pass criteria:** every command exits 0; no `FAIL` in output.
 
 **Working tree:** `git status --porcelain` must be empty before publish (see RELEASE_GUIDE).
 
-**Manifest rule:** `.spinosa/framework-files.tsv` lists only files delivered to user workspaces on install/update. Maintainer scripts (`.bin/test-*.sh`, packaging tools, etc.) live in the git repo only — do not add them to the manifest.
+**Manifest rule:** `workspace-template/.spinosa/workspace-files.tsv` lists only files delivered to user workspaces on install/update. Maintainer scripts (`.bin/test-*.sh`, packaging tools, etc.) live in the git repo only — do not add them to the manifest.
 
 ---
 
@@ -355,7 +344,7 @@ spinosa update --yes --workspace "$WORKSPACE"
 | Doctor | Warns if workspace behind CLI; no crash on `framework_version: dev` workspaces |
 | Dry-run | Shows version range (e.g. `0.7.1 → 0.7.3`) and file count |
 | Apply update | `framework_version` bumped in `.spinosa/workspace` |
-| `sync-agents` | `.hermes/skills/`, `.codex/agents/` present after update |
+| Pre-baked agent mirrors | `.hermes/skills/`, `.codex/agents/` present after update |
 | Cloud path | Doctor cloud warning acceptable; update completes or documents known Drive limits |
 
 ### E1. Hermes (if used)
@@ -393,9 +382,8 @@ curl -sL "https://api.github.com/repos/TommasoPrinetti/spinosa/releases/tags/vX.
   python3 -c "import json,sys; r=json.load(sys.stdin); [print(a['name'], a['state'], a['size']) for a in r['assets']]"
 ```
 
-**Three assets**, all `uploaded`:
+**Two assets**, all `uploaded`:
 
-- `spinosa-framework-X.Y.Z.tar.gz`
 - `install.sh`
 - `checksums.txt`
 
@@ -485,20 +473,15 @@ Warnings (cloud storage, Hermes merge, workspace behind CLI) are **not** blocker
 
 | Script | Purpose |
 |--------|---------|
-| `.bin/check-startup.sh` | Startup template / workspace surface |
-| `.bin/check-doc-contract.sh` | Docs don't regress routing model |
-| `.bin/validate-skills.sh` | Agent skills structure |
-| `.bin/test-doctor.sh` | Doctor command unit test |
-| `.bin/test-safe-copy.sh` | Cloud-safe copy helpers |
-| `.bin/test-import-routing.sh` | Import routing |
-| `.bin/test-onboarding-verify.sh` | Onboarding verification |
-| `.bin/test-pdf-classifier.sh` | PDF classification |
-| `.bin/test-new-test-vault.sh` | `spinosa new` against TEST-VAULT (`subset` / `mixed` / `full`) |
+| `bash -n install.sh` | Installer syntax |
+| `bash -n workspace-template/.bin/spinosa` | Launcher syntax |
+| `cd packages/tui && bun test test/spinosa` | Spinosa TUI flow coverage |
 
 **Publish command** (only after full sign-off):
 
 ```bash
-bash .bin/publish-release.sh X.Y.Z
+git tag vX.Y.Z
+git push origin vX.Y.Z
 ```
 
 **User must explicitly approve** version bump and publish in chat before running publish.
