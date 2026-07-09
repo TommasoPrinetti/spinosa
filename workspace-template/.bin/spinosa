@@ -66,6 +66,15 @@ if [[ "${1:-}" == "uninstall" ]]; then
   note() { printf '  %s↳%s %s\n' "${DIM}" "${RESET}" "$1"; }
   divider() { printf '%s\n' "${DIM}$(printf '%.0s─' {1..78})${RESET}"; }
 
+  # Parse a confirmation token so non-interactive runs can proceed:
+  #   spinosa uninstall yes | y | -y | --yes | -f | --force
+  CONFIRM=""
+  for a in "$@"; do
+    case "$a" in
+      yes|y|-y|--yes|-f|--force) CONFIRM=1 ;;
+    esac
+  done
+
   printf '\n'
   printf '  %s\n' "${G}███████╗██████╗ ██╗███╗   ██╗ ██████╗ ███████╗ █████╗ ${RESET}"
   printf '  %s\n' "${G}██╔════╝██╔══██╗██║████╗  ██║██╔═══██╗██╔════╝██╔══██╗${RESET}"
@@ -93,40 +102,52 @@ if [[ "${1:-}" == "uninstall" ]]; then
   printf '\n'
 
   # Arrow-key selector: Yes / No
-  selected=1  # 0=Yes, 1=No
-  key=
-  while true; do
-    if [[ $selected -eq 0 ]]; then
-      printf '\r  %s  Are you sure you want to uninstall?\n  %s  %s\u25cf%s Yes / %s\u25cb%s No\n  %s  \n' \
-        "${Y}◆${RESET}" \
-        "${DIM}│${RESET}" "${G}" "${RESET}" "${DIM}" "${RESET}" \
-        "${DIM}└${RESET}" >&2
-    else
-      printf '\r  %s  Are you sure you want to uninstall?\n  %s  %s\u25cb%s Yes / %s\u25cf%s No\n  %s  \n' \
-        "${Y}◆${RESET}" \
-        "${DIM}│${RESET}" "${DIM}" "${RESET}" "${G}" "${RESET}" \
-        "${DIM}└${RESET}" >&2
+  if [[ -z "$CONFIRM" ]]; then
+    if [[ ! -t 0 ]]; then
+      # Non-interactive with no explicit confirmation — refuse to uninstall.
+      echo "  ${Y}⚠${RESET}  Canceled (no confirmation provided)." >&2
+      exit 0
     fi
-    IFS= read -rsn1 key
-    if [[ $key == $'\x1b' ]]; then
-      read -rsn2 key
-      case "$key" in
-        '[A') selected=0 ;;  # Up
-        '[B') selected=1 ;;  # Down
-      esac
-    elif [[ -z $key ]]; then
-      break  # Enter — confirm
+    selected=1  # 0=Yes, 1=No
+    key=
+    while true; do
+      if [[ $selected -eq 0 ]]; then
+        printf '\r  %s  Are you sure you want to uninstall?\n  %s  %s●%s Yes / %s○%s No\n  %s  \n' \
+          "${Y}◆${RESET}" \
+          "${DIM}│${RESET}" "${G}" "${RESET}" "${DIM}" "${RESET}" \
+          "${DIM}└${RESET}" >&2
+      else
+        printf '\r  %s  Are you sure you want to uninstall?\n  %s  %s○%s Yes / %s●%s No\n  %s  \n' \
+          "${Y}◆${RESET}" \
+          "${DIM}│${RESET}" "${DIM}" "${RESET}" "${G}" "${RESET}" \
+          "${DIM}└${RESET}" >&2
+      fi
+      IFS= read -rsn1 key
+      if [[ $key == $'\x1b' ]]; then
+        read -rsn2 key
+        case "$key" in
+          '[A') selected=0 ;;  # Up
+          '[B') selected=1 ;;  # Down
+        esac
+      elif [[ -z $key ]]; then
+        break  # Enter — confirm
+      fi
+      printf '\033[3A' >&2  # cursor up 3 for redraw
+    done
+    echo >&2
+    if [[ $selected -eq 1 ]]; then
+      echo "  ${Y}⚠${RESET}  Canceled." >&2
+      exit 0
     fi
-    printf '\033[3A' >&2  # cursor up 3 for redraw
-  done
-  echo >&2
-  if [[ $selected -eq 1 ]]; then
-    echo "  ${Y}⚠${RESET}  Canceled." >&2
-    exit 0
   fi
 
   printf '  %s Removing framework...\n' "${G}✦${RESET}"
-  rm -rf "${SPINOSA_HOME}/versions" \
+  rm -rf \
+    "${SPINOSA_HOME}/versions" \
+    "${SPINOSA_HOME}/bin" \
+    "${SPINOSA_HOME}/lib" \
+    "${SPINOSA_HOME}/logs" \
+    "${SPINOSA_HOME}/env.sh"
 
   divider
   printf '\n'
