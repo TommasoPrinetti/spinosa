@@ -400,10 +400,8 @@ export function AddFiles() {
     for (const r of results) logTool(r.label, r.status, r.detail)
     spinOff()
   }
-
   const handleToolAction = () => {
-    if (busy()) return
-    try { blurSourceInputs() } catch { /* inputs may already be destroyed from path step */ }
+    logAction("handleToolAction", "called")
     const checks = toolChecks()
     const needsRepair = checks.some((t) => t.status === "missing")
     if (needsRepair) {
@@ -796,6 +794,11 @@ export function AddFiles() {
           continueFromScan()
           consume(); return
         }
+      }
+
+      if (step() === "tools" && event.name === "return") {
+        handleToolAction()
+        consume(); return
       }
 
       if (step() === "done" && event.name === "return") {
