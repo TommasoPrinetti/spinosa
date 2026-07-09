@@ -734,12 +734,8 @@ mark_version_install_complete() {
 }
 
 install_install_state_lib() {
-  local fw_root="$1"
-  local src="${fw_root}/framework/bin/lib/spinosa/install_state.sh"
-  local dest="${SPINOSA_HOME}/lib/install_state.sh"
-  [ -f "$src" ] || return 0
-  mkdir -p "${SPINOSA_HOME}/lib"
-  cp "$src" "$dest"
+  # No-op — install_state.sh removed, all functionality in TypeScript
+  return 0
 }
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1321,13 +1317,17 @@ run_basic_test() {
     ok "Basic test passed (shim works; reload shell for PATH)"
   fi
 }
-
+handle_dry_run() {
+  [ "$DRY_RUN" -eq 1 ] || return 1
+  local archive_url="https://github.com/${REPO}/archive/refs/tags/v${VERSION}.tar.gz"
+  info "Dry run — would download:"
+  info "  ${archive_url}"
+  info "Would install to: ${SPINOSA_HOME}/versions/${VERSION}/"
+  info "Would create shim: ${SPINOSA_BIN_DIR}/spinosa"
+  echo ""
+  return 0
+}
 maybe_launch_dashboard() {
-  local spinosa_cmd="${SPINOSA_BIN_DIR}/spinosa"
-  if command -v spinosa >/dev/null 2>&1; then
-    spinosa_cmd="spinosa"
-  fi
-
   if [[ "$LAUNCH_DASHBOARD" == "1" ]] || { [[ "$LAUNCH_DASHBOARD" == "auto" ]] && [[ -t 0 && -r /dev/tty ]]; }; then
     info "Launching Spinosa dashboard..."
     flush_pending_input
@@ -1366,8 +1366,8 @@ main() {
 
   check_release_age "$VERSION" "$MIN_DAYS"
 
-  local base_url="https://github.com/${REPO}/releases/download/${RELEASE_DOWNLOAD_TAG}"
-  local archive_name="spinosa-framework-${VERSION}.tar.gz"
+  local archive_url="https://github.com/${REPO}/archive/refs/tags/v${VERSION}.tar.gz"
+  local archive_name="spinosa-v${VERSION}.tar.gz"
 
   info "Version: ${VERSION}"
   info "Install root: ${SPINOSA_HOME}"
@@ -1395,22 +1395,23 @@ main() {
   reclaim_all_incomplete_versions
   INSTALL_COMPLETED=0
 
-  # Download framework archive + checksums
-  local framework_dest="${tmpdir}/${archive_name}"
-  download_and_verify \
-    "${base_url}/${archive_name}" "$framework_dest" \
-    "Framework v${VERSION}" \
-    "checksums.txt" "$archive_name" 3 3
+  # Download GitHub source tarball
+  local framework_dest="${tmpdir}/spinosa-${VERSION}.tar.gz"
+  spinner_start "Downloading Spinosa v${VERSION}"
+  download "$archive_url" "$framework_dest" || die "Failed to download Spinosa v${VERSION}"
 
-  # Extract to temp then move atomically (creates version dir only
-  # after verified content is ready — prevents marking partial installs)
+  # Extract — GitHub's tarball has a top-level dir (spinosa-<tag>/)
   local extract_tmp="${tmpdir}/framework-extract"
   mkdir -p "$extract_tmp"
-  safe_untar "$framework_dest" "$extract_tmp"
+  tar -xzf "$framework_dest" -C "$extract_tmp"
+  local top_dir
+  top_dir="$(find "$extract_tmp" -mindepth 1 -maxdepth 1 -type d | head -1)"
+  [[ -n "$top_dir" ]] || die "Archive has unexpected structure"
   rm -rf "${SPINOSA_HOME}/versions/${VERSION}" 2>/dev/null || true
   mkdir -p "${SPINOSA_HOME}/versions/${VERSION}"
-  mv "$extract_tmp"/* "${SPINOSA_HOME}/versions/${VERSION}/"
+  mv "$top_dir"/* "${SPINOSA_HOME}/versions/${VERSION}/"
   clean_macos_metadata "${SPINOSA_HOME}/versions/${VERSION}"
+  local fw_root="${SPINOSA_HOME}/versions/${VERSION}"
   install_bundled_bun "$tmpdir"
   if [ "$DEV_MODE" -eq 1 ]; then
     install_bun_dependencies "$fw_root"
@@ -1419,7 +1420,7 @@ main() {
   fi
 
   # Install CLI binary (atomic write: temp + mv to avoid partial reads)
-  local spinosa_bin="${fw_root}/framework/bin/spinosa"
+  local spinosa_bin="${fw_root}/workspace-template/.bin/spinosa"
   if [ -f "$spinosa_bin" ]; then
     cp "$spinosa_bin" "${SPINOSA_HOME}/bin/.spinosa.tmp"
     chmod +x "${SPINOSA_HOME}/bin/.spinosa.tmp"
@@ -1434,8 +1435,6 @@ main() {
   install_shims
 
   mark_version_install_complete "$VERSION"
-  install_install_state_lib "$fw_root"
-  INSTALL_COMPLETED=1
 
   cleanup
   trap - EXIT INT TERM HUP
