@@ -62,13 +62,26 @@ function discoverInstalledFramework(): string | undefined {
     for (const verEntry of readdirSync(versionsDir, { withFileTypes: true })) {
       if (!verEntry.isDirectory()) continue
       const versionBase = path.join(versionsDir, verEntry.name)
+      const ver = verEntry.name
+      if (!/^\d/.test(ver)) continue
+
+      // New installer format: framework files directly in the version directory
+      if (hasFrameworkMarker(versionBase)) {
+        if (!bestDir || compareFrameworkVersions(ver, bestVersion) > 0) {
+          bestVersion = ver
+          bestDir = versionBase
+        }
+        continue
+      }
+
+      // Old installer format: spinosa-framework-<version>/ subdirectory
       for (const fwEntry of readdirSync(versionBase, { withFileTypes: true })) {
         if (!fwEntry.isDirectory() || !fwEntry.name.startsWith("spinosa-framework-")) continue
         const fwPath = path.join(versionBase, fwEntry.name)
         if (!hasFrameworkMarker(fwPath)) continue
-        const ver = fwEntry.name.replace("spinosa-framework-", "")
-        if (!bestDir || compareFrameworkVersions(ver, bestVersion) > 0) {
-          bestVersion = ver
+        const fwVer = fwEntry.name.replace("spinosa-framework-", "")
+        if (!bestDir || compareFrameworkVersions(fwVer, bestVersion) > 0) {
+          bestVersion = fwVer
           bestDir = fwPath
         }
       }
