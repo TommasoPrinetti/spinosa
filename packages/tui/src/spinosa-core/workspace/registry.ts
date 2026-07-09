@@ -123,7 +123,20 @@ export async function unregisterWorkspace(workspacePath: string): Promise<void> 
 
 export async function listRegisteredWorkspaces(): Promise<SpinosaRegisteredWorkspace[]> {
   const entries = await loadRegistry(undefined, { allowMissingMarker: true })
-  return entries.map((entry) => ({
+  const valid: { path: string; project: string }[] = []
+  const invalid: string[] = []
+  for (const entry of entries) {
+    if (validateWorkspace(entry.path)) {
+      valid.push(entry)
+    } else {
+      invalid.push(entry.path)
+    }
+  }
+  // Prune stale entries in the background
+  if (invalid.length > 0) {
+    Promise.all(invalid.map((p) => unregisterWorkspace(p).catch(() => {})))
+  }
+  return valid.map((entry) => ({
     path: entry.path,
     projectName: resolveWorkspaceDisplayName(entry.path, entry.project),
   }))
