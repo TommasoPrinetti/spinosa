@@ -1411,6 +1411,7 @@ main() {
   local fw_root="${SPINOSA_HOME}/versions/${VERSION}"
   install_bundled_bun "$tmpdir"
   install_bun_dependencies "$fw_root"
+  local spinosa_bin="${fw_root}/workspace-template/.bin/spinosa"
   if [ -f "$spinosa_bin" ]; then
     cp "$spinosa_bin" "${SPINOSA_HOME}/bin/.spinosa.tmp"
     chmod +x "${SPINOSA_HOME}/bin/.spinosa.tmp"
