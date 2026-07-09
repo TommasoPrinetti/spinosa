@@ -17,7 +17,7 @@ DEVELOPMENT.md            export-ignore
 
 # Build output and deps
 node_modules/             export-ignore
-assets/                   export-ignore
+/assets/                  export-ignore
 
 # Dev tools
 tests/                    export-ignore
