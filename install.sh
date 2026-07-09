@@ -2,7 +2,7 @@
 # shellcheck shell=bash
 # ── install.sh — Spinosa Framework Installer (auto-re-execs with bash) ──────
 
-PINNED_VERSION="0.8.0-beta.20"
+PINNED_VERSION="0.8.0-beta.21"
 PINNED_TAG="beta"
 BUNDLED_BUN_VERSION="1.3.14"
 
@@ -388,15 +388,29 @@ install_bun_dependencies() {
   if [ ! -d "${fw_root}/node_modules" ]; then
     note "Downloading npm packages — this may take 2-3 minutes on first install"
   fi
-
   spinner_start "Installing dependencies"
-  if (cd "$fw_root" && PATH="$(dirname "$bun_bin"):$PATH" "$bun_bin" install --production >/dev/null 2>&1); then
-    spinner_stop "Dependencies installed"
-  else
+  local bun_out
+  bun_out="$(mktemp "${TMPDIR:-/tmp}/spinosa-bun-install.XXXXXX")"
+  local bun_ok=0
+  for attempt in 1 2; do
+    if (cd "$fw_root" && PATH="$(dirname "$bun_bin"):$PATH" "$bun_bin" install --production > "$bun_out" 2>&1); then
+      bun_ok=1
+      break
+    fi
+    if [[ $attempt -eq 1 ]]; then
+      spinosa_log WARN "bun install failed (attempt 1/2), retrying..."
+      sleep 2
+    fi
+  done
+  if [[ $bun_ok -eq 0 ]]; then
     spinner_stop
-    die "Dependency install failed. See ${SPINOSA_HOME}/logs/spinosa.log for details. If the network is unreliable, set SPINOSA_SKIP_DEPS=1 to skip this step and manage dependencies separately."
+    spinosa_log ERROR "bun install failed after 2 attempts. Output:"
+    while IFS= read -r line; do spinosa_log ERROR "$line"; done < "$bun_out"
+    rm -f "$bun_out"
+    die "Dependency install failed. Check ${SPINOSA_HOME}/logs/spinosa.log for details. If the network is unreliable, set SPINOSA_SKIP_DEPS=1 to skip this step and manage dependencies separately."
   fi
-
+  rm -f "$bun_out"
+  spinner_stop "Dependencies installed"
   # Ensure all workspace packages are resolvable as @opencode-ai/* symlinks.
   # `bun install --production` from the framework root sometimes skips symlinks
   # for packages with complex native dep chains (core, spinosa-core, etc.).
