@@ -429,7 +429,6 @@ const runToolRepair = async () => {
     await yieldToEventLoop()
     await delay(500)
     try {
-      snapshotSourcePaths()
       const resolved = allPathsResolved()
       if (resolved.length === 0) {
         appendLogLine("At least one valid source path is required.")
