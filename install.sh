@@ -1314,7 +1314,7 @@ run_basic_test() {
 
   # Check opencode (TUI packages)
   local fw_root="${SPINOSA_HOME}/versions/${VERSION}"
-  if [[ -d "${fw_root}/workspace-template/.bin/spinosa" ]]; then
+  if [[ -f "${fw_root}/workspace-template/.bin/spinosa" ]]; then
     ok "spinosa launcher: ${fw_root}/workspace-template/.bin/spinosa"
   else
     warn "spinosa launcher not found"
