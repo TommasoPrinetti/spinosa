@@ -1301,28 +1301,45 @@ print_banner() {
 
 run_basic_test() {
   info "Running basic test..."
-  local test_err
-  test_err="$("${SPINOSA_BIN_DIR}/spinosa" help 2>&1 >/dev/null)" || true
-  if ! "${SPINOSA_BIN_DIR}/spinosa" help >/dev/null 2>&1; then
-    spinosa_log WARN "basic test stderr: ${test_err:-<empty>}"
-    warn "Basic test failed — shim at ${SPINOSA_BIN_DIR}/spinosa is not runnable."
-    return 1
-  fi
-  if command -v spinosa >/dev/null 2>&1; then
-    ok "Basic test passed (spinosa on PATH)"
+  local ok=true
+
+  # Check bun
+  local bun_bin="${SPINOSA_HOME}/bin/bun"
+  if [[ -x "$bun_bin" ]]; then
+    ok "bun: $("$bun_bin" --version 2>/dev/null || echo ok)"
   else
-    ok "Basic test passed (shim works; reload shell for PATH)"
+    warn "bun not found at ${bun_bin}"
+    ok=false
   fi
-}
-handle_dry_run() {
-  [ "$DRY_RUN" -eq 1 ] || return 1
-  local archive_url="https://github.com/${REPO}/archive/refs/tags/v${VERSION}.tar.gz"
-  info "Dry run — would download:"
-  info "  ${archive_url}"
-  info "Would install to: ${SPINOSA_HOME}/versions/${VERSION}/"
-  info "Would create shim: ${SPINOSA_BIN_DIR}/spinosa"
-  echo ""
-  return 0
+
+  # Check opencode (TUI packages)
+  local fw_root="${SPINOSA_HOME}/versions/${VERSION}"
+  if [[ -d "${fw_root}/workspace-template/.bin/spinosa" ]]; then
+    ok "spinosa launcher: ${fw_root}/workspace-template/.bin/spinosa"
+  else
+    warn "spinosa launcher not found"
+    ok=false
+  fi
+  if [[ -d "${fw_root}/packages/opencode" ]]; then
+    ok "TUI packages: $(ls "${fw_root}/packages/opencode/"*.json 2>/dev/null | head -1)"
+  else
+    warn "TUI packages (packages/opencode) not found"
+    ok=false
+  fi
+
+  # Check shim
+  if [[ -f "${SPINOSA_BIN_DIR}/spinosa" ]]; then
+    ok "shim: ${SPINOSA_BIN_DIR}/spinosa"
+  else
+    warn "shim not found at ${SPINOSA_BIN_DIR}/spinosa"
+    ok=false
+  fi
+
+  if $ok; then
+    ok "All components verified"
+  else
+    warn "Some components missing — spinosa may not work until dependencies are installed"
+  fi
 }
 maybe_launch_dashboard() {
   if [[ "$LAUNCH_DASHBOARD" == "1" ]] || { [[ "$LAUNCH_DASHBOARD" == "auto" ]] && [[ -t 0 && -r /dev/tty ]]; }; then

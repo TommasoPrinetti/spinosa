@@ -7,19 +7,29 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Resolve system root
 RESOLVED_ROOT=""
+SPINOSA_HOME="${SPINOSA_HOME:-$HOME/.spinosa}"
+
+# 1. Check relative to script location (dev mode: script in template's .bin/)
 candidate="${SCRIPT_DIR}/.."
 if [[ -f "${candidate}/.spinosa/workspace-files.tsv" ]]; then
   RESOLVED_ROOT="$candidate"
 else
+  # 2. Check two levels up (installed shim at $SPINOSA_HOME/bin/)
   candidate2="${SCRIPT_DIR}/../.."
   if [[ -f "${candidate2}/workspace-template/.spinosa/workspace-files.tsv" ]]; then
     RESOLVED_ROOT="$candidate2"
   fi
 fi
 
-if [[ -z "$RESOLVED_ROOT" ]]; then
-  echo "Error: Spinosa template not found." >&2
-  exit 1
+# 3. Check SPINOSA_HOME/versions/ for installed framework
+if [[ -z "$RESOLVED_ROOT" && -d "${SPINOSA_HOME}/versions" ]]; then
+  for v in $(ls -1 "${SPINOSA_HOME}/versions" 2>/dev/null | grep -E '^[0-9]' | sort -V -r); do
+    candidate3="${SPINOSA_HOME}/versions/${v}"
+    if [[ -f "${candidate3}/workspace-template/.spinosa/workspace-files.tsv" ]]; then
+      RESOLVED_ROOT="$candidate3"
+      break
+    fi
+  done
 fi
 
 # Find bun — bundled install first, then system
