@@ -1,287 +1,44 @@
 #!/usr/bin/env bash
-# ── rlwrap re-exec for readline + tab completion ───────────────────────────
-if [[ -z "${RLWRAP_EXEC:-}" && -t 0 && -t 1 ]] && command -v rlwrap >/dev/null 2>&1; then
-  export RLWRAP_EXEC=1
-  exec rlwrap -c "$0" "$@"
-fi
+# ── spinosa — TUI launcher (thin) ──────────────────────────────────────────
+# For CLI usage, run the TUI directly. All commands handled in TypeScript.
 set -euo pipefail
-ORIGINAL_ARGS=("$@")
 
-# ── Dev tree detection ──────────────────────────────────────────────────────
-# When SPINOSA_TEMPLATE_ROOT points to a local dev repo, re-exec through the
-# development TUI instead of using the installed opencode binary.  The dev TUI
-# picks up all local source changes in packages/tui/ and packages/spinosa-core/.
-if [[ -n "${SPINOSA_TEMPLATE_ROOT:-}" ]] && [[ -d "${SPINOSA_TEMPLATE_ROOT}/packages/opencode" ]]; then
-  exec bun run --cwd "${SPINOSA_TEMPLATE_ROOT}/packages/opencode" --conditions=browser src/index.ts "${ORIGINAL_ARGS[@]}"
-fi
-
-# ── spinosa — CLI entry point ────────────────────────────────────────────────
-# Usage: spinosa [command]
-#
-# Commands:
-#   cli       Open the Spinosa terminal dashboard (CLI menu)
-#   add       Add files to an existing Spinosa workspace
-#   new       Create a new Spinosa workspace and run setup
-#   startup   Re-run the startup prompt on an existing workspace
-#   upgrade   Upgrade Spinosa CLI to latest release
-#   update    Update framework files in the current workspace
-#   uninstall Remove Spinosa from this system
-#   version   Show Spinosa version
-#   help      Show this help
-#
-# Run without arguments to open the Spinosa TUI (requires OpenCode).
-
-# ── ANSI colors (zero dependencies) ─────────────────────────────────────────
-if [[ "${NO_COLOR:-}" == "1" ]] || [[ ! -t 1 ]]; then
-  R="" G="" B="" Y="" C="" M="" PG="" DIM="" BOLD="" RESET=""
-else
-  R=$'\033[31m' G=$'\033[32m' B=$'\033[32m' Y=$'\033[32m'
-  C=$'\033[32m' M=$'\033[32m' PG=$'\033[32m' DIM=$'\033[2m' BOLD=$'\033[1m' RESET=$'\033[0m'
-fi
-
-# ── terminal width ─────────────────────────────────────────────────────────
-COLS="${COLUMNS:-$(tput cols 2>/dev/null || echo 80)}"
-
-# ── paths ───────────────────────────────────────────────────────────────────
-SPINOSA_HOME="${SPINOSA_HOME:-$HOME/.spinosa}"
-SPINOSA_REPO="${SPINOSA_REPO:-TommasoPrinetti/spinosa}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TODAY="$(date +%Y-%m-%d)"
 
-# ── global cleanup trap ────────────────────────────────────────────────────
-cleanup_on_exit() {
-  # Kill spinner if running
-  if [[ -n "${SPINNER_PID:-}" ]]; then
-    kill "$SPINNER_PID" 2>/dev/null || true
-    wait "$SPINNER_PID" 2>/dev/null || true
+# Resolve system root (where packages/ lives)
+RESOLVED_ROOT=""
+candidate="${SCRIPT_DIR}/.."
+if [[ -f "${candidate}/.spinosa/workspace-files.tsv" ]]; then
+  RESOLVED_ROOT="$candidate"
+else
+  # Installed mode: binary is in template's .bin/, system root is two levels up
+  candidate2="${SCRIPT_DIR}/../.."
+  if [[ -f "${candidate2}/workspace-template/.spinosa/workspace-files.tsv" ]]; then
+    RESOLVED_ROOT="$candidate2"
   fi
-  # Reset terminal
-  stty sane 2>/dev/null || true
-  if [[ -t 2 ]]; then
-    printf '\033[?25h' >&2
-  fi
-  return 0
-}
+fi
 
-cleanup_on_signal() {
-  cleanup_on_exit
-  exit 130
-}
-
-trap cleanup_on_exit EXIT
-trap cleanup_on_signal INT TERM
-
-# Source file classes used by integrated onboarding.
-MARKDOWN_EXTENSIONS="txt|rtf|textile|wiki|mediawiki|dokuwiki|pmwiki|outliner|workflowy|dynalist|yaml|yml|toml|css|js|ts|py|rb|sh|log|ini|cfg|conf|tex|bib|org|adoc|rst|tiddlywiki|logseq|roam|obsidian"
-NATIVE_EXTENSIONS="md"
-BINARY_COPYABLE_EXTENSIONS=""
-# Engine: MarkItDown — convert supported local files before OCR/copy fallbacks.
-# Plugins stay disabled by default; opt in with SPINOSA_MARKITDOWN_ENABLE_PLUGINS=1
-# and add plugin-owned extensions with SPINOSA_MARKITDOWN_EXTRA_EXTENSIONS.
-MARKITDOWN_EXTENSIONS="docx|pptx|xlsx|xls|epub|html|htm|msg|zip|json|csv|xml"
-STRUCTURED_FALLBACK_EXTENSIONS="csv|json|xml"
-IMAGE_EXTENSIONS="jpg|jpeg|png|gif|webp|heic|heif|tif|tiff|bmp|svg"
-AUDIO_VIDEO_EXTENSIONS="mp4|mov|m4v|avi|mkv|webm|wmv|mp3|wav|m4a|aac|flac|ogg|opus|aiff"
-OPTION_SEP=$'\t'
-
-# Resolve framework root:
-#   - Dev mode: binary is in .bin/ of the repo → TEMPLATE_ROOT is repo root
-#   - Installed mode: binary is in ~/.spinosa/bin/ → framework is in ~/.spinosa/versions/<latest>/
-resolve_template_root() {
-  # Dev mode: check if we're in the repo's .bin/
-  local candidate="${SCRIPT_DIR}/.."
-  if [[ -f "${candidate}/.spinosa/workspace-files.tsv" ]]; then
-    echo "$candidate"
-    return
-  fi
-
-  # Installed mode: find latest *complete* version (ignore partial install dirs)
-  if [[ -d "${SPINOSA_HOME}/versions" ]]; then
-      local latest_version="" v _meta_last
-      if [[ -f "${SPINOSA_HOME}/lib/install_state.sh" ]]; then
-        # shellcheck source=/dev/null
-        source "${SPINOSA_HOME}/lib/install_state.sh"
-        latest_version="$(spinosa_latest_complete_version)"
-      fi
-      if [[ -z "$latest_version" ]]; then
-        _meta_last=""
-        [[ -f "${SPINOSA_HOME}/metadata/config.yaml" ]] && \
-          _meta_last="$(awk '$1 == "last_installed_version:" { print $2; exit }' "${SPINOSA_HOME}/metadata/config.yaml")"
-        if sort -V /dev/null 2>/dev/null; then
-          for v in $(ls -1 "${SPINOSA_HOME}/versions" 2>/dev/null | grep -E '^[0-9]' | sort -V); do
-            if [[ -f "${SPINOSA_HOME}/versions/${v}/.spinosa-install-complete" ]] \
-                || [[ "$v" == "$_meta_last" ]]; then
-              latest_version="$v"
-            fi
-          done
-        else
-          for v in $(ls -1 "${SPINOSA_HOME}/versions" 2>/dev/null | grep -E '^[0-9]' | sort -t. -k1,1n -k2,2n -k3,3n); do
-            if [[ -f "${SPINOSA_HOME}/versions/${v}/.spinosa-install-complete" ]] \
-                || [[ "$v" == "$_meta_last" ]]; then
-              latest_version="$v"
-            fi
-          done
-        fi
-      fi
-    if [[ -n "$latest_version" ]]; then
-      local fw_dir="${SPINOSA_HOME}/versions/${latest_version}"
-      # The archive unpacks to spinosa-framework-<version>/
-      local fw_subdir
-      fw_subdir="$(find "$fw_dir" -maxdepth 1 -type d -name 'spinosa-framework-*' 2>/dev/null | head -1)"
-      if [[ -n "$fw_subdir" && -f "${fw_subdir}/.spinosa/workspace-files.tsv" ]]; then
-        echo "$fw_subdir"
-        return
-      fi
-    fi
-  fi
-
-  echo ""
-}
-
-TEMPLATE_ROOT="$(resolve_template_root)"
-SPINOSA_BANNER_PRINTED=0
-
-# ── No arguments: open the bundled TUI ────────────────────────────────────
-if [[ $# -eq 0 ]]; then
-  # Primary: launch from installed framework tree (packages/opencode + bun deps installed)
-  if [[ -d "${TEMPLATE_ROOT}/packages/opencode" ]]; then
-    SPINOSA_BUN="${SPINOSA_BUN:-}"
-    if [[ -z "$SPINOSA_BUN" && -x "${SPINOSA_HOME}/bin/bun" ]]; then
-      SPINOSA_BUN="${SPINOSA_HOME}/bin/bun"
-    fi
-    if [[ -z "$SPINOSA_BUN" ]] && command -v bun >/dev/null 2>&1; then
-      SPINOSA_BUN="$(command -v bun)"
-    fi
-    if [[ -n "$SPINOSA_BUN" ]]; then
-      export SPINOSA_TEMPLATE_ROOT="${TEMPLATE_ROOT}"
-      exec "$SPINOSA_BUN" run --cwd "${TEMPLATE_ROOT}/packages/opencode" --conditions=browser src/index.ts "$@"
-    fi
-  fi
-  # Fallback: npm-published @spinosa/tui
-  if command -v npx >/dev/null 2>&1 && npx --yes @spinosa/tui --version >/dev/null 2>&1; then
-    exec npx @spinosa/tui "$@"
-  fi
-  # Fallback: system opencode
-  if command -v opencode >/dev/null 2>&1; then
-    exec opencode "$@"
-  fi
-  printf '\n  %sSpinosa TUI is not available.%s\n' "${Y}" "${RESET}" >&2
-  printf '  Re-run the installer or run %sbun install -g @spinosa/tui%s.\n' "${BOLD}" "${RESET}"
-  printf '\n'
+if [[ -z "$RESOLVED_ROOT" ]]; then
+  echo "Error: Spinosa template not found." >&2
   exit 1
 fi
 
-if [[ -f "${TEMPLATE_ROOT}/packages/spinosa-core/bin/spinosa.ts" ]]; then
-  SPINOSA_BUN="${SPINOSA_BUN:-}"
-  if [[ -z "$SPINOSA_BUN" && -x "${SPINOSA_HOME}/bin/bun" ]]; then
-    SPINOSA_BUN="${SPINOSA_HOME}/bin/bun"
-  fi
-  if [[ -z "$SPINOSA_BUN" ]] && command -v bun >/dev/null 2>&1; then
-    SPINOSA_BUN="$(command -v bun)"
-  fi
-  if [[ -n "$SPINOSA_BUN" ]]; then
-    export PATH="${TEMPLATE_ROOT}/node_modules/.bin:${PATH}"
-    export SPINOSA_TEMPLATE_ROOT="${TEMPLATE_ROOT}"
-    exec "$SPINOSA_BUN" run "${TEMPLATE_ROOT}/packages/spinosa-core/bin/spinosa.ts" "${ORIGINAL_ARGS[@]}"
+# Dev mode: launch local TUI from packages/opencode
+if [[ -d "${RESOLVED_ROOT}/packages/opencode" ]]; then
+  BUN="${BUN:-$(command -v bun || true)}"
+  if [[ -n "$BUN" ]]; then
+    export SPINOSA_TEMPLATE_ROOT="$RESOLVED_ROOT"
+    exec "$BUN" run --cwd "${RESOLVED_ROOT}/packages/opencode" --conditions=browser src/index.ts "$@"
   fi
 fi
 
-# ── sourced libraries ───────────────────────────────────────────────────────
-SPINOSA_LIB_DIR="${TEMPLATE_ROOT}/.bin/lib/spinosa"
-SPINOSA_LIBS=(
-  logging
-  install_state
-  ui
-  core
-  release_channels
-  handoff
-  import
-  import_scan
-  import_copy
-  import_onboarding_log
-  workspace
-  tools
-  commands_new
-  commands_add
-  commands_system
-  commands_dashboard
-  commands_startup
-)
-for spinosa_lib in "${SPINOSA_LIBS[@]}"; do
-  spinosa_lib_path="${SPINOSA_LIB_DIR}/${spinosa_lib}.sh"
-  if [[ ! -f "$spinosa_lib_path" ]]; then
-    printf 'Missing Spinosa library: %s\n' "$spinosa_lib_path" >&2
-    exit 1
-  fi
-  # shellcheck source=/dev/null
-  source "$spinosa_lib_path"
-done
-
-# bash 3.2 + set -u: "${ORIGINAL_ARGS[@]}" is an error when argv is empty
-if ((${#ORIGINAL_ARGS[@]} > 0)); then
-  spinosa_log_init "cli" "${ORIGINAL_ARGS[@]}"
-else
-  spinosa_log_init "cli"
+# Installed mode: launch from @spinosa/tui or system opencode
+if command -v npx >/dev/null 2>&1 && npx --yes @spinosa/tui --version >/dev/null 2>&1; then
+  exec npx @spinosa/tui "$@"
 fi
-spinosa_log_enable_err_trap
-
-# ── Pre-parse global flags ──────────────────────────────────
-while true; do
-  case "${1:-}" in
-    --no-upgrade-check) export SPINOSA_NO_UPGRADE_CHECK=1; shift ;;
-    --no-color)  R="" G="" B="" Y="" C="" M="" PG="" DIM="" BOLD="" RESET=""; shift ;;
-    --numbered)  NUMBERED="1"; shift ;;
-    *) break ;;
-  esac
-done
-
-# ── help routing ───────────────────────────────────────────────────────────
-subcommand="${1:-}"
-case "$subcommand" in
-  help|-h|--help)
-    cmd_help
-    exit 0
-    ;;
-  cli|add|new|startup|upgrade|update|doctor|uninstall)
-    if [[ "${2:-}" == "--help" || "${2:-}" == "-h" ]]; then
-      shift
-      case "$subcommand" in
-        add) cmd_add "$@" ;;
-        new) cmd_new "$@" ;;
-        startup) cmd_startup "$@" ;;
-        upgrade) cmd_upgrade "$@" ;;
-        update) cmd_update "$@" ;;
-        doctor) cmd_doctor "$@" ;;
-        uninstall) cmd_uninstall "$@" ;;
-      esac
-      exit 0
-    fi
-    ;;
-esac
-
-# ── Call auto-upgrade check before command screens render ──
-if [[ "${1:-}" != "upgrade" ]] && [[ "${1:-}" != "__post_upgrade_workspaces" ]] && [[ "${1:-}" != "uninstall" ]] && [[ "${1:-}" != "doctor" ]] && [[ "${1:-}" != "version" ]] && [[ "${1:-}" != "--version" ]] && [[ "${1:-}" != "-v" ]]; then
-  auto_upgrade_check
+if command -v opencode >/dev/null 2>&1; then
+  exec opencode "$@"
 fi
 
-# ═══════════════════════════════════════════════════════════════════════════
-# MAIN
-# ═══════════════════════════════════════════════════════════════════════════
-case "${1:-}" in
-  cli)       shift; cmd_dashboard "$@" ;;
-  add)       shift; cmd_add "$@" ;;
-  new)       shift; cmd_new "$@" ;;
-  startup)   shift; cmd_startup "$@" ;;
-  upgrade)   shift; cmd_upgrade "$@" ;;
-  __post_upgrade_workspaces) prompt_upgrade_workspaces ;;
-  update)    shift; cmd_update "$@" ;;
-  doctor)    shift; cmd_doctor "$@" ;;
-  uninstall) shift; cmd_uninstall "$@" ;;
-  version|--version|-v) printf 'spinosa %s\n' "$(framework_version "$TEMPLATE_ROOT")"; exit 0 ;;
-  help|-h|--help) cmd_help ;;
-  *)
-    printf '%s\n' "${R}Unknown command: $1${RESET}" >&2
-    cmd_help
-    exit 1
-    ;;
-esac
+echo "Error: Spinosa TUI not available. Re-run installer." >&2
+exit 1
