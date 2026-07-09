@@ -190,11 +190,17 @@ export function SpinosaPromptChips() {
 
   useBindings(() => ({
     mode: OPENCODE_BASE_MODE,
-    enabled: () => workspaceReady() && !spinosa.genericMode && !promptRef.current?.focused,
+    enabled: () => !spinosa.genericMode && !promptRef.current?.focused,
     bindings: [
+      { key: "Left", desc: "Previous action", group: "Home", cmd: () => moveSelection(-1) },
+      { key: "Right", desc: "Next action", group: "Home", cmd: () => moveSelection(1) },
+      { key: "Enter", desc: "Run selected action", group: "Home", cmd: () => runSelectedAction() },
       { key: "n", desc: "New workspace", group: "Home", cmd: () => navigate({ type: "onboarding" }) },
       { key: "a", desc: "Add files", group: "Home", cmd: () => navigate({ type: "add-files" }) },
       { key: "w", desc: "Change workspace", group: "Home", cmd: () => spinosa.showPicker() },
+      ...(workspaceReady() && needsWorkspaceUpdate()
+        ? [{ key: "u", desc: "Update workspace", group: "Home", cmd: () => void runWorkspaceUpdate() }]
+        : []),
     ],
   }))
 

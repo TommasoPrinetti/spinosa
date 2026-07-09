@@ -98,21 +98,28 @@ export function Home() {
     const off = keymap.intercept("key", ({ event, consume }) => {
       if (modeStack.current() !== OPENCODE_BASE_MODE) return
 
-      if (event.name === "up" || event.name === "k") {
-        setKeyboardFocus((v) => Math.max(-1, v - 1))
-        consume(); return
-      }
-      if (event.name === "down" || event.name === "j") {
-        if (keyboardFocus() === -1 && upgradeAvailable()) {
+      // Only intercept when the upgrade button is actually focused.
+      // Otherwise let events fall through to child components (SpinosaPromptChips etc.)
+      if (keyboardFocus() === 0) {
+        if (event.name === "up" || event.name === "k") {
+          setKeyboardFocus(-1)
+          consume(); return
+        }
+        if (event.name === "down" || event.name === "j") {
+          setKeyboardFocus(-1)
+          consume(); return
+        }
+        if (event.name === "return") {
+          void doUpgrade()
+          consume(); return
+        }
+      } else if (event.name === "down" || event.name === "j") {
+        // Not focused — try to focus the upgrade button if available
+        if (upgradeAvailable()) {
           setKeyboardFocus(0)
           consume(); return
         }
-        setKeyboardFocus((v) => Math.min(0, v + 1))
-        consume(); return
-      }
-      if (event.name === "return" && keyboardFocus() === 0) {
-        void doUpgrade()
-        consume(); return
+        // No upgrade button — don't consume, event falls through
       }
     })
     onCleanup(off)
