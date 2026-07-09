@@ -2,7 +2,7 @@
 # shellcheck shell=bash
 # ── install.sh — Spinosa Framework Installer (auto-re-execs with bash) ──────
 
-PINNED_VERSION="0.8.0-beta.21"
+PINNED_VERSION="0.8.0-beta.22"
 PINNED_TAG="beta"
 BUNDLED_BUN_VERSION="1.3.14"
 
@@ -393,7 +393,7 @@ install_bun_dependencies() {
   bun_out="$(mktemp "${TMPDIR:-/tmp}/spinosa-bun-install.XXXXXX")"
   local bun_ok=0
   for attempt in 1 2; do
-    if (cd "$fw_root" && PATH="$(dirname "$bun_bin"):$PATH" "$bun_bin" install --production > "$bun_out" 2>&1); then
+    if (cd "$fw_root" && PATH="$(dirname "$bun_bin"):$PATH" "$bun_bin" install > "$bun_out" 2>&1); then
       bun_ok=1
       break
     fi
@@ -412,7 +412,6 @@ install_bun_dependencies() {
   rm -f "$bun_out"
   spinner_stop "Dependencies installed"
   # Ensure all workspace packages are resolvable as @opencode-ai/* symlinks.
-  # `bun install --production` from the framework root sometimes skips symlinks
   # for packages with complex native dep chains (core, spinosa-core, etc.).
   local nm="${fw_root}/node_modules/@opencode-ai"
   mkdir -p "$nm"
