@@ -12,7 +12,8 @@ SPINOSA_HOME="${SPINOSA_HOME:-$HOME/.spinosa}"
 # 1. Check relative to script location (dev mode: script in template's .bin/)
 candidate="${SCRIPT_DIR}/.."
 if [[ -f "${candidate}/.spinosa/workspace-files.tsv" ]]; then
-  RESOLVED_ROOT="$candidate"
+  # candidate = template root → system root is parent
+  RESOLVED_ROOT="$(cd "$candidate/.." && pwd)"
 else
   # 2. Check two levels up (installed shim at $SPINOSA_HOME/bin/)
   candidate2="${SCRIPT_DIR}/../.."
