@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs"
 import { spawnSync } from "node:child_process"
 import { homedir } from "node:os"
 import path from "node:path"
@@ -16,6 +16,7 @@ import { ensureGlobalMetadata, discoverRegisteredWorkspaces } from "../workspace
 import { readWorkspaceMeta } from "../workspace/meta"
 import { spinosaLogInfo } from "../utils/log"
 
+const FETCH_TIMEOUT_MS = 15_000
 export interface UpgradeOptions {
   version?: string
   channel?: ReleaseChannel
@@ -65,7 +66,7 @@ async function fetchReleaseNotes(version: string): Promise<string | undefined> {
       ? `https://api.github.com/repos/${SPINOSA_RELEASE_REPO}/releases/latest`
       : `https://api.github.com/repos/${SPINOSA_RELEASE_REPO}/releases/tags/v${version}`
   try {
-    const response = await fetch(apiUrl)
+    const response = await fetch(apiUrl, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) })
     if (!response.ok) return undefined
     const data = (await response.json()) as {
       tag_name?: string
@@ -171,7 +172,7 @@ export async function upgradeFramework(
 
   let response: Response
   try {
-    response = await fetch(installerUrl)
+    response = await fetch(installerUrl, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) })
     if (!response.ok) {
       rmSync(tmpdir, { recursive: true, force: true })
       return { success: false, previousVersion: normalizedInstalled || undefined, workspaceUpgradesNeeded: [] }
