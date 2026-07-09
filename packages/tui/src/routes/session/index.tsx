@@ -229,7 +229,7 @@ export function Session() {
     const title = Locale.truncate(session()?.title ?? "", 50)
     setEpilogue(sessionEpilogue({ title, sessionID: session()?.id }))
   })
-  onCleanup(() => setEpilogue())
+  onCleanup(() => { setEpilogue(); clearTimeout(toBottomTimer) })
   const children = createMemo(() => {
     const parentID = session()?.parentID ?? session()?.id
     return sync.data.session
@@ -505,8 +505,10 @@ export function Session() {
     dialog.clear()
   }
 
+  let toBottomTimer: ReturnType<typeof setTimeout> | undefined
   function toBottom() {
-    setTimeout(() => {
+    clearTimeout(toBottomTimer)
+    toBottomTimer = setTimeout(() => {
       if (!scroll || scroll.isDestroyed) return
       scroll.scrollTo(scroll.scrollHeight)
     }, 50)
@@ -1558,11 +1560,14 @@ function ToolRailCallout(props: {
     props.callout.part.state.input ?? {},
   )))
 
+  let copyTimer: ReturnType<typeof setTimeout> | undefined
   const handleCopy = () => {
     if (!props.callout.summary) return
     const text = buildCopyCommand(props.callout.part.tool, props.callout.part.state.input ?? {}, props.callout.summary)
     void clipboard.write?.(text).then(() => setCopied(true))
-    setTimeout(() => setCopied(false), 3000)
+    clearTimeout(copyTimer)
+    copyTimer = setTimeout(() => setCopied(false), 3000)
+    onCleanup(() => clearTimeout(copyTimer))
   }
 
   const stem = createMemo(() => (props.side === "left" ? "  │" : "│  "))

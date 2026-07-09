@@ -271,10 +271,12 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     visibilityGeneration++
   })
 
+  let filterTimer: ReturnType<typeof setTimeout> | undefined
   createEffect(
     on([() => store.filter, () => props.current], ([filter, current]) => {
+      clearTimeout(filterTimer)
       if (filter.length > 0) resetSelection = true
-      setTimeout(() => {
+      filterTimer = setTimeout(() => {
         if (filter.length > 0) {
           moveTo(0, true, false)
         } else if (current) {
@@ -286,6 +288,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
       }, 0)
     }),
   )
+  onCleanup(() => clearTimeout(filterTimer))
 
   function move(direction: number) {
     if (props.locked) return

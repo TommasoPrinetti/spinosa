@@ -23,7 +23,7 @@ export function normalizePromptContent(content: string) {
   return content
 }
 
-export async function openEditor(input: { value: string; renderer: CliRenderer; cwd?: string; stdin?: EditorStdio }) {
+export async function openEditor(input: { value: string; renderer: CliRenderer; cwd?: string; stdin?: EditorStdio; signal?: AbortSignal }) {
   const editor = process.env.VISUAL || process.env.EDITOR
   if (!editor) return
   const file = path.join(os.tmpdir(), `${Date.now()}.md`)
@@ -31,25 +31,27 @@ export async function openEditor(input: { value: string; renderer: CliRenderer; 
   input.renderer.suspend()
   input.renderer.currentRenderBuffer.clear()
   try {
-    await new Promise<void>((resolve, reject) => {
+    const editorResult = await new Promise<string | void>((resolve, reject) => {
       const parts = editor.split(" ")
       const child = spawn(parts[0]!, [...parts.slice(1), file], {
         cwd: input.cwd && existsSync(input.cwd) ? input.cwd : process.cwd(),
         stdio: [input.stdin ?? "inherit", "inherit", "inherit"],
         shell: process.platform === "win32",
       })
+      function onAbort() {
+        child.kill()
+        reject(new DOMException("Editor cancelled", "AbortError"))
+      }
+      input.signal?.addEventListener("abort", onAbort, { once: true })
       child.on("error", reject)
       child.on("exit", (code, signal) => {
+        input.signal?.removeEventListener("abort", onAbort)
         if (code === 0) return resolve()
         reject(new Error(`Editor exited with ${signal ? `signal ${signal}` : `code ${code}`}`))
       })
     })
-    return (await readFile(file, "utf8")) || undefined
-  } finally {
-    await rm(file, { force: true }).catch(() => {})
-    input.renderer.currentRenderBuffer.clear()
-    input.renderer.resume()
-    input.renderer.requestRender()
+    if (editorResult === undefined) return
+    return editorResult
   }
 }
 
