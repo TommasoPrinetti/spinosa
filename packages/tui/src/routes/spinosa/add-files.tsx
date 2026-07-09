@@ -8,7 +8,7 @@ import { createStore } from "solid-js/store"
 import { useTheme } from "../../context/theme"
 import { useRoute } from "../../context/route"
 import { useSpinosaWorkspace } from "../../context/spinosa-workspace"
-import { Toast } from "../../ui/toast"
+import { Toast, useToast } from "../../ui/toast"
 import { scanAndClassifySource, processDirectCopy, processMarkitdown, processOcr } from "../../spinosa-core/import/pipeline"
 import { ProgressEmitter } from "../../spinosa-core/progress/progress"
 import { ImportBatchManager } from "../../spinosa-core/import/batch"
@@ -139,11 +139,12 @@ async function runReinstall(input?: {
 }
 
 export function AddFiles() {
+  const toast = useToast()
   const { theme } = useTheme()
+  const modeStack = useOpencodeModeStack()
   const { navigate } = useRoute()
   const spinosa = useSpinosaWorkspace()
   const keymap = useOpencodeKeymap()
-  const modeStack = useOpencodeModeStack()
   const exit = useExit()
 
   // ── Core state ────────────────────────────────────────────────────────────
@@ -443,11 +444,8 @@ const runToolRepair = async () => {
           else mergedOptions.push({ ...opt })
         }
       }
-      setImportOptions(mergedOptions)
-      clearLog()
-      setScanDone(true)
-      logAction("scan-done", `${mergedOptions.length} file types found`)
     } catch (err) {
+      toast.error(err)
       logError("startScan", err)
       appendLogLine(`Scan failed: ${err instanceof Error ? err.message : String(err)}`)
       setStep("error")
@@ -565,12 +563,13 @@ const runToolRepair = async () => {
           setStep("ocr")
           setBusy(false)
           await gate("Continue to OCR")
-          setBusy(true)
-          if (abortProcessing) { spinOff(); setBusy(false); return }
-
-          setProgTotal(ocrCount || 1)
-          setProgCurrent(0)
-          setProcessingStatus("OCR...")
+      }
+    } catch (err) {
+      toast.error(err)
+      logError("startProcessing", err)
+      appendLogLine(`Error: ${err instanceof Error ? err.message : String(err)}`)
+      setStep("error")
+    }
           totalOcr += ocrCount
           await delay(500)
           const or = await processOcr(classified.ocrFiles, classified.logsDir, sharedProg, onPhaseLog)
