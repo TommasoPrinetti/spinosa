@@ -3,6 +3,7 @@ import path from "node:path"
 import { buildLaunchCommand } from "../handoff/builder"
 import { copyToClipboard } from "../handoff/runner"
 import { spinosaLogInfo } from "../utils/log"
+import { resolveTemplateRootFromFrameworkRoot } from "../framework/discovery"
 
 export interface StartupOptions {
   workspacePath: string
@@ -31,7 +32,7 @@ export async function generateStartupPrompt(
 ): Promise<string> {
   let prompt = ""
 
-  const templateRoot = resolveTemplateRoot(frameworkRoot)
+  const templateRoot = resolveTemplateRootFromFrameworkRoot(frameworkRoot) ?? frameworkRoot
   const templateFile = Bun.file(path.join(templateRoot, "startup-prompt.md"))
   if (await templateFile.exists()) {
     prompt = await templateFile.text()
@@ -118,10 +119,6 @@ Do not re-index files that are already mapped. Only process additions.
 `
 }
 
-function resolveTemplateRoot(frameworkRoot: string): string {
-  const nested = path.join(frameworkRoot, "workspace-template")
-  return existsSync(path.join(nested, ".spinosa", "workspace-files.tsv")) ? nested : frameworkRoot
-}
 
 async function readDirRecursive(dirPath: string): Promise<string[]> {
   const results: string[] = []

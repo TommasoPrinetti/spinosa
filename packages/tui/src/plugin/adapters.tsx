@@ -15,7 +15,6 @@ import { DialogSelect, type DialogSelectOption as SelectOption } from "../ui/dia
 import { Prompt } from "../component/prompt"
 import type { useToast } from "../ui/toast"
 import * as Keymap from "../keymap"
-import { createCommandShim } from "./command-shim"
 import type { PluginRoutes } from "./api"
 export type { RouteMap } from "./api"
 export { createPluginRoutes, createTuiApi } from "./api"
@@ -182,8 +181,6 @@ export function createTuiApiAdapters(input: Input): Omit<TuiPluginApi, "lifecycl
   return {
     app: appApi(input.version),
     attention: input.attention,
-    // Keep deprecated `api.command` working for v1 plugins; remove in v2.
-    command: createCommandShim(input.keymap, input.dialog, input.tuiConfig.keybinds),
     keys: {
       formatSequence(parts) {
         return Keymap.formatKeySequence(parts, input.tuiConfig)

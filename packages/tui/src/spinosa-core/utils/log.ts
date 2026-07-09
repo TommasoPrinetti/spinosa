@@ -11,7 +11,7 @@ function ensureLogDir(): void {
   if (initialized) return
   try {
     mkdirSync(path.dirname(LOG_FILE), { recursive: true })
-  } catch { /* best effort */ }
+  } catch (e) { console.error("spinosa: failed to create log dir", e) }
   initialized = true
 }
 
@@ -24,7 +24,7 @@ export function spinosaLog(level: "INFO" | "WARN" | "ERROR", component: string, 
     ensureLogDir()
     const line = `${isoNow()} level=${level} component=${component} ${message}\n`
     appendFileSync(LOG_FILE, line)
-  } catch { /* best effort */ }
+  } catch (e) { console.error("spinosa: failed to write log", e) }
 }
 
 export function spinosaLogInfo(component: string, message: string): void {

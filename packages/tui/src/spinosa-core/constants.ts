@@ -29,7 +29,6 @@ export const SPINOSA_HOME = "~/.spinosa"
 export const SPINOSA_METADATA_DIR = "~/.spinosa/metadata"
 export const SPINOSA_REGISTRY = "workspaces.txt"
 export const SPINOSA_CONFIG = "config.yaml"
-export const FRAMEWORK_MARKER = "workspace-template/.spinosa/workspace-files.tsv"
 export const WORKSPACE_MARKER = ".spinosa/workspace"
 
 export const SPINOSA_AGENT_FILES = [

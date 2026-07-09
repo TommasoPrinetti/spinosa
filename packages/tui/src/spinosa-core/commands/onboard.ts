@@ -5,13 +5,8 @@ import { ImportBatchManager } from "../import/batch"
 import {
   copySource,
   verifyAndRecoverImport,
-  processDirectCopy,
-  processMarkitdown,
-  processOcr,
-  scanAndClassifySource,
   type PhaseResult,
 } from "../import/pipeline"
-import { ProgressEmitter } from "../progress/progress"
 import { writeSetupFiles } from "../workspace/registry"
 import { writeWorkspaceStatus } from "../workspace/meta"
 import { generateStartupPrompt } from "./startup"
@@ -223,59 +218,49 @@ export async function runOnboarding(
   const ctx = prepared as OnboardingContext
 
   const { onPhase, onCopyProgress } = options
-  const phase = onPhase ?? (() => {})
 
-  const prog = typeof onCopyProgress === "function"
-    ? (() => { const p = new ProgressEmitter(); p.on((e) => onCopyProgress(e.phase, e.current, e.total, e.relPath)); return p })()
-    : undefined
-  const classified = await scanAndClassifySource(ctx.sourcePath, ctx.rawDir, ctx.batches)
-  if (!classified) {
-    return { success: false, blockedPhase: "scan", blockerReason: "Failed to scan source" }
-  }
+  const result = await copySource(ctx.sourcePath, ctx.rawDir, {
+    batchManager: ctx.batches,
+    markitdownChoice: ctx.toolStatus.markitdown,
+    ocrChoice: true,
+    verifyAfter: false,
+    onProgress: onCopyProgress,
+    onLog: (msg) => onPhase?.("import", msg),
+    onPhaseChange: (phase) => {
+      switch (phase) {
+        case "direct":
+          onPhase?.("direct", "Copying files...")
+          spinosaLogInfo("onboard", "phase=direct running")
+          break
+        case "markitdown":
+          onPhase?.("markitdown", "Converting with MarkItDown...")
+          spinosaLogInfo("onboard", "phase=markitdown running")
+          break
+        case "ocr":
+          onPhase?.("ocr", "Processing OCR...")
+          spinosaLogInfo("onboard", "phase=ocr running")
+          break
+      }
+    },
+    onClassified: (classified) => {
+      const classifyMsg = `Classified: ${classified.directFiles.length} direct, ${classified.markitdownFiles.length} markitdown, ${classified.ocrFiles.length} ocr`
+      onPhase?.("import", classifyMsg)
+      spinosaLogInfo("onboard", classifyMsg)
+      if (classified.markitdownFiles.length > 0) {
+        spinosaLogInfo("onboard", `markitdown files (${classified.markitdownFiles.length}): ${classified.markitdownFiles.map(f => f.rel).join(", ")}`)
+      }
+      if (classified.ocrFiles.length > 0) {
+        spinosaLogInfo("onboard", `ocr files (${classified.ocrFiles.length}): ${classified.ocrFiles.map(f => f.rel).join(", ")}`)
+      }
+    },
+  })
 
-  // Log classification breakdown to file
-  const classifyMsg = `Classified: ${classified.directFiles.length} direct, ${classified.markitdownFiles.length} markitdown, ${classified.ocrFiles.length} ocr`
-  onPhase?.("import", classifyMsg)
-  spinosaLogInfo("onboard", classifyMsg)
-
-  if (classified.markitdownFiles.length > 0) {
-    spinosaLogInfo("onboard", `markitdown files (${classified.markitdownFiles.length}): ${classified.markitdownFiles.map(f => f.rel).join(", ")}`)
-  }
-  if (classified.ocrFiles.length > 0) {
-    spinosaLogInfo("onboard", `ocr files (${classified.ocrFiles.length}): ${classified.ocrFiles.map(f => f.rel).join(", ")}`)
-  }
-
-  const onImportLog = (msg: string) => onPhase?.("import", msg)
-
-  let mr: PhaseResult = { converted: 0, skipped: 0, failed: 0, recoverable: [] }
-  let or: PhaseResult = { converted: 0, skipped: 0, failed: 0, recoverable: [] }
-
-  phase("direct", "Copying files...")
-  spinosaLogInfo("onboard", "phase=direct running")
-  const dr = await processDirectCopy(classified.directFiles, prog, onImportLog)
-  spinosaLogInfo("onboard", `phase=direct complete converted=${dr.converted} skipped=${dr.skipped}`)
-
-  if (classified.markitdownFiles.length > 0) {
-    phase("markitdown", "Converting with MarkItDown...")
-    spinosaLogInfo("onboard", "phase=markitdown running")
-    mr = await processMarkitdown(classified.markitdownFiles, classified.logsDir, prog, onImportLog)
-    spinosaLogInfo("onboard", `phase=markitdown complete converted=${mr.converted} skipped=${mr.skipped}`)
-  } else {
-    spinosaLogInfo("onboard", "phase=markitdown skipped (0 files)")
-  }
-
-  if (classified.ocrFiles.length > 0) {
-    phase("ocr", "Processing OCR...")
-    spinosaLogInfo("onboard", "phase=ocr running")
-    or = await processOcr(classified.ocrFiles, classified.logsDir, prog, onImportLog)
-    spinosaLogInfo("onboard", `phase=ocr complete converted=${or.converted} skipped=${or.skipped}`)
-  } else {
-    spinosaLogInfo("onboard", "phase=ocr skipped (0 files)")
-  }
-
-  return completeOnboarding(ctx, { direct: dr, markitdown: mr, ocr: or }, options)
+  return completeOnboarding(ctx, {
+    direct: { converted: result.copied, skipped: result.skipped, failed: result.failed, recoverable: [] },
+    markitdown: { converted: result.mdConverted, skipped: result.mdSkipped, failed: 0, recoverable: [] },
+    ocr: { converted: result.ocrConverted, skipped: result.ocrSkipped, failed: 0, recoverable: [] },
+  }, options)
 }
-
 
 async function writeOnboardingSummary(summary: OnboardingSummary): Promise<void> {
   const {

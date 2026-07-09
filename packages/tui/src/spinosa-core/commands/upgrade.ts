@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process"
 import { homedir } from "node:os"
 import path from "node:path"
 import {
+  readConfigValue,
   type ReleaseChannel,
   installUrlForChannel,
   resolveReleaseVersionForChannel,
@@ -57,13 +58,6 @@ function versionCachePath(channel: string): string {
   return path.join(metadataDir(), `version_check_cache_${channel}`)
 }
 
-async function readConfigValue(key: string): Promise<string | undefined> {
-  const configPath = path.join(metadataDir(), "config.yaml")
-  if (!existsSync(configPath)) return undefined
-  const text = readFileSync(configPath, "utf-8")
-  const match = text.match(new RegExp(`^${key}:\\s*(.+)$`, "m"))
-  return match?.[1]?.trim()
-}
 
 async function fetchReleaseNotes(version: string): Promise<string | undefined> {
   const apiUrl =
@@ -175,18 +169,19 @@ export async function upgradeFramework(
   const tmpdir = mkdtempSync(path.join(homedir(), "spinosa-upgrade-"))
   const installerPath = path.join(tmpdir, "install-spinosa.sh")
 
-  const response = await fetch(installerUrl)
-  if (!response.ok) {
-    rmSync(tmpdir, { recursive: true, force: true })
-    return {
-      success: false,
-      previousVersion: normalizedInstalled || undefined,
-      workspaceUpgradesNeeded: [],
+  let response: Response
+  try {
+    response = await fetch(installerUrl)
+    if (!response.ok) {
+      rmSync(tmpdir, { recursive: true, force: true })
+      return { success: false, previousVersion: normalizedInstalled || undefined, workspaceUpgradesNeeded: [] }
     }
+    const installerScript = await response.text()
+    writeFileSync(installerPath, installerScript, { mode: 0o755 })
+  } catch {
+    rmSync(tmpdir, { recursive: true, force: true })
+    return { success: false, previousVersion: normalizedInstalled || undefined, workspaceUpgradesNeeded: [] }
   }
-
-  const installerScript = await response.text()
-  writeFileSync(installerPath, installerScript, { mode: 0o755 })
 
   options.onPhase?.("install", "Running installer...")
 
@@ -247,13 +242,13 @@ export async function upgradeFramework(
     workspaceUpgradesNeeded: needsUpdate,
   }
 }
-
 export async function checkUpgradeAvailable(): Promise<AutoUpgradeResult> {
   spinosaLogInfo("upgrade", "checkUpgradeAvailable start")
   if (process.env.SPINOSA_NO_UPGRADE_CHECK === "1") {
+    return { available: false }
   }
 
-  const autoUpgrade = await readConfigValue("auto_upgrade")
+  const autoUpgrade = await readConfigValue(path.join(metadataDir(), "config.yaml"), "auto_upgrade")
   if (autoUpgrade === "false") {
     return { available: false }
   }

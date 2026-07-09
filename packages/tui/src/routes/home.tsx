@@ -25,12 +25,12 @@ import { readBundledFrameworkVersion, compareFrameworkVersions, isPrereleaseFram
 import { workspaceAsciiBannerText } from "../spinosa/workspace-name"
 import { upgradeFramework } from "../spinosa-core/commands/upgrade"
 import { resolveReleaseVersionForChannel, type ReleaseChannel } from "../spinosa-core/system/channels"
-import { buttonBackground, buttonText } from "../util/button"
+import { buttonText } from "../util/button"
 
-let once = false
+const SHELL_PLACEHOLDER = ["ls -la", "git status", "pwd"]
 const defaultPlaceholder = {
   normal: ["Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests"],
-  shell: ["ls -la", "git status", "pwd"],
+  shell: SHELL_PLACEHOLDER,
 }
 const spinosaPlaceholder = {
   normal: [
@@ -38,7 +38,7 @@ const spinosaPlaceholder = {
     "Compare cohorts using approved corpus sources",
     "Surface hidden connections across the corpus",
   ],
-  shell: ["ls -la", "git status", "pwd"],
+  shell: SHELL_PLACEHOLDER,
 }
 
 export function Home() {
@@ -59,7 +59,7 @@ export function Home() {
   const workspaceReady = createMemo(() => Boolean(spinosa.activePath && !spinosa.genericMode))
   const startupPrompt = createMemo(() => route.prompt ?? spinosa.pendingPrompt)
   const startupPromptIsQueued = createMemo(() => !route.prompt && Boolean(spinosa.pendingPrompt))
-  const [bundledVersion, { refetch: refetchBundled }] = createResource(readBundledFrameworkVersion)
+  const [bundledVersion] = createResource(readBundledFrameworkVersion)
   const wsVersion = createMemo(() => spinosa.meta?.frameworkVersion)
   const workspaceBannerText = createMemo(() => {
     const workspacePath = spinosa.activePath
@@ -179,6 +179,7 @@ export function Home() {
   })
 
   let sent = false
+  let once = false
   let lastRoutePromptKey: string | undefined
 
   onMount(() => {

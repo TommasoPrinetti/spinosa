@@ -49,13 +49,13 @@ function copyFileViaStream(src: string, dest: string): boolean {
   const tmp = dest + ".spinosa-part"
   try {
     mkdirSync(path.dirname(dest), { recursive: true })
-    try { unlinkSync(tmp) } catch { /* ignore */ }
+    try { unlinkSync(tmp) } catch { /* temp cleanup, ignore */ }
     const content = readFileSync(src)
     writeFileSync(tmp, content)
     renameSync(tmp, dest)
     return true
   } catch {
-    try { unlinkSync(tmp) } catch { /* ignore */ }
+    try { unlinkSync(tmp) } catch { /* temp cleanup, ignore */ }
     return false
   }
 }
@@ -124,11 +124,9 @@ export function safeCopyTree(src: string, dest: string): void {
       try {
         const target = readlinkSync(srcPath)
         mkdirSync(path.dirname(destPath), { recursive: true })
-        try { unlinkSync(destPath) } catch { /* ignore */ }
+        try { unlinkSync(destPath) } catch (e) { console.error("spinosa: symlink dest unlink failed", destPath, e) }
         symlinkSync(target, destPath)
-      } catch {
-        /* symlink copy failure */
-      }
+      } catch (e) { console.error("spinosa: symlink copy failed", srcPath, e) }
     } else if (entry.isDirectory()) {
       safeCopyTree(srcPath, destPath)
     } else if (entry.isFile()) {
@@ -190,7 +188,7 @@ export function cleanMacMetadata(dir: string): void {
     if (entry.isDirectory()) {
       cleanMacMetadata(full)
     } else if (entry.name === ".DS_Store" || entry.name.startsWith("._")) {
-      try { rmSync(full, { force: true }) } catch { /* ignore */ }
+      try { rmSync(full, { force: true }) } catch (e) { console.error("spinosa: failed to clean metadata", full, e) }
     }
   }
 }

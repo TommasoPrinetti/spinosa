@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, appendFileSync, readFileSync, readdirSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, appendFileSync, readFileSync, readdirSync, writeFileSync, rmSync } from "node:fs"
 import * as path from "node:path"
 import { MarkItDown } from "markitdown-ts"
 
@@ -32,6 +32,7 @@ export interface CopyResult {
   ocrSkipped: number
   totalCopied: number
   stillMissing: number
+  recovered: number
 }
 
 type CopyPhase = "all" | "direct" | "markitdown" | "ocr"
@@ -42,8 +43,12 @@ interface CopyOptions {
   runPhase?: CopyPhase
   verifyAfter?: boolean
   batchManager?: ImportBatchManager
+  overwrite?: boolean
+  subfolder?: string
   onProgress?: (phase: string, current: number, total: number, relPath: string) => void
   onLog?: (line: string) => void
+  onClassified?: (classified: { directFiles: ClassifiedEntry[]; markitdownFiles: ClassifiedEntry[]; ocrFiles: ClassifiedEntry[]; logsDir: string }) => void
+  onPhaseChange?: (phase: string, message: string) => void
 }
 
 
@@ -67,6 +72,7 @@ export async function scanAndClassifySource(
   sourcePath: string,
   destDir: string,
   batchManager?: ImportBatchManager,
+  subfolder?: string,
 ): Promise<{
   directFiles: ClassifiedEntry[]
   markitdownFiles: ClassifiedEntry[]
@@ -84,7 +90,8 @@ export async function scanAndClassifySource(
   const entries: Array<{ filePath: string; relPath: string; ext: string; klass: FileClass }> = []
   for (const fp of allFiles) {
     if (shouldSkipSourceFile(fp)) continue
-    const rel = fp.replace(sourcePath, "").replace(/^\//, "")
+    let rel = fp.replace(sourcePath, "").replace(/^\//, "")
+    if (subfolder) rel = path.join(subfolder, rel)
     const ext = fileExt(fp)
     entries.push({ filePath: fp, relPath: rel, ext, klass: await classifySourceFile(fp) })
   }
@@ -139,15 +146,19 @@ export async function processDirectCopy(
   files: ClassifiedEntry[],
   prog?: ProgressEmitter,
   onLog?: (msg: string) => void,
+  overwrite?: boolean,
 ): Promise<PhaseResult> {
   let converted = 0; let skipped = 0; let failed = 0
   const recoverable: { src: string; dest: string }[] = []
 
   for (const [i, entry] of files.entries()) {
     const { src, rel, dest } = entry
-    const result = await copyDirectRawFile(src, dest, rel, prog, onLog, i + 1, files.length)
-    if (result === "copied") { converted++; injectColdFrontmatter(dest); recoverable.push({ src, dest }) }
-    else if (result === "skipped") { skipped++ }
+    const result = await copyDirectRawFile(src, dest, rel, prog, onLog, i + 1, files.length, overwrite)
+    if (result === "copied") {
+      converted++
+      if (dest.endsWith(".md")) injectColdFrontmatter(dest)
+      recoverable.push({ src, dest })
+    } else if (result === "skipped") { skipped++ }
     else { failed++ }
   }
 
@@ -351,7 +362,9 @@ function isoNow(): string {
 }
 
 function yieldToEL(): Promise<void> {
-  return new Promise((r) => setTimeout(r, 0))
+  const { promise, resolve } = Promise.withResolvers<void>()
+  setTimeout(resolve, 0)
+  return promise
 }
 
 function isExtSelected(ext: string, bm?: ImportBatchManager): boolean {
@@ -444,6 +457,7 @@ async function copyDirectRawFile(
   onLog?: (msg: string) => void,
   current?: number,
   total?: number,
+  overwrite?: boolean,
 ): Promise<CopyDirectResult> {
   const c = current ?? 0
   const t = total ?? 0
@@ -451,13 +465,16 @@ async function copyDirectRawFile(
   onLog?.(`  ${relPath}`)
 
   if (existsSync(destFile)) {
-    prog?.file("direct-skipped", c, t, relPath)
-    onLog?.(`  ${relPath} → skipped`)
-    return "skipped"
+    if (!overwrite) {
+      prog?.file("direct-skipped", c, t, relPath)
+      onLog?.(`  ${relPath} → skipped`)
+      return "skipped"
+    }
+    rmSync(destFile, { force: true })
   }
 
   // Yield before copy so the "starting" progress event renders
-  await new Promise((r) => setTimeout(r, 0))
+  await yieldToEL()
 
   if (await safeCopyAsync(srcFile, destFile)) {
     prog?.file("direct-copied", c, t, relPath)
@@ -581,7 +598,6 @@ export async function verifyAndRecoverImport(
 }
 
 // ── Main copy pipeline ────────────────────────────────────────────────────
-
 export async function copySource(
   sourcePath: string,
   destDir: string,
@@ -591,14 +607,21 @@ export async function copySource(
     copied: 0, skipped: 0, failed: 0,
     mdConverted: 0, mdSkipped: 0,
     ocrConverted: 0, ocrSkipped: 0,
-    totalCopied: 0, stillMissing: 0,
+    totalCopied: 0, stillMissing: 0, recovered: 0,
   }
 
-  const classified = await scanAndClassifySource(sourcePath, destDir, options?.batchManager)
+  const classified = await scanAndClassifySource(sourcePath, destDir, options?.batchManager, options?.subfolder)
   if (!classified) {
     options?.onLog?.(`Failed to scan source: ${sourcePath}`)
     return res
   }
+
+  options?.onClassified?.({
+    directFiles: classified.directFiles,
+    markitdownFiles: classified.markitdownFiles,
+    ocrFiles: classified.ocrFiles,
+    logsDir: classified.logsDir,
+  })
 
   const prog = new ProgressEmitter()
   prog.on((e) => { options?.onProgress?.(e.phase, e.current, e.total, e.relPath) })
@@ -609,16 +632,19 @@ export async function copySource(
   }
 
   if (runPhase("direct") && classified.directFiles.length > 0) {
-    const dr = await processDirectCopy(classified.directFiles, prog, options?.onLog)
+    options?.onPhaseChange?.("direct", `Copying ${classified.directFiles.length} files...`)
+    const dr = await processDirectCopy(classified.directFiles, prog, options?.onLog, options?.overwrite)
     res.copied += dr.converted; res.skipped += dr.skipped; res.failed += dr.failed
   }
 
   if (runPhase("markitdown") && classified.markitdownFiles.length > 0 && options?.markitdownChoice) {
+    options?.onPhaseChange?.("markitdown", `Converting ${classified.markitdownFiles.length} files with MarkItDown...`)
     const mr = await processMarkitdown(classified.markitdownFiles, classified.logsDir, prog, options?.onLog)
     res.mdConverted += mr.converted; res.mdSkipped += mr.skipped
   }
 
   if (runPhase("ocr") && classified.ocrFiles.length > 0 && options?.ocrChoice) {
+    options?.onPhaseChange?.("ocr", `Processing ${classified.ocrFiles.length} OCR files...`)
     const or = await processOcr(classified.ocrFiles, classified.logsDir, prog, options?.onLog)
     res.ocrConverted += or.converted; res.ocrSkipped += or.skipped
   }
@@ -628,6 +654,7 @@ export async function copySource(
   if (options?.verifyAfter !== false) {
     const verifyResult = await verifyAndRecoverImport(sourcePath, destDir, options?.batchManager, options?.markitdownChoice, options?.ocrChoice, options?.onLog)
     res.stillMissing = verifyResult.stillMissing
+    res.recovered = verifyResult.recovered
   }
 
   options?.onLog?.(`Copy complete: ${res.totalCopied} total (${res.copied} direct, ${res.mdConverted} MarkItDown, ${res.ocrConverted} OCR), ${res.skipped} skipped, ${res.failed} failed, ${res.stillMissing} still missing`)

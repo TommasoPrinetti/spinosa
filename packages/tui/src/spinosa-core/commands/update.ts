@@ -11,7 +11,8 @@ import path from "node:path"
 import { safeCopy, copyDirContents, cleanMacMetadata, isCloudStoragePath } from "../utils/fs"
 import { compareFrameworkVersions } from "../utils/version"
 import { writeWorkspaceFrameworkVersion } from "../workspace/meta"
-import { spinosaLogInfo } from "../utils/log"
+import { resolveTemplateRootFromFrameworkRoot } from "../framework/discovery"
+import { spinosaLogInfo, spinosaLogWarn } from "../utils/log"
 
 export interface UpdateOptions {
   workspacePath: string
@@ -81,10 +82,6 @@ function frameworkVersion(root: string): string {
   return "dev"
 }
 
-function templateRoot(root: string): string {
-  const nested = path.join(root, "workspace-template")
-  return existsSync(path.join(nested, ".spinosa", "workspace-files.tsv")) ? nested : root
-}
 
 function readWorkspaceFrameworkVersion(workspacePath: string): string | undefined {
   const markerPath = path.join(workspacePath, ".spinosa", "workspace")
@@ -145,7 +142,10 @@ export async function updateWorkspace(options: UpdateOptions): Promise<UpdateRes
   const phase = onPhase ?? ((_p: string, _d: string) => {})
   spinosaLogInfo("update", `workspacePath=${workspacePath} dryRun=${dryRun}`)
 
-  const sourceTemplateRoot = templateRoot(frameworkRoot)
+  const sourceTemplateRoot = resolveTemplateRootFromFrameworkRoot(frameworkRoot)
+  if (!sourceTemplateRoot) {
+    return { success: false, added: 0, updated: 0, removed: 0, skipped: 0, changes: false }
+  }
   const fwManifestPath = path.join(sourceTemplateRoot, ".spinosa", "workspace-files.tsv")
   const wsManifestPath = path.join(workspacePath, ".spinosa", "manifest.tsv")
 
@@ -214,7 +214,7 @@ export async function updateWorkspace(options: UpdateOptions): Promise<UpdateRes
       if (s.isDirectory()) {
         copyDirContents(src, dst)
       } else {
-        safeCopy(src, dst)
+        if (!safeCopy(src, dst)) { spinosaLogWarn("update", `copy failed: ${entry.path}`); continue }
       }
       added++
       changedPaths.push(entry.path)
@@ -252,7 +252,7 @@ export async function updateWorkspace(options: UpdateOptions): Promise<UpdateRes
     if (srcStat.isDirectory()) {
       copyDirContents(src, dst)
     } else {
-      safeCopy(src, dst)
+      if (!safeCopy(src, dst)) { spinosaLogWarn("update", `copy failed: ${entry.path}`); continue }
     }
     updated++
     changedPaths.push(entry.path)

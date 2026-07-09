@@ -81,7 +81,6 @@ import type { EventSource } from "./context/sdk"
 import { DialogVariant } from "./component/dialog-variant"
 import { createTuiAttention } from "./attention"
 import * as TuiAudio from "./audio"
-import { win32DisableProcessedInput, win32FlushInputBuffer } from "./terminal-win32"
 import { destroyRenderer } from "./util/renderer"
 import { cliErrorMessage, errorFormat } from "./util/error"
 import { AddFiles } from "./routes/spinosa/add-files"
@@ -209,7 +208,11 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
             destroyRenderer(renderer)
           }),
       )
-      win32DisableProcessedInput()
+      yield* Effect.promise(async () => {
+        // Platform-specific: Bun FFI to kernel32.dll (Windows only).
+        const { win32DisableProcessedInput } = await import("./terminal-win32")
+        win32DisableProcessedInput()
+      })
       const keymap = createDefaultOpenTuiKeymap(renderer)
       yield* Effect.acquireRelease(
         Effect.sync(() => registerOpencodeKeymap(keymap, renderer, input.config)),
@@ -254,7 +257,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
               }}
             >
               <EpilogueProvider set={(value) => (exit.epilogue = value)}>
-                <ErrorBoundary fallback={(error, reset) => <ErrorComponent error={error} reset={reset} mode={mode} />}>
+                <>
                   <TuiPathsProvider
                     value={{
                       cwd: process.cwd(),
@@ -325,10 +328,16 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                                               <PromptRefProvider>
                                                                 <EditorContextProvider>
                                                                   <LocationProvider>
-                                                                    <App
-                                                                      onSnapshot={input.onSnapshot}
-                                                                      pluginHost={input.pluginHost}
-                                                                    />
+                                                                    <ErrorBoundary
+                                                                      fallback={(error, reset) => (
+                                                                        <ErrorComponent error={error} reset={reset} mode={mode} />
+                                                                      )}
+                                                                    >
+                                                                      <App
+                                                                        onSnapshot={input.onSnapshot}
+                                                                        pluginHost={input.pluginHost}
+                                                                      />
+                                                                    </ErrorBoundary>
                                                                   </LocationProvider>
                                                                 </EditorContextProvider>
                                                               </PromptRefProvider>
@@ -355,7 +364,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                       </TuiStartupProvider>
                     </TuiTerminalEnvironmentProvider>
                   </TuiPathsProvider>
-                </ErrorBoundary>
+                </>
               </EpilogueProvider>
             </ExitProvider>
           )
@@ -365,8 +374,12 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
       return { epilogue: exit.epilogue, reason: exit.reason }
     }),
   )
-  yield* Effect.sync(() => {
+  yield* Effect.promise(async () => {
+    // Platform-specific: Bun FFI to kernel32.dll (Windows only).
+    const { win32FlushInputBuffer } = await import("./terminal-win32")
     win32FlushInputBuffer()
+  })
+  yield* Effect.sync(() => {
     if (result.reason !== undefined)
       process.stderr.write((cliErrorMessage(result.reason) ?? errorFormat(result.reason)) + "\n")
     if (result.epilogue) process.stdout.write(result.epilogue + "\n")

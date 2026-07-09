@@ -1,6 +1,6 @@
 import { homedir } from "node:os"
 import { mkdirSync } from "node:fs"
-import { parseInstallPinnedVersion } from "../utils/version"
+import { parseInstallPinnedVersion, isPrereleaseFrameworkVersion } from "../utils/version"
 
 export type ReleaseChannel = "stable" | "beta"
 
@@ -39,7 +39,7 @@ export function spinosaBetaToggleChannel(value: string): ReleaseChannel {
   }
 }
 
-async function readConfigValue(path: string, key: string): Promise<string | undefined> {
+export async function readConfigValue(path: string, key: string): Promise<string | undefined> {
   const file = Bun.file(path)
   if (!(await file.exists())) return undefined
   const text = await file.text()
@@ -176,5 +176,5 @@ export function installUrlForChannel(
 }
 
 export function isPrereleaseVersion(version: string): boolean {
-  return /^\d+\.\d+\.\d+-[0-9A-Za-z.]+$/.test(version)
+  return isPrereleaseFrameworkVersion(version)
 }

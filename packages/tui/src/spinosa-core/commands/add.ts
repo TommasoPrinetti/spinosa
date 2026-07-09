@@ -23,6 +23,7 @@ import { runPpuOcrBatch } from "../import/ppu-ocr"
 import type { PpuOcrFile } from "../import/ppu-ocr"
 import { spinosaLogInfo } from "../utils/log"
 import { MarkItDown } from "markitdown-ts"
+import { copySource } from "../import/pipeline"
 
 export interface AddFilesOptions {
   workspacePath: string
@@ -44,47 +45,6 @@ export interface AddFilesResult {
   mdSkipped: number
   ocrConverted: number
   ocrSkipped: number
-}
-
-async function runBatchMarkitdown(
-  sourcePath: string,
-  files: { srcFile: string; destFile: string; relPath: string }[],
-): Promise<{ converted: string[]; failed: string[] }> {
-  const converter = new MarkItDown()
-  const converted: string[] = []
-  const failed: string[] = []
-
-  for (const f of files) {
-    try {
-      mkdirSync(path.dirname(f.destFile), { recursive: true })
-      const result = await converter.convert(f.srcFile)
-      const text = result?.markdown ?? ""
-      writeFileSync(f.destFile, text, "utf-8")
-      converted.push(f.relPath)
-    } catch {
-      failed.push(f.relPath)
-    }
-  }
-
-  return { converted, failed }
-}
-
-async function runBatchOcr(
-  _sourcePath: string,
-  files: { srcFile: string; destFile: string; relPath: string }[],
-): Promise<{ converted: string[]; failed: string[] }> {
-  const toProcess: PpuOcrFile[] = files
-    .filter((f) => !convertedOutputExists(f.destFile))
-    .map((f) => ({ src: f.srcFile, rel: f.relPath, dest: f.destFile }))
-  if (toProcess.length === 0) return { converted: files.map((f) => f.relPath), failed: [] }
-  try {
-    await runPpuOcrBatch(toProcess)
-    const converted = files.filter((f) => convertedOutputExists(f.destFile)).map((f) => f.relPath)
-    const failed = files.filter((f) => !convertedOutputExists(f.destFile)).map((f) => f.relPath)
-    return { converted, failed }
-  } catch {
-    return { converted: [], failed: files.map((f) => f.relPath) }
-  }
 }
 
 export async function addFiles(options: AddFilesOptions): Promise<AddFilesResult> {
@@ -110,255 +70,50 @@ async function addFilesFromDir(
   overwrite?: boolean,
   onProgress?: (msg: string) => void,
 ): Promise<AddFilesResult> {
-  onProgress?.("Scanning source directory...")
-
   const importBatches = new ImportBatchManager()
   await scanSource(sourcePath, importBatches)
-
   if (extensions) {
     importBatches.parseExtensionsFromFlag(extensions)
   }
 
-  const allFiles = findSourceFiles(sourcePath)
+  onProgress?.("Scanning source directory...")
 
-  const markdownFiles: string[] = []
-  const nativeFiles: string[] = []
-  const avFiles: string[] = []
-  const mdConvertFiles: { srcFile: string; destFile: string; relPath: string }[] = []
-  const ocrFiles: { srcFile: string; destFile: string; relPath: string }[] = []
-
-  for (const file of allFiles) {
-    const ext = fileExt(file)
-    const klass = await classifySourceFile(file)
-
-    if (klass === "ignored" || klass === "unknown") continue
-    if (!ext || !importBatches.isSelected(ext)) continue
-
-    const relPath = subfolder ? path.join(subfolder, path.relative(sourcePath, file)) : path.relative(sourcePath, file)
-
-    switch (klass) {
-      case "markdown":
-        markdownFiles.push(file)
-        break
-      case "native":
-        nativeFiles.push(file)
-        break
-      case "video":
-      case "audio":
-        avFiles.push(file)
-        break
-      case "markitdown": {
-        const destRel = markitdownOutputRelPath(relPath)
-        const destFile = path.join(rawDir, destRel)
-        mdConvertFiles.push({ srcFile: file, destFile, relPath })
-        break
+  const result = await copySource(sourcePath, rawDir, {
+    batchManager: importBatches,
+    markitdownChoice: true,
+    ocrChoice: true,
+    overwrite,
+    subfolder,
+    verifyAfter: false,
+    onPhaseChange: (phase) => {
+      switch (phase) {
+        case "direct":
+          onProgress?.("Importing files...")
+          break
+        case "markitdown":
+          onProgress?.("Converting files with MarkItDown...")
+          break
+        case "ocr":
+          onProgress?.("Processing OCR...")
+          break
       }
-      case "ocr_convertible": {
-        const destRel = ocrOutputRelPath(relPath)
-        const destFile = path.join(rawDir, destRel)
-        ocrFiles.push({ srcFile: file, destFile, relPath })
-        break
-      }
-    }
-  }
+    },
+  })
 
-  const totalTargeted =
-    markdownFiles.length +
-    nativeFiles.length +
-    avFiles.length +
-    mdConvertFiles.length +
-    ocrFiles.length
-
-  if (totalTargeted === 0) {
-    return {
-      success: false,
-      totalTargeted: 0,
-      copied: 0,
-      skipped: 0,
-      failed: 0,
-      mdConverted: 0,
-      mdSkipped: 0,
-      ocrConverted: 0,
-      ocrSkipped: 0,
-    }
-  }
-
-  let copied = 0
-  let skipped = 0
-  let failed = 0
-  let mdConverted = 0
-  let mdSkipped = 0
-  let ocrConverted = 0
-  let ocrSkipped = 0
-
-  onProgress?.(`Importing ${markdownFiles.length} text files...`)
-
-  for (const file of markdownFiles) {
-    const relPath = subfolder ? path.join(subfolder, path.relative(sourcePath, file)) : path.relative(sourcePath, file)
-    const destRel = markdownRawRelPath(relPath)
-    const destFile = path.join(rawDir, destRel)
-
-    mkdirSync(path.dirname(destFile), { recursive: true })
-
-    if (existsSync(destFile)) {
-      if (!overwrite) {
-        skipped++
-        continue
-      }
-      rmSync(destFile, { force: true })
-    }
-
-    if (safeCopy(file, destFile)) {
-      copied++
-      injectColdFrontmatter(destFile)
-    } else {
-      failed++
-    }
-  }
-
-  onProgress?.(`Importing ${nativeFiles.length} native files...`)
-
-  for (const file of nativeFiles) {
-    const relPath = subfolder ? path.join(subfolder, path.relative(sourcePath, file)) : path.relative(sourcePath, file)
-    const destFile = path.join(rawDir, relPath)
-
-    mkdirSync(path.dirname(destFile), { recursive: true })
-
-    if (existsSync(destFile)) {
-      if (!overwrite) {
-        skipped++
-        continue
-      }
-      rmSync(destFile, { force: true })
-    }
-
-    if (safeCopy(file, destFile)) {
-      copied++
-      if (relPath.endsWith(".md")) {
-        injectColdFrontmatter(destFile)
-      }
-    } else {
-      failed++
-    }
-  }
-
-  onProgress?.(`Importing ${avFiles.length} media files...`)
-
-  for (const file of avFiles) {
-    const relPath = subfolder ? path.join(subfolder, path.relative(sourcePath, file)) : path.relative(sourcePath, file)
-    const destFile = path.join(rawDir, relPath)
-
-    mkdirSync(path.dirname(destFile), { recursive: true })
-
-    if (existsSync(destFile)) {
-      if (!overwrite) {
-        skipped++
-        continue
-      }
-      rmSync(destFile, { force: true })
-    }
-
-    if (safeCopy(file, destFile)) {
-      copied++
-    } else {
-      failed++
-    }
-  }
-
-  if (mdConvertFiles.length > 0) {
-    onProgress?.(`Converting ${mdConvertFiles.length} files with MarkItDown...`)
-
-    for (const f of mdConvertFiles) {
-      mkdirSync(path.dirname(f.destFile), { recursive: true })
-
-      if (convertedOutputExists(f.destFile)) {
-        if (!overwrite) {
-          mdSkipped++
-          continue
-        }
-      }
-
-      removeConvertedOutput(f.destFile)
-    }
-
-    const active = mdConvertFiles.filter(
-      (f) => !convertedOutputExists(f.destFile),
-    )
-
-    if (active.length > 0) {
-      const mdResult = await runBatchMarkitdown(sourcePath, active)
-      for (const rel of mdResult.converted) {
-        const entry = active.find((e) => e.relPath === rel)
-        if (!entry) continue
-
-        mdConverted++
-        injectColdFrontmatter(entry.destFile)
-
-        const pageDir = entry.destFile.replace(/\.md$/, "")
-        if (existsSync(pageDir) && statSync(pageDir).isDirectory()) {
-          for (const p of readdirSync(pageDir)) {
-            if (p.endsWith(".md")) {
-              injectColdFrontmatter(path.join(pageDir, p))
-            }
-          }
-        }
-      }
-      mdSkipped += mdResult.failed.length
-    }
-  }
-
-  if (ocrFiles.length > 0) {
-    onProgress?.(`Converting ${ocrFiles.length} files with OCR...`)
-
-    for (const f of ocrFiles) {
-      mkdirSync(path.dirname(f.destFile), { recursive: true })
-
-      if (convertedOutputExists(f.destFile)) {
-        if (!overwrite) {
-          ocrSkipped++
-          continue
-        }
-      }
-
-      removeConvertedOutput(f.destFile)
-    }
-
-    const active = ocrFiles.filter((f) => !convertedOutputExists(f.destFile))
-
-    if (active.length > 0) {
-      const ocrResult = await runBatchOcr(sourcePath, active)
-      for (const rel of ocrResult.converted) {
-        const entry = active.find((e) => e.relPath === rel)
-        if (!entry) continue
-
-        ocrConverted++
-        injectColdFrontmatter(entry.destFile)
-
-        const pageDir = entry.destFile.replace(/\.md$/, "")
-        if (existsSync(pageDir) && statSync(pageDir).isDirectory()) {
-          for (const p of readdirSync(pageDir)) {
-            if (p.endsWith(".md")) {
-              injectColdFrontmatter(path.join(pageDir, p))
-            }
-          }
-        }
-      }
-      ocrSkipped += ocrResult.failed.length
-    }
-  }
+  const totalTargeted = result.copied + result.skipped + result.failed + result.mdConverted + result.mdSkipped + result.ocrConverted + result.ocrSkipped
 
   onProgress?.("Import complete.")
 
   return {
-    success: failed === 0 || totalTargeted > failed,
+    success: result.failed === 0 || totalTargeted > result.failed,
     totalTargeted,
-    copied,
-    skipped,
-    failed,
-    mdConverted,
-    mdSkipped,
-    ocrConverted,
-    ocrSkipped,
+    copied: result.copied,
+    skipped: result.skipped,
+    failed: result.failed,
+    mdConverted: result.mdConverted,
+    mdSkipped: result.mdSkipped,
+    ocrConverted: result.ocrConverted,
+    ocrSkipped: result.ocrSkipped,
   }
 }
 

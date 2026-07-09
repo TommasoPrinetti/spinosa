@@ -137,7 +137,6 @@ info()  { spinosa_log INFO "$1"; printf '  %s %s\n' "${DIM}→${RESET}" "$1"; }
 ok()    { spinosa_log INFO "$1"; printf '  %s %s\n' "${G}✦${RESET}" "$1"; }
 warn()  { spinosa_log WARN "$1"; printf '  %s %s\n' "${Y}⚠${RESET}" "$1" >&2; }
 note()  { spinosa_log INFO "$1"; printf '  %s↳%s %s\n' "${DIM}" "${RESET}" "$1"; }
-fail()  { spinosa_log ERROR "$1"; printf '  %s%s✗%s %s%s\n' "${R}${BOLD}" "${U}" "$(printf '\033[24m')" "$1" "${RESET}" >&2; }
 die()   { spinosa_log ERROR "$1"; printf '\n  %s %s\n\n' "${R}✗${RESET}" "$1" >&2; exit 1; }
 divider() { printf '%s\n' "${DIM}$(printf '%.0s─' {1..78})${RESET}"; }
 
@@ -182,30 +181,16 @@ read_tty_or_die() {
 
 spinner_start() {
   local msg="$1"
-  SPINNER_PID=""
   [ -t 2 ] || return 0
-  (
-    local frames=("▁" "▃" "▄" "▅" "▆" "▇" "█" "▇" "▆" "▅" "▄" "▃")
-    local i=0
-    while true; do
-      printf '\r\033[2K  %s%s%s %s' "${G}" "${frames[$((i % 12))]}" "${RESET}" "$msg" >&2
-      i=$((i + 1))
-      sleep 0.1
-    done
-  ) &
-  SPINNER_PID=$!
+  printf '  %s' "$msg" >&2
 }
-
 spinner_stop() {
-  [ -n "${SPINNER_PID:-}" ] || return 0
-  kill "$SPINNER_PID" 2>/dev/null || true
-  wait "$SPINNER_PID" 2>/dev/null || true
-  SPINNER_PID=""
   printf '\r\033[2K' >&2
   if [ -n "${1:-}" ]; then
-    printf '  %s %s\n' "${G}✦${RESET}" "$1"
+    printf '  %s %s\n' "${G}✦${RESET}" "$1" >&2
   fi
 }
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # FLAG PARSING
@@ -297,21 +282,6 @@ detect_platform() {
   info "Platform: ${PLATFORM}"
 }
 
-detect_platform_suffix() {
-  local os arch
-  case "$(uname -s)" in
-    Darwin) os="darwin" ;;
-    Linux)  os="linux" ;;
-    *)      die "Unsupported OS for platform suffix: $(uname -s)" ;;
-  esac
-  case "$(uname -m)" in
-    arm64|aarch64) arch="arm64" ;;
-    x86_64|amd64)  arch="amd64" ;;
-    i386|i686)     arch="i386" ;;
-    *)             die "Unsupported architecture for platform suffix: $(uname -m)" ;;
-  esac
-  printf '%s-%s' "$os" "$arch"
-}
 
 download() {
   local url="$1" dest="$2"
@@ -455,17 +425,6 @@ check_download_disk_space() {
   done
 }
 
-_realpath() {
-  local path="$1"
-  if [[ -d "$path" ]]; then
-    (cd "$path" 2>/dev/null && pwd -P) 2>/dev/null || printf '%s\n' "$path"
-  else
-    local dir base
-    dir="$(dirname "$path")"
-    base="$(basename "$path")"
-    (cd "$dir" 2>/dev/null && printf '%s/%s\n' "$(pwd -P)" "$base") 2>/dev/null || printf '%s\n' "$path"
-  fi
-}
 
 # SECURITY: Keep archive safety checks centralized here unless a new runtime
 # extraction path is introduced; if so, keep both implementations in parity.
@@ -587,7 +546,7 @@ clean_macos_metadata() {
 init_global_metadata() {
   mkdir -p "$SPINOSA_METADATA_DIR"
   local name legacy current
-  for name in config.yaml workspace_cache.txt workspaces.txt version_check_cache; do
+  for name in config.yaml workspace_cache.txt workspaces.txt; do
     legacy="${SPINOSA_HOME}/${name}"
     current="${SPINOSA_METADATA_DIR}/${name}"
     if [ -f "$legacy" ] && [ ! -f "$current" ]; then
@@ -628,7 +587,7 @@ channel_install_url() {
   local channel="$1"
   case "$channel" in
     stable) printf 'https://raw.githubusercontent.com/%s/main/install.sh\n' "$REPO" ;;
-    beta|dev) printf 'https://raw.githubusercontent.com/%s/main/install.sh\n' "$REPO" ;;
+    beta|dev) printf 'https://raw.githubusercontent.com/%s/beta/install.sh\n' "$REPO" ;;
     *) die "Unknown release channel: ${channel}" ;;
   esac
 }
@@ -721,24 +680,7 @@ version_install_complete() {
 }
 
 
-reclaim_incomplete_version() {
-  local version="$1"
-  if [ -d "${SPINOSA_HOME}/versions/${version}" ] && ! version_install_complete "$version"; then
-    warn "Removing incomplete v${version} from a previous install attempt"
-    spinosa_log WARN "reclaim incomplete versions/${version}"
-    rm -rf "${SPINOSA_HOME}/versions/${version}"
-  fi
-}
 
-reclaim_all_incomplete_versions() {
-  local entry version
-  [ -d "${SPINOSA_HOME}/versions" ] || return 0
-  for entry in "${SPINOSA_HOME}/versions"/*; do
-    [ -e "$entry" ] || continue
-    version="$(basename "$entry")"
-    reclaim_incomplete_version "$version"
-  done
-}
 
 mark_version_install_complete() {
   local version="$1"
@@ -747,85 +689,40 @@ mark_version_install_complete() {
   write_install_metadata
 }
 
-install_install_state_lib() {
-  # No-op — install_state.sh removed, all functionality in TypeScript
-  return 0
-}
 
 # ══════════════════════════════════════════════════════════════════════════════
 # VERSION & SECURITY
 # ══════════════════════════════════════════════════════════════════════════════
 
 compare_versions() {
-  local original_a="$1" original_b="$2"
-  local a="${original_a%%-*}" b="${original_b%%-*}"
-  a="${a%%+*}" b="${b%%+*}"
-  local IFS=.
-  set -f
-  # shellcheck disable=SC2086
-  set -- $a
-  set +f
-  local av=("$@")
-  set -f
-  # shellcheck disable=SC2086
-  set -- $b
-  set +f
-  local bv=("$@")
-  local i max
-  max=${#av[@]}
-  [ "${#bv[@]}" -gt "$max" ] && max="${#bv[@]}"
-  for ((i=0; i<max; i++)); do
-    local an="${av[$i]:-0}" bn="${bv[$i]:-0}"
-    an="${an//[^0-9]/}"; an="${an:-0}"
-    bn="${bn//[^0-9]/}"; bn="${bn:-0}"
-    if (( an > bn )); then
-      return 1
-    elif (( an < bn )); then
-      return 2
-    fi
-  done
+  if [ "$1" = "$2" ]; then
+    return 0
+  fi
+
+  # Strip prerelease and build metadata for base version comparison
+  local a_base="$1" b_base="$2"
+  a_base="${a_base%%-*}"; a_base="${a_base%%+*}"
+  b_base="${b_base%%-*}"; b_base="${b_base%%+*}"
+
+  if [ "$a_base" != "$b_base" ]; then
+    local sorted
+    sorted="$(printf '%s\n%s\n' "$a_base" "$b_base" | sort -V)"
+    [ "$(echo "$sorted" | head -1)" = "$a_base" ] && return 2  # $1 < $2
+    return 1  # $1 > $2
+  fi
+
+  # Same base version: compare prerelease tags (semver: prerelease < release)
   local apre="" bpre=""
-  if [[ "$original_a" == *-* ]]; then
-    apre="${original_a#*-}"
-    apre="${apre%%+*}"
-  fi
-  if [[ "$original_b" == *-* ]]; then
-    bpre="${original_b#*-}"
-    bpre="${bpre%%+*}"
-  fi
-  if [ -z "$apre" ] && [ -n "$bpre" ]; then return 1; fi
-  if [ -n "$apre" ] && [ -z "$bpre" ]; then return 2; fi
-  if [ -n "$apre" ] && [ -n "$bpre" ] && [ "$apre" != "$bpre" ]; then
-    set -f
-    # shellcheck disable=SC2086
-    set -- $apre
-    set +f
-    local ap=("$@")
-    set -f
-    # shellcheck disable=SC2086
-    set -- $bpre
-    set +f
-    local bp=("$@")
-    max=${#ap[@]}; [ "${#bp[@]}" -gt "$max" ] && max="${#bp[@]}"
-    for ((i=0; i<max; i++)); do
-      local ai="${ap[$i]:-}" bi="${bp[$i]:-}"
-      [ "$ai" = "$bi" ] && continue
-      [ -z "$ai" ] && return 2
-      [ -z "$bi" ] && return 1
-      if [[ "$ai" =~ ^[0-9]+$ && "$bi" =~ ^[0-9]+$ ]]; then
-        if [ "$ai" -gt "$bi" ]; then return 1; fi
-        if [ "$ai" -lt "$bi" ]; then return 2; fi
-      elif [[ "$ai" =~ ^[0-9]+$ ]]; then
-        return 2
-      elif [[ "$bi" =~ ^[0-9]+$ ]]; then
-        return 1
-      else
-        [ "$ai" '>' "$bi" ] && return 1
-        [ "$ai" '<' "$bi" ] && return 2
-      fi
-    done
-  fi
-  return 0
+  case "$1" in *-*) apre="${1#*-}"; apre="${apre%%+*}" ;; esac
+  case "$2" in *-*) bpre="${2#*-}"; bpre="${bpre%%+*}" ;; esac
+
+  [ -z "$apre" ] && return 1  # release > prerelease
+  [ -z "$bpre" ] && return 2  # prerelease < release
+
+  # Both have prerelease tags: sort -V handles numeric tokens correctly
+  sorted="$(printf '%s\n%s\n' "$apre" "$bpre" | sort -V)"
+  [ "$(echo "$sorted" | head -1)" = "$apre" ] && return 2
+  return 1
 }
 
 get_installed_version() {
@@ -1046,58 +943,6 @@ handle_dry_run() {
   echo ""
   return 0
 }
-
-download_and_verify() {
-  local url="$1" dest="$2" label="$3"
-  local checksums_file="${4:-}"
-  local archive_name="${5:-}"
-  local max_retries="${6:-1}"
-  local retry_delay="${7:-3}"
-
-  local retries=0 download_ok=false
-  while [ "$retries" -lt "$max_retries" ]; do
-    if [ "$max_retries" -gt 1 ]; then
-      spinner_start "Downloading ${label} (attempt $((retries + 1))/${max_retries})"
-    else
-      spinner_start "Downloading ${label}"
-    fi
-    if download "$url" "$dest"; then
-      spinner_stop
-      download_ok=true
-      break
-    fi
-    # Fallback: try GitHub API if direct download failed
-    if [ "$retries" -eq 0 ] && [ -n "${archive_name:-}" ]; then
-      spinner_stop
-      warn "Direct download failed — trying API fallback for ${archive_name}"
-      if download_github_release_asset "$REPO" "$RELEASE_DOWNLOAD_TAG" "$archive_name" "$dest"; then
-        download_ok=true
-        break
-      fi
-    fi
-    spinner_stop
-    retries=$((retries + 1))
-    if [ "$retries" -lt "$max_retries" ]; then
-      warn "Download failed — retrying (${retries}/${max_retries})"
-      sleep "$retry_delay"
-    fi
-  done
-
-  if ! $download_ok; then
-    die "Failed to download ${label}"
-  fi
-
-  if [ -n "$checksums_file" ] && [ -n "$archive_name" ]; then
-    local ck_url="${url%/*}/${checksums_file}"
-    local ck_dest
-    ck_dest="$(dirname "$dest")/${checksums_file}"
-    download "$ck_url" "$ck_dest" || die "Failed to download ${checksums_file} — cannot verify integrity"
-    verify_asset_checksum "$dest" "$archive_name" "$ck_dest" "$label"
-  fi
-}
-
-
-
 install_shims() {
   if [ "$PREFIX_MODE" -eq 1 ]; then
     info "Custom install root (--prefix) — skipping global shim."
@@ -1423,8 +1268,7 @@ main() {
 
   # Extract — GitHub's tarball has a top-level dir (spinosa-<tag>/)
   local extract_tmp="${tmpdir}/framework-extract"
-  mkdir -p "$extract_tmp"
-  tar -xzf "$framework_dest" -C "$extract_tmp"
+  safe_untar "$framework_dest" "$extract_tmp"
   local top_dir
   top_dir="$(find "$extract_tmp" -mindepth 1 -maxdepth 1 -type d | head -1)"
   [[ -n "$top_dir" ]] || die "Archive has unexpected structure"
