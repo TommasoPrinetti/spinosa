@@ -7,18 +7,26 @@ async function getDoc(pdfPath: string): Promise<PDFDocumentProxy> {
   return getDocument({ data }).promise
 }
 
-export async function pdfPageCount(pdfPath: string): Promise<number> {
+async function withDoc<T>(pdfPath: string, fn: (doc: PDFDocumentProxy) => Promise<T>): Promise<T> {
   const doc = await getDoc(pdfPath)
-  return doc.numPages
+  try {
+    return await fn(doc)
+  } finally {
+    await doc.destroy().catch(() => {})
+  }
+}
+
+export async function pdfPageCount(pdfPath: string): Promise<number> {
+  return withDoc(pdfPath, (doc) => Promise.resolve(doc.numPages))
 }
 
 export async function pdfTextContent(pdfPath: string, page: number): Promise<string> {
-  const doc = await getDoc(pdfPath)
-  const pg = await doc.getPage(page)
-  const content = await pg.getTextContent()
-  return content.items.map((item) => ("str" in item ? item.str : "")).join(" ")
+  return withDoc(pdfPath, async (doc) => {
+    const pg = await doc.getPage(page)
+    const content = await pg.getTextContent()
+    return content.items.map((item) => ("str" in item ? item.str : "")).join(" ")
+  })
 }
-
 export async function pdfPageHasExtractableText(pdfPath: string, page: number): Promise<boolean> {
   const text = await pdfTextContent(pdfPath, page)
   return text.replace(/\s/g, "").length > 0
@@ -45,16 +53,15 @@ export async function pdfTextPagesMeetThreshold(pdfPath: string, pageCount: numb
   ])
   const hits = results.filter(Boolean).length
   return hits >= 2
-}
-
 export async function pdfRenderPageToPng(pdfPath: string, pageNumber: number, dpi = 180): Promise<Buffer> {
-  const doc = await getDoc(pdfPath)
-  const pg = await doc.getPage(pageNumber)
-  const viewport = pg.getViewport({ scale: dpi / 72 })
-  const canvas = createCanvas(viewport.width, viewport.height)
-  const ctx = canvas.getContext("2d")
-  await pg.render({ canvasContext: ctx as unknown as CanvasRenderingContext2D, viewport }).promise
-  return canvas.toBuffer("image/png")
+  return withDoc(pdfPath, async (doc) => {
+    const pg = await doc.getPage(pageNumber)
+    const viewport = pg.getViewport({ scale: dpi / 72 })
+    const canvas = createCanvas(viewport.width, viewport.height)
+    const ctx = canvas.getContext("2d")
+    await pg.render({ canvasContext: ctx as unknown as CanvasRenderingContext2D, viewport }).promise
+    return canvas.toBuffer("image/png")
+  })
 }
 
 export async function isTextBasedPdf(pdfPath: string): Promise<boolean> {
@@ -79,28 +86,38 @@ export async function isTextBasedPdf(pdfPath: string): Promise<boolean> {
 }
 
 export async function pdfExtractAllText(pdfPath: string): Promise<string> {
-  const doc = await getDoc(pdfPath)
-  const pages: string[] = []
-  for (let i = 1; i <= doc.numPages; i++) {
-    const pg = await doc.getPage(i)
-    const content = await pg.getTextContent()
-    pages.push(content.items.map((item) => ("str" in item ? item.str : "")).join(" "))
-  }
-  return pages.join("\n\n")
+  return withDoc(pdfPath, async (doc) => {
+    const pages: string[] = []
+    for (let i = 1; i <= doc.numPages; i++) {
+      try {
+        const pg = await doc.getPage(i)
+        const content = await pg.getTextContent()
+        pages.push(content.items.map((item) => ("str" in item ? item.str : "")).join(" "))
+      } catch {
+        continue
+      }
+    }
+    return pages.join("\n\n")
+  })
 }
 
 export async function pdfExtractPageTexts(pdfPath: string): Promise<{ page: number; text: string }[]> {
-  const doc = await getDoc(pdfPath)
-  const result: { page: number; text: string }[] = []
-  for (let i = 1; i <= doc.numPages; i++) {
-    const pg = await doc.getPage(i)
-    const content = await pg.getTextContent()
-    result.push({
-      page: i,
-      text: content.items.map((item) => ("str" in item ? item.str : "")).join(" "),
-    })
-  }
-  return result
+  return withDoc(pdfPath, async (doc) => {
+    const result: { page: number; text: string }[] = []
+    for (let i = 1; i <= doc.numPages; i++) {
+      try {
+        const pg = await doc.getPage(i)
+        const content = await pg.getTextContent()
+        result.push({
+          page: i,
+          text: content.items.map((item) => ("str" in item ? item.str : "")).join(" "),
+        })
+      } catch {
+        continue
+      }
+    }
+    return result
+  })
 }
 
 function searchBuffer(haystack: Buffer, needle: Buffer, start: number, end: number): boolean {
