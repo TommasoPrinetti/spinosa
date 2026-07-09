@@ -1,4 +1,5 @@
 import { homedir } from "node:os"
+import path from "node:path"
 import { mkdirSync } from "node:fs"
 import { parseInstallPinnedVersion, isPrereleaseFrameworkVersion } from "../utils/version"
 
@@ -18,8 +19,9 @@ const SPINOSA_RELEASE_REPO =
 const FETCH_TIMEOUT_MS = 10_000
 
 export function spinosaConfigFile(): string {
-  const home = process.env.SPINOSA_HOME ?? `${homedir()}/.spinosa`
-  return `${home}/metadata/config.yaml`
+  const metaDir = process.env.SPINOSA_METADATA_DIR ??
+    `${process.env.SPINOSA_HOME ?? `${homedir()}/.spinosa`}/metadata`
+  return `${metaDir}/config.yaml`
 }
 
 export function spinosaBetaToggleChannel(value: string): ReleaseChannel {
@@ -108,11 +110,9 @@ export async function deleteConfigKey(
   text = text.replace(regex, "")
   await Bun.write(configPath, text)
 }
-
 export async function setReleaseChannel(channel: ReleaseChannel): Promise<void> {
-  const configDir = process.env.SPINOSA_METADATA_DIR ??
-    `${process.env.SPINOSA_HOME ?? `${homedir()}/.spinosa`}/metadata`
-  const configPath = `${configDir}/config.yaml`
+  const configPath = spinosaConfigFile()
+  const configDir = path.dirname(configPath)
   const betaValue = channel === "beta" ? "true" : "false"
 
   mkdirSync(configDir, { recursive: true })
