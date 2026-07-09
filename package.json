@@ -7,8 +7,8 @@
   "packageManager": "bun@1.3.14",
   "scripts": {
     "dev": "bun run --cwd packages/opencode --conditions=browser src/index.ts",
-    "postinstall": "bun run --cwd packages/core fix-node-pty && bash framework/bin/sync-agents.sh",
-    "sync-agents": "bash framework/bin/sync-agents.sh",
+    "postinstall": "bun run --cwd packages/core fix-node-pty",
+    "sync-agents": "echo 'sync-agents removed — agent dirs pre-baked in workspace-template'",
     "typecheck": "bun run --cwd packages/core typecheck && bun run --cwd packages/sdk typecheck && bun run --cwd packages/tui typecheck && bun run --cwd packages/opencode typecheck"
   },
   "workspaces": {
