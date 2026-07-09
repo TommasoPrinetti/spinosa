@@ -242,22 +242,6 @@ Use to test installers and upgrades **before** a stable cut. Safe to publish fro
    (cd packages/tui && bun test test/spinosa)
    ```
 
-4a. **Build and publish TUI binary to npm**:
-
-   The TUI (opencode fork + spinosa enhancements) ships as a standalone npm package.
-   The installer runs `bun install -g @spinosa/tui` after framework extraction.
-
-   ```bash
-   # Build platform binaries for all targets
-   bun run script/build-tui.ts
-
-   # Publish to npm (requires @spinosa org access)
-   bun run script/publish-tui.ts
-   ```
-
-   This compiles packages/opencode + packages/tui + packages/spinosa-core into
-   standalone binaries for 12 platform targets (~80-120 MB each).
-   Platform packages are auto-resolved via optionalDependencies.
 
 5. **Publish beta**:
 
