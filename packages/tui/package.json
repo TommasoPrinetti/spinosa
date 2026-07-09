@@ -36,7 +36,6 @@
     "./prompt/display": "./src/prompt/display.ts",
     "./plugin/runtime": "./src/plugin/runtime.tsx",
     "./plugin/slots": "./src/plugin/slots.tsx",
-    "./plugin/command-shim": "./src/plugin/command-shim.ts",
     "./parsers-config": "./src/parsers-config.ts",
     "./util/error": "./src/util/error.ts",
     "./util/locale": "./src/util/locale.ts",
