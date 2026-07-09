@@ -4,8 +4,8 @@ import { useToast } from "../../ui/toast"
 import { useRoute } from "../../context/route"
 import { useSpinosaWorkspace } from "../../context/spinosa-workspace"
 
-import { updateWorkspace } from "@opencode-ai/spinosa-core/commands/update"
-import { resolveFrameworkRoot } from "@opencode-ai/spinosa-core/framework/discovery"
+import { updateWorkspace } from "../../spinosa-core/commands/update"
+import { resolveFrameworkRoot } from "../../spinosa-core/framework/discovery"
 import {
   readBundledFrameworkVersion,
   workspaceNeedsFrameworkUpdate,

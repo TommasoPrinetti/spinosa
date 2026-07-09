@@ -7,24 +7,36 @@ on:
     branches: [main]
 
 jobs:
-  test:
+  shell-check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Shell syntax check
         run: |
-          for f in .bin/spinosa .bin/*.sh .bin/lib/spinosa/*.sh install.sh; do bash -n "$f"; done
+          for f in framework/bin/spinosa framework/bin/*.sh framework/bin/lib/spinosa/*.sh install.sh; do bash -n "$f"; done
       - name: Startup contract check
-        run: bash .bin/check-startup.sh
-
+        run: bash framework/bin/check-startup.sh
       - name: Doc contract check
-        run: bash .bin/check-doc-contract.sh
-
+        run: bash framework/bin/check-doc-contract.sh
       - name: Skill validation
-        run: bash .bin/validate-skills.sh
-
-      - name: Release packaging syntax surface
+        run: bash framework/bin/validate-skills.sh
+      - name: Manifest integrity
         run: |
-          test -f .spinosa/framework-files.tsv
+          test -f framework/spinosa/framework-files.tsv
           test -f RELEASE_GUIDE.md
+
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-bun
+      - name: TypeScript typecheck
+        run: bun run typecheck
+
+  unit-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-bun
+      - name: Run tests
+        run: bun test --filter './packages/spinosa-core' --filter './packages/tui'

@@ -85,7 +85,6 @@ import { destroyRenderer } from "./util/renderer"
 import { cliErrorMessage, errorFormat } from "./util/error"
 import { AddFiles } from "./routes/spinosa/add-files"
 import { Onboarding } from "./routes/spinosa/onboarding"
-import { StartupHub } from "./routes/spinosa/startup-hub"
 
 const appGlobalBindingCommands = [
   "session.list",
@@ -1112,9 +1111,6 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         <box flexGrow={1} minHeight={0} flexDirection="column">
           <Show when={route.data.type === "workspace"}>
             <Workspace />
-          </Show>
-          <Show when={route.data.type === "startup-hub"}>
-            <StartupHub />
           </Show>
           <Show when={route.data.type === "onboarding"}>
             <Onboarding />

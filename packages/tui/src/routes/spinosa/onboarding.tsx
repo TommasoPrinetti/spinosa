@@ -7,14 +7,14 @@ import { useTheme } from "../../context/theme"
 import { useRoute } from "../../context/route"
 import { useSpinosaWorkspace } from "../../context/spinosa-workspace"
 import { Toast } from "../../ui/toast"
-import { ProgressEmitter } from "@opencode-ai/spinosa-core/progress/progress"
-import { createWorkspace } from "@opencode-ai/spinosa-core/commands/create"
-import { prepareOnboarding, completeOnboarding } from "@opencode-ai/spinosa-core/commands/onboard"
-import type { OnboardingContext, PhaseAccumulator, OnboardingResult } from "@opencode-ai/spinosa-core/commands/onboard"
-import { scanAndClassifySource, processDirectCopy, processMarkitdown, processOcr, type PhaseResult } from "@opencode-ai/spinosa-core/import/pipeline"
-import { addFiles } from "@opencode-ai/spinosa-core/commands/add"
-import { runStartup as tsRunStartup } from "@opencode-ai/spinosa-core/commands/startup"
-import { resolveFrameworkRoot } from "@opencode-ai/spinosa-core/framework/discovery"
+import { ProgressEmitter } from "../../spinosa-core/progress/progress"
+import { createWorkspace } from "../../spinosa-core/commands/create"
+import { prepareOnboarding, completeOnboarding } from "../../spinosa-core/commands/onboard"
+import type { OnboardingContext, PhaseAccumulator, OnboardingResult } from "../../spinosa-core/commands/onboard"
+import { scanAndClassifySource, processDirectCopy, processMarkitdown, processOcr, type PhaseResult } from "../../spinosa-core/import/pipeline"
+import { addFiles } from "../../spinosa-core/commands/add"
+import { runStartup as tsRunStartup } from "../../spinosa-core/commands/startup"
+import { resolveFrameworkRoot } from "../../spinosa-core/framework/discovery"
 import { spawn } from "node:child_process"
 import { tuiLog, logStep, logAction, logPhase, logTool, logResult, logError, logGate } from "../../spinosa/log"
 import { useExit } from "../../context/exit"
@@ -415,7 +415,7 @@ let nameInput: TextareaRenderable | undefined
     if (step() === "name") { logAction("back", `from ${step()} to path`); setStep("path"); return }
     if (step() === "tools") { logAction("back", `from ${step()} to name`); setStep("name"); return }
     if (step() === "scan") { logAction("back", `from ${step()} to path`); setStep("path"); return }
-    if (step() === "setup" || step() === "direct" || step() === "markitdown" || step() === "ocr" || step() === "verification") { logAction("back", `from ${step()} to imports`); setStep("imports"); return }
+    if (step() === "setup" || step() === "direct" || step() === "markitdown" || step() === "ocr" || step() === "verification") { logAction("back", `from ${step()} to scan`); setStep("scan"); return }
     if (step() === "provider") {
       setGateLabel("Choose provider")
       setGateAction(() => () => {
@@ -440,8 +440,7 @@ let nameInput: TextareaRenderable | undefined
   const generateToolCheckLines = (): ToolCheckResult[] => [
     { label: "PPU PaddleOCR", status: "checking", detail: "scanned PDFs and images" },
     { label: "MarkItDown", status: "checking", detail: "Office docs, EPUB, HTML, text PDFs" },
-    { label: "pdftoppm", status: "checking", detail: "scanned PDF page rendering" },
-    { label: "pdftotext", status: "checking", detail: "text PDF splitting" },
+    { label: "PDF.js", status: "checking", detail: "PDF text extraction and page rendering" },
   ]
 
   const runToolCheck = async () => {
@@ -449,8 +448,7 @@ let nameInput: TextareaRenderable | undefined
     const checks: ToolCheckResult[] = [
       { label: "PPU PaddleOCR", status: "checking", detail: "scanned PDFs and images" },
       { label: "MarkItDown", status: "checking", detail: "Office docs, EPUB, HTML, text PDFs" },
-      { label: "pdftoppm", status: "checking", detail: "scanned PDF page rendering" },
-      { label: "pdftotext", status: "checking", detail: "text PDF splitting" },
+      { label: "PDF.js", status: "checking", detail: "PDF text extraction and page rendering" },
     ]
     setToolChecks(checks)
     setStep("tools")
@@ -460,8 +458,7 @@ let nameInput: TextareaRenderable | undefined
     const results: ToolCheckResult[] = [
       { label: "PPU PaddleOCR", status: toolStatus.ocr ? "available" : "missing", detail: "scanned PDFs and images" },
       { label: "MarkItDown", status: toolStatus.markitdown ? "available" : "missing", detail: "Office docs, EPUB, HTML, text PDFs" },
-      { label: "pdftoppm", status: toolStatus.pypdfium2 ? "available" : "missing", detail: "scanned PDF page rendering" },
-      { label: "pdftotext", status: toolStatus.pypdf ? "available" : "missing", detail: "text PDF splitting" },
+      { label: "PDF.js", status: toolStatus.pdfjs ? "available" : "missing", detail: "PDF text extraction and page rendering" },
     ]
     setToolChecks(results)
     for (const r of results) logTool(r.label, r.status, r.detail)
@@ -491,8 +488,7 @@ let nameInput: TextareaRenderable | undefined
     const results = [
       { label: "PPU PaddleOCR", status: toolStatus.ocr ? "available" : "missing", detail: "scanned PDFs and images" },
       { label: "MarkItDown", status: toolStatus.markitdown ? "available" : "missing", detail: "Office docs, EPUB, HTML, text PDFs" },
-      { label: "pdftoppm", status: toolStatus.pypdfium2 ? "available" : "missing", detail: "scanned PDF page rendering" },
-      { label: "pdftotext", status: toolStatus.pypdf ? "available" : "missing", detail: "text PDF splitting" },
+      { label: "PDF.js", status: toolStatus.pdfjs ? "available" : "missing", detail: "PDF text extraction and page rendering" },
     ] as ToolCheckResult[]
     setToolChecks(results)
     for (const r of results) logTool(r.label, r.status, r.detail)
@@ -500,6 +496,7 @@ let nameInput: TextareaRenderable | undefined
   }
 
   const handleToolAction = () => {
+    if (busy()) return
     const checks = toolChecks()
     const needsRepair = checks.some((t) => t.status === "missing")
     if (needsRepair) {
@@ -524,7 +521,7 @@ let nameInput: TextareaRenderable | undefined
       let mergedOptions: ImportOption[] = []
       for (const src of resolved) {
         appendLogLine(`Scanning: ${src}`)
-        const scanPreview = await buildNewWorkspacePreview(src)
+        const scanPreview = await buildNewWorkspacePreview(src, workspaceName() || defaultWorkspaceName())
         setPreview(scanPreview)
         for (const opt of scanPreview.importOptions) {
           const existing = mergedOptions.find((m) => m.ext === opt.ext)
@@ -639,16 +636,24 @@ let nameInput: TextareaRenderable | undefined
     }
 
     try {
-      // Phase A: Create workspace + scan + classify
+      setStep("setup")
       setProcessingStatus("Creating workspace...")
+      await yieldToEventLoop()
       const frameworkRoot = resolveFrameworkRoot()
-      if (!frameworkRoot) { setStep("error"); return }
+      if (!frameworkRoot) {
+        appendLogLine("Framework root not found — cannot create workspace.")
+        spinOff()
+        setBusy(false)
+        setStep("error")
+        return
+      }
       const wsResult = await createWorkspace({
         corpusPath: primarySource,
         frameworkRoot,
         extensions,
         preferredCli: "opencode",
         launch: "copy",
+        workspaceName: workspaceName() || defaultWorkspaceName(),
         onProgress: (msg) => { appendLogLine(msg) },
       })
       if (!wsResult.success) { setStep("error"); return }
@@ -656,7 +661,7 @@ let nameInput: TextareaRenderable | undefined
         workspacePath: wsResult.workspacePath,
         frameworkRoot,
         sourcePath: primarySource,
-        projectTitle: path.basename(primarySource),
+        projectTitle: workspaceName() || path.basename(primarySource),
         flagExtensions: extensions,
       }) as OnboardingContext
       if ("success" in ctx && !ctx.success) { setStep("error"); return }
@@ -682,7 +687,9 @@ let nameInput: TextareaRenderable | undefined
       setProcessingStatus(`Direct copy complete — ${totalDirect} files`)
       await delay(1000)
       if (classified.markitdownFiles.length > 0) {
+        setBusy(false)
         await gate("Continue to MarkItDown")
+        setBusy(true)
         setStep("markitdown")
         setProgTotal(totalMd)
         setProgCurrent(0)
@@ -698,7 +705,9 @@ let nameInput: TextareaRenderable | undefined
       }
 
       if (classified.ocrFiles.length > 0) {
+        setBusy(false)
         await gate("Continue to OCR")
+        setBusy(true)
         setStep("ocr")
         setProgTotal(totalOcr)
         setProgCurrent(0)

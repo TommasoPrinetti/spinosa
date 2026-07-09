@@ -2,7 +2,7 @@
 # shellcheck shell=bash
 # ── install.sh — Spinosa Framework Installer (auto-re-execs with bash) ──────
 
-PINNED_VERSION="0.8.0-beta.16"
+PINNED_VERSION="__VERSION__"
 PINNED_TAG="beta"
 BUNDLED_BUN_VERSION="1.3.14"
 
@@ -115,6 +115,7 @@ MIN_DAYS=""
 YES=0
 LAUNCH_DASHBOARD="auto"
 PREFIX_MODE=0
+DEV_MODE=0
 SPINOSA_HOME="${SPINOSA_HOME:-$HOME/.spinosa}"
 SPINOSA_METADATA_DIR="${SPINOSA_HOME}/metadata"
 SPINOSA_BIN_DIR="${SPINOSA_BIN_DIR:-$HOME/.local/bin}"
@@ -238,6 +239,7 @@ while [ $# -gt 0 ]; do
     --bin-dir)
       [ $# -ge 2 ] || die "--bin-dir requires a directory path"
       SPINOSA_BIN_DIR="$2"; shift 2 ;;
+    --dev)        DEV_MODE=1; shift ;;
     --yes|-y)     YES=1; shift ;;
     --)           shift; break ;;
     --help|-h)
@@ -253,6 +255,7 @@ while [ $# -gt 0 ]; do
       echo "  --yes             Skip all confirmation prompts (for automation)"
       echo "  --launch          Launch the dashboard after install"
       echo "  --no-launch       Do not launch the dashboard after install"
+      echo "  --dev             Install full source tree for local development"
       echo ""
       echo "Security:"
       echo "  --min-days N      Reject releases newer than N days old"
@@ -409,9 +412,7 @@ install_bun_dependencies() {
     [[ -L "$link" ]] || ln -sf "$pkg_dir" "$link" 2>/dev/null || true
   done
 
-  if ! command -v pdftoppm >/dev/null 2>&1 || ! command -v pdftotext >/dev/null 2>&1 || ! command -v pdfinfo >/dev/null 2>&1; then
-    warn "Poppler tools not found — image OCR works, but PDF page splitting needs pdftoppm, pdftotext, and pdfinfo"
-  fi
+
 }
 
 available_disk_bytes() {
@@ -453,6 +454,8 @@ _realpath() {
   fi
 }
 
+# SECURITY: Keep in sync with framework/bin/lib/spinosa/core.sh safe_untar().
+# Any change to archive safety checks must be applied to BOTH files.
 safe_untar() {
   local archive="$1" dest="$2"
   shift 2
@@ -703,15 +706,6 @@ version_install_complete() {
   [ -n "$last" ] && [ "$last" = "$version" ]
 }
 
-list_complete_versions() {
-  local entry version
-  [ -d "${SPINOSA_HOME}/versions" ] || return 0
-  for entry in "${SPINOSA_HOME}/versions"/*; do
-    [ -e "$entry" ] || continue
-    version="$(basename "$entry")"
-    version_install_complete "$version" && printf '%s\n' "$version"
-  done | sort -V
-}
 
 reclaim_incomplete_version() {
   local version="$1"
@@ -741,7 +735,7 @@ mark_version_install_complete() {
 
 install_install_state_lib() {
   local fw_root="$1"
-  local src="${fw_root}/.bin/lib/spinosa/install_state.sh"
+  local src="${fw_root}/framework/bin/lib/spinosa/install_state.sh"
   local dest="${SPINOSA_HOME}/lib/install_state.sh"
   [ -f "$src" ] || return 0
   mkdir -p "${SPINOSA_HOME}/lib"
@@ -825,9 +819,21 @@ compare_versions() {
 }
 
 get_installed_version() {
-  list_complete_versions | tail -1
+  local entry version latest="" cmp=0
+  [ -d "${SPINOSA_HOME}/versions" ] || return 0
+  for entry in "${SPINOSA_HOME}/versions"/*; do
+    [ -e "$entry" ] || continue
+    version="$(basename "$entry")"
+    version_install_complete "$version" || continue
+    if [ -z "$latest" ]; then
+      latest="$version"
+    else
+      compare_versions "$version" "$latest" || cmp=$?
+      [ "$cmp" -eq 1 ] && latest="$version"
+    fi
+  done
+  [ -n "$latest" ] && printf '%s\n' "$latest"
 }
-
 resolve_version() {
   if [ "$VERSION" = "latest" ]; then
     local channel url
@@ -1141,7 +1147,7 @@ spinosa_path_block_present() {
   local config_file="$1"
   [[ -f "$config_file" ]] || return 1
   grep -q '# Spinosa' "$config_file" 2>/dev/null || return 1
-  grep -Eq '\.spinosa/env\.sh|fish_add_path|SPINOSA_BIN_DIR' "$config_file" 2>/dev/null
+  grep -Eq '\framework/spinosa/env\.sh|fish_add_path|SPINOSA_BIN_DIR' "$config_file" 2>/dev/null
 }
 
 spinosa_path_source_line() {
@@ -1405,13 +1411,15 @@ main() {
   mkdir -p "${SPINOSA_HOME}/versions/${VERSION}"
   mv "$extract_tmp"/* "${SPINOSA_HOME}/versions/${VERSION}/"
   clean_macos_metadata "${SPINOSA_HOME}/versions/${VERSION}"
-  local fw_root="${SPINOSA_HOME}/versions/${VERSION}/spinosa-framework-${VERSION}"
-
   install_bundled_bun "$tmpdir"
-  install_bun_dependencies "$fw_root"
+  if [ "$DEV_MODE" -eq 1 ]; then
+    install_bun_dependencies "$fw_root"
+  else
+    note "Production install — skipping source dependencies (use --dev for full source tree)"
+  fi
 
   # Install CLI binary (atomic write: temp + mv to avoid partial reads)
-  local spinosa_bin="${fw_root}/.bin/spinosa"
+  local spinosa_bin="${fw_root}/framework/bin/spinosa"
   if [ -f "$spinosa_bin" ]; then
     cp "$spinosa_bin" "${SPINOSA_HOME}/bin/.spinosa.tmp"
     chmod +x "${SPINOSA_HOME}/bin/.spinosa.tmp"

@@ -2,7 +2,7 @@ import { existsSync } from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { MAIN_CONTENT_MAX_WIDTH, SIDEBAR_WIDTH } from "../util/layout"
-import { resolveFrameworkBin, resolveFrameworkRoot } from "@opencode-ai/spinosa-core/framework/discovery"
+import { resolveFrameworkBin, resolveFrameworkRoot } from "../spinosa-core/framework/discovery"
 import { routeForSetupStatus } from "./entry"
 import {
   getCorpusSummary,
@@ -12,7 +12,7 @@ import {
   getFrameworkHealth,
   isSpinosaWorkspace,
   readWorkspaceMeta,
-} from "@opencode-ai/spinosa-core/workspace/meta"
+} from "../spinosa-core/workspace/meta"
 
 export type VerifyCheck = {
   id: string

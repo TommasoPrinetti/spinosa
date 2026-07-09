@@ -20,8 +20,8 @@ import {
   workspaceNeedsFrameworkUpdate,
   writeWorkspaceFrameworkVersion,
 } from "../../spinosa/service"
-import { updateWorkspace } from "@opencode-ai/spinosa-core/commands/update"
-import { resolveFrameworkRoot } from "@opencode-ai/spinosa-core/framework/discovery"
+import { updateWorkspace } from "../../spinosa-core/commands/update"
+import { resolveFrameworkRoot } from "../../spinosa-core/framework/discovery"
 import { setupStatusLabel } from "../../spinosa/status-labels"
 import type { SpinosaSetupStatus } from "../../spinosa/types"
 import { truncatePathTail } from "../../spinosa/truncate-path"

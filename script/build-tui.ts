@@ -21,7 +21,8 @@ const skipInstall = process.argv.includes("--skip-install")
 const sourcemapsFlag = process.argv.includes("--sourcemaps")
 const plugin = createSolidTransformPlugin()
 
-const TUI_VERSION = "0.8.0-beta.12"
+const rootPkg = await Bun.file(path.join(repoRoot, "package.json")).json()
+const TUI_VERSION: string = rootPkg.version
 
 const allTargets: {
   os: string

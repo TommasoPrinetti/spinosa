@@ -67,7 +67,6 @@ function routeCurrent(route: ReturnType<typeof useRoute>): TuiPluginApi["route"]
   }
   if (
     route.data.type === "workspace-picker" ||
-    route.data.type === "startup-hub" ||
     route.data.type === "onboarding" ||
     route.data.type === "add-files"
   ) {

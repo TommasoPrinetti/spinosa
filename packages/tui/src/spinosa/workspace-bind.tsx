@@ -10,7 +10,7 @@ export function SpinosaWorkspaceBinder() {
 
   createWorkspaceFileWatcher(
     () => spinosa.activePath,
-    ["system/configuration.md", "system/context.md", ".spinosa/workspace"],
+    ["framework/system/configuration.md", "framework/system/context.md", "framework/spinosa/workspace"],
     () => {
       spinosa.refresh()
     },

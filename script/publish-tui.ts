@@ -14,8 +14,9 @@ const repoRoot = path.resolve(__dirname, "..")
 
 process.chdir(repoRoot)
 
-const TUI_VERSION = "0.8.0-beta.12"
-const CHANNEL = "beta"
+const rootPkg = await Bun.file(path.join(repoRoot, "package.json")).json()
+const TUI_VERSION: string = rootPkg.version
+const CHANNEL = TUI_VERSION.includes("-") ? "beta" : "latest"
 
 async function published(name: string, version: string) {
   return (await $`npm view ${name}@${version} version`.nothrow()).exitCode === 0

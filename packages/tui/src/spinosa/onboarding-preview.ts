@@ -1,13 +1,13 @@
 import { existsSync, readdirSync, statSync } from "node:fs"
 import path from "node:path"
-import { detectLlmTools as coreDetectLlmTools } from "@opencode-ai/spinosa-core/tools/detection"
-import { resolveUserPath } from "@opencode-ai/spinosa-core/utils/path"
-import { pluralCount } from "@opencode-ai/spinosa-core/utils/string"
-import { fileExt } from "@opencode-ai/spinosa-core/constants"
-import { shouldSkipSourceFile, classifySourceFile } from "@opencode-ai/spinosa-core/extension/classifier"
-import { suggestWorkspacePath as coreSuggestWorkspacePath } from "@opencode-ai/spinosa-core/scan/scanner"
-import { detectDocumentTools as coreDetectDocumentTools } from "@opencode-ai/spinosa-core/scan/scanner"
-import type { ToolStatus as CoreToolStatus } from "@opencode-ai/spinosa-core/scan/scanner"
+import { detectLlmTools as coreDetectLlmTools } from "../spinosa-core/tools/detection"
+import { resolveUserPath } from "../spinosa-core/utils/path"
+import { pluralCount } from "../spinosa-core/utils/string"
+import { fileExt } from "../spinosa-core/constants"
+import { shouldSkipSourceFile, classifySourceFile } from "../spinosa-core/extension/classifier"
+import { suggestWorkspacePath as coreSuggestWorkspacePath } from "../spinosa-core/scan/scanner"
+import { detectDocumentTools as coreDetectDocumentTools } from "../spinosa-core/scan/scanner"
+import type { ToolStatus as CoreToolStatus } from "../spinosa-core/scan/scanner"
 
 export type OnboardingImportOption = {
   ext: string
@@ -99,8 +99,9 @@ async function scanByExtension(sourcePath: string): Promise<{
 
 // ── Build scan rows (for display) ────────────────────────────────────
 
-function buildScanRows(totals: { markdown: number; markitdown: number; native: number; ocr: number; video: number; audio: number; unknown: number; ignored: number }): OnboardingPreviewRow[] {
+function buildScanRows(totals: { markdown: number; markitdown: number; native: number; ocr: number; video: number; audio: number; unknown: number; ignored: number; total: number }): OnboardingPreviewRow[] {
   const rows: OnboardingPreviewRow[] = []
+  if (totals.total > 0) rows.push({ label: "Source scan", status: `${totals.total} file${totals.total === 1 ? "" : "s"}` })
   const push = (count: number, label: string) => {
     if (count > 0) rows.push({ label, status: `${count} file${count === 1 ? "" : "s"}` })
   }
@@ -141,8 +142,7 @@ function buildPreflightRows(workspacePath: string, toolStatus: ToolStatus): Onbo
   rows.push({ label: "Workspace", status: "writable", detail: path.basename(workspacePath), tone: "success" })
   rows.push({ label: "PPU PaddleOCR", status: "available", tone: "success" })
   rows.push({ label: "MarkItDown", status: toolStatus.markitdown ? "available" : "missing", tone: toolStatus.markitdown ? "success" : "error" })
-  rows.push({ label: "pdftoppm", status: toolStatus.pypdfium2 ? "available" : "missing", tone: toolStatus.pypdfium2 ? "success" : "error" })
-  rows.push({ label: "pdftotext", status: toolStatus.pypdf ? "available" : "missing", tone: toolStatus.pypdf ? "success" : "error" })
+  rows.push({ label: "PDF.js", status: toolStatus.pdfjs ? "available" : "missing", tone: toolStatus.pdfjs ? "success" : "error" })
   return rows
 }
 
@@ -154,14 +154,24 @@ export function detectLlmTools(): string[] {
   return coreDetectLlmTools()
 }
 
-function resolveWorkspacePath(projectName: string): string {
-  const cwd = process.cwd()
-  return coreSuggestWorkspacePath(cwd) ?? path.join(path.dirname(cwd), `${projectName}-spinosa`)
+function resolveWorkspacePath(sourcePath: string, workspaceName?: string): string {
+  const resolved = resolveUserPath(sourcePath)
+  if (!resolved) return ""
+  const corpusName = path.basename(resolved)
+  const parentDir = path.dirname(resolved)
+  const baseName = workspaceName?.trim() || `${corpusName}-spinosa`
+  let candidate = path.join(parentDir, baseName)
+  let n = 2
+  while (existsSync(candidate)) {
+    candidate = path.join(parentDir, `${baseName}-${n}`)
+    n++
+  }
+  return candidate
 }
 
-export async function buildNewWorkspacePreview(sourcePath: string): Promise<NewWorkspacePreview> {
-  const projectName = path.basename(sourcePath)
-  const workspacePath = resolveWorkspacePath(projectName)
+export async function buildNewWorkspacePreview(sourcePath: string, workspaceName?: string): Promise<NewWorkspacePreview> {
+  const projectName = workspaceName?.trim() || path.basename(sourcePath)
+  const workspacePath = resolveWorkspacePath(sourcePath, workspaceName)
   const toolStatus = await detectDocumentTools()
   const { extMap, totals } = await scanByExtension(sourcePath)
 
@@ -188,5 +198,5 @@ export async function buildImportScanPreview(sourcePath: string): Promise<Import
   }
 }
 
-export { resolveUserPath } from "@opencode-ai/spinosa-core/utils/path"
-export { suggestWorkspacePath } from "@opencode-ai/spinosa-core/scan/scanner"
+export { resolveUserPath } from "../spinosa-core/utils/path"
+export { suggestWorkspacePath } from "../spinosa-core/scan/scanner"

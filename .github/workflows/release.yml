@@ -1,0 +1,155 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Shell syntax check
+        run: |
+          for f in framework/bin/spinosa framework/bin/*.sh framework/bin/lib/spinosa/*.sh install.sh; do bash -n "$f"; done
+      - name: Manifest integrity
+        run: |
+          test -f framework/spinosa/framework-files.tsv
+          test -f RELEASE_GUIDE.md
+      - name: Validate version matches package.json
+        run: |
+          TAG_VERSION="${GITHUB_REF#refs/tags/v}"
+          PKG_VERSION="$(jq -r '.version' package.json)"
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "Error: tag v${TAG_VERSION} does not match package.json version ${PKG_VERSION}"
+            exit 1
+          fi
+
+  typecheck:
+    runs-on: ubuntu-latest
+    needs: gate
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-bun
+      - name: TypeScript typecheck
+        run: bun run typecheck
+
+  test:
+    runs-on: ubuntu-latest
+    needs: gate
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-bun
+      - name: Run tests
+        run: bun test --filter './packages/spinosa-core' --filter './packages/tui'
+
+  package:
+    runs-on: ubuntu-latest
+    needs: [typecheck, test]
+    outputs:
+      version: ${{ steps.version.outputs.value }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: version
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          echo "value=${VERSION}" >> $GITHUB_OUTPUT
+          if echo "$VERSION" | grep -q '-'; then
+            echo "prerelease=true" >> $GITHUB_OUTPUT
+            echo "channel=beta" >> $GITHUB_OUTPUT
+          else
+            echo "prerelease=false" >> $GITHUB_OUTPUT
+            echo "channel=stable" >> $GITHUB_OUTPUT
+          fi
+      - name: Build framework tarball
+        run: bash framework/bin/package-release.sh ${{ steps.version.outputs.value }}
+      - name: Upload framework artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: framework-${{ steps.version.outputs.value }}
+          path: |
+            dist/v${{ steps.version.outputs.value }}/*.tar.gz
+            dist/v${{ steps.version.outputs.value }}/install.sh
+            dist/v${{ steps.version.outputs.value }}/checksums.txt
+
+  publish-github:
+    runs-on: ubuntu-latest
+    needs: package
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download framework artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: framework-${{ needs.package.outputs.version }}
+          path: dist/v${{ needs.package.outputs.version }}
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${{ needs.package.outputs.version }}"
+          PRERELEASE="${{ needs.package.outputs.prerelease }}"
+          DIST="dist/v${VERSION}"
+
+          RELEASE_ARGS=(
+            --target "${GITHUB_REF_NAME}"
+            --title "Spinosa Framework v${VERSION}"
+            --generate-notes
+          )
+          [[ "$PRERELEASE" == "true" ]] && RELEASE_ARGS+=(--prerelease)
+
+          gh release create "v${VERSION}" \
+            "${RELEASE_ARGS[@]}" \
+            "${DIST}/spinosa-framework-${VERSION}.tar.gz" \
+            "${DIST}/install.sh" \
+            "${DIST}/checksums.txt"
+
+      - name: Sync rolling channel tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${{ needs.package.outputs.version }}"
+          PRERELEASE="${{ needs.package.outputs.prerelease }}"
+          DIST="dist/v${VERSION}"
+
+          if [[ "$PRERELEASE" == "true" ]]; then
+            CHANNEL="beta"
+          else
+            CHANNEL="stable"
+          fi
+
+          # Prepare channel installer (PINNED_TAG = channel name)
+          cp "${DIST}/install.sh" "${DIST}/install-${CHANNEL}.sh"
+          sed -i 's/^PINNED_TAG=".*"/PINNED_TAG="'"${CHANNEL}"'"/' "${DIST}/install-${CHANNEL}.sh"
+
+          # Create channel checksums
+          CHANNEL_CHECKSUMS="${DIST}/checksums-${CHANNEL}.txt"
+          sha256sum "${DIST}/spinosa-framework-${VERSION}.tar.gz" | awk '{print $1"  "$2}' > "$CHANNEL_CHECKSUMS"
+          sha256sum "${DIST}/install-${CHANNEL}.sh" | awk '{print $1"  "$2}' >> "$CHANNEL_CHECKSUMS"
+
+          # Sync rolling release
+          git tag -f "$CHANNEL" "$GITHUB_SHA"
+          git push origin "refs/tags/${CHANNEL}:refs/tags/${CHANNEL}" --force
+
+          if gh release view "$CHANNEL" >/dev/null 2>&1; then
+            gh release upload "$CHANNEL" \
+              "${DIST}/spinosa-framework-${VERSION}.tar.gz" \
+              "${DIST}/install-${CHANNEL}.sh" \
+              "$CHANNEL_CHECKSUMS" --clobber
+            [[ "$PRERELEASE" == "true" ]] && PRERELEASE_FLAG="--prerelease" || PRERELEASE_FLAG=""
+            gh release edit "$CHANNEL" \
+              --title "Spinosa Framework v${VERSION} (${CHANNEL})" \
+              --notes "Rolling ${CHANNEL} channel — points to v${VERSION}" \
+              $PRERELEASE_FLAG
+          else
+            gh release create "$CHANNEL" \
+              --target "$GITHUB_SHA" \
+              --title "Spinosa Framework v${VERSION} (${CHANNEL})" \
+              --notes "Rolling ${CHANNEL} channel — points to v${VERSION}" \
+              $([[ "$PRERELEASE" == "true" ]] && echo "--prerelease" || true) \
+              "${DIST}/spinosa-framework-${VERSION}.tar.gz" \
+              "${DIST}/install-${CHANNEL}.sh" \
+              "$CHANNEL_CHECKSUMS"
+          fi

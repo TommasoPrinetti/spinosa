@@ -1,6 +1,6 @@
-import { classifyPrompt, isNonFastPath, type RouteClass } from "@opencode-ai/spinosa-core/classify/route"
-import { orchestratorPreamble, writeGoalArtifact } from "@opencode-ai/spinosa-core/artifacts/goal"
-import { isSpinosaWorkspace } from "@opencode-ai/spinosa-core/workspace/meta"
+import { classifyPrompt, isNonFastPath, type RouteClass } from "../spinosa-core/classify/route"
+import { orchestratorPreamble, writeGoalArtifact } from "../spinosa-core/artifacts/goal"
+import { isSpinosaWorkspace } from "../spinosa-core/workspace/meta"
 
 export type PreparedSubmit = {
   text: string

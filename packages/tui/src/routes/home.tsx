@@ -23,7 +23,7 @@ import { DialogSpinosaWorkspacePicker } from "../component/dialog-spinosa-worksp
 import { OPENCODE_BASE_MODE, useOpencodeKeymap, useOpencodeModeStack } from "../keymap"
 import { readBundledFrameworkVersion, compareFrameworkVersions, isPrereleaseFrameworkVersion } from "../spinosa/service"
 import { workspaceAsciiBannerText } from "../spinosa/workspace-name"
-import { upgradeFramework } from "@opencode-ai/spinosa-core/commands/upgrade"
+import { upgradeFramework } from "../spinosa-core/commands/upgrade"
 import { buttonBackground, buttonText } from "../util/button"
 
 let once = false

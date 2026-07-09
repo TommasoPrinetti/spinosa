@@ -9,9 +9,9 @@ import { useTheme } from "../../context/theme"
 import { useRoute } from "../../context/route"
 import { useSpinosaWorkspace } from "../../context/spinosa-workspace"
 import { Toast } from "../../ui/toast"
-import { scanAndClassifySource, processDirectCopy, processMarkitdown, processOcr } from "@opencode-ai/spinosa-core/import/pipeline"
-import { ProgressEmitter } from "@opencode-ai/spinosa-core/progress/progress"
-import { ImportBatchManager } from "@opencode-ai/spinosa-core/import/batch"
+import { scanAndClassifySource, processDirectCopy, processMarkitdown, processOcr } from "../../spinosa-core/import/pipeline"
+import { ProgressEmitter } from "../../spinosa-core/progress/progress"
+import { ImportBatchManager } from "../../spinosa-core/import/batch"
 import { tuiLog, logStep, logAction, logTool, logGate, logError } from "../../spinosa/log"
 import { CenteredColumn } from "../../component/centered-column"
 import { OPENCODE_BASE_MODE, useOpencodeKeymap, useOpencodeModeStack } from "../../keymap"
@@ -24,7 +24,7 @@ import {
 } from "../../spinosa/onboarding-preview"
 import type { CliRunResult } from "../../spinosa/types"
 import { readBundledFrameworkVersion, isPrereleaseFrameworkVersion } from "../../spinosa/service"
-import { resolveFrameworkRoot } from "@opencode-ai/spinosa-core/framework/discovery"
+import { resolveFrameworkRoot } from "../../spinosa-core/framework/discovery"
 import {
   blurIfFocused,
   createWorkflowGuard,
@@ -346,10 +346,10 @@ export function AddFiles() {
     setWaitingForGate(false)
   }
 
-  const goHome = () => navigate({ type: "workspace" })
+  const goToWorkspace = () => navigate({ type: "workspace" })
   const leavePathStep = () => {
     stopActiveWork()
-    goHome()
+    goToWorkspace()
   }
 
   const handleBackPress = () => {
@@ -383,8 +383,7 @@ export function AddFiles() {
     const checks: ToolCheckResult[] = [
       { label: "PPU PaddleOCR", status: "checking", detail: "scanned PDFs and images" },
       { label: "MarkItDown", status: "checking", detail: "Office docs, EPUB, HTML, text PDFs" },
-      { label: "pdftoppm", status: "checking", detail: "scanned PDF page rendering" },
-      { label: "pdftotext", status: "checking", detail: "text PDF splitting" },
+      { label: "PDF.js", status: "checking", detail: "PDF text extraction and page rendering" },
     ]
     setToolChecks(checks)
     setStep("tools")
@@ -395,15 +394,14 @@ export function AddFiles() {
     const results: ToolCheckResult[] = [
       { label: "PPU PaddleOCR", status: toolStatus.ocr ? "available" : "missing", detail: "scanned PDFs and images" },
       { label: "MarkItDown", status: toolStatus.markitdown ? "available" : "missing", detail: "Office docs, EPUB, HTML, text PDFs" },
-      { label: "pdftoppm", status: toolStatus.pypdfium2 ? "available" : "missing", detail: "scanned PDF page rendering" },
-      { label: "pdftotext", status: toolStatus.pypdf ? "available" : "missing", detail: "text PDF splitting" },
+      { label: "PDF.js", status: toolStatus.pdfjs ? "available" : "missing", detail: "PDF text extraction and page rendering" },
     ]
     setToolChecks(results)
     for (const r of results) logTool(r.label, r.status, r.detail)
     spinOff()
   }
 
-  const handleToolAction = () => {
+  const handleToolAction = () => { if (busy()) return
     const checks = toolChecks()
     const needsRepair = checks.some((t) => t.status === "missing")
     if (needsRepair) {
@@ -438,8 +436,7 @@ export function AddFiles() {
     const results = [
       { label: "PPU PaddleOCR", status: toolStatus.ocr ? "available" : "missing", detail: "scanned PDFs and images" },
       { label: "MarkItDown", status: toolStatus.markitdown ? "available" : "missing", detail: "Office docs, EPUB, HTML, text PDFs" },
-      { label: "pdftoppm", status: toolStatus.pypdfium2 ? "available" : "missing", detail: "scanned PDF page rendering" },
-      { label: "pdftotext", status: toolStatus.pypdf ? "available" : "missing", detail: "text PDF splitting" },
+      { label: "PDF.js", status: toolStatus.pdfjs ? "available" : "missing", detail: "PDF text extraction and page rendering" },
     ] as ToolCheckResult[]
     setToolChecks(results)
     for (const r of results) logTool(r.label, r.status, r.detail)
@@ -571,7 +568,9 @@ export function AddFiles() {
         const mdCount = classified.markitdownFiles.length
         if (mdCount > 0) {
           setStep("markitdown")
+          setBusy(false)
           await gate("Continue to MarkItDown")
+          setBusy(true)
           if (abortProcessing) { spinOff(); setBusy(false); return }
 
           setProgTotal(mdCount || 1)
@@ -591,7 +590,9 @@ export function AddFiles() {
         const ocrCount = classified.ocrFiles.length
         if (ocrCount > 0) {
           setStep("ocr")
+          setBusy(false)
           await gate("Continue to OCR")
+          setBusy(true)
           if (abortProcessing) { spinOff(); setBusy(false); return }
 
           setProgTotal(ocrCount || 1)
@@ -628,7 +629,7 @@ export function AddFiles() {
   // ── Finish ────────────────────────────────────────────────────────────────
   const finish = () => {
     spinosa.refresh()
-    goHome()
+    goToWorkspace()
   }
 
   // ── Toggle helpers ────────────────────────────────────────────────────────
