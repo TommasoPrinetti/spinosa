@@ -43,6 +43,20 @@ if [[ -z "$BUN" ]] && command -v bun >/dev/null 2>&1; then
   BUN="$(command -v bun)"
 fi
 
+
+# Handle upgrade — route to Spinosa framework upgrade, not OpenCode's own upgrade
+if [[ "${1:-}" == "upgrade" ]]; then
+  CHANNEL="beta"
+  # Check for --channel flag
+  if [[ "$2" == "--channel" && -n "${3:-}" ]]; then
+    CHANNEL="$3"
+  fi
+  echo "  Upgrading Spinosa (${CHANNEL} channel)..."
+  # Use raw git URL to bypass GitHub release asset CDN cache
+  bash <(curl -fsSL "https://github.com/TommasoPrinetti/spinosa/raw/${CHANNEL}/install.sh") --upgrade --yes 2>&1
+  exit $?
+fi
+
 # Handle uninstall — removes framework versions, keeps metadata + workspace registry
 if [[ "${1:-}" == "uninstall" ]]; then
   R=$'\033[31m' G=$'\033[32m' Y=$'\033[33m' DIM=$'\033[2m' BOLD=$'\033[1m' RESET=$'\033[0m'
