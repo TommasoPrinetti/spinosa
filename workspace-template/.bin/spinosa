@@ -1,17 +1,16 @@
 #!/usr/bin/env bash
-# ── spinosa — TUI launcher (thin) ──────────────────────────────────────────
-# For CLI usage, run the TUI directly. All commands handled in TypeScript.
+# ── spinosa — TUI launcher ────────────────────────────────────────────────
+# Resolves template root, finds bun, launches TUI from packages/opencode.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Resolve system root (where packages/ lives)
+# Resolve system root
 RESOLVED_ROOT=""
 candidate="${SCRIPT_DIR}/.."
 if [[ -f "${candidate}/.spinosa/workspace-files.tsv" ]]; then
   RESOLVED_ROOT="$candidate"
 else
-  # Installed mode: binary is in template's .bin/, system root is two levels up
   candidate2="${SCRIPT_DIR}/../.."
   if [[ -f "${candidate2}/workspace-template/.spinosa/workspace-files.tsv" ]]; then
     RESOLVED_ROOT="$candidate2"
@@ -23,22 +22,21 @@ if [[ -z "$RESOLVED_ROOT" ]]; then
   exit 1
 fi
 
-# Dev mode: launch local TUI from packages/opencode
-if [[ -d "${RESOLVED_ROOT}/packages/opencode" ]]; then
-  BUN="${BUN:-$(command -v bun || true)}"
-  if [[ -n "$BUN" ]]; then
-    export SPINOSA_TEMPLATE_ROOT="$RESOLVED_ROOT"
-    exec "$BUN" run --cwd "${RESOLVED_ROOT}/packages/opencode" --conditions=browser src/index.ts "$@"
-  fi
+# Find bun — bundled install first, then system
+BUN=""
+bun_bin="${SPINOSA_HOME:-$HOME/.spinosa}/bin/bun"
+if [[ -z "$BUN" && -x "$bun_bin" ]]; then
+  BUN="$bun_bin"
+fi
+if [[ -z "$BUN" ]] && command -v bun >/dev/null 2>&1; then
+  BUN="$(command -v bun)"
 fi
 
-# Installed mode: launch from @spinosa/tui or system opencode
-if command -v npx >/dev/null 2>&1 && npx --yes @spinosa/tui --version >/dev/null 2>&1; then
-  exec npx @spinosa/tui "$@"
-fi
-if command -v opencode >/dev/null 2>&1; then
-  exec opencode "$@"
+# Launch TUI from local packages/opencode
+if [[ -d "${RESOLVED_ROOT}/packages/opencode" && -n "$BUN" ]]; then
+  export SPINOSA_TEMPLATE_ROOT="$RESOLVED_ROOT"
+  exec "$BUN" run --cwd "${RESOLVED_ROOT}/packages/opencode" --conditions=browser src/index.ts "$@"
 fi
 
-echo "Error: Spinosa TUI not available. Re-run installer." >&2
+echo "Error: Spinosa TUI not found. Run the installer or re-install dependencies." >&2
 exit 1
