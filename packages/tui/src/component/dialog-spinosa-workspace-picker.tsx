@@ -87,24 +87,40 @@ export function DialogSpinosaWorkspacePicker() {
   const [workspaces] = createResource(
     () => undefined,
     async () => {
+      console.error("[spinosa-workspace-picker] Fetching workspace list...")
       const list = await listRegisteredWorkspaces()
+      console.error("[spinosa-workspace-picker] listRegisteredWorkspaces returned", list.length, "entries")
       const bundled = await readBundledFrameworkVersion()
-      return Promise.all(
-        list.map(async (ws) => {
-          const meta = await readWorkspaceMeta(ws.path)
-          return {
-            path: ws.path,
-            name: resolveWorkspaceDisplayName(ws.path, meta?.projectName ?? ws.projectName),
-            parentFolder: getParentFolder(ws.path),
-            status: meta?.setupStatus || "unknown",
-            version: meta?.frameworkVersion || "unknown",
-            needsUpdate: workspaceNeedsFrameworkUpdate(meta?.frameworkVersion, bundled),
-            lastAccessed: getLastAccessed(ws.path),
-          } satisfies SelectWorkspaceRow
-        }),
+      console.error("[spinosa-workspace-picker] bundled version:", bundled)
+      const pairs = await Promise.all(
+        list.map(async (ws) => ({ ws, meta: await readWorkspaceMeta(ws.path) })),
       )
+      const valid = pairs.filter((p): p is { ws: typeof p.ws; meta: NonNullable<typeof p.meta> } => {
+        if (!p.meta) console.error("[spinosa-workspace-picker]  SKIP (no meta):", wsPathForLog(p.ws.path))
+        return !!p.meta
+      })
+      console.error("[spinosa-workspace-picker] After readWorkspaceMeta:", valid.length, "valid")
+      for (const v of valid) {
+        console.error("[spinosa-workspace-picker]  VALID:", v.ws.projectName, "|", v.ws.path, "| status:", v.meta.setupStatus)
+      }
+      return valid.map(({ ws, meta }) => ({
+        path: ws.path,
+        name: resolveWorkspaceDisplayName(ws.path, meta?.projectName ?? ws.projectName),
+        parentFolder: getParentFolder(ws.path),
+        status: meta?.setupStatus || "unknown",
+        version: meta?.frameworkVersion || "unknown",
+        needsUpdate: workspaceNeedsFrameworkUpdate(meta?.frameworkVersion, bundled),
+        lastAccessed: getLastAccessed(ws.path),
+      } satisfies SelectWorkspaceRow))
     },
   )
+function wsPathForLog(p: string) { const s = p.split("/"); return s[s.length-2]+"/"+s[s.length-1] }
+
+  const workspaceError = createMemo(() => {
+    const error = workspaces.error
+    if (!error) return undefined
+    return error instanceof Error ? error.message : String(error)
+  })
 
   const sorted = createMemo(() => {
     const rows = workspaces() ?? []
@@ -195,6 +211,15 @@ export function DialogSpinosaWorkspacePicker() {
         <text fg={theme.textMuted}>Loading workspaces…</text>
       </Show>
 
+      {/* ── error ── */}
+      <Show when={workspaceError()}>
+        {(message) => (
+          <box paddingLeft={1} paddingRight={1} paddingTop={1} paddingBottom={1}>
+            <text fg={theme.error}>Failed to load registered workspaces: {message()}</text>
+          </box>
+        )}
+      </Show>
+
       {/* ── table ── */}
       <Show when={sorted().length > 0}>
         <box flexDirection="column">
@@ -274,7 +299,7 @@ export function DialogSpinosaWorkspacePicker() {
       </Show>
 
       {/* ── empty ── */}
-      <Show when={!workspaces.loading && sorted().length === 0}>
+      <Show when={!workspaces.loading && !workspaceError() && sorted().length === 0}>
         <box paddingLeft={1} paddingRight={1} paddingTop={1} paddingBottom={1}>
           <text fg={theme.textMuted}>No registered workspaces found.</text>
         </box>
