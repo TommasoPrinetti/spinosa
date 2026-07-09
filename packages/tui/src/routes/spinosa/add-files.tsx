@@ -401,49 +401,10 @@ export function AddFiles() {
     spinOff()
   }
   const handleToolAction = () => {
-    logAction("handleToolAction", "called")
-    const checks = toolChecks()
-    const needsRepair = checks.some((t) => t.status === "missing")
-    if (needsRepair) {
-      logAction("repair-tools", `${checks.filter(t => t.status === "missing").length} tools missing`)
-      void runToolRepair()
-    } else if (checks.every((t) => t.status === "available")) {
-      logAction("start-scan", "All tools ready")
-      void startScan()
-    }
+    setStep("error")
+    appendLogLine("DEBUG: handleToolAction FIRED — toolChecks=" + JSON.stringify(toolChecks().map(t => t.status)))
+    return
   }
-
-  const runToolRepair = async () => {
-    logAction("repair", "Tools missing — repairing")
-    setToolChecks((prev) => prev.map((t) => t.status === "missing" ? { ...t, status: "checking" as const } : t))
-    spinOn()
-    await delay(80)
-    const bv = await readBundledFrameworkVersion()
-    const channel = bv && isPrereleaseFrameworkVersion(bv) ? "beta" : "stable"
-    await runReinstall({
-      channel,
-      onStdout: (chunk) => {
-        const clean = stripAnsi(chunk)
-        if (clean) appendLogLine(clean)
-      },
-      onStderr: (chunk) => {
-        const clean = stripAnsi(chunk)
-        if (clean) appendLogLine(clean)
-      },
-    })
-    await delay(200)
-    const toolStatus = await detectDocumentTools()
-    const results = [
-      { label: "PPU PaddleOCR", status: toolStatus.ocr ? "available" : "missing", detail: "scanned PDFs and images" },
-      { label: "MarkItDown", status: toolStatus.markitdown ? "available" : "missing", detail: "Office docs, EPUB, HTML, text PDFs" },
-      { label: "PDF.js", status: toolStatus.pdfjs ? "available" : "missing", detail: "PDF text extraction and page rendering" },
-    ] as ToolCheckResult[]
-    setToolChecks(results)
-    for (const r of results) logTool(r.label, r.status, r.detail)
-    appendLogLine("Tool repair complete.")
-    spinOff()
-  }
-
   // ── Scan ──────────────────────────────────────────────────────────────────
   const startScan = async () => {
     snapshotSourcePaths()
