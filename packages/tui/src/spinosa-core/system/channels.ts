@@ -6,11 +6,12 @@ export type ReleaseChannel = "stable" | "beta"
 
 const SPINOSA_STABLE_INSTALL_URL =
   process.env.SPINOSA_STABLE_INSTALL_URL ??
-  "https://github.com/TommasoPrinetti/spinosa/releases/download/stable/install.sh"
+  "https://github.com/TommasoPrinetti/spinosa/raw/stable/install.sh"
 
 const SPINOSA_BETA_INSTALL_URL =
   process.env.SPINOSA_BETA_INSTALL_URL ??
-  "https://github.com/TommasoPrinetti/spinosa/releases/download/beta/install.sh"
+  "https://github.com/TommasoPrinetti/spinosa/raw/beta/install.sh"
+
 
 const SPINOSA_RELEASE_REPO =
   process.env.SPINOSA_RELEASE_REPO ?? "TommasoPrinetti/spinosa"
