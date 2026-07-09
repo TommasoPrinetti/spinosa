@@ -4,7 +4,7 @@
 .gitattributes            export-ignore
 .gitignore                export-ignore
 .editorconfig             export-ignore
-tsconfig.json             export-ignore
+/tsconfig.json            export-ignore
 
 # CI and community health
 .github/                  export-ignore
@@ -21,4 +21,4 @@ assets/                   export-ignore
 
 # Dev tools
 tests/                    export-ignore
-script/                   export-ignore
+/script/                  export-ignore
