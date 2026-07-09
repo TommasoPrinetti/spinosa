@@ -85,9 +85,19 @@ export function logGate(label: string) {
   logEntry("info", "gate", { label, msg: `Gate: ${label}` })
 }
 
+let _toastError: ((err: unknown) => void) | undefined
+/** Register a toast callback — called by logError for visible error feedback */
+export function setToastError(fn: (err: unknown) => void) {
+  _toastError = fn
+}
+export function getToastError() {
+  return _toastError
+}
+
 /** Log an error with optional stack */
 export function logError(context: string, err: unknown) {
   const msg = err instanceof Error ? err.message : String(err)
   const stack = err instanceof Error ? err.stack : undefined
   logEntry("error", "error", { context, err: msg, ...(stack ? { stack } : {}), msg: `${context}: ${msg}` })
+  _toastError?.(err)
 }

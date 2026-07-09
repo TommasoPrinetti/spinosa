@@ -12,7 +12,7 @@ import { Toast, useToast } from "../../ui/toast"
 import { scanAndClassifySource, processDirectCopy, processMarkitdown, processOcr } from "../../spinosa-core/import/pipeline"
 import { ProgressEmitter } from "../../spinosa-core/progress/progress"
 import { ImportBatchManager } from "../../spinosa-core/import/batch"
-import { tuiLog, logStep, logAction, logTool, logGate, logError } from "../../spinosa/log"
+import { tuiLog, logStep, logAction, logTool, logGate, logError, setToastError } from "../../spinosa/log"
 import { CenteredColumn } from "../../component/centered-column"
 import { OPENCODE_BASE_MODE, useOpencodeKeymap, useOpencodeModeStack } from "../../keymap"
 import { useExit } from "../../context/exit"
@@ -139,14 +139,13 @@ async function runReinstall(input?: {
 }
 
 export function AddFiles() {
-  const toast = useToast()
   const { theme } = useTheme()
-  const modeStack = useOpencodeModeStack()
+  const toast = useToast()
   const { navigate } = useRoute()
   const spinosa = useSpinosaWorkspace()
   const keymap = useOpencodeKeymap()
+  const modeStack = useOpencodeModeStack()
   const exit = useExit()
-
   // ── Core state ────────────────────────────────────────────────────────────
   const [step, setStep] = createSignal<WizardStep>("path")
   const [sourcePaths, setSourcePaths] = createSignal<SourcePathEntry[]>([{ id: 0 }])
@@ -444,8 +443,11 @@ const runToolRepair = async () => {
           else mergedOptions.push({ ...opt })
         }
       }
+      setImportOptions(mergedOptions)
+      clearLog()
+      setScanDone(true)
+      logAction("scan-done", `${mergedOptions.length} file types found`)
     } catch (err) {
-      toast.error(err)
       logError("startScan", err)
       appendLogLine(`Scan failed: ${err instanceof Error ? err.message : String(err)}`)
       setStep("error")
@@ -563,13 +565,12 @@ const runToolRepair = async () => {
           setStep("ocr")
           setBusy(false)
           await gate("Continue to OCR")
-      }
-    } catch (err) {
-      toast.error(err)
-      logError("startProcessing", err)
-      appendLogLine(`Error: ${err instanceof Error ? err.message : String(err)}`)
-      setStep("error")
-    }
+          setBusy(true)
+          if (abortProcessing) { spinOff(); setBusy(false); return }
+
+          setProgTotal(ocrCount || 1)
+          setProgCurrent(0)
+          setProcessingStatus("OCR...")
           totalOcr += ocrCount
           await delay(500)
           const or = await processOcr(classified.ocrFiles, classified.logsDir, sharedProg, onPhaseLog)
@@ -650,10 +651,11 @@ const runToolRepair = async () => {
 
   // ── Mount (keymap + timers) ──────────────────────────────────────────────
   onMount(() => {
-    const handler = (ev: PromiseRejectionEvent) => {
-      console.error("Unhandled rejection:", ev.reason)
+    const onUnhandled = (ev: PromiseRejectionEvent) => {
+      console.error("[unhandled]", ev.reason)
     }
-    window.addEventListener?.("unhandledrejection", handler)
+    window.addEventListener?.("unhandledrejection", onUnhandled)
+    setToastError((err) => toast.error(err))
     focusSourceInput()
 
     // Auto-add new path input when last input has content
