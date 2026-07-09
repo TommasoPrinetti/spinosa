@@ -1,4 +1,4 @@
-import { readdirSync, statSync } from "node:fs"
+import { readdirSync, realpathSync, statSync } from "node:fs"
 import * as path from "node:path"
 import { homedir } from "node:os"
 import {
@@ -62,6 +62,7 @@ export function shouldSkipSourceFile(filePath: string): boolean {
 
 export function findSourceFiles(sourcePath: string): string[] {
   const results: string[] = []
+  const visited = new Set<string>()
 
   function walk(dir: string) {
     let entries
@@ -74,6 +75,14 @@ export function findSourceFiles(sourcePath: string): string[] {
       const fullPath = path.join(dir, entry.name)
       if (isTccSensitiveSourcePath(fullPath)) continue
       if (entry.isDirectory()) {
+        let real: string
+        try {
+          real = realpathSync(fullPath)
+        } catch {
+          continue
+        }
+        if (visited.has(real)) continue
+        visited.add(real)
         walk(fullPath)
       } else if (entry.isFile()) {
         results.push(fullPath)
@@ -86,28 +95,36 @@ export function findSourceFiles(sourcePath: string): string[] {
 }
 
 export async function classifySourceFile(filePath: string): Promise<FileClass> {
-  if (shouldSkipSourceFile(filePath)) return "ignored"
+  try {
+    if (shouldSkipSourceFile(filePath)) return "ignored"
 
-  const ext = fileExt(filePath)
+    const ext = fileExt(filePath)
 
-  if (extInList(ext, MARKDOWN_EXTENSIONS)) return "markdown"
-  if (extInList(ext, MARKITDOWN_EXTENSIONS)) return "markitdown"
-  if (extInList(ext, NATIVE_EXTENSIONS)) return "native"
+    if (extInList(ext, MARKDOWN_EXTENSIONS)) return "markdown"
+    if (extInList(ext, MARKITDOWN_EXTENSIONS)) return "markitdown"
+    if (extInList(ext, NATIVE_EXTENSIONS)) return "native"
 
-  if (ext === "pdf") {
-    return (await isTextBasedPdf(filePath)) ? "markitdown" : "ocr_convertible"
+    if (ext === "pdf") {
+      try {
+        return (await isTextBasedPdf(filePath)) ? "markitdown" : "ocr_convertible"
+      } catch {
+        return "unknown"
+      }
+    }
+
+    if (extInList(ext, IMAGE_EXTENSIONS)) return "ocr_convertible"
+
+    if (extInList(ext, AUDIO_VIDEO_EXTENSIONS)) {
+      const audioExts = ["mp3", "wav", "m4a", "aac", "flac", "ogg", "opus", "aiff"]
+      return audioExts.includes(ext) ? "audio" : "video"
+    }
+
+    if (extInList(ext, BINARY_COPYABLE_EXTENSIONS)) return "binary_copyable"
+
+    return "unknown"
+  } catch {
+    return "unknown"
   }
-
-  if (extInList(ext, IMAGE_EXTENSIONS)) return "ocr_convertible"
-
-  if (extInList(ext, AUDIO_VIDEO_EXTENSIONS)) {
-    const audioExts = ["mp3", "wav", "m4a", "aac", "flac", "ogg", "opus", "aiff"]
-    return audioExts.includes(ext) ? "audio" : "video"
-  }
-
-  if (extInList(ext, BINARY_COPYABLE_EXTENSIONS)) return "binary_copyable"
-
-  return "unknown"
 }
 
 export async function importRouteForFile(
