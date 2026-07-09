@@ -84,24 +84,27 @@ export function DialogSpinosaWorkspacePicker() {
     }
   }
 
-  const [workspaces] = createResource(async () => {
-    const list = await listRegisteredWorkspaces()
-    const bundled = await readBundledFrameworkVersion()
-    return Promise.all(
-      list.map(async (ws) => {
-        const meta = await readWorkspaceMeta(ws.path)
-        return {
-          path: ws.path,
-          name: resolveWorkspaceDisplayName(ws.path, meta?.projectName ?? ws.projectName),
-          parentFolder: getParentFolder(ws.path),
-          status: meta?.setupStatus || "unknown",
-          version: meta?.frameworkVersion || "unknown",
-          needsUpdate: workspaceNeedsFrameworkUpdate(meta?.frameworkVersion, bundled),
-          lastAccessed: getLastAccessed(ws.path),
-        } satisfies SelectWorkspaceRow
-      }),
-    )
-  })
+  const [workspaces] = createResource(
+    () => undefined,
+    async () => {
+      const list = await listRegisteredWorkspaces()
+      const bundled = await readBundledFrameworkVersion()
+      return Promise.all(
+        list.map(async (ws) => {
+          const meta = await readWorkspaceMeta(ws.path)
+          return {
+            path: ws.path,
+            name: resolveWorkspaceDisplayName(ws.path, meta?.projectName ?? ws.projectName),
+            parentFolder: getParentFolder(ws.path),
+            status: meta?.setupStatus || "unknown",
+            version: meta?.frameworkVersion || "unknown",
+            needsUpdate: workspaceNeedsFrameworkUpdate(meta?.frameworkVersion, bundled),
+            lastAccessed: getLastAccessed(ws.path),
+          } satisfies SelectWorkspaceRow
+        }),
+      )
+    },
+  )
 
   const sorted = createMemo(() => {
     const rows = workspaces() ?? []

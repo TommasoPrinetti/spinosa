@@ -832,7 +832,7 @@ const runToolRepair = async () => {
               onMouseOut={() => setHoveredButton(null)}
               onMouseDown={() => deferPress(handleBackPress)}
             >
-              <text fg={buttonText(theme, hoveredButton() === "back", theme.text)}>← Back</text>
+              <text fg={buttonText(theme, hoveredButton() === "back", theme.text)}>←</text>
             </box>
             <text fg={theme.text}>
               <span style={{ bold: true }}>Add files to workspace</span>

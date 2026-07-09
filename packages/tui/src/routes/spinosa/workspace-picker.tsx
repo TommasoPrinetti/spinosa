@@ -420,6 +420,7 @@ export function WorkspacePicker() {
     },
   ])
 
+  // Clamp selected index when rows change
   createEffect(() => {
     if (step() !== "manager") return
     const rows = managerRowsValue()

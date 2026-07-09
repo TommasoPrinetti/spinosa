@@ -29,16 +29,17 @@ export function DialogConsoleOrg() {
 
   const [loadError, setLoadError] = createSignal<unknown>()
 
-  const [orgs] = createResource(() =>
-    sdk.client.experimental.console
-      .listOrgs({}, { throwOnError: true })
-      .then((result) => result.data?.orgs ?? [])
-      // Catch so the rejected resource never reaches the memos below: reading
-      // orgs() in an errored state re-throws and tears down the dialog.
-      .catch((error) => {
+  const [orgs] = createResource(
+    () => undefined,
+    async () => {
+      try {
+        const result = await sdk.client.experimental.console.listOrgs({}, { throwOnError: true })
+        return result.data?.orgs ?? []
+      } catch (error) {
         setLoadError(error)
         return undefined
-      }),
+      }
+    },
   )
 
   const showError = createMemo(() => Boolean(loadError()))

@@ -18,16 +18,17 @@ export function DialogSkill(props: DialogSkillProps) {
 
   const [loadError, setLoadError] = createSignal<unknown>()
 
-  const [skills] = createResource(() =>
-    sdk.client.app
-      .skills({}, { throwOnError: true })
-      .then((result) => result.data ?? [])
-      // Catch so the rejected resource never reaches the memo below: reading
-      // skills() in an errored state re-throws and tears down the dialog.
-      .catch((error) => {
+  const [skills] = createResource(
+    () => undefined,
+    async () => {
+      try {
+        const result = await sdk.client.app.skills({}, { throwOnError: true })
+        return result.data ?? []
+      } catch (error) {
         setLoadError(error)
         return undefined
-      }),
+      }
+    },
   )
 
   const showError = createMemo(() => Boolean(loadError()))
