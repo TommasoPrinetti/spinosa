@@ -17,6 +17,7 @@ import { spinosaLogInfo } from "../utils/log"
 import type { FileClass, ImportRoute } from "../extension/types"
 import { injectColdFrontmatter, convertedOutputExists } from "./frontmatter"
 import type { ImportBatchManager } from "./batch"
+import { isSpinosaCancellationError, throwIfSpinosaCancelled } from "./cancellation"
 import { runPpuOcrBatch } from "./ppu-ocr"
 import { ProgressEmitter } from "../progress/progress"
 import { ocrAvailable } from "../tools/detection"
@@ -28,8 +29,10 @@ export interface CopyResult {
   failed: number
   mdConverted: number
   mdSkipped: number
+  mdFailed: number
   ocrConverted: number
   ocrSkipped: number
+  ocrFailed: number
   totalCopied: number
   stillMissing: number
   recovered: number
@@ -147,13 +150,16 @@ export async function processDirectCopy(
   prog?: ProgressEmitter,
   onLog?: (msg: string) => void,
   overwrite?: boolean,
+  shouldAbort?: () => boolean,
 ): Promise<PhaseResult> {
   let converted = 0; let skipped = 0; let failed = 0
   const recoverable: { src: string; dest: string }[] = []
 
   for (const [i, entry] of files.entries()) {
+    throwIfSpinosaCancelled(shouldAbort)
     const { src, rel, dest } = entry
     const result = await copyDirectRawFile(src, dest, rel, prog, onLog, i + 1, files.length, overwrite)
+    throwIfSpinosaCancelled(shouldAbort)
     if (result === "copied") {
       converted++
       if (dest.endsWith(".md")) injectColdFrontmatter(dest)
@@ -170,8 +176,9 @@ export async function processMarkitdown(
   logsDir: string,
   prog?: ProgressEmitter,
   onLog?: (msg: string) => void,
+  shouldAbort?: () => boolean,
 ): Promise<PhaseResult> {
-  let converted = 0; let skipped = 0
+  let converted = 0; let skipped = 0; let failed = 0
   const recoverable: { src: string; dest: string }[] = []
 
   const preSkipped: ClassifiedEntry[] = []
@@ -183,6 +190,7 @@ export async function processMarkitdown(
   skipped += preSkipped.length
   const total = preSkipped.length + toProcess.length
   for (const [i, ps] of preSkipped.entries()) {
+    throwIfSpinosaCancelled(shouldAbort)
     onLog?.(`  ${ps.rel} → already converted, skipped`)
     appendNdjson(path.join(logsDir, "markitdown-processed.ndjson"), {
       ts: isoNow(), status: "skip", source: ps.rel,
@@ -196,11 +204,13 @@ export async function processMarkitdown(
   const pdfRemaining: ClassifiedEntry[] = []
 
   for (const f of toProcess) {
+    throwIfSpinosaCancelled(shouldAbort)
     if (fileExt(f.src) !== "pdf") { nonPdfFiles.push(f); continue }
     onLog?.(`  ${f.rel} → pdf-js ...`)
     const startTime = Date.now()
     try {
       await convertTextPdf(f.src, f.dest, f.rel)
+      throwIfSpinosaCancelled(shouldAbort)
       converted++
       recoverable.push({ src: f.src, dest: f.dest })
       appendNdjson(path.join(logsDir, "markitdown-processed.ndjson"), {
@@ -211,7 +221,8 @@ export async function processMarkitdown(
       })
       prog?.file("MarkItDown", preSkipped.length + converted + skipped, total, f.rel)
       await yieldToEL()
-    } catch {
+    } catch (err) {
+      if (isSpinosaCancellationError(err)) throw err
       pdfRemaining.push(f)
     }
   }
@@ -225,6 +236,7 @@ export async function processMarkitdown(
     // Formats markitdown-ts doesn't handle — convert inline
     const INLINE_FORMATS = new Set(["json", "csv", "xml"])
     for (const [i, f] of remainingMd.entries()) {
+      throwIfSpinosaCancelled(shouldAbort)
       const ext = fileExt(f.src).toLowerCase()
 
       // Inline conversion for formats markitdown-ts doesn't support
@@ -234,6 +246,7 @@ export async function processMarkitdown(
         const startTime = Date.now()
         try {
           const raw = readFileSync(f.src, "utf-8")
+          throwIfSpinosaCancelled(shouldAbort)
           mkdirSync(path.dirname(f.dest), { recursive: true })
           writeFileSync(f.dest, `# ${path.basename(f.rel)}\n\n\`\`\`${ext}\n${raw}\n\`\`\`\n`, "utf-8")
           injectColdFrontmatter(f.dest)
@@ -246,8 +259,9 @@ export async function processMarkitdown(
             duration_s: (Date.now() - startTime) / 1000,
           })
         } catch (err) {
+          if (isSpinosaCancellationError(err)) throw err
           const errMsg = err instanceof Error ? err.message : String(err)
-          skipped++
+          failed++
           appendNdjson(mdLog, {
             ts: isoNow(), status: "fail", source: f.rel,
             output: markitdownOutputRelPath(f.rel),
@@ -266,6 +280,7 @@ export async function processMarkitdown(
       try {
         mkdirSync(path.dirname(f.dest), { recursive: true })
         const result = await converter.convert(f.src)
+        throwIfSpinosaCancelled(shouldAbort)
         const text = result?.markdown ?? ""
         writeFileSync(f.dest, text, "utf-8")
         injectColdFrontmatter(f.dest)
@@ -278,8 +293,9 @@ export async function processMarkitdown(
           duration_s: (Date.now() - startTime) / 1000,
         })
       } catch (err) {
+        if (isSpinosaCancellationError(err)) throw err
         const errMsg = err instanceof Error ? err.message : String(err)
-        skipped++
+        failed++
         appendNdjson(mdLog, {
           ts: isoNow(), status: "fail", source: f.rel,
           output: markitdownOutputRelPath(f.rel),
@@ -292,7 +308,7 @@ export async function processMarkitdown(
     }
   }
 
-  return { converted, skipped, failed: 0, recoverable }
+  return { converted, skipped, failed, recoverable }
 }
 
 export async function processOcr(
@@ -300,8 +316,9 @@ export async function processOcr(
   logsDir: string,
   prog?: ProgressEmitter,
   onLog?: (msg: string) => void,
+  shouldAbort?: () => boolean,
 ): Promise<PhaseResult> {
-  let converted = 0; let skipped = 0
+  let converted = 0; let skipped = 0; let failed = 0
   const recoverable: { src: string; dest: string }[] = []
 
   const toProcess: ClassifiedEntry[] = []
@@ -313,6 +330,7 @@ export async function processOcr(
   skipped += preSkipped.length
   const total = preSkipped.length + toProcess.length
   for (const [i, ps] of preSkipped.entries()) {
+    throwIfSpinosaCancelled(shouldAbort)
     onLog?.(`  ${ps.rel} → already converted, skipped`)
     appendNdjson(path.join(logsDir, "ocr-processed.ndjson"), {
       ts: isoNow(), status: "skip", source: ps.rel,
@@ -323,11 +341,13 @@ export async function processOcr(
   }
 
   if (toProcess.length > 0) {
+    throwIfSpinosaCancelled(shouldAbort)
     onLog?.(`PPU PaddleOCR: Processing ${toProcess.length} files`)
     const ocrLog = path.join(logsDir, "ocr-processed.ndjson")
     try {
       const ocrResult = await runPpuOcrBatch(toProcess, {
         onLog,
+        shouldAbort,
         onProgress: (current, total, relPath) => {
           prog?.file("OCR", preSkipped.length + current, preSkipped.length + total, relPath)
         },
@@ -338,20 +358,26 @@ export async function processOcr(
       converted += ocrResult.converted
       skipped += ocrResult.skipped
       for (const f of toProcess) {
+        const ok = convertedOutputExists(f.dest)
         appendNdjson(ocrLog, {
-          ts: isoNow(), status: convertedOutputExists(f.dest) ? "ok" : "fail",
+          ts: isoNow(), status: ok ? "ok" : "fail",
           source: f.rel, output: ocrOutputRelPath(f.rel),
           engine: "ppu-paddle-ocr", pages: "", duration_s: 0,
         })
-        if (convertedOutputExists(f.dest)) recoverable.push({ src: f.src, dest: f.dest })
+        if (ok) {
+          recoverable.push({ src: f.src, dest: f.dest })
+        } else {
+          failed++
+        }
       }
     } catch (err) {
+      if (isSpinosaCancellationError(err)) throw err
       onLog?.(`PPU PaddleOCR engine failed: ${err instanceof Error ? err.message : String(err)} — skipping OCR pass`)
-      skipped = toProcess.length
+      failed = toProcess.length
     }
   }
 
-  return { converted, skipped, failed: 0, recoverable }
+  return { converted, skipped, failed, recoverable }
 }
 
 
@@ -605,8 +631,8 @@ export async function copySource(
 ): Promise<CopyResult> {
   const res: CopyResult = {
     copied: 0, skipped: 0, failed: 0,
-    mdConverted: 0, mdSkipped: 0,
-    ocrConverted: 0, ocrSkipped: 0,
+    mdConverted: 0, mdSkipped: 0, mdFailed: 0,
+    ocrConverted: 0, ocrSkipped: 0, ocrFailed: 0,
     totalCopied: 0, stillMissing: 0, recovered: 0,
   }
 
@@ -639,14 +665,14 @@ export async function copySource(
 
   if (runPhase("markitdown") && classified.markitdownFiles.length > 0 && options?.markitdownChoice) {
     options?.onPhaseChange?.("markitdown", `Converting ${classified.markitdownFiles.length} files with MarkItDown...`)
-    const mr = await processMarkitdown(classified.markitdownFiles, classified.logsDir, prog, options?.onLog)
-    res.mdConverted += mr.converted; res.mdSkipped += mr.skipped
+      const mr = await processMarkitdown(classified.markitdownFiles, classified.logsDir, prog, options?.onLog)
+    res.mdConverted += mr.converted; res.mdSkipped += mr.skipped; res.mdFailed += mr.failed
   }
 
   if (runPhase("ocr") && classified.ocrFiles.length > 0 && options?.ocrChoice) {
     options?.onPhaseChange?.("ocr", `Processing ${classified.ocrFiles.length} OCR files...`)
-    const or = await processOcr(classified.ocrFiles, classified.logsDir, prog, options?.onLog)
-    res.ocrConverted += or.converted; res.ocrSkipped += or.skipped
+      const or = await processOcr(classified.ocrFiles, classified.logsDir, prog, options?.onLog)
+    res.ocrConverted += or.converted; res.ocrSkipped += or.skipped; res.ocrFailed += or.failed
   }
 
   res.totalCopied = res.copied + res.mdConverted + res.ocrConverted
