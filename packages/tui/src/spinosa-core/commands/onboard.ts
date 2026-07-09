@@ -265,6 +265,7 @@ export async function runOnboarding(
     direct: { converted: result.copied, skipped: result.skipped, failed: result.failed, recoverable: [] },
     markitdown: { converted: result.mdConverted, skipped: result.mdSkipped, failed: result.mdFailed, recoverable: [] },
     ocr: { converted: result.ocrConverted, skipped: result.ocrSkipped, failed: result.ocrFailed, recoverable: [] },
+}, options)
 }
 
 async function writeOnboardingSummary(summary: OnboardingSummary): Promise<void> {
