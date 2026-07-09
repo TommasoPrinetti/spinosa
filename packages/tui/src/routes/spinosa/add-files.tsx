@@ -650,6 +650,10 @@ const runToolRepair = async () => {
 
   // ── Mount (keymap + timers) ──────────────────────────────────────────────
   onMount(() => {
+    const handler = (ev: PromiseRejectionEvent) => {
+      console.error("Unhandled rejection:", ev.reason)
+    }
+    window.addEventListener?.("unhandledrejection", handler)
     focusSourceInput()
 
     // Auto-add new path input when last input has content
