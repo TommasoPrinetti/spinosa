@@ -195,7 +195,7 @@ run_cli_with_prompt() {
     hermes)
       command -v hermes >/dev/null 2>&1 || { warn "hermes was not found on PATH."; return 1; }
       if [[ ! -f "$root/.hermes/workspace.config.yaml" ]]; then
-        warn "Missing $root/.hermes/workspace.config.yaml — run: bash $root/.bin/sync-agents.sh"
+        warn "Missing $root/.hermes/workspace.config.yaml — run spinosa update to get it"
       fi
       local _ltmp_hm
       _ltmp_hm="$(mktemp /tmp/spinosa-launch.XXXXXX.sh)"

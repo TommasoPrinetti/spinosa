@@ -122,10 +122,6 @@ cmd_add() {
   local raw_dir="$workspace_path/raw"
   [[ -d "$raw_dir" ]] || mkdir -p "$raw_dir"
 
-  # ── Sync vendor agent folders if missing ──────────────────────────────
-  if [[ -f "$workspace_path/.bin/sync-agents.sh" ]]; then
-    bash "$workspace_path/.bin/sync-agents.sh" >/dev/null 2>&1 || true
-  fi
 
   # ---- Step 3: File intake -------------------------------------------------
   print_step 3 3 "File import"

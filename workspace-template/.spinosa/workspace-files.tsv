@@ -6,8 +6,10 @@ README.md	framework	replace_if_unmodified
 .bin/spinosa	framework	replace_if_unmodified
 .bin/AGENTS.md	framework	replace_if_unmodified
 .bin/startup-prompt.md	framework	replace_if_unmodified
-.bin/sync-agents.sh	framework	replace_if_unmodified
-.bin/validate-skills.sh	framework	replace_if_unmodified
+.opencode/	framework	replace_if_unmodified
+.codex/	framework	replace_if_unmodified
+.claude/	framework	replace_if_unmodified
+.hermes/	framework	replace_if_unmodified
 .bin/lib/CONVERTER_PROTOCOL.md	framework	replace_if_unmodified
 .bin/lib/markitdown-cli.py	framework	replace_if_unmodified
 .bin/lib/spinosa/	framework	replace_if_unmodified
