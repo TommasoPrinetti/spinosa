@@ -223,7 +223,6 @@ function wsPathForLog(p: string) { const s = p.split("/"); return s[s.length-2]+
           {/* header row */}
           <box
             flexDirection="row"
-            gap={1}
             paddingLeft={1}
             paddingRight={1}
             paddingTop={1}
@@ -269,7 +268,6 @@ function wsPathForLog(p: string) { const s = p.split("/"); return s[s.length-2]+
                   border={["left"]}
                   borderColor={active() ? theme.borderActive : theme.border}
                   flexDirection="row"
-                  gap={1}
                   onMouseOver={() => setSelected(i())}
                   onMouseDown={() => { setSelected(i()); void chooseWorkspace(row.path) }}
                 >
