@@ -45,30 +45,57 @@ fi
 
 # Handle uninstall — removes framework versions, keeps metadata + workspace registry
 if [[ "${1:-}" == "uninstall" ]]; then
-  echo "Uninstalling Spinosa framework..."
-  echo "  Keep: ${SPINOSA_HOME}/metadata/ (workspace registry)"
-  echo "  Keep: ${SPINOSA_HOME}/versions/*/workspaces.txt"
-  echo "  Remove: ${SPINOSA_HOME}/versions/ (framework binaries)"
-  echo "  Remove: ${SPINOSA_HOME}/bin/ (bun, spinosa)"
-  echo "  Remove: ${SPINOSA_HOME}/lib/"
-  echo "  Remove: ${SPINOSA_HOME}/logs/"
-  echo "  Remove: ${SPINOSA_HOME}/env.sh"
-  echo ""
-  read -p "Proceed? [y/N] " -n 1 -r
+  R=$'\033[31m' G=$'\033[32m' Y=$'\033[33m' DIM=$'\033[2m' BOLD=$'\033[1m' RESET=$'\033[0m'
+  ok()   { printf '  %s %s\n' "${G}✦${RESET}" "$1"; }
+  info() { printf '  %s %s\n' "${DIM}→${RESET}" "$1"; }
+  warn() { printf '  %s %s\n' "${Y}⚠${RESET}" "$1" >&2; }
+  note() { printf '  %s↳%s %s\n' "${DIM}" "${RESET}" "$1"; }
+  divider() { printf '%s\n' "${DIM}$(printf '%.0s─' {1..78})${RESET}"; }
+
+  printf '\n'
+  printf '  %s\n' "${G}███████╗██████╗ ██╗███╗   ██╗ ██████╗ ███████╗ █████╗ ${RESET}"
+  printf '  %s\n' "${G}██╔════╝██╔══██╗██║████╗  ██║██╔═══██╗██╔════╝██╔══██╗${RESET}"
+  printf '  %s\n' "${G}███████╗██████╔╝██║██╔██╗ ██║██║   ██║███████╗███████║${RESET}"
+  printf '  %s\n' "${G}╚════██║██╔═══╝ ██║██║╚██╗██║██║   ██║╚════██║██╔══██║${RESET}"
+  printf '  %s\n' "${G}███████║██║     ██║██║ ╚████║╚██████╔╝███████║██║  ██║${RESET}"
+  printf '  %s\n' "${G}╚══════╝╚═╝     ╚═╝╚═╝  ╚═══╝ ╚═════╝ ╚══════╝╚═╝  ╚═╝${RESET}"
+  printf '  %sUninstaller%s\n\n' "${BOLD}" "${RESET}"
+
+  info "Found Spinosa at ${SPINOSA_HOME}"
+  divider
+  printf '\n'
+
+  info "The following will be kept:"
+  note "${SPINOSA_HOME}/metadata/ — workspace registry"
+  ok "Workspace metadata preserved"
+  printf '\n'
+
+  info "The following will be removed:"
+  note "${SPINOSA_HOME}/versions/ — framework binaries"
+  note "${SPINOSA_HOME}/bin/ — bun and spinosa CLI"
+  note "${SPINOSA_HOME}/lib/"
+  note "${SPINOSA_HOME}/logs/"
+  note "${SPINOSA_HOME}/env.sh"
+  printf '\n'
+
+  read -p "  ${Y}◆${RESET}  Are you sure you want to uninstall?${DIM}${RESET}
+  ${DIM}│${RESET}  ${DIM}○${RESET} Yes / ${G}●${RESET} No
+  ${DIM}└${RESET} " -n 1 -r
   echo
   if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-    echo "Canceled."
+    echo "  ${Y}⚠${RESET}  Canceled." >&2
     exit 0
   fi
+
+  printf '  %s Removing framework...\n' "${G}✦${RESET}"
   rm -rf "${SPINOSA_HOME}/versions" \
-         "${SPINOSA_HOME}/bin" \
-         "${SPINOSA_HOME}/lib" \
-         "${SPINOSA_HOME}/logs" \
-         "${SPINOSA_HOME}/env.sh" \
-         "${SPINOSA_HOME}/.spinosa-install-complete" 2>/dev/null || true
-  # Remove shim
-  rm -f "$(command -v spinosa 2>/dev/null)" 2>/dev/null || true
-  echo "Done. Workspace metadata preserved in ${SPINOSA_HOME}/metadata/"
+
+  divider
+  printf '\n'
+  ok "Spinosa uninstalled."
+  note "Workspace metadata kept at ${SPINOSA_HOME}/metadata/"
+  note "Re-install: curl -fsSL https://raw.githubusercontent.com/TommasoPrinetti/spinosa/main/install.sh | bash"
+  printf '\n'
   exit 0
 fi
 
