@@ -4,8 +4,7 @@ import { findSourceFiles, classifySourceFile } from "../extension/classifier"
 import { fileExt } from "../constants"
 import { resolveUserPath } from "../utils/path"
 import type { ImportBatchManager } from "../import/batch"
-import { ocrAvailable } from "../tools/detection"
-export { detectLlmTools } from "../tools/detection"
+import { ocrAvailable, pdfjsAvailable } from "../tools/detection"
 
 export interface ScanCounts {
   markdown: number
@@ -115,9 +114,18 @@ export async function scanSource(
 
 export async function detectDocumentTools(): Promise<ToolStatus> {
   return {
-    markitdown: true,
+    markitdown: checkModuleAvailable("markitdown-ts"),
     ocr: ocrAvailable(),
-    pdfjs: true,
+    pdfjs: pdfjsAvailable(),
+  }
+}
+
+function checkModuleAvailable(name: string): boolean {
+  try {
+    require.resolve(name)
+    return true
+  } catch {
+    return false
   }
 }
 
