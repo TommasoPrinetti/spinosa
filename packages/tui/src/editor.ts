@@ -52,6 +52,11 @@ export async function openEditor(input: { value: string; renderer: CliRenderer; 
     })
     if (editorResult === undefined) return
     return editorResult
+  } finally {
+    await rm(file, { force: true }).catch(() => {})
+    input.renderer.currentRenderBuffer.clear()
+    input.renderer.resume()
+    input.renderer.requestRender()
   }
 }
 
