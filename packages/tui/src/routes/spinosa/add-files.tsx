@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs"
 import path from "node:path"
 import { spawn } from "node:child_process"
 import { TextareaRenderable, TextAttributes } from "@opentui/core"
+import { useTerminalDimensions } from "@opentui/solid"
 import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useTheme } from "../../context/theme"
@@ -10,6 +11,7 @@ import { useRoute } from "../../context/route"
 import { useSpinosaWorkspace } from "../../context/spinosa-workspace"
 import { Toast, useToast } from "../../ui/toast"
 import { scanAndClassifySource, processDirectCopy, processMarkitdown, processOcr } from "../../spinosa-core/import/pipeline"
+import { isSpinosaCancellationError } from "../../spinosa-core/import/cancellation"
 import { ProgressEmitter } from "../../spinosa-core/progress/progress"
 import { ImportBatchManager } from "../../spinosa-core/import/batch"
 import { tuiLog, logStep, logAction, logTool, logGate, logError, setToastError } from "../../spinosa/log"
@@ -25,18 +27,21 @@ import {
 import type { CliRunResult } from "../../spinosa/types"
 import { readBundledFrameworkVersion, isPrereleaseFrameworkVersion } from "../../spinosa/service"
 import { resolveFrameworkRoot } from "../../spinosa-core/framework/discovery"
+import { resolveExistingUserPaths } from "../../spinosa-core/utils/path"
 import {
   blurIfFocused,
   createWorkflowGuard,
   deferPress,
   delay,
   generateScanLines,
+  ImportOptionsSelector,
+  nextFocusedSourceIndexForAppend,
+  shouldCancelSpinosaWorkOnCtrlC,
   type ImportOption,
   LogScrollbox,
   LogoSummary,
   ProgressBar,
   stripAnsi,
-  ToggleLine,
   WizardActionButton,
   WizardActionRow,
   WizardGateButton,
@@ -55,6 +60,8 @@ type ToolCheckResult = {
 type SourcePathEntry = {
   id: number
 }
+
+const CANCELABLE_STEPS = ["direct", "markitdown", "ocr"] as const
 
 let nextSourceId = 1
 
@@ -143,6 +150,7 @@ export function AddFiles() {
   const toast = useToast()
   const { navigate } = useRoute()
   const spinosa = useSpinosaWorkspace()
+  const dimensions = useTerminalDimensions()
   const keymap = useOpencodeKeymap()
   const modeStack = useOpencodeModeStack()
   const exit = useExit()
@@ -202,6 +210,13 @@ export function AddFiles() {
     const checks = toolChecks()
     return checks.length > 0 && checks.every((t) => t.status === "available")
   })
+
+  function formatBytes(bytes: number): string {
+    if (bytes >= 1_000_000_000) return `${(bytes / 1_000_000_000).toFixed(1)} GB`
+    if (bytes >= 1_000_000) return `${(bytes / 1_000_000).toFixed(1)} MB`
+    if (bytes >= 1_000) return `${(bytes / 1_000).toFixed(1)} KB`
+    return `${bytes} B`
+  }
 
   const totalSteps = 7
   const stepIndex = createMemo(() => {
@@ -295,11 +310,12 @@ export function AddFiles() {
     if (entry) focusSourceEntry(entry.id)
   }
 
-  const addSourcePath = () => {
+  const addSourcePath = (options?: { focusNewInput?: boolean }) => {
     const id = nextSourceId++
     const nextIndex = sourcePaths().length
     setSourcePaths((prev) => [...prev, { id }])
-    setFocusedSource(nextIndex)
+    setFocusedSource((current) => nextFocusedSourceIndexForAppend(current, nextIndex, options))
+    if (options?.focusNewInput === false) return
     focusSourceEntry(id)
   }
 
@@ -313,11 +329,7 @@ export function AddFiles() {
   }
 
   const allPathsResolved = () =>
-    sourcePaths()
-      .map((e) => readPathText(e.id))
-      .filter(Boolean)
-      .map((p) => resolveUserPath(p))
-      .filter((p: string | undefined): p is string => Boolean(p))
+    resolveExistingUserPaths(sourcePaths().map((entry) => readPathText(entry.id)))
 
   const validateSinglePath = (p: string): "valid" | "invalid" => {
     try {
@@ -368,6 +380,21 @@ export function AddFiles() {
     }
   }
 
+  const handleInterrupt = () => {
+    if (!shouldCancelSpinosaWorkOnCtrlC({
+      step: step(),
+      busy: busy(),
+      waitingForGate: waitingForGate(),
+      cancellableSteps: CANCELABLE_STEPS,
+    })) {
+      exit()
+      return
+    }
+
+    appendLogLine("Cancellation requested. Stopping current Spinosa operation...")
+    moveBack()
+  }
+
   // ── Gate helper ───────────────────────────────────────────────────────────
   const gate = (label = "Continue") => new Promise<void>((resolve) => {
     gateResolve = resolve
@@ -401,42 +428,77 @@ export function AddFiles() {
     spinOff()
   }
   const handleToolAction = () => {
-    if (busy()) return
+    console.error("[add-files] handleToolAction called, busy=", busy())
+    if (busy()) { console.error("[add-files] handleToolAction: busy=true, returning"); return }
     try { blurSourceInputs() } catch {}
     const checks = toolChecks()
     const needsRepair = checks.some((t) => t.status === "missing")
+    console.error("[add-files] handleToolAction: needsRepair=", needsRepair, "checks=", checks.map(c => c.status))
     if (needsRepair) {
       logAction("repair-tools", `${checks.filter(t => t.status === "missing").length} tools missing`)
       void runToolRepair()
     } else if (checks.every((t) => t.status === "available")) {
       logAction("start-scan", "All tools ready")
       pendingPaths = allPathsResolved()
+      console.error("[add-files] handleToolAction: pendingPaths=", pendingPaths)
       startScan().catch((err) => {
         logError("startScan-top", err)
         appendLogLine(`Fatal: ${err instanceof Error ? err.message : String(err)}`)
         setStep("error")
       })
+    } else {
+      console.error("[add-files] handleToolAction: no condition matched!")
     }
   }
 
-const runToolRepair = async () => {
-  // Stub — tools are pre-installed, repair not needed at runtime
-  logAction("repair-tools", "stub")
-}
+  const runToolRepair = async () => {
+    logAction("repair", "Tools missing — repairing")
+    setToolChecks((prev) => prev.map((t) => t.status === "missing" ? { ...t, status: "checking" as const } : t))
+    spinOn()
+    await delay(80)
+    const bv = await readBundledFrameworkVersion()
+    const channel = bv && isPrereleaseFrameworkVersion(bv) ? "beta" : "stable"
+    await runReinstall({
+      channel,
+      onStdout: (chunk) => {
+        const clean = stripAnsi(chunk)
+        if (clean) appendLogLine(clean)
+      },
+      onStderr: (chunk) => {
+        const clean = stripAnsi(chunk)
+        if (clean) appendLogLine(clean)
+      },
+    })
+    await delay(200)
+    const toolStatus = await detectDocumentTools()
+    const results: ToolCheckResult[] = [
+      { label: "PPU PaddleOCR", status: toolStatus.ocr ? "available" : "missing", detail: "scanned PDFs and images" },
+      { label: "MarkItDown", status: toolStatus.markitdown ? "available" : "missing", detail: "Office docs, EPUB, HTML, text PDFs" },
+      { label: "PDF.js", status: toolStatus.pdfjs ? "available" : "missing", detail: "PDF text extraction and page rendering" },
+    ]
+    setToolChecks(results)
+    for (const r of results) logTool(r.label, r.status, r.detail)
+    appendLogLine("Tool repair complete.")
+    spinOff()
+  }
   // ── Scan ──────────────────────────────────────────────────────────────────
   let pendingPaths: string[] | undefined
   const startScan = async () => {
+    console.error("[add-files] startScan called, pendingPaths=", pendingPaths)
     const resolved = pendingPaths
-    if (!resolved || resolved.length === 0) { logError("startScan", "No pending paths"); setStep("error"); return }
+    if (!resolved || resolved.length === 0) { console.error("[add-files] startScan: no pending paths!"); logError("startScan", "No pending paths"); setStep("error"); return }
     setScanDone(false)
     setStep("scan")
+    console.error("[add-files] startScan: step set to scan")
     await yieldToEventLoop()
     clearLog()
     try {
       let mergedOptions: ImportOption[] = []
       for (const src of resolved) {
         appendLogLine(`Scanning: ${src}`)
+        console.error("[add-files] startScan: scanning", src)
         const scanPreview = await buildImportScanPreview(src)
+        console.error("[add-files] startScan: scanPreview for", src, "=", scanPreview.importOptions.length, "options")
         for (const opt of scanPreview.importOptions) {
           const existing = mergedOptions.find((m) => m.ext === opt.ext)
           if (existing) existing.count += opt.count
@@ -446,8 +508,10 @@ const runToolRepair = async () => {
       setImportOptions(mergedOptions)
       clearLog()
       setScanDone(true)
+      console.error("[add-files] startScan: done,", mergedOptions.length, "options")
       logAction("scan-done", `${mergedOptions.length} file types found`)
     } catch (err) {
+      console.error("[add-files] startScan: error", err)
       logError("startScan", err)
       appendLogLine(`Scan failed: ${err instanceof Error ? err.message : String(err)}`)
       setStep("error")
@@ -532,7 +596,7 @@ const runToolRepair = async () => {
         setProcessingStatus(`Direct copy — ${directCount} files`)
         totalDirect += directCount
         await delay(500)
-        const dr = await processDirectCopy(classified.directFiles, sharedProg, onPhaseLog)
+        const dr = await processDirectCopy(classified.directFiles, sharedProg, onPhaseLog, undefined, () => abortProcessing)
         if (dr.failed > 0) totalFailed += dr.failed
         if (abortProcessing) { spinOff(); setBusy(false); return }
         dirConverted += dr.converted
@@ -551,7 +615,7 @@ const runToolRepair = async () => {
           setProcessingStatus("MarkItDown conversion...")
           totalMd += mdCount
           await delay(500)
-          const mr = await processMarkitdown(classified.markitdownFiles, classified.logsDir, sharedProg, onPhaseLog)
+          const mr = await processMarkitdown(classified.markitdownFiles, classified.logsDir, sharedProg, onPhaseLog, () => abortProcessing)
           if (mr.failed > 0) totalFailed += mr.failed
           if (abortProcessing) { spinOff(); setBusy(false); return }
           mdConverted += mr.converted
@@ -573,7 +637,7 @@ const runToolRepair = async () => {
           setProcessingStatus("OCR...")
           totalOcr += ocrCount
           await delay(500)
-          const or = await processOcr(classified.ocrFiles, classified.logsDir, sharedProg, onPhaseLog)
+          const or = await processOcr(classified.ocrFiles, classified.logsDir, sharedProg, onPhaseLog, () => abortProcessing)
           if (or.failed > 0) totalFailed += or.failed
           if (abortProcessing) { spinOff(); setBusy(false); return }
           ocrConverted += or.converted
@@ -590,6 +654,11 @@ const runToolRepair = async () => {
       setProcessingDone(true)
       setStep("done")
     } catch (err) {
+      if (isSpinosaCancellationError(err) || abortProcessing) {
+        appendLogLine("Spinosa import cancelled.")
+        setProcessingStatus("Cancelled.")
+        return
+      }
       logError("startProcessing", err)
       appendLogLine(`Error: ${err instanceof Error ? err.message : String(err)}`)
       setStep("error")
@@ -618,18 +687,22 @@ const runToolRepair = async () => {
 
   // ── Path step navigation ──────────────────────────────────────────────────
   const continueFromPath = async () => {
+    console.error("[add-files] continueFromPath called, busy=", busy())
     if (busy()) return
     blurSourceInputs()
     logAction("continue", "Path step → Tools step")
     snapshotSourcePaths()
     const resolved = allPathsResolved()
+    console.error("[add-files] continueFromPath: resolved=", resolved)
     if (resolved.length === 0) {
+      console.error("[add-files] continueFromPath: no valid paths!")
       appendLogLine("At least one valid source path is required.")
       setStep("error")
       return
     }
     for (const p of resolved) {
       if (!existsSync(p)) {
+        console.error("[add-files] continueFromPath: path does not exist:", p)
         appendLogLine(`Source folder does not exist: ${p}`)
         setStep("error")
         return
@@ -667,7 +740,7 @@ const runToolRepair = async () => {
       const input = sourceInputs.get(last.id)
       if (!input || input.isDestroyed) return
       if (input.plainText?.trim()?.length > 0) {
-        addSourcePath()
+        addSourcePath({ focusNewInput: false })
       }
     }, 300)
 
@@ -694,7 +767,7 @@ const runToolRepair = async () => {
       setHoveredButton(null)
 
       if (event.ctrl && event.name === "c") {
-        exit()
+        handleInterrupt()
         consume(); return
       }
       if (event.name === "escape") {
@@ -793,6 +866,7 @@ const runToolRepair = async () => {
     onCleanup(() => {
       clearInterval(autoAddTimer)
       clearInterval(validateTimer)
+      clearInterval(spinTimer)
       stopActiveWork()
       off()
     })
@@ -971,7 +1045,7 @@ const runToolRepair = async () => {
                 </box>
                 <Show when={logLines().length > 0}>
                   <box height={1} />
-                  <LogScrollbox theme={theme} lines={logLines()} />
+                  <LogScrollbox theme={theme} lines={logLines()} viewportHeight={dimensions().height} />
                 </Show>
               </Show>
               <Show when={step() === "scan"}>
@@ -979,53 +1053,21 @@ const runToolRepair = async () => {
                   <text fg={theme.textMuted}>Scanning source folder...</text>
                   <Show when={logLines().length > 0}>
                     <box height={1} />
-                    <LogScrollbox theme={theme} lines={logLines()} />
+                    <LogScrollbox theme={theme} lines={logLines()} viewportHeight={dimensions().height} />
                   </Show>
                 </Show>
                 <Show when={scanDone()}>
                   <text fg={theme.textMuted}>Select file types to import</text>
-                  <box flexDirection="column" gap={1} paddingTop={1}>
-                    <box
-                      paddingLeft={1}
-                      paddingRight={1}
-                      paddingTop={1}
-                      paddingBottom={1}
-                      backgroundColor={buttonBackground(theme, selectedImport() === 0)}
-                      onMouseOver={() => setSelectedImport(0)}
-                      onMouseDown={() => deferPress(toggleAllImports)}
-                    >
-                      <ToggleLine
-                        theme={theme}
-                        selected={selectedImport() === 0}
-                        enabled={importOptions().every((item) => item.selected)}
-                        label="All supported files"
-                        count={importOptions().reduce((sum, item) => sum + item.count, 0)}
-                      />
-                    </box>
-                    <box flexDirection="column" gap={1}>
-                      <For each={importOptions()}>
-                        {(item, index) => (
-                          <box
-                            paddingLeft={1}
-                            paddingRight={1}
-                            paddingTop={1}
-                            paddingBottom={1}
-                            backgroundColor={buttonBackground(theme, selectedImport() === index() + 1)}
-                            onMouseOver={() => setSelectedImport(index() + 1)}
-                            onMouseDown={() => deferPress(() => toggleImport(index()))}
-                          >
-                            <ToggleLine
-                              theme={theme}
-                              selected={selectedImport() === index() + 1}
-                              enabled={item.selected}
-                              label={`.${item.ext}`}
-                              count={item.count}
-                            />
-                          </box>
-                        )}
-                      </For>
-                    </box>
-                  </box>
+                  <ImportOptionsSelector
+                    theme={theme}
+                    options={importOptions()}
+                    selectedIndex={selectedImport()}
+                    viewportHeight={dimensions().height}
+                    formatDetail={(item) => formatBytes(item.bytes)}
+                    onSelectIndex={setSelectedImport}
+                    onToggleAll={toggleAllImports}
+                    onToggleItem={toggleImport}
+                  />
                   <text fg={theme.textMuted}>↑↓ move · space toggle · a toggle all · enter continue</text>
                 </Show>
               </Show>
@@ -1092,7 +1134,7 @@ const runToolRepair = async () => {
                   <span style={{ bold: true }}>Spinosa could not complete this step.</span>
                 </text>
                 <Show when={logLines().length > 0}>
-                  <LogScrollbox theme={theme} lines={logLines()} />
+                  <LogScrollbox theme={theme} lines={logLines()} viewportHeight={dimensions().height} />
                 </Show>
               </Show>
             </WizardPanel>
