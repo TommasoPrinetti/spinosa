@@ -15,6 +15,7 @@ const SPINOSA_BETA_INSTALL_URL =
 
 const SPINOSA_RELEASE_REPO =
   process.env.SPINOSA_RELEASE_REPO ?? "TommasoPrinetti/spinosa"
+const FETCH_TIMEOUT_MS = 10_000
 
 export function spinosaConfigFile(): string {
   const home = process.env.SPINOSA_HOME ?? `${homedir()}/.spinosa`
@@ -130,20 +131,20 @@ export async function resolvePinnedVersionFromInstaller(
   channel: ReleaseChannel,
   url: string,
 ): Promise<string | undefined> {
-  const response = await fetch(url)
-  if (!response.ok) {
-    throw new Error(
-      `Could not fetch ${channel} channel installer (${url}). Publish the rolling ${channel} release first.`,
-    )
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
+  let response: Response
+  try {
+    response = await fetch(url, { signal: controller.signal })
+  } catch {
+    return undefined
+  } finally {
+    clearTimeout(timer)
   }
+  if (!response.ok) return undefined
   const script = await response.text()
   const version = parseInstallPinnedVersion(script)
-  if (!version) {
-    throw new Error(
-      `${channel} channel installer missing PINNED_VERSION. Re-publish the rolling ${channel} release.`,
-    )
-  }
-  return version
+  return version ?? undefined
 }
 
 export async function resolveLatestStableVersion(): Promise<string | undefined> {
