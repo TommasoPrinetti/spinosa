@@ -3,6 +3,15 @@ import { homedir } from "node:os"
 import path from "node:path"
 import { resolveWorkspaceDisplayName } from "../workspace-name"
 import type { SpinosaRegisteredWorkspace } from "../types"
+// In-process mutex serializing registry file read-modify-write cycles
+let registryLock: Promise<void> = Promise.resolve()
+
+function withRegistryLock<T>(fn: () => Promise<T>): Promise<T> {
+  const next = registryLock
+    .then(fn, fn) // recover from previous rejection and still run fn
+  registryLock = next.then(() => {}, () => {}) // keep chain alive even if fn rejects
+  return next
+}
 
 function spinosaHome(): string {
   return process.env.SPINOSA_HOME ?? path.join(homedir(), ".spinosa")
@@ -20,17 +29,29 @@ export function registryUnescape(value: string): string {
   return value.replace(/%7C/g, "|").replace(/%25/g, "%")
 }
 
-export function ensureGlobalMetadata(): void {
+function decodeRegistryLine(line: string): { workspacePath: string; project: string } | undefined {
+  const [rawPath, rawProject = ""] = line.split("|", 2)
+  if (!rawPath) return
+  return {
+    workspacePath: registryUnescape(rawPath),
+    project: registryUnescape(rawProject),
+  }
+}
+
+export async function ensureGlobalMetadata(): Promise<void> {
   const metadataDir = metadataPath()
   mkdirSync(metadataDir, { recursive: true })
 
   const configPath = path.join(metadataDir, "config.yaml")
   if (!existsSync(configPath)) {
-    Bun.write(configPath, "beta: false\nauto_upgrade: true\n")
+    await Bun.write(configPath, "beta: false\nauto_upgrade: true\n")
   }
 }
 
-export async function loadRegistry(configPath?: string): Promise<{ path: string; project: string }[]> {
+export async function loadRegistry(
+  configPath?: string,
+  options?: { allowMissingMarker?: boolean },
+): Promise<{ path: string; project: string }[]> {
   const registry = configPath ?? metadataPath("workspaces.txt")
   const file = Bun.file(registry)
   if (!(await file.exists())) return []
@@ -40,15 +61,15 @@ export async function loadRegistry(configPath?: string): Promise<{ path: string;
   const seen = new Set<string>()
 
   for (const line of lines) {
-    const [rawPath, rawProject] = line.split("|")
-    if (!rawPath) continue
-    const workspacePath = registryUnescape(rawPath)
-    if (!existsSync(path.join(workspacePath, ".spinosa", "workspace"))) continue
+    const decoded = decodeRegistryLine(line)
+    if (!decoded) continue
+    const { workspacePath, project } = decoded
+    if (!options?.allowMissingMarker && !existsSync(path.join(workspacePath, ".spinosa", "workspace"))) continue
     if (seen.has(workspacePath)) continue
     seen.add(workspacePath)
     results.push({
       path: workspacePath,
-      project: registryUnescape(rawProject ?? ""),
+      project,
     })
   }
 
@@ -56,48 +77,52 @@ export async function loadRegistry(configPath?: string): Promise<{ path: string;
 }
 
 export async function registerWorkspace(workspacePath: string, project: string): Promise<void> {
-  const registry = metadataPath("workspaces.txt")
-  const encodedPath = registryEscape(workspacePath)
-  const encodedProject = registryEscape(project)
+  return withRegistryLock(async () => {
+    const registry = metadataPath("workspaces.txt")
+    const encodedPath = registryEscape(workspacePath)
+    const encodedProject = registryEscape(project)
 
-  ensureGlobalMetadata()
+    await ensureGlobalMetadata()
 
-  const file = Bun.file(registry)
-  let lines: string[] = []
-  if (await file.exists()) {
-    const text = await file.text()
-    lines = text.split(/\r?\n/).filter(Boolean)
-  }
+    const file = Bun.file(registry)
+    let lines: string[] = []
+    if (await file.exists()) {
+      const text = await file.text()
+      lines = text.split(/\r?\n/).filter(Boolean)
+    }
 
-  const filtered = lines.filter((line) => {
-    const rawPath = line.split("|")[0] ?? ""
-    return rawPath !== encodedPath
+    const filtered = lines.filter((line) => {
+      const rawPath = line.split("|")[0] ?? ""
+      return rawPath !== encodedPath
+    })
+
+    const today = new Date().toISOString().slice(0, 10)
+    filtered.push(`${encodedPath}|${encodedProject}|${today}`)
+    await Bun.write(registry, filtered.join("\n") + "\n")
   })
-
-  const today = new Date().toISOString().slice(0, 10)
-  filtered.push(`${encodedPath}|${encodedProject}|${today}`)
-  await Bun.write(registry, filtered.join("\n") + "\n")
 }
 
 export async function unregisterWorkspace(workspacePath: string): Promise<void> {
-  const registry = metadataPath("workspaces.txt")
-  const file = Bun.file(registry)
-  if (!(await file.exists())) return
+  return withRegistryLock(async () => {
+    const registry = metadataPath("workspaces.txt")
+    const file = Bun.file(registry)
+    if (!(await file.exists())) return
 
-  const text = await file.text()
-  const lines = text.split(/\r?\n/).filter(Boolean)
-  const filtered = lines.filter((line) => {
-    const rawPath = line.split("|")[0] ?? ""
-    return registryUnescape(rawPath) !== workspacePath
+    const text = await file.text()
+    const lines = text.split(/\r?\n/).filter(Boolean)
+    const filtered = lines.filter((line) => {
+      const rawPath = line.split("|")[0] ?? ""
+      return registryUnescape(rawPath) !== workspacePath
+    })
+
+    if (filtered.length < lines.length) {
+      await Bun.write(registry, filtered.join("\n") + (filtered.length > 0 ? "\n" : ""))
+    }
   })
-
-  if (filtered.length < lines.length) {
-    await Bun.write(registry, filtered.join("\n") + (filtered.length > 0 ? "\n" : ""))
-  }
 }
 
 export async function listRegisteredWorkspaces(): Promise<SpinosaRegisteredWorkspace[]> {
-  const entries = await loadRegistry()
+  const entries = await loadRegistry(undefined, { allowMissingMarker: true })
   return entries.map((entry) => ({
     path: entry.path,
     projectName: resolveWorkspaceDisplayName(entry.path, entry.project),
@@ -151,12 +176,12 @@ function walkWorkspaceMarker(dir: string, depth: number, seen: Set<string>, resu
 }
 
 export async function discoverRegisteredWorkspaces(): Promise<string[]> {
-  ensureGlobalMetadata()
+  await ensureGlobalMetadata()
 
   const registryPath = metadataPath("workspaces.txt")
   const registryFile = Bun.file(registryPath)
   if (await registryFile.exists()) {
-    const entries = await loadRegistry(registryPath)
+    const entries = await loadRegistry(registryPath, { allowMissingMarker: true })
     if (entries.length > 0) return entries.map((e) => e.path)
   }
 
