@@ -1403,16 +1403,10 @@ main() {
     rm -rf "$tmpdir" "$lockdir" 2>/dev/null || true
   }
   trap cleanup EXIT INT TERM HUP
-
-  printf '\n' >&2
-
-  reclaim_all_incomplete_versions
-  INSTALL_COMPLETED=0
-
   # Download GitHub source tarball
   local framework_dest="${tmpdir}/spinosa-${VERSION}.tar.gz"
   spinner_start "Downloading Spinosa v${VERSION}"
-  download "$archive_url" "$framework_dest" || die "Failed to download Spinosa v${VERSION}"
+  download "$archive_url" "$framework_dest" && spinner_stop || { spinner_stop; die "Failed to download Spinosa v${VERSION}"; }
 
   # Extract — GitHub's tarball has a top-level dir (spinosa-<tag>/)
   local extract_tmp="${tmpdir}/framework-extract"
