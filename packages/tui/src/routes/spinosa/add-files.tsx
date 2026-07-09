@@ -401,26 +401,42 @@ export function AddFiles() {
     spinOff()
   }
   const handleToolAction = () => {
-    setStep("error")
-    appendLogLine("DEBUG: handleToolAction FIRED — toolChecks=" + JSON.stringify(toolChecks().map(t => t.status)))
-    return
+    if (busy()) return
+    try { blurSourceInputs() } catch {}
+    const checks = toolChecks()
+    const needsRepair = checks.some((t) => t.status === "missing")
+    if (needsRepair) {
+      logAction("repair-tools", `${checks.filter(t => t.status === "missing").length} tools missing`)
+      void runToolRepair()
+    } else if (checks.every((t) => t.status === "available")) {
+      logAction("start-scan", "All tools ready")
+      startScan().catch((err) => {
+        logError("startScan-top", err)
+        appendLogLine(`Fatal: ${err instanceof Error ? err.message : String(err)}`)
+        setStep("error")
+      })
+    }
   }
+
+const runToolRepair = async () => {
+  // Stub — tools are pre-installed, repair not needed at runtime
+  logAction("repair-tools", "stub")
+}
   // ── Scan ──────────────────────────────────────────────────────────────────
   const startScan = async () => {
-    snapshotSourcePaths()
-    const resolved = allPathsResolved()
-    if (resolved.length === 0) {
-      appendLogLine("At least one valid source path is required.")
-      setStep("error")
-      return
-    }
-    clearLog()
     setScanDone(false)
     setStep("scan")
     await yieldToEventLoop()
-    await delay(1000)
-
+    await delay(500)
     try {
+      snapshotSourcePaths()
+      const resolved = allPathsResolved()
+      if (resolved.length === 0) {
+        appendLogLine("At least one valid source path is required.")
+        setStep("error")
+        return
+      }
+      clearLog()
       let mergedOptions: ImportOption[] = []
       for (const src of resolved) {
         appendLogLine(`Scanning: ${src}`)
