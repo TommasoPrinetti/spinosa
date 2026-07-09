@@ -614,8 +614,8 @@ installer_beta_toggle() {
 channel_install_url() {
   local channel="$1"
   case "$channel" in
-    stable) printf 'https://github.com/%s/releases/download/stable/install.sh\n' "$REPO" ;;
-    beta|dev) printf 'https://github.com/%s/releases/download/beta/install.sh\n' "$REPO" ;;
+    stable) printf 'https://raw.githubusercontent.com/%s/main/install.sh\n' "$REPO" ;;
+    beta|dev) printf 'https://raw.githubusercontent.com/%s/main/install.sh\n' "$REPO" ;;
     *) die "Unknown release channel: ${channel}" ;;
   esac
 }
@@ -1410,14 +1410,7 @@ main() {
   clean_macos_metadata "${SPINOSA_HOME}/versions/${VERSION}"
   local fw_root="${SPINOSA_HOME}/versions/${VERSION}"
   install_bundled_bun "$tmpdir"
-  if [ "$DEV_MODE" -eq 1 ]; then
-    install_bun_dependencies "$fw_root"
-  else
-    note "Production install — skipping source dependencies (use --dev for full source tree)"
-  fi
-
-  # Install CLI binary (atomic write: temp + mv to avoid partial reads)
-  local spinosa_bin="${fw_root}/workspace-template/.bin/spinosa"
+  install_bun_dependencies "$fw_root"
   if [ -f "$spinosa_bin" ]; then
     cp "$spinosa_bin" "${SPINOSA_HOME}/bin/.spinosa.tmp"
     chmod +x "${SPINOSA_HOME}/bin/.spinosa.tmp"
