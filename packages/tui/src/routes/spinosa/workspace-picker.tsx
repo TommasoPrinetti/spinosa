@@ -21,6 +21,7 @@ import {
   writeWorkspaceFrameworkVersion,
 } from "../../spinosa/service"
 import { updateWorkspace as updateWorkspaceFiles } from "../../spinosa-core/commands/update"
+import { buildStartupChatPrompt } from "../../spinosa-core/commands/startup"
 import { resolveFrameworkRoot } from "../../spinosa-core/framework/discovery"
 import { setupStatusLabel } from "../../spinosa/status-labels"
 import type { SpinosaSetupStatus } from "../../spinosa/types"
@@ -145,6 +146,7 @@ export function WorkspacePicker() {
       const rows: WorkspaceRow[] = []
       for (const ws of workspaces) {
         const meta = await readWorkspaceMeta(ws.path)
+        if (!meta) continue
         const fileCount = await countRawMarkdownFiles(join(ws.path, "raw"))
         rows.push({
           path: ws.path,
@@ -186,6 +188,7 @@ export function WorkspacePicker() {
       const rows: SelectWorkspaceRow[] = []
       for (const ws of workspaces) {
         const meta = await readWorkspaceMeta(ws.path)
+        if (!meta) continue
         rows.push({
           path: ws.path,
           name: resolveWorkspaceDisplayName(ws.path, meta?.projectName ?? ws.projectName),
@@ -199,6 +202,12 @@ export function WorkspacePicker() {
       return rows
     },
   )
+
+  const selectRowsError = createMemo(() => {
+    const error = selectRows.error
+    if (!error) return undefined
+    return error instanceof Error ? error.message : String(error)
+  })
 
   const sortedSelectRows = createMemo(() => {
     const rows = selectRows() ?? []
@@ -225,7 +234,7 @@ export function WorkspacePicker() {
           break
       }
       return dir === "desc" ? -cmp : cmp
-    }, { priority: 10 })
+    })
     return sorted
   })
 
@@ -247,7 +256,7 @@ export function WorkspacePicker() {
   const launchStartupInChat = async () => {
     const path = startupPath()
     if (!path) return
-    spinosa.queuePrompt({ input: startupPrompt(), parts: [], autoSubmit: true })
+    spinosa.queuePrompt(buildStartupChatPrompt(startupPrompt()))
     await spinosa.openWorkspace(path)
     navigate({ type: "workspace" })
   }
@@ -707,7 +716,9 @@ export function WorkspacePicker() {
                 <text fg={buttonText(theme, startupSelected() === 0, theme.primary)}>
                   <span style={{ bold: startupSelected() === 0 }}>Launch startup indexing</span>
                 </text>
-                <text fg={buttonText(theme, startupSelected() === 0, theme.textMuted)}>Begin indexing automatically in Chat</text>
+                <text fg={buttonText(theme, startupSelected() === 0, theme.textMuted)}>
+                  Load the startup prompt into Chat. Press Enter to run it, or edit it first.
+                </text>
               </box>
               <box
                 paddingLeft={2}
@@ -735,6 +746,9 @@ export function WorkspacePicker() {
           <Show when={!startupPath()}>
             <Show when={selectRows.loading}>
               <text fg={theme.textMuted}>Loading registered workspaces…</text>
+            </Show>
+            <Show when={selectRowsError()}>
+              {(message) => <text fg={theme.error ?? theme.textMuted}>Failed to load registered workspaces: {message()}</text>}
             </Show>
             <Show when={selectRows()}>
               {(rows) => (
@@ -792,7 +806,7 @@ export function WorkspacePicker() {
                   </box>
 
                   {/* ── table rows ── */}
-                  <Show when={rows().length === 0}>
+                  <Show when={!selectRowsError() && rows().length === 0}>
                     <text fg={theme.textMuted}>No registered workspaces.</text>
                   </Show>
                   <For each={sortedSelectRows()}>

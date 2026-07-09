@@ -2,7 +2,11 @@
 import { expect, mock, test } from "bun:test"
 import { testRender } from "@opentui/solid"
 import { createStore } from "solid-js/store"
-import { deferPress } from "../../src/routes/spinosa/wizard-ui"
+import {
+  deferPress,
+  nextFocusedSourceIndexForAppend,
+  shouldCancelSpinosaWorkOnCtrlC,
+} from "../../src/routes/spinosa/wizard-ui"
 
 test("deferPress runs action after the current tick", async () => {
   let ran = false
@@ -12,6 +16,35 @@ test("deferPress runs action after the current tick", async () => {
   expect(ran).toBe(false)
   await new Promise((resolve) => setTimeout(resolve, 0))
   expect(ran).toBe(true)
+})
+
+test("auto-added source rows do not steal focus from the active input", () => {
+  expect(nextFocusedSourceIndexForAppend(0, 1, { focusNewInput: false })).toBe(0)
+  expect(nextFocusedSourceIndexForAppend(2, 3, { focusNewInput: false })).toBe(2)
+  expect(nextFocusedSourceIndexForAppend(0, 1)).toBe(1)
+})
+
+test("ctrl-c cancels Spinosa work only for active cancellable steps", () => {
+  expect(shouldCancelSpinosaWorkOnCtrlC({
+    step: "ocr",
+    busy: true,
+    waitingForGate: false,
+    cancellableSteps: ["direct", "markitdown", "ocr"],
+  })).toBe(true)
+
+  expect(shouldCancelSpinosaWorkOnCtrlC({
+    step: "ocr",
+    busy: false,
+    waitingForGate: true,
+    cancellableSteps: ["direct", "markitdown", "ocr"],
+  })).toBe(true)
+
+  expect(shouldCancelSpinosaWorkOnCtrlC({
+    step: "path",
+    busy: false,
+    waitingForGate: false,
+    cancellableSteps: ["direct", "markitdown", "ocr"],
+  })).toBe(false)
 })
 
 test("renders the dedicated add-files screen marker copy", async () => {
@@ -53,6 +86,7 @@ mock.module("../../src/context/exit", () => ({
 }))
   mock.module("../../src/ui/toast", () => ({
     Toast: () => null,
+    useToast: () => ({ error() {}, show() {} }),
   }))
   const { DEFAULT_THEMES, resolveTheme } = await import("../../src/theme")
   const theme = resolveTheme(DEFAULT_THEMES.opencode, "dark")

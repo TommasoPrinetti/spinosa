@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, statSync } from "node:fs"
 import path from "node:path"
-import { onCleanup } from "solid-js"
+import { getOwner, onCleanup } from "solid-js"
 
 function snapshotAgentReports(workspacePath: string) {
   const dir = path.join(workspacePath, "agent_reports")
@@ -31,7 +31,9 @@ export function createAgentReportsWatcher(
     }
   }, intervalMs)
 
-  onCleanup(() => clearInterval(timer))
+  const dispose = () => clearInterval(timer)
+  if (getOwner()) onCleanup(dispose)
+  return dispose
 }
 
 export function createWorkspaceFileWatcher(
@@ -61,5 +63,7 @@ export function createWorkspaceFileWatcher(
     }
   }, intervalMs)
 
-  onCleanup(() => clearInterval(timer))
+  const dispose = () => clearInterval(timer)
+  if (getOwner()) onCleanup(dispose)
+  return dispose
 }

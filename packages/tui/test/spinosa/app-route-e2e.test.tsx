@@ -128,6 +128,17 @@ async function createRegisteredWorkspace(input: {
   return workspacePath
 }
 
+async function appendRegistryEntry(home: string, workspacePath: string, projectName: string) {
+  const metadataDir = path.join(home, ".spinosa", "metadata")
+  mkdirSync(metadataDir, { recursive: true })
+  const registryPath = path.join(metadataDir, "workspaces.txt")
+  const existing = await Bun.file(registryPath).text().catch(() => "")
+  await Bun.write(
+    registryPath,
+    `${existing}${workspacePath}|${projectName}|2026-07-09\n`,
+  )
+}
+
 async function waitForText(setup: TestRenderer, text: string) {
   let frame = ""
   for (let attempt = 0; attempt < 30; attempt++) {
@@ -211,5 +222,31 @@ test("Spinosa app route E2E boots and navigates key workspace flows", async () =
     expect(readyFrame).not.toContain("Launch startup indexing")
   } finally {
     rmSync(readyRoot, { recursive: true, force: true })
+  }
+
+  const filteredRoot = mkdtempSync(path.join(tmpdir(), "spinosa-app-e2e-"))
+  const filteredHome = path.join(filteredRoot, "home")
+  mkdirSync(filteredHome, { recursive: true })
+  try {
+    await createRegisteredWorkspace({
+      root: filteredRoot,
+      home: filteredHome,
+      projectName: "visible-demo",
+      setupStatus: "workspace_started",
+    })
+    await appendRegistryEntry(filteredHome, path.join(filteredRoot, "stale-demo-spinosa"), "stale-demo")
+
+    const filteredFrame = await renderRouteFrame("workspace-picker", {
+      home: filteredHome,
+      act: async (setup) => {
+        setup.mockInput.pressKey("2")
+        await waitForText(setup, "visible-demo")
+      },
+    })
+
+    expect(filteredFrame).toContain("visible-demo")
+    expect(filteredFrame).not.toContain("stale-demo")
+  } finally {
+    rmSync(filteredRoot, { recursive: true, force: true })
   }
 }, 30_000)

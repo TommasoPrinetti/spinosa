@@ -5,6 +5,22 @@ import { copyToClipboard } from "../handoff/runner"
 import { spinosaLogInfo } from "../utils/log"
 import { resolveTemplateRootFromFrameworkRoot } from "../framework/discovery"
 
+export const STARTUP_PROGRESS_THRESHOLD_MS = 2_000
+export const STARTUP_PROGRESS_INTERVAL_MS = 500
+
+export function formatStartupProgressMessage(elapsedMs: number): string {
+  if (elapsedMs < STARTUP_PROGRESS_THRESHOLD_MS) return "Running workspace startup..."
+  return `Running workspace startup... (${(elapsedMs / 1_000).toFixed(1)}s)`
+}
+
+export function buildStartupChatPrompt(prompt: string) {
+  return {
+    input: prompt,
+    parts: [] as [],
+    autoSubmit: false as const,
+  }
+}
+
 export interface StartupOptions {
   workspacePath: string
   frameworkRoot: string
@@ -173,24 +189,22 @@ export async function runStartup(
 
 export async function runStartupWithHandoff(
   options: StartupOptions & { launch?: "copy" | "run" },
-): Promise<{ prompt: string; launchCommand: string; handoffResult: "prompt_copied" | "launch_command_copied" | "run_requested" | "run_failed_command_copied" }> {
+): Promise<{ prompt: string; launchCommand: string; handoffResult: "prompt_copied" | "prompt_ready" | "launch_command_copied" | "launch_command_ready" | "run_requested" | "run_failed_command_copied" | "run_failed_command_ready" }> {
   const { prompt, launchCommand } = await runStartup(options)
   const cli = options.preferredCli ?? "opencode"
 
-  let handoffResult: "prompt_copied" | "launch_command_copied" | "run_requested" | "run_failed_command_copied" = "prompt_copied"
+  let handoffResult: "prompt_copied" | "prompt_ready" | "launch_command_copied" | "launch_command_ready" | "run_requested" | "run_failed_command_copied" | "run_failed_command_ready" = "prompt_copied"
 
   const launch = options.launch ?? "copy"
 
   if (cli === "other" || launch === "copy") {
-    copyToClipboard(prompt)
-    handoffResult = "prompt_copied"
+    handoffResult = copyToClipboard(prompt) ? "prompt_copied" : "prompt_ready"
   } else if (launch === "run") {
     const { runCliWithPrompt } = await import("../handoff/runner")
     if (runCliWithPrompt(options.workspacePath, cli, prompt)) {
       handoffResult = "run_requested"
     } else {
-      copyToClipboard(launchCommand)
-      handoffResult = "run_failed_command_copied"
+      handoffResult = copyToClipboard(launchCommand) ? "run_failed_command_copied" : "run_failed_command_ready"
     }
   }
 
@@ -234,7 +248,11 @@ updated: ${today}
 `
 
   const summaryPath = path.join(workspacePath, ".spinosa", "add-summary.md")
-  await Bun.write(summaryPath, content)
+  try {
+    await Bun.write(summaryPath, content)
+  } catch (error) {
+    throw new Error(`Failed to write add summary at ${summaryPath}`, { cause: error })
+  }
 
   return content
 }

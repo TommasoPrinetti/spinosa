@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, statSync } from "node:fs"
+import { existsSync, lstatSync, readdirSync } from "node:fs"
 import path from "node:path"
 import { detectLlmTools as coreDetectLlmTools } from "../spinosa-core/tools/detection"
 import { resolveUserPath } from "../spinosa-core/utils/path"
@@ -46,7 +46,7 @@ export type ToolStatus = CoreToolStatus
 type ExtEntry = { ext: string; count: number; bytes: number }
 
 function shouldSkipScanDir(name: string) {
-  return name === ".git" || name === "node_modules" || name === "__MACOSX" || name === ".trash" || name.endsWith(".app") || name.endsWith(".photoslibrary")
+  return name === ".git" || name === ".spinosa" || name === "node_modules" || name === "__MACOSX" || name === ".trash" || name.endsWith(".app") || name.endsWith(".photoslibrary")
 }
 
 async function scanByExtension(sourcePath: string): Promise<{
@@ -56,24 +56,28 @@ async function scanByExtension(sourcePath: string): Promise<{
   const extMap = new Map<string, ExtEntry>()
   const totals = { markdown: 0, markitdown: 0, native: 0, ocr: 0, video: 0, audio: 0, unknown: 0, ignored: 0, total: 0 }
 
-  async function walk(dir: string) {
+  const stack = [sourcePath]
+  while (stack.length > 0) {
+    const dir = stack.pop()
+    if (!dir) continue
     let entries: string[]
-    try { entries = readdirSync(dir) } catch { return }
+    try { entries = readdirSync(dir) } catch { continue }
     for (const entry of entries) {
       if (entry.startsWith(".") && entry !== "." && entry !== "..") continue
       const fullPath = path.join(dir, entry)
-      let st: ReturnType<typeof statSync>
-      try { st = statSync(fullPath) } catch { continue }
+      let st: ReturnType<typeof lstatSync>
+      try { st = lstatSync(fullPath) } catch { continue }
+      if (st.isSymbolicLink()) continue
       if (st.isDirectory()) {
         if (shouldSkipScanDir(entry)) continue
-        await walk(fullPath)
+        stack.push(fullPath)
         continue
       }
       if (!st.isFile()) continue
-      totals.total++
-      if (shouldSkipSourceFile(fullPath)) { totals.ignored++; continue }
-      const ext = fileExt(fullPath)
       try {
+        totals.total++
+        if (shouldSkipSourceFile(fullPath)) { totals.ignored++; continue }
+        const ext = fileExt(fullPath)
         const cls = await classifySourceFile(fullPath)
         switch (cls) {
           case "markdown": totals.markdown++; break
@@ -84,17 +88,15 @@ async function scanByExtension(sourcePath: string): Promise<{
           case "audio": totals.audio++; break
           default: totals.unknown++; break
         }
+        if (!ext) continue
+        const existing = extMap.get(ext)
+        if (existing) { existing.count++; existing.bytes += st.size }
+        else { extMap.set(ext, { ext, count: 1, bytes: st.size }) }
       } catch {
-        // ignored — classifySourceFile may throw on unreadable files
         totals.unknown++; continue
       }
-      const existing = extMap.get(ext)
-      if (existing) { existing.count++; existing.bytes += st.size }
-      else { extMap.set(ext, { ext, count: 1, bytes: st.size }) }
     }
   }
-
-  await walk(sourcePath)
   return { extMap, totals }
 }
 
@@ -188,7 +190,6 @@ export async function buildNewWorkspacePreview(sourcePath: string, workspaceName
 
 export async function buildImportScanPreview(sourcePath: string): Promise<ImportScanPreview> {
   const projectName = path.basename(sourcePath)
-  const workspacePath = resolveWorkspacePath(projectName)
   const { extMap, totals } = await scanByExtension(sourcePath)
 
   return {

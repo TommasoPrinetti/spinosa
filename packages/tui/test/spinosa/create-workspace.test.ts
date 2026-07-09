@@ -108,4 +108,15 @@ describe("E2E: Workspace creation flow", () => {
     expect(ws2.success).toBe(true)
     expect(ws2.workspacePath).not.toBe(ws1.workspacePath)
   })
+
+  test("failed workspace creation cleans up reserved directory", async () => {
+    const result = await createWorkspace({
+      corpusPath: corpusDir,
+      frameworkRoot: path.join(testRoot, "missing-framework"),
+      workspaceName: "e2e-cleanup-test",
+    })
+
+    expect(result.success).toBe(false)
+    expect(existsSync(result.workspacePath)).toBe(false)
+  })
 })

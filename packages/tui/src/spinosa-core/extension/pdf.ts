@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs"
+import { closeSync, openSync, readSync } from "node:fs"
 import {
   pdfPageCount as jsPdfPageCount,
   pdfPageHasExtractableText as jsPdfPageHasText,
@@ -42,7 +42,14 @@ export async function isTextBasedPdf(pdfPath: string): Promise<boolean> {
 
   let header: Buffer
   try {
-    header = readFileSync(pdfPath, { flag: "r" })
+    const fd = openSync(pdfPath, "r")
+    try {
+      header = Buffer.alloc(262144)
+      const read = readSync(fd, header, 0, header.length, 0)
+      header = header.subarray(0, read)
+    } finally {
+      closeSync(fd)
+    }
   } catch {
     return false
   }
@@ -54,12 +61,6 @@ export async function isTextBasedPdf(pdfPath: string): Promise<boolean> {
     searchBuffer(header, Buffer.from("/Font"), 0, quickLen) ||
     searchBuffer(header, Buffer.from("/CIDFont"), 0, quickLen)
   ) return true
-
-  if (
-    searchBuffer(header, Buffer.from("/Font"), 0, header.length) ||
-    searchBuffer(header, Buffer.from("/CIDFont"), 0, header.length)
-  ) return true
-
   const pageCount = await pdfPageCount(pdfPath)
   return pdfTextPagesMeetThreshold(pdfPath, pageCount)
 }

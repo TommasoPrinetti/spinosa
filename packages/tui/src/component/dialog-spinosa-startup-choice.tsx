@@ -3,6 +3,7 @@ import { createMemo, createSignal, For } from "solid-js"
 import { useTheme } from "../context/theme"
 import { useRoute } from "../context/route"
 import { useSpinosaWorkspace } from "../context/spinosa-workspace"
+import { buildStartupChatPrompt } from "../spinosa-core/commands/startup"
 import { useDialog } from "../ui/dialog"
 import { useBindings } from "../keymap"
 import { buttonBackground, buttonBorder, buttonText } from "../util/button"
@@ -21,7 +22,7 @@ export function DialogSpinosaStartupChoice(props: {
 
   const launchStartupInChat = async () => {
     dialog.clear()
-    spinosa.queuePrompt({ input: props.prompt, parts: [], autoSubmit: true })
+    spinosa.queuePrompt(buildStartupChatPrompt(props.prompt))
     await spinosa.openWorkspace(props.workspacePath)
     route.navigate({ type: "workspace" })
   }
@@ -35,7 +36,7 @@ export function DialogSpinosaStartupChoice(props: {
   const options = createMemo(() => [
     {
       title: "Run startup-prompt in chat",
-      description: "Load `startup-prompt.md` and submit it automatically.",
+      description: "Load `startup-prompt.md` into chat. Press Enter to run it, or edit it first.",
       primary: true,
       run: () => void launchStartupInChat(),
     },

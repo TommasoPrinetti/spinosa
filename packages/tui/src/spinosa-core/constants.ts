@@ -1,3 +1,5 @@
+import path from "node:path"
+
 export const MARKDOWN_EXTENSIONS = [
   "txt", "rtf", "textile", "wiki", "mediawiki", "dokuwiki", "pmwiki",
   "outliner", "workflowy", "dynalist", "yaml", "yml", "toml",
@@ -41,9 +43,27 @@ export const SPINOSA_AGENT_FILES = [
   "spinosa-evaluator.md",
 ]
 
-export function fileExt(path: string): string {
-  const i = path.lastIndexOf(".")
-  return i >= 0 ? path.slice(i + 1) : ""
+const MAX_EXTENSION_FILENAME_LENGTH = 255
+
+export function fileExt(filePath: string): string {
+  try {
+    if (typeof filePath !== "string" || filePath.trim() === "") return ""
+
+    const baseName = path.basename(filePath).trim()
+    if (!baseName || baseName === "." || baseName === "..") return ""
+
+    const safeName =
+      baseName.length > MAX_EXTENSION_FILENAME_LENGTH
+        ? baseName.slice(-MAX_EXTENSION_FILENAME_LENGTH)
+        : baseName
+
+    const lastDot = safeName.lastIndexOf(".")
+    if (lastDot <= 0 || lastDot === safeName.length - 1) return ""
+
+    return safeName.slice(lastDot + 1).toLowerCase()
+  } catch {
+    return ""
+  }
 }
 
 export function extInList(ext: string, list: string[]): boolean {

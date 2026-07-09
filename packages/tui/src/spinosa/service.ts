@@ -188,8 +188,9 @@ export async function getRoutesSnapshot(
   const overseerCounter = notes ? parseOrchestratorCounter(notes) : undefined
   const overseerAdvisories = notes ? parseOrchestratorAdvisories(notes) : undefined
 
-  const activeGoal =
-    (preferredSessionId ? goals.find((goal) => goal.sessionId === preferredSessionId) : undefined) ?? goals[0]
+  const activeGoal = preferredSessionId
+    ? goals.find((goal) => goal.sessionId === preferredSessionId)
+    : goals[0]
 
   return {
     goals,
@@ -200,4 +201,3 @@ export async function getRoutesSnapshot(
     activeGoal,
   }
 }
-

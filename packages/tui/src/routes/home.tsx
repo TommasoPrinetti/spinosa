@@ -181,6 +181,7 @@ export function Home() {
   let sent = false
   let once = false
   let lastRoutePromptKey: string | undefined
+  let lastStartupHintKey: string | undefined
 
   onMount(() => {
     editor.clearSelection()
@@ -202,6 +203,18 @@ export function Home() {
     const prompt = startupPrompt()
     if (!r || !prompt) return
     r.set(prompt)
+
+    if (!prompt.autoSubmit && startupPromptIsQueued()) {
+      const hintKey = JSON.stringify({ input: prompt.input, parts: prompt.parts })
+      if (lastStartupHintKey !== hintKey) {
+        lastStartupHintKey = hintKey
+        toast.show({
+          variant: "info",
+          message: "Startup prompt ready - press Enter to run it, or edit it first.",
+          duration: 4000,
+        })
+      }
+    }
   })
 
   // Auto-submit route prompt once the prompt, sync, and model state are ready.

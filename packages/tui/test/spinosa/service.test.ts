@@ -99,6 +99,11 @@ describe("service fixture workspace", () => {
     expect(bound.activeGoal?.sessionId).toBe(target!.sessionId)
   })
 
+  test("does not silently bind a different goal when preferred session is missing", async () => {
+    const snapshot = await getRoutesSnapshot(fixture, "missing-session-id")
+    expect(snapshot.activeGoal).toBeUndefined()
+  })
+
   test("framework health passes", async () => {
     const health = await getFrameworkHealth(fixture)
     expect(health.every((row) => row.ok)).toBe(true)

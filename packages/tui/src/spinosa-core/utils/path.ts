@@ -6,6 +6,14 @@ export function resolveUserPath(value: string): string | undefined {
   return existsSync(resolved) ? resolved : undefined
 }
 
+export function resolveExistingUserPaths(values: string[]): string[] {
+  return values
+    .map((value) => normalizePathInput(value))
+    .filter(Boolean)
+    .map((value) => resolveUserPath(value))
+    .filter((value): value is string => Boolean(value))
+}
+
 export function normalizePathInput(value: string): string {
   let result = value.trim()
   if (result.length >= 2) {
