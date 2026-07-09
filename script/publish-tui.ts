@@ -2,7 +2,7 @@
 import fs from "fs"
 // ── publish-tui.ts — Build and publish @spinosa/tui to npm ─────────────────
 //
-// Usage: bun run script/publish-tui.ts
+// Usage: bun run script/publish-tui.ts [--dry-run]
 // Prerequisites: npm login (with @spinosa org access)
 
 import { $ } from "bun"
@@ -13,6 +13,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(__dirname, "..")
 
 process.chdir(repoRoot)
+const dryRun = process.argv.includes("--dry-run")
 
 const rootPkg = await Bun.file(path.join(repoRoot, "package.json")).json()
 const TUI_VERSION: string = rootPkg.version
@@ -24,8 +25,13 @@ async function published(name: string, version: string) {
 
 async function publishPackage(dir: string, name: string, version: string) {
   if (process.platform !== "win32") await $`chmod -R 755 .`.cwd(dir)
-  if (await published(name, version)) {
+  const alreadyPublished = await published(name, version)
+  if (alreadyPublished) {
     console.log(`  ✓ Already published ${name}@${version}`)
+    return
+  }
+  if (dryRun) {
+    console.log(`  [dry-run] Would publish ${name}@${version} to ${CHANNEL} channel`)
     return
   }
   await $`bun pm pack`.cwd(dir)
