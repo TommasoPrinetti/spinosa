@@ -401,7 +401,9 @@ export function AddFiles() {
     spinOff()
   }
 
-  const handleToolAction = () => { blurSourceInputs(); if (busy()) return
+  const handleToolAction = () => {
+    if (busy()) return
+    try { blurSourceInputs() } catch { /* inputs may already be destroyed from path step */ }
     const checks = toolChecks()
     const needsRepair = checks.some((t) => t.status === "missing")
     if (needsRepair) {
