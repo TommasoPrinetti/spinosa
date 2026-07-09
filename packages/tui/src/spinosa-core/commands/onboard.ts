@@ -30,9 +30,12 @@ export type OnboardingPhase =
 
 export type OnboardingHandoffResult =
   | "prompt_copied"
+  | "prompt_ready"
   | "launch_command_copied"
+  | "launch_command_ready"
   | "run_requested"
   | "run_failed_command_copied"
+  | "run_failed_command_ready"
 
 
 export interface OnboardingOptions {
@@ -163,21 +166,24 @@ export async function completeOnboarding(
 
   phase("prompt", "Generating startup prompt...")
   const startupPrompt = await generateStartupPrompt(ctx.projectTitle, ctx.workspacePath, ctx.sourcePath, cliLabel, ctx.frameworkRoot)
-  await Bun.write(path.join(ctx.workspacePath, "startup-prompt.md"), startupPrompt)
+  const startupPromptPath = path.join(ctx.workspacePath, "startup-prompt.md")
+  try {
+    await Bun.write(startupPromptPath, startupPrompt)
+  } catch (error) {
+    throw new Error(`Failed to write startup prompt at ${startupPromptPath}`, { cause: error })
+  }
   const launchCommand = buildLaunchCommand(ctx.workspacePath, cli, startupPrompt)
-  copyToClipboard(startupPrompt)
+  const copiedPrompt = copyToClipboard(startupPrompt)
 
-  let handoffResult: OnboardingHandoffResult = "prompt_copied"
+  let handoffResult: OnboardingHandoffResult = copiedPrompt ? "prompt_copied" : "prompt_ready"
   if (flagLaunch === "run" && cli !== "other") {
     if (runCliWithPrompt(ctx.workspacePath, cli, startupPrompt)) {
       handoffResult = "run_requested"
     } else {
-      handoffResult = "run_failed_command_copied"
-      copyToClipboard(launchCommand)
+      handoffResult = copyToClipboard(launchCommand) ? "run_failed_command_copied" : "run_failed_command_ready"
     }
   } else {
-    copyToClipboard(launchCommand)
-    handoffResult = "launch_command_copied"
+    handoffResult = copyToClipboard(launchCommand) ? "launch_command_copied" : "launch_command_ready"
   }
 
   phase("complete", "Writing onboarding summary...")
@@ -322,5 +328,9 @@ updated: ${today()}
 - Handoff result: ${handoffResult}
 `
 
-  await Bun.write(summaryPath, content)
+  try {
+    await Bun.write(summaryPath, content)
+  } catch (error) {
+    throw new Error(`Failed to write onboarding summary at ${summaryPath}`, { cause: error })
+  }
 }
