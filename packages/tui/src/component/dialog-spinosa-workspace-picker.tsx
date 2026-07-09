@@ -219,7 +219,7 @@ function wsPathForLog(p: string) { const s = p.split("/"); return s[s.length-2]+
 
       {/* ── table ── */}
       <Show when={sorted().length > 0}>
-        <box flexDirection="column">
+        <box flexDirection="column" maxHeight={18}>
           {/* header row */}
           <box
             flexDirection="row"
@@ -230,17 +230,17 @@ function wsPathForLog(p: string) { const s = p.split("/"); return s[s.length-2]+
             paddingBottom={1}
             backgroundColor={theme.backgroundPanel}
           >
-            <box width={28} onMouseDown={() => toggleSort("name")}>
+            <box flexGrow={3} onMouseDown={() => toggleSort("name")}>
               <text fg={theme.textMuted}>
                 Name{sortColumn() === "name" ? (sortDir() === "asc" ? " ↑" : " ↓") : ""}
               </text>
             </box>
-            <box width={22} onMouseDown={() => toggleSort("folder")}>
+            <box flexGrow={2} onMouseDown={() => toggleSort("folder")}>
               <text fg={theme.textMuted}>
                 Parent{sortColumn() === "folder" ? (sortDir() === "asc" ? " ↑" : " ↓") : ""}
               </text>
             </box>
-            <box width={12} onMouseDown={() => toggleSort("status")}>
+            <box width={14} onMouseDown={() => toggleSort("status")}>
               <text fg={theme.textMuted}>
                 Status{sortColumn() === "status" ? (sortDir() === "asc" ? " ↑" : " ↓") : ""}
               </text>
@@ -250,7 +250,7 @@ function wsPathForLog(p: string) { const s = p.split("/"); return s[s.length-2]+
                 Ver{sortColumn() === "version" ? (sortDir() === "asc" ? " ↑" : " ↓") : ""}
               </text>
             </box>
-            <box width={18} onMouseDown={() => toggleSort("accessed")}>
+            <box flexGrow={1} onMouseDown={() => toggleSort("accessed")}>
               <text fg={theme.textMuted}>
                 Accessed{sortColumn() === "accessed" ? (sortDir() === "asc" ? " ↑" : " ↓") : ""}
               </text>
@@ -273,19 +273,19 @@ function wsPathForLog(p: string) { const s = p.split("/"); return s[s.length-2]+
                   onMouseOver={() => setSelected(i())}
                   onMouseDown={() => { setSelected(i()); void chooseWorkspace(row.path) }}
                 >
-                  <text fg={theme.text} width={28}>
+                  <text fg={theme.text} flexGrow={3}>
                     <span style={{ bold: active() }}>{row.name}</span>
                   </text>
-                  <text fg={theme.textMuted} width={22}>
-                    {truncatePathTail(row.parentFolder, 20)}
+                  <text fg={theme.textMuted} flexGrow={2}>
+                    {truncatePathTail(row.parentFolder, 30)}
                   </text>
-                  <text fg={theme.textMuted} width={12}>
+                  <text fg={theme.textMuted} width={14}>
                     {setupStatusLabel(row.status)}
                   </text>
                   <text fg={theme.textMuted} width={10}>
                     v{row.version}{row.needsUpdate ? " ⚠" : ""}
                   </text>
-                  <text fg={theme.textMuted} width={18}>
+                  <text fg={theme.textMuted} flexGrow={1}>
                     {relativeTime(row.lastAccessed)}
                   </text>
                 </box>
