@@ -72,16 +72,17 @@ export function Home() {
     if (wsVersion()) parts.push(`workspace v${wsVersion()}`)
     return parts.join(" · ")
   })
-  const [latestVersion] = createResource(async () => {
-    try {
-      const bv = bundledVersion()
-      if (!bv) return undefined
-      // Infer channel from the bundled version: prerelease → beta, otherwise → stable.
-      // This prevents offering stable upgrades when the user runs a beta build.
-      const inferredChannel: ReleaseChannel = isPrereleaseFrameworkVersion(bv) ? "beta" : "stable"
-      return await resolveReleaseVersionForChannel(inferredChannel)
-    } catch { return undefined }
-  })
+  const [latestVersion] = createResource(
+    bundledVersion,
+    async (bv: string) => {
+      try {
+        // Infer channel from the bundled version: prerelease → beta, otherwise → stable.
+        // This prevents offering stable upgrades when the user runs a beta build.
+        const inferredChannel: ReleaseChannel = isPrereleaseFrameworkVersion(bv) ? "beta" : "stable"
+        return await resolveReleaseVersionForChannel(inferredChannel)
+      } catch { return undefined }
+    },
+  )
   const upgradeAvailable = createMemo(() => {
     const bv = bundledVersion()
     const lv = latestVersion()
