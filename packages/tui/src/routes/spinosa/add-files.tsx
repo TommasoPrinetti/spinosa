@@ -648,6 +648,7 @@ export function AddFiles() {
   // ── Path step navigation ──────────────────────────────────────────────────
   const continueFromPath = async () => {
     if (busy()) return
+    blurSourceInputs()
     logAction("continue", "Path step → Tools step")
     snapshotSourcePaths()
     const resolved = allPathsResolved()
@@ -822,11 +823,14 @@ export function AddFiles() {
       step,
       (current, previous) => {
         if (current === "path" && current !== previous) focusSourceInput()
+        if (previous === "path" && current !== previous) {
+          sourceInputs.clear()
+          sourceInput = undefined
+        }
       },
       { defer: true },
     ),
   )
-
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <CenteredColumn>
