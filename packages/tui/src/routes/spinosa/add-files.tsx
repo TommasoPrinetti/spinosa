@@ -410,6 +410,7 @@ export function AddFiles() {
       void runToolRepair()
     } else if (checks.every((t) => t.status === "available")) {
       logAction("start-scan", "All tools ready")
+      pendingPaths = allPathsResolved()
       startScan().catch((err) => {
         logError("startScan-top", err)
         appendLogLine(`Fatal: ${err instanceof Error ? err.message : String(err)}`)
@@ -423,19 +424,15 @@ const runToolRepair = async () => {
   logAction("repair-tools", "stub")
 }
   // ── Scan ──────────────────────────────────────────────────────────────────
+  let pendingPaths: string[] | undefined
   const startScan = async () => {
+    const resolved = pendingPaths
+    if (!resolved || resolved.length === 0) { logError("startScan", "No pending paths"); setStep("error"); return }
     setScanDone(false)
     setStep("scan")
     await yieldToEventLoop()
-    await delay(500)
+    clearLog()
     try {
-      const resolved = allPathsResolved()
-      if (resolved.length === 0) {
-        appendLogLine("At least one valid source path is required.")
-        setStep("error")
-        return
-      }
-      clearLog()
       let mergedOptions: ImportOption[] = []
       for (const src of resolved) {
         appendLogLine(`Scanning: ${src}`)
