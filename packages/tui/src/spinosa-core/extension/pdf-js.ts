@@ -53,6 +53,7 @@ export async function pdfTextPagesMeetThreshold(pdfPath: string, pageCount: numb
   ])
   const hits = results.filter(Boolean).length
   return hits >= 2
+}
 export async function pdfRenderPageToPng(pdfPath: string, pageNumber: number, dpi = 180): Promise<Buffer> {
   return withDoc(pdfPath, async (doc) => {
     const pg = await doc.getPage(pageNumber)
