@@ -53,7 +53,7 @@ function compareFrameworkVersions(a: string, b: string): number {
   return 0
 }
 
-function discoverInstalledFramework(): string | undefined {
+export function discoverInstalledFramework(): string | undefined {
   const versionsDir = path.join(process.env.SPINOSA_HOME ?? path.join(homedir(), ".spinosa"), "versions")
   if (!existsSync(versionsDir)) return undefined
   let bestDir = ""

@@ -1251,9 +1251,19 @@ main() {
 
   local lockdir="${SPINOSA_HOME}/versions/.install.lock"
 
-  # Stale lock check: if lock dir is older than 30 min, reclaim it
+  # Stale lock check: reclaim if older than 30 min or PID is dead
   if [ -d "$lockdir" ]; then
+    local stale=0
     if [[ "$(find "$lockdir" -maxdepth 0 -mmin +30 2>/dev/null)" == "$lockdir" ]]; then
+      stale=1
+    elif [ -f "$lockdir/pid" ]; then
+      local lock_pid
+      lock_pid=$(cat "$lockdir/pid") 2>/dev/null || true
+      if [ -n "$lock_pid" ] && ! kill -0 "$lock_pid" 2>/dev/null; then
+        stale=1
+      fi
+    fi
+    if [ "$stale" -eq 1 ]; then
       rm -rf "$lockdir"
       info "Removed stale lock from previous install attempt"
     fi
@@ -1261,6 +1271,9 @@ main() {
   mkdir -p "$(dirname "$lockdir")"
   mkdir "$lockdir" 2>/dev/null || die "Another Spinosa installer is running. Wait and retry, or remove stale lock: rm -rf '${lockdir}'"
   printf '%s\n' "$$" > "${lockdir}/pid"
+  # Early trap: ensure lock cleanup on any exit before full cleanup trap is registered
+  trap 'rm -rf "$lockdir"' EXIT
+  trap 'rm -rf "$lockdir"; exit 1' INT TERM HUP
 
   check_release_age "$VERSION" "$MIN_DAYS"
 

@@ -11,7 +11,7 @@ import {
   setReleaseChannel,
   spinosaReleaseChannel,
 } from "../system/channels"
-import { installedReleaseVersion, resolveFrameworkRoot } from "../framework/discovery"
+import { discoverInstalledFramework, installedReleaseVersion, resolveFrameworkRoot } from "../framework/discovery"
 import { compareFrameworkVersions } from "../utils/version"
 import { ensureGlobalMetadata, discoverRegisteredWorkspaces } from "../workspace/registry"
 import { readWorkspaceMeta } from "../workspace/meta"
@@ -154,11 +154,21 @@ export async function upgradeFramework(
   const normalizedInstalled =
     installedVersion === "dev" || !installedVersion ? "" : installedVersion
 
-  if (!options.reinstall && normalizedInstalled && normalizedInstalled === resolvedVersion) {
+  // When running from source tree (dev), also check globally installed version
+  let effectiveInstalled = normalizedInstalled
+  if (normalizedInstalled !== resolvedVersion) {
+    const installedFwRoot = discoverInstalledFramework()
+    if (installedFwRoot && installedFwRoot !== fwRoot) {
+      const globalVersion = installedReleaseVersion(installedFwRoot)
+      if (globalVersion) effectiveInstalled = globalVersion
+    }
+  }
+
+  if (!options.reinstall && effectiveInstalled && effectiveInstalled === resolvedVersion) {
     return {
       success: true,
-      previousVersion: normalizedInstalled,
-      newVersion: normalizedInstalled,
+      previousVersion: effectiveInstalled,
+      newVersion: effectiveInstalled,
       workspaceUpgradesNeeded: [],
     }
   }
