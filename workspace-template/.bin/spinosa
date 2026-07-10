@@ -1,28 +1,23 @@
 #!/usr/bin/env bash
-# ── spinosa — TUI launcher ────────────────────────────────────────────────
-# Resolves template root, finds bun, launches TUI from packages/opencode.
+# ── spinosa — Bootstrap launcher ────────────────────────────────────────────
+# Resolves Spinosa root and Bun runtime, then dispatches to TypeScript CLI
+# or TUI. All command logic lives in packages/tui/src/spinosa-cli.ts.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
-# Resolve system root
 RESOLVED_ROOT=""
 SPINOSA_HOME="${SPINOSA_HOME:-$HOME/.spinosa}"
 
-# 1. Check relative to script location (dev mode: script in template's .bin/)
+# Resolve system root (3 tiers)
 candidate="${SCRIPT_DIR}/.."
 if [[ -f "${candidate}/.spinosa/workspace-files.tsv" ]]; then
-  # candidate = template root → system root is parent
   RESOLVED_ROOT="$(cd "$candidate/.." && pwd)"
 else
-  # 2. Check two levels up (installed shim at $SPINOSA_HOME/bin/)
   candidate2="${SCRIPT_DIR}/../.."
   if [[ -f "${candidate2}/workspace-template/.spinosa/workspace-files.tsv" ]]; then
     RESOLVED_ROOT="$candidate2"
   fi
 fi
-
-# 3. Check SPINOSA_HOME/versions/ for installed framework
 if [[ -z "$RESOLVED_ROOT" && -d "${SPINOSA_HOME}/versions" ]]; then
   while IFS= read -r candidate3; do
     v="$(basename "$candidate3")"
@@ -36,163 +31,36 @@ fi
 
 # Find bun — bundled install first, then system
 BUN=""
-bun_bin="${SPINOSA_HOME:-$HOME/.spinosa}/bin/bun"
-if [[ -z "$BUN" && -x "$bun_bin" ]]; then
-  BUN="$bun_bin"
-fi
+[[ -x "${SPINOSA_HOME:-$HOME/.spinosa}/bin/bun" ]] && BUN="${SPINOSA_HOME:-$HOME/.spinosa}/bin/bun"
 if [[ -z "$BUN" ]] && command -v bun >/dev/null 2>&1; then
   BUN="$(command -v bun)"
 fi
 
-
-# Handle uninstall — removes framework versions, keeps metadata + workspace registry
-if [[ "${1:-}" == "uninstall" ]]; then
-  if [[ "${2:-}" == "--help" || "${2:-}" == "-h" ]]; then
-    echo "Usage: spinosa uninstall [--yes]"
-    echo "Removes Spinosa runtime files while preserving workspace folders and metadata registry."
-    exit 0
-  fi
-  G=$'\033[32m' Y=$'\033[33m' DIM=$'\033[2m' BOLD=$'\033[1m' RESET=$'\033[0m'
-  ok()   { printf '  %s %s\n' "${G}✦${RESET}" "$1"; }
-  info() { printf '  %s %s\n' "${DIM}→${RESET}" "$1"; }
-  note() { printf '  %s↳%s %s\n' "${DIM}" "${RESET}" "$1"; }
-  divider() { printf '%s\n' "${DIM}$(printf '%.0s─' {1..78})${RESET}"; }
-
-  # Parse a confirmation token so non-interactive runs can proceed:
-  #   spinosa uninstall yes | y | -y | --yes | -f | --force
-  CONFIRM=""
-  for a in "$@"; do
-    case "$a" in
-      yes|y|-y|--yes|-f|--force) CONFIRM=1 ;;
-    esac
-  done
-
-  printf '\n'
-  printf '  %s\n' "${G}███████╗██████╗ ██╗███╗   ██╗ ██████╗ ███████╗ █████╗ ${RESET}"
-  printf '  %s\n' "${G}██╔════╝██╔══██╗██║████╗  ██║██╔═══██╗██╔════╝██╔══██╗${RESET}"
-  printf '  %s\n' "${G}███████╗██████╔╝██║██╔██╗ ██║██║   ██║███████╗███████║${RESET}"
-  printf '  %s\n' "${G}╚════██║██╔═══╝ ██║██║╚██╗██║██║   ██║╚════██║██╔══██║${RESET}"
-  printf '  %s\n' "${G}███████║██║     ██║██║ ╚████║╚██████╔╝███████║██║  ██║${RESET}"
-  printf '  %s\n' "${G}╚══════╝╚═╝     ╚═╝╚═╝  ╚═══╝ ╚═════╝ ╚══════╝╚═╝  ╚═╝${RESET}"
-  printf '  %sUninstaller%s\n\n' "${BOLD}" "${RESET}"
-
-  info "Found Spinosa at ${SPINOSA_HOME}"
-  divider
-  printf '\n'
-
-  info "The following will be kept:"
-  note "${SPINOSA_HOME}/metadata/ — workspace registry"
-  ok "Workspace metadata preserved"
-  printf '\n'
-
-  info "The following will be removed:"
-  note "${SPINOSA_HOME}/versions/ — framework binaries"
-  note "${SPINOSA_HOME}/bin/ — bun and spinosa CLI"
-  note "${SPINOSA_HOME}/lib/"
-  note "${SPINOSA_HOME}/logs/"
-  note "${SPINOSA_HOME}/env.sh"
-  printf '\n'
-
-  # Arrow-key selector: Yes / No
-  if [[ -z "$CONFIRM" ]]; then
-    if [[ ! -t 0 ]]; then
-      # Non-interactive with no explicit confirmation — refuse to uninstall.
-      echo "  ${Y}⚠${RESET}  Canceled (no confirmation provided)." >&2
-      exit 0
-    fi
-    selected=1  # 0=Yes, 1=No
-    key=
-    while true; do
-      if [[ $selected -eq 0 ]]; then
-        printf '\r  %s  Are you sure you want to uninstall?\n  %s  %s●%s Yes / %s○%s No\n  %s  \n' \
-          "${Y}◆${RESET}" \
-          "${DIM}│${RESET}" "${G}" "${RESET}" "${DIM}" "${RESET}" \
-          "${DIM}└${RESET}" >&2
-      else
-        printf '\r  %s  Are you sure you want to uninstall?\n  %s  %s○%s Yes / %s●%s No\n  %s  \n' \
-          "${Y}◆${RESET}" \
-          "${DIM}│${RESET}" "${DIM}" "${RESET}" "${G}" "${RESET}" \
-          "${DIM}└${RESET}" >&2
-      fi
-      IFS= read -rsn1 key
-      if [[ $key == $'\x1b' ]]; then
-        read -rsn2 key
-        case "$key" in
-          '[A') selected=0 ;;  # Up
-          '[B') selected=1 ;;  # Down
-        esac
-      elif [[ -z $key ]]; then
-        break  # Enter — confirm
-      fi
-      printf '\033[3A' >&2  # cursor up 3 for redraw
-    done
-    echo >&2
-    if [[ $selected -eq 1 ]]; then
-      echo "  ${Y}⚠${RESET}  Canceled." >&2
-      exit 0
-    fi
-  fi
-
-  case "$SPINOSA_HOME" in
-    ""|/|.|..|"$HOME"|"$HOME"/)
-      echo "Error: refusing unsafe SPINOSA_HOME for uninstall: ${SPINOSA_HOME:-<empty>}" >&2
-      exit 1
-      ;;
-    /*) ;;
-    *)
-      echo "Error: SPINOSA_HOME must be an absolute path for uninstall." >&2
-      exit 1
-      ;;
-  esac
-  if [[ ! -d "${SPINOSA_HOME}/metadata" && ! -d "${SPINOSA_HOME}/versions" ]]; then
-    echo "Error: ${SPINOSA_HOME} does not look like a Spinosa installation." >&2
-    exit 1
-  fi
-
-  printf '  %s Removing framework...\n' "${G}✦${RESET}"
-  rm -rf \
-    "${SPINOSA_HOME:?}/versions" \
-    "${SPINOSA_HOME:?}/bin" \
-    "${SPINOSA_HOME:?}/lib" \
-    "${SPINOSA_HOME:?}/logs" \
-    "${SPINOSA_HOME:?}/env.sh"
-
-  divider
-  printf '\n'
-  ok "Spinosa uninstalled."
-  note "Workspace metadata kept at ${SPINOSA_HOME}/metadata/"
-  note "Re-install: curl -fsSL https://raw.githubusercontent.com/TommasoPrinetti/spinosa/main/install.sh | bash"
-  printf '\n'
-  exit 0
+# Dispatch to TS CLI for all non-interactive commands.
+# new/create without a source argument still launches the TUI dashboard.
+dispatch=false
+case "${1:-}" in
+  help|--help|-h|version|--version|add|update|doctor|upgrade|uninstall|status|list) dispatch=true ;;
+  new|create) [[ $# -gt 1 ]] && dispatch=true ;;
+esac
+if [[ "$dispatch" == "true" ]]; then
+  [[ -z "$RESOLVED_ROOT" || -z "$BUN" ]] && { echo "Error: Spinosa runtime not found. Reinstall Spinosa." >&2; exit 1; }
+  export SPINOSA_TEMPLATE_ROOT="$RESOLVED_ROOT"
+  exec "$BUN" run "${RESOLVED_ROOT}/packages/tui/src/spinosa-cli.ts" "$@"
 fi
 
-# Spinosa-owned non-interactive commands. `new`/`create` without a source keep
-# the interactive dashboard behavior instead of entering the CLI dispatcher.
-case "${1:-}" in
-  help|--help|-h|version|--version|add|update|doctor|upgrade)
-    if [[ -z "$RESOLVED_ROOT" || -z "$BUN" ]]; then
-      echo "Error: Spinosa runtime not found. Reinstall Spinosa." >&2
-      exit 1
-    fi
-    exec "$BUN" run "${RESOLVED_ROOT}/packages/tui/src/spinosa-cli.ts" "$@"
-    ;;
-  new|create)
-    if [[ $# -gt 1 ]]; then
-      if [[ -z "$RESOLVED_ROOT" || -z "$BUN" ]]; then
-        echo "Error: Spinosa runtime not found. Reinstall Spinosa." >&2
-        exit 1
-      fi
-      exec "$BUN" run "${RESOLVED_ROOT}/packages/tui/src/spinosa-cli.ts" "$@"
-    fi
-    set --
-    ;;
-esac
+# Unknown command — reject instead of silently falling through to TUI
+if [[ $# -gt 0 && "${1:-}" != "new" && "${1:-}" != "create" ]]; then
+  echo "Error: Unknown Spinosa command: ${1}" >&2
+  echo "Run 'spinosa help' for usage." >&2
+  exit 1
+fi
 
-# Launch TUI from local packages/opencode
+# No-args or new/create without source → launch TUI
 if [[ -d "${RESOLVED_ROOT}/packages/opencode" && -n "$BUN" ]]; then
   export SPINOSA_TEMPLATE_ROOT="$RESOLVED_ROOT"
   exec "$BUN" run --cwd "${RESOLVED_ROOT}/packages/opencode" --conditions=browser src/index.ts "$@"
 fi
 
-echo "Error: Spinosa TUI not found. Run the installer or re-install dependencies." >&2
+echo "Error: Spinosa not found. Run the installer or re-install dependencies." >&2
 exit 1

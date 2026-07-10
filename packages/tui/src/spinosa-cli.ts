@@ -16,54 +16,20 @@ import {
   writeWorkspaceStatus,
   type ReleaseChannel,
 } from "./spinosa-core"
+import { parseSpinosaCliArgs, type ParsedArgs } from "./spinosa-cli/parser"
+import type { UpdateResult } from "./spinosa-core/commands/update"
+import { createIo, emitResult, type SpinosaCliIo } from "./spinosa-cli/io"
+import { runUninstall } from "./spinosa-cli/commands/uninstall"
+import { runStatus } from "./spinosa-cli/commands/status"
+import { runList } from "./spinosa-cli/commands/list"
 
-export interface SpinosaCliIo {
-  out(message: string): void
-  error(message: string): void
-}
+export { parseSpinosaCliArgs }
 
-export interface ParsedArgs {
-  positionals: string[]
-  values: Map<string, string>
-  flags: Set<string>
-}
-
-const defaultIo: SpinosaCliIo = {
-  out: (message) => process.stdout.write(`${message}\n`),
-  error: (message) => process.stderr.write(`${message}\n`),
-}
-
-export function parseSpinosaCliArgs(args: string[]): ParsedArgs {
-  const positionals: string[] = []
-  const values = new Map<string, string>()
-  const flags = new Set<string>()
-  const valueFlags = new Set(["workspace", "file", "dir", "extensions", "cli", "launch", "channel", "version", "name"])
-  const booleanFlags = new Set(["yes", "dry-run", "force", "reinstall", "overwrite", "no-color"])
-
-  for (let index = 0; index < args.length; index++) {
-    const value = args[index]!
-    if (!value.startsWith("--")) {
-      positionals.push(value)
-      continue
-    }
-    const [rawKey, inlineValue] = value.slice(2).split("=", 2)
-    if (!rawKey) throw new Error(`Invalid option: ${value}`)
-    if (valueFlags.has(rawKey)) {
-      const nextValue = inlineValue ?? args[++index]
-      if (!nextValue || nextValue.startsWith("--")) throw new Error(`--${rawKey} requires a value`)
-      values.set(rawKey, nextValue)
-    } else {
-      if (inlineValue !== undefined) throw new Error(`--${rawKey} does not accept a value`)
-      if (!booleanFlags.has(rawKey)) throw new Error(`Unknown option: --${rawKey}`)
-      flags.add(rawKey)
-    }
-  }
-  return { positionals, values, flags }
-}
+export type { SpinosaCliIo, ParsedArgs }
 
 function helpText(): string {
   return [
-    "Spinosa — local-first research workspace framework",
+    "Spinosa \u2014 local-first research workspace framework",
     "",
     "Usage:",
     "  spinosa                         Open dashboard",
@@ -71,9 +37,15 @@ function helpText(): string {
     "  spinosa add <source> [--workspace path] [--file path|--dir path] [--extensions ext,...]",
     "  spinosa update [workspace] [--dry-run] [--force] [--yes]",
     "  spinosa doctor [--workspace path]",
+    "  spinosa status [workspace]",
+    "  spinosa list",
     "  spinosa version",
     "  spinosa upgrade [--channel stable|beta] [--version X.Y.Z] [--yes] [--reinstall]",
     "  spinosa uninstall [--yes]",
+    "",
+    "Global flags:",
+    "  --json       Machine-readable JSON output",
+    "  --quiet      Exit code only, no output",
   ].join("\n")
 }
 
@@ -81,6 +53,16 @@ function requiredFrameworkRoot(): string {
   const root = resolveFrameworkRoot()
   if (!root) throw new Error("Spinosa framework root not found. Reinstall Spinosa or set SPINOSA_TEMPLATE_ROOT.")
   return root
+}
+
+function runVersion(io: SpinosaCliIo): number {
+  const version = readFrameworkVersionFromRoot(requiredFrameworkRoot())
+  if (io.format === "json") {
+    emitResult(io, "version", { version }, `spinosa ${version}`)
+  } else {
+    io.out(`spinosa ${version}`)
+  }
+  return 0
 }
 
 async function runCreate(parsed: ParsedArgs, io: SpinosaCliIo): Promise<number> {
@@ -112,7 +94,8 @@ async function runCreate(parsed: ParsedArgs, io: SpinosaCliIo): Promise<number> 
   if (!onboarding.success) {
     throw new Error(onboarding.blockerReason ?? `Onboarding failed during ${onboarding.blockedPhase ?? "unknown phase"}`)
   }
-  io.out(`Workspace ready: ${created.workspacePath}`)
+
+  emitResult(io, "create", { workspacePath: created.workspacePath, project: created.projectName }, `Workspace ready: ${created.workspacePath}`)
   return 0
 }
 
@@ -133,7 +116,11 @@ async function runAdd(parsed: ParsedArgs, io: SpinosaCliIo): Promise<number> {
     overwrite: parsed.flags.has("overwrite"),
     onProgress: (message) => io.out(message),
   })
-  io.out(`Import: ${result.copied + result.mdConverted + result.ocrConverted} delivered, ${result.skipped + result.mdSkipped + result.ocrSkipped} skipped, ${result.failed + result.mdFailed + result.ocrFailed} failed`)
+  const delivered = result.copied + result.mdConverted + result.ocrConverted
+  const skipped = result.skipped + result.mdSkipped + result.ocrSkipped
+  const failed = result.failed + result.mdFailed + result.ocrFailed
+
+  emitResult(io, "add", { delivered, skipped, failed, workspacePath }, `Import: ${delivered} delivered, ${skipped} skipped, ${failed} failed`)
   return result.success ? 0 : 1
 }
 
@@ -147,7 +134,7 @@ async function runUpdate(parsed: ParsedArgs, io: SpinosaCliIo): Promise<number> 
     force: parsed.flags.has("force"),
     onPhase: (_phase, detail) => io.out(detail),
   })
-  io.out(`Update: ${result.added} added, ${result.updated} updated, ${result.removed} removed, ${result.skipped} preserved`)
+  emitResult(io, "update", { ...result as unknown as Record<string, unknown> }, `Update: ${result.added} added, ${result.updated} updated, ${result.removed} removed, ${result.skipped} preserved`)
   return result.success ? 0 : 1
 }
 
@@ -178,6 +165,8 @@ async function runDoctor(parsed: ParsedArgs, io: SpinosaCliIo): Promise<number> 
       }
     }
   }
+
+  emitResult(io, "doctor", { healthy, frameworkRoot, version: readFrameworkVersionFromRoot(frameworkRoot) }, healthy ? "healthy" : "issues found")
   return healthy ? 0 : 1
 }
 
@@ -198,35 +187,44 @@ async function runUpgrade(parsed: ParsedArgs, io: SpinosaCliIo): Promise<number>
   return result.success ? 0 : 1
 }
 
-export async function runSpinosaCli(args: string[], io: SpinosaCliIo = defaultIo): Promise<number> {
+export async function runSpinosaCli(args: string[], io?: SpinosaCliIo): Promise<number> {
   const [command = "help", ...rest] = args
   try {
     if (command === "help" || command === "--help" || command === "-h" || rest.includes("--help") || rest.includes("-h")) {
-      io.out(helpText())
-      return 0
-    }
-    if (command === "version" || command === "--version") {
-      io.out(`spinosa ${readFrameworkVersionFromRoot(requiredFrameworkRoot())}`)
+      const out = io ?? { out: (m: string) => process.stdout.write(`${m}\n`), error: (m: string) => process.stderr.write(`${m}\n`), format: "human" as const }
+      out.out(helpText())
       return 0
     }
     const parsed = parseSpinosaCliArgs(rest)
+    const resolvedIo = io ?? createIo(parsed)
+
     switch (command) {
       case "new":
       case "create":
-        return await runCreate(parsed, io)
+        return await runCreate(parsed, resolvedIo)
       case "add":
-        return await runAdd(parsed, io)
+        return await runAdd(parsed, resolvedIo)
       case "update":
-        return await runUpdate(parsed, io)
+        return await runUpdate(parsed, resolvedIo)
       case "doctor":
-        return await runDoctor(parsed, io)
+        return await runDoctor(parsed, resolvedIo)
       case "upgrade":
-        return await runUpgrade(parsed, io)
+        return await runUpgrade(parsed, resolvedIo)
+      case "uninstall":
+        return await runUninstall(resolvedIo, parsed.flags.has("yes"))
+      case "status":
+        return await runStatus(parsed.values.get("workspace") ?? undefined, resolvedIo)
+      case "list":
+        return await runList(resolvedIo)
+      case "version":
+      case "--version":
+        return runVersion(resolvedIo)
       default:
         throw new Error(`Unknown Spinosa command: ${command}`)
     }
   } catch (error) {
-    io.error(error instanceof Error ? error.message : String(error))
+    const out = io ?? { out: (m: string) => process.stdout.write(`${m}\n`), error: (m: string) => process.stderr.write(`${m}\n`), format: "human" as const }
+    out.error(error instanceof Error ? error.message : String(error))
     return 1
   }
 }
