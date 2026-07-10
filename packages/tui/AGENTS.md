@@ -25,7 +25,7 @@ Route model: `workspace-picker | onboarding | startup-hub | workspace | plugin`.
 
 `SpinosaWorkspaceProvider` holds `activePath` in KV (`spinosa_active_workspace_path`). `setup_status` from `.spinosa/workspace` drives routing.
 
-**Workspace binding:** Chat sessions default to `spinosa.activePath` (not host cwd) via `HomeSessionDestinationProvider`. `SpinosaWorkspaceBinder` runs `sync-agents.sh` and watches setup files.
+**Workspace binding:** Chat sessions default to `spinosa.activePath` (not host cwd) via `HomeSessionDestinationProvider`. `SpinosaWorkspaceBinder` watches setup files and refreshes workspace state.
 
 **Framework source:** `scripts/link-framework.sh` symlinks `../spinosa-main` → `framework/`. CLI bridge resolves `.bin/spinosa` from that tree.
 

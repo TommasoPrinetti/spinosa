@@ -10,7 +10,32 @@ export const SPINOSA_LAST_GOAL_KV = "spinosa_last_goal_path"
 export function routeForSetupStatus(
   setupStatus: SpinosaSetupStatus,
 ): RouteNavigateInput {
-  return { type: "workspace" }
+  switch (setupStatus) {
+    case "not_started":
+    case "importing":
+      return { type: "onboarding" }
+    case "cli_started":
+      return { type: "startup-hub" }
+    case "workspace_started":
+    case "unknown":
+      return { type: "workspace" }
+  }
+}
+
+export function routeForWorkspaceOpen(
+  setupStatus: SpinosaSetupStatus,
+  requestedRoute?: RouteNavigateInput,
+): RouteNavigateInput {
+  return requestedRoute ?? routeForSetupStatus(setupStatus)
+}
+
+async function routeForWorkspace(workspacePath: string): Promise<RouteNavigateInput | undefined> {
+  try {
+    const meta = await readWorkspaceMeta(workspacePath)
+    return meta ? routeForSetupStatus(meta.setupStatus) : undefined
+  } catch {
+    return undefined
+  }
 }
 
 export async function resolveSpinosaEntryRoute(input: {
@@ -22,27 +47,18 @@ export async function resolveSpinosaEntryRoute(input: {
   if (input.skipPicker) {
     if (input.forceGeneric) return { type: "workspace" }
     const path = input.kvActivePath && isSpinosaWorkspace(input.kvActivePath) ? input.kvActivePath : input.cwd
-    if (isSpinosaWorkspace(path)) {
-      const meta = await readWorkspaceMeta(path)
-      if (meta) return routeForSetupStatus(meta.setupStatus)
-    }
+    if (isSpinosaWorkspace(path)) return (await routeForWorkspace(path)) ?? { type: "workspace" }
     return { type: "workspace" }
   }
 
   if (input.kvActivePath && isSpinosaWorkspace(input.kvActivePath)) {
-    const meta = await readWorkspaceMeta(input.kvActivePath)
-    if (meta) {
-      if (meta.setupStatus === "cli_started" || meta.setupStatus === "importing") return { type: "workspace-picker" }
-      return routeForSetupStatus(meta.setupStatus)
-    }
+    const route = await routeForWorkspace(input.kvActivePath)
+    if (route) return route
   }
 
   if (isSpinosaWorkspace(input.cwd)) {
-    const meta = await readWorkspaceMeta(input.cwd)
-    if (meta) {
-      if (meta.setupStatus === "cli_started" || meta.setupStatus === "importing") return { type: "workspace-picker" }
-      return routeForSetupStatus(meta.setupStatus)
-    }
+    const route = await routeForWorkspace(input.cwd)
+    if (route) return route
   }
 
   return { type: "workspace" }

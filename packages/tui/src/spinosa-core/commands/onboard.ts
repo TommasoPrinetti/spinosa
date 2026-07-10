@@ -48,6 +48,7 @@ export interface OnboardingOptions {
   flagLaunch?: "copy" | "run"
   onPhase?: (phase: OnboardingPhase, message: string) => void
   onCopyProgress?: (phase: string, current: number, total: number, relPath: string) => void
+  shouldAbort?: () => boolean
 }
 
 export interface OnboardingResult {
@@ -149,6 +150,7 @@ export async function completeOnboarding(
     ctx.sourcePath, ctx.rawDir, ctx.batches,
     ctx.toolStatus.markitdown, true,
     (msg: string) => onPhase?.("import", msg),
+    options.shouldAbort,
   )
 
   const imported = acc.direct.converted + acc.markitdown.converted + acc.ocr.converted + verifyResult.recovered
@@ -230,6 +232,7 @@ export async function runOnboarding(
     markitdownChoice: ctx.toolStatus.markitdown,
     ocrChoice: true,
     verifyAfter: false,
+    shouldAbort: options.shouldAbort,
     onProgress: onCopyProgress,
     onLog: (msg) => onPhase?.("import", msg),
     onPhaseChange: (phase) => {

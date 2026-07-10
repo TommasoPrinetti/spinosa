@@ -6,7 +6,7 @@ import { parseSpinosaCliArgs, runSpinosaCli } from "../../src/spinosa-cli"
 import { readFileSync } from "node:fs"
 
 const repoRoot = path.resolve(import.meta.dir, "../../../..")
-const EXPECTED_VERSION = "0.9.0-beta.5"
+const EXPECTED_VERSION = "0.9.0-beta.6"
 
 function capture() {
   const output: string[] = []

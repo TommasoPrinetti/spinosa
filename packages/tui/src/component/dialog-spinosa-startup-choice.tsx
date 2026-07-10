@@ -22,7 +22,7 @@ export function DialogSpinosaStartupChoice(props: {
 
   const launchStartupInChat = async () => {
     dialog.clear()
-    spinosa.queuePrompt(buildStartupChatPrompt(props.prompt))
+    spinosa.queuePrompt(buildStartupChatPrompt(props.prompt), props.workspacePath)
     await spinosa.openWorkspace(props.workspacePath)
     route.navigate({ type: "workspace" })
   }

@@ -90,7 +90,7 @@ export function Home() {
     return compareFrameworkVersions(lv, bv) === 1
   })
   const [upgradeHover, setUpgradeHover] = createSignal(false)
-  const [upgrading, setUpgrading] = createSignal(false)
+  const [upgradeStatus, setUpgradeStatus] = createSignal<"idle" | "upgrading" | "success" | "failed">("idle")
   const modeStack = useOpencodeModeStack()
   const keymap = useOpencodeKeymap()
   const [keyboardFocus, setKeyboardFocus] = createSignal(-1)
@@ -128,41 +128,41 @@ export function Home() {
 
   const toast = useToast()
   const doUpgrade = async () => {
-    if (upgrading()) return
-    setUpgrading(true)
+    if (upgradeStatus() !== "idle") return
+    setUpgradeStatus("upgrading")
     const bv = bundledVersion()
     const channel: ReleaseChannel = bv && isPrereleaseFrameworkVersion(bv) ? "beta" : "stable"
     try {
       const result = await upgradeFramework({
         channel,
         yes: true,
-        onPhase: (_phase, msg) => {
-          toast.show({ variant: "info", message: msg, duration: 0 })
-        },
+        suppressInstallOutput: true,
       })
       if (result.success) {
-        const wsList = result.workspaceUpgradesNeeded
-        if (wsList.length > 0) {
-          const wsNames = wsList.map((p: string) => p.split("/").pop() || p).join(", ")
+        setUpgradeStatus("success")
+        const wsNeeded = result.workspaceUpgradesNeeded
+        if (wsNeeded.length > 0) {
+          const names = wsNeeded.map((p: string) => p.split("/").pop() || p).join(", ")
           toast.show({
             variant: "success",
-            message: `Upgrade complete! ${wsList.length} workspace(s) need updating: ${wsNames}. Run 'spinosa update' to sync them.`,
+            message: `${wsNeeded.length} workspace(s) need updating: ${names}. Run 'spinosa update' to sync them.`,
             duration: 5000,
           })
-        } else {
-          toast.show({ variant: "success", message: "Upgrade complete!" })
         }
-        // Give toast time to render, then restart the TUI
-        await new Promise((r) => setTimeout(r, 3000))
+        await new Promise((r) => setTimeout(r, 2000))
         exit()
       } else {
+        setUpgradeStatus("failed")
         toast.show({ variant: "error", message: "Upgrade failed" })
+        await new Promise((r) => setTimeout(r, 3000))
+        setUpgradeStatus("idle")
       }
     } catch (err) {
+      setUpgradeStatus("failed")
       const msg = err instanceof Error ? err.message : String(err)
       toast.show({ variant: "error", message: msg })
-    } finally {
-      setUpgrading(false)
+      await new Promise((r) => setTimeout(r, 3000))
+      setUpgradeStatus("idle")
     }
   }
   const placeholders = createMemo(() => {
@@ -252,7 +252,7 @@ export function Home() {
   createEffect(() => {
     if (!spinosa.pickerRequested) return
     spinosa.clearPickerRequest()
-    dialog.replace(() => <DialogSpinosaWorkspacePicker />)
+    dialog.replace(() => <DialogSpinosaWorkspacePicker onClose={() => spinosa.restorePickerRoute()} />)
   })
 
   return (
@@ -270,11 +270,11 @@ export function Home() {
                   paddingX={1}
                   backgroundColor={upgradeHover() || keyboardFocus() === 0 ? theme.text : undefined}
                   onMouseDown={doUpgrade}
-                  onMouseOver={() => !upgrading() && setUpgradeHover(true)}
+                  onMouseOver={() => upgradeStatus() === "idle" && setUpgradeHover(true)}
                   onMouseOut={() => setUpgradeHover(false)}
                 >
                   <text fg={buttonText(theme, upgradeHover() || keyboardFocus() === 0, theme.primary)}>
-                    {upgrading() ? "Upgrading…" : "Upgrade available"}
+                    {upgradeStatus() === "upgrading" ? "Upgrading…" : upgradeStatus() === "success" ? "Upgraded!" : upgradeStatus() === "failed" ? "Can't upgrade" : "Upgrade available"}
                   </text>
                 </box>
                 <box height={1} />

@@ -24,6 +24,7 @@ export interface UpgradeOptions {
   reinstall?: boolean
   yes?: boolean
   onPhase?: (phase: string, detail: string) => void
+  suppressInstallOutput?: boolean
 }
 
 export interface UpgradeResult {
@@ -222,7 +223,7 @@ export async function upgradeFramework(
   if (options.reinstall) upgradeArgs.push("--reinstall")
 
   const result = spawnSync("bash", [installerPath, ...upgradeArgs], {
-    stdio: "inherit",
+    stdio: options.suppressInstallOutput ? ["ignore", "pipe", "pipe"] : "inherit",
   })
   if (result.status !== 0) {
     rmSync(tmpdir, { recursive: true, force: true })
@@ -243,7 +244,8 @@ export async function upgradeFramework(
   }
   rmSync(tmpdir, { recursive: true, force: true })
 
-  const postInstallVersion = installedReleaseVersion(resolveFrameworkRoot())
+  const installedTargetRoot = path.join(spinosaHome(), "versions", resolvedVersion)
+  const postInstallVersion = installedReleaseVersion(installedTargetRoot)
   if (postInstallVersion !== resolvedVersion) {
     return {
       success: false,

@@ -64,7 +64,7 @@ function getLastAccessed(workspacePath: string): number {
   }
 }
 
-export function DialogSpinosaWorkspacePicker() {
+export function DialogSpinosaWorkspacePicker(props: { onClose?: () => void } = {}) {
   const dialog = useDialog()
   const route = useRoute()
   const spinosa = useSpinosaWorkspace()
@@ -139,6 +139,10 @@ function wsPathForLog(p: string) { const s = p.split("/"); return s[s.length-2]+
   })
 
   const navCount = createMemo(() => sorted().length + 1) // rows + New workspace
+  const close = () => {
+    dialog.clear()
+    props.onClose?.()
+  }
 
   async function chooseWorkspace(path: string) {
     const launch = await getWorkspaceLaunchDecision(path)
@@ -193,7 +197,7 @@ function wsPathForLog(p: string) { const s = p.split("/"); return s[s.length-2]+
           paddingRight={2}
           paddingTop={1}
           paddingBottom={1}
-          onMouseDown={() => dialog.clear()}
+          onMouseDown={close}
         >
           <text fg={theme.textMuted}>← Back</text>
         </box>

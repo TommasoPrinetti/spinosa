@@ -3,6 +3,8 @@ import { readdirSync, rmSync } from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { prepareSpinosaSubmit } from "../../src/spinosa/orchestrator"
+import { tmpdir } from "../fixture/fixture"
+import { mkdir } from "node:fs/promises"
 
 const fixture = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "fixtures/workspace-started")
 
@@ -33,5 +35,17 @@ describe("prepareSpinosaSubmit", () => {
     const prepared = await prepareSpinosaSubmit(fixture, "How do I open settings pane?")
     expect(prepared.framed).toBe(false)
     expect(prepared.route).toBe("fast_path")
+  })
+
+  test("creates agent_reports when framing a fresh workspace", async () => {
+    await using tmp = await tmpdir()
+    await mkdir(path.join(tmp.path, ".spinosa"), { recursive: true })
+    await Bun.write(path.join(tmp.path, ".spinosa", "workspace"), "setup_status: workspace_started\n")
+
+    const prepared = await prepareSpinosaSubmit(tmp.path, "Compare the evidence in two source documents")
+
+    expect(prepared.framed).toBe(true)
+    expect(prepared.goalPath).toBeDefined()
+    expect(await Bun.file(path.join(tmp.path, prepared.goalPath!)).exists()).toBe(true)
   })
 })

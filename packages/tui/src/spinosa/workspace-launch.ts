@@ -14,12 +14,12 @@ export type WorkspaceLaunchDecision =
     }
 
 export async function getWorkspaceLaunchDecision(workspacePath: string): Promise<WorkspaceLaunchDecision> {
-  const meta = await readWorkspaceMeta(workspacePath)
+  const meta = await readWorkspaceMeta(workspacePath).catch(() => undefined)
   if (meta?.setupStatus !== "cli_started") return { type: "open" }
   return {
     type: "startup-choice",
     workspacePath,
     workspaceName: resolveWorkspaceDisplayName(workspacePath, meta.projectName),
-    prompt: (await readStartupPrompt(workspacePath)) ?? STARTUP_PROMPT_FALLBACK,
+    prompt: (await readStartupPrompt(workspacePath).catch(() => undefined)) ?? STARTUP_PROMPT_FALLBACK,
   }
 }

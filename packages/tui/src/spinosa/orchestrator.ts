@@ -36,5 +36,6 @@ export async function prepareSpinosaSubmit(workspacePath: string, promptText: st
 }
 
 function stripExistingPreamble(text: string) {
+  if (typeof text !== "string") throw new TypeError("Spinosa prompt must be a string")
   return text.replace(/<system-reminder>[\s\S]*?<\/system-reminder>\s*/g, "").trim()
 }

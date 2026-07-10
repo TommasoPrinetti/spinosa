@@ -74,6 +74,12 @@ describe("install and release flow", () => {
     expect(await Bun.file(sentinel).text()).toBe("keep\n")
   })
 
+  test("installed launcher derives a custom installation root from its bin directory", async () => {
+    const launcher = await Bun.file(path.join(repoRoot, "workspace-template", ".bin", "spinosa")).text()
+    expect(launcher).toContain('"${SCRIPT_DIR}/../versions"')
+    expect(launcher).toContain("export SPINOSA_HOME")
+  })
+
   test("rejects installer checksum mismatch", () => {
     const installer = "#!/bin/bash\necho ok\n"
     expect(verifyInstallerChecksum(installer, `${Bun.CryptoHasher.hash("sha256", installer, "hex")}  install.sh\n`)).toBe(true)

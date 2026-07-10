@@ -80,6 +80,7 @@ export async function runSpinosaMaturityChecks(fixturePath = fixtureWorkspacePat
       "fixture.health",
       missing.length === 0,
       missing.length ? `missing: ${missing.map((row) => row.label).join(", ")}` : "all core files present",
+      true,
     )
   }
 

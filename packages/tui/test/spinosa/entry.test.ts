@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
-import { resolveSpinosaEntryRoute, routeForSetupStatus } from "../../src/spinosa/entry"
+import { resolveSpinosaEntryRoute, routeForSetupStatus, routeForWorkspaceOpen } from "../../src/spinosa/entry"
 
 const fixture = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "fixtures/workspace-started")
 
@@ -10,13 +10,17 @@ describe("routeForSetupStatus", () => {
     expect(routeForSetupStatus("workspace_started").type).toBe("workspace")
   })
 
-  test("routes cli_started through the workspace shell", () => {
-    expect(routeForSetupStatus("cli_started").type).toBe("workspace")
+  test("routes cli_started through the startup hub", () => {
+    expect(routeForSetupStatus("cli_started").type).toBe("startup-hub")
   })
 
-  test("keeps unfinished statuses on the chat workspace shell", () => {
-    expect(routeForSetupStatus("not_started").type).toBe("workspace")
-    expect(routeForSetupStatus("importing").type).toBe("workspace")
+  test("routes unfinished statuses to onboarding", () => {
+    expect(routeForSetupStatus("not_started").type).toBe("onboarding")
+    expect(routeForSetupStatus("importing").type).toBe("onboarding")
+  })
+
+  test("honors an intentional chat destination for a cli_started workspace", () => {
+    expect(routeForWorkspaceOpen("cli_started", { type: "workspace" })).toEqual({ type: "workspace" })
   })
 })
 

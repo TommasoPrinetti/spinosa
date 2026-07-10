@@ -4,7 +4,7 @@ import type { SpinosaCliIo } from "../io"
 import { emitResult } from "../io"
 
 function spinosaHome(): string {
-  return process.env.SPINOSA_HOME ?? process.env.SPINOSA_TEMPLATE_ROOT ?? ""
+  return process.env.SPINOSA_HOME ?? `${homedir()}/.spinosa`
 }
 
 function validateHome(home: string): string | undefined {

@@ -6,7 +6,12 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RESOLVED_ROOT=""
-SPINOSA_HOME="${SPINOSA_HOME:-$HOME/.spinosa}"
+if [[ -z "${SPINOSA_HOME:-}" && -d "${SCRIPT_DIR}/../versions" && -d "${SCRIPT_DIR}/../metadata" ]]; then
+  SPINOSA_HOME="$(cd "${SCRIPT_DIR}/.." && pwd)"
+else
+  SPINOSA_HOME="${SPINOSA_HOME:-$HOME/.spinosa}"
+fi
+export SPINOSA_HOME
 
 # Resolve system root (3 tiers)
 candidate="${SCRIPT_DIR}/.."

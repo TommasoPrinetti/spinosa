@@ -13,6 +13,9 @@ export type WorkspacePickerRoute = {
   type: "workspace-picker"
 }
 
+export type StartupHubRoute = {
+  type: "startup-hub"
+}
 
 export type OnboardingRoute = {
   type: "onboarding"
@@ -53,6 +56,7 @@ export type LauncherRoute = {
 export type RouteNavigateInput =
   | WorkspaceRoute
   | WorkspacePickerRoute
+  | StartupHubRoute
   | OnboardingRoute
   | AddFilesRoute
   | LegacyOnboardingNavigateInput
@@ -61,7 +65,7 @@ export type RouteNavigateInput =
   | PluginRoute
   | LauncherRoute
 
-export type Route = WorkspaceRoute | WorkspacePickerRoute | OnboardingRoute | AddFilesRoute | PluginRoute
+export type Route = WorkspaceRoute | WorkspacePickerRoute | StartupHubRoute | OnboardingRoute | AddFilesRoute | PluginRoute
 
 export const { use: useRoute, provider: RouteProvider } = createSimpleContext({
   name: "Route",
@@ -94,7 +98,7 @@ export function normalizeRoute(route: RouteNavigateInput): Route {
     if (route.mode === "add") return { type: "add-files" }
     return { type: "onboarding" }
   }
-  if (route.type === "workspace-picker" || route.type === "onboarding" || route.type === "add-files") {
+  if (route.type === "workspace-picker" || route.type === "startup-hub" || route.type === "onboarding" || route.type === "add-files") {
     return route
   }
   if (route.type === "launcher") {
@@ -107,12 +111,13 @@ export function normalizeRoute(route: RouteNavigateInput): Route {
       prompt: route.prompt,
     }
   }
-  return route
+  return { type: "workspace" }
 }
 
 function initialRoute(value: unknown): RouteNavigateInput | undefined {
   if (!value || typeof value !== "object" || !("type" in value)) return
   if (value.type === "workspace-picker") return { type: "workspace-picker" }
+  if (value.type === "startup-hub") return { type: "startup-hub" }
   if (value.type === "add-files") return { type: "add-files" }
   if (value.type === "onboarding" && "mode" in value) {
     if (value.mode === "add") return { type: "add-files" }

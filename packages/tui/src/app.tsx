@@ -86,6 +86,7 @@ import { cliErrorMessage, errorFormat } from "./util/error"
 import { AddFiles } from "./routes/spinosa/add-files"
 import { Onboarding } from "./routes/spinosa/onboarding"
 import { WorkspacePicker } from "./routes/spinosa/workspace-picker"
+import { StartupHub } from "./routes/spinosa/startup-hub"
 
 const appGlobalBindingCommands = [
   "session.list",
@@ -1130,6 +1131,9 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
           </Show>
           <Show when={route.data.type === "workspace-picker"}>
             <WorkspacePicker />
+          </Show>
+          <Show when={route.data.type === "startup-hub"}>
+            <StartupHub />
           </Show>
           <Show when={route.data.type === "onboarding"}>
             <Onboarding />

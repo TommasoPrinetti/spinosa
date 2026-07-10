@@ -247,22 +247,13 @@ export function WorkspacePicker() {
   const selectNavCount = createMemo(() => sortedSelectRows().length + 2) // rows + New workspace + OpenCode only
 
   const pickWorkspace = async (workspacePath: string) => {
-    const launch = await getWorkspaceLaunchDecision(workspacePath)
-    if (launch.type === "open") {
-      await spinosa.openWorkspace(workspacePath)
-      return
-    }
-    setStep("select")
-    setStartupPath(launch.workspacePath)
-    setStartupName(launch.workspaceName)
-    setStartupPrompt(launch.prompt)
-    setStartupSelected(0)
+    await spinosa.openWorkspace(workspacePath)
   }
 
   const launchStartupInChat = async () => {
     const path = startupPath()
     if (!path) return
-    spinosa.queuePrompt(buildStartupChatPrompt(startupPrompt()))
+    spinosa.queuePrompt(buildStartupChatPrompt(startupPrompt()), path)
     await spinosa.openWorkspace(path)
     navigate({ type: "workspace" })
   }

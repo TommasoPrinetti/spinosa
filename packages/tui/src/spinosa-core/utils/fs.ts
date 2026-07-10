@@ -11,6 +11,7 @@ import {
   symlinkSync,
   unlinkSync,
 } from "node:fs"
+import { writeFileSync } from "node:fs"
 import { copyFile as copyFileAsync, mkdir as mkdirAsync, rm as rmAsync } from "node:fs/promises"
 import { spawnSync } from "node:child_process"
 import path from "node:path"
@@ -20,6 +21,7 @@ import { isCloudStoragePath } from "./path"
 const DEFAULT_RETRIES = 3
 const CLOUD_TIMEOUT_SEC = 60
 const LOCAL_TIMEOUT_SEC = 30
+const asyncCopyQueues = new Map<string, Promise<void>>()
 
 export { isCloudStoragePath }
 
@@ -105,7 +107,25 @@ export function safeCopy(src: string, dest: string, options?: SafeCopyOptions): 
   return false
 }
 
+export function writeTextAtomic(dest: string, content: string): void {
+  const tmp = `${dest}.spinosa-part-${process.pid}-${crypto.randomUUID()}`
+  mkdirSync(path.dirname(dest), { recursive: true })
+  try {
+    writeFileSync(tmp, content, "utf-8")
+    renameSync(tmp, dest)
+  } catch (error) {
+    try { unlinkSync(tmp) } catch { /* temp cleanup */ }
+    throw error
+  }
+}
+
 export async function safeCopyAsync(src: string, dest: string, options?: SafeCopyOptions): Promise<boolean> {
+  const previous = asyncCopyQueues.get(dest) ?? Promise.resolve()
+  const gate = Promise.withResolvers<void>()
+  const queued = previous.then(() => gate.promise)
+  asyncCopyQueues.set(dest, queued)
+  await previous
+  try {
   const retries = options?.retries ?? DEFAULT_RETRIES
   let delayMs = safeCopyDelaySec(dest) * 1000
   let lastReason = ""
@@ -128,6 +148,10 @@ export async function safeCopyAsync(src: string, dest: string, options?: SafeCop
     delayMs *= 2
   }
   return false
+  } finally {
+    gate.resolve()
+    if (asyncCopyQueues.get(dest) === queued) asyncCopyQueues.delete(dest)
+  }
 }
 
 export function safeCopyTree(src: string, dest: string): void {

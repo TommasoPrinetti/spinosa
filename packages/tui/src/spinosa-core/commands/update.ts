@@ -7,12 +7,13 @@ import {
   readFileSync,
   readdirSync,
   statSync,
-  writeFileSync,
   rmSync,
+  cpSync,
+  renameSync,
 } from "node:fs"
 import { createHash } from "node:crypto"
 import path from "node:path"
-import { safeCopy, copyDirContents, cleanMacMetadata, isCloudStoragePath, shouldSkipTemplateCopyEntry } from "../utils/fs"
+import { safeCopy, copyDirContents, cleanMacMetadata, isCloudStoragePath, shouldSkipTemplateCopyEntry, writeTextAtomic } from "../utils/fs"
 import { compareFrameworkVersions } from "../utils/version"
 import { writeWorkspaceFrameworkVersion } from "../workspace/meta"
 import { readFrameworkVersionFromRoot, resolveTemplateRootFromFrameworkRoot } from "../framework/discovery"
@@ -120,7 +121,7 @@ function readFrameworkChecksums(wsPath: string): FrameworkChecksums {
 function writeFrameworkChecksums(wsPath: string, checksums: FrameworkChecksums): void {
   const p = path.join(wsPath, CHECKSUMS_RELPATH)
   mkdirSync(path.dirname(p), { recursive: true })
-  writeFileSync(p, JSON.stringify(checksums, null, 2) + "\n")
+  writeTextAtomic(p, JSON.stringify(checksums, null, 2) + "\n")
 }
 
 function sha256File(filePath: string): string {
@@ -201,7 +202,7 @@ function copyManagedDirectory(
   return { changed, failed }
 }
 
-export async function updateWorkspace(options: UpdateOptions): Promise<UpdateResult> {
+async function updateWorkspaceUnlocked(options: UpdateOptions): Promise<UpdateResult> {
   const { workspacePath, frameworkRoot, dryRun = false, force = false, onPhase } = options
   const phase = onPhase ?? ((_p: string, _d: string) => {})
   spinosaLogInfo("update", `workspacePath=${workspacePath} dryRun=${dryRun}`)
@@ -246,9 +247,6 @@ export async function updateWorkspace(options: UpdateOptions): Promise<UpdateRes
 
   const manifestHasEntries = wsManifest.length > 0
   const declaredPaths = new Set(fwEntries.map((e) => e.path))
-  const processedPaths = new Set(
-    fwEntries.filter((e) => e.role && !e.role.startsWith("#")).map((e) => e.path),
-  )
 
   // Load stored checksums for replace_if_unmodified detection
   const storedChecksums = readFrameworkChecksums(workspacePath)
@@ -318,9 +316,6 @@ export async function updateWorkspace(options: UpdateOptions): Promise<UpdateRes
           skipped++
           continue
         }
-      } else if (!filesMatch(src, dst)) {
-        skipped++
-        continue
       }
     }
     if (srcStat.isFile() && dstStat.isFile() && filesMatch(src, dst)) {
@@ -337,7 +332,14 @@ export async function updateWorkspace(options: UpdateOptions): Promise<UpdateRes
     phase("2", `${dstStat.isDirectory() ? "Sync" : "Update"} ${entry.path}`)
     mkdirSync(path.dirname(dst), { recursive: true })
     if (srcStat.isDirectory()) {
-      const sync = copyManagedDirectory(sourceTemplateRoot, workspacePath, entry, storedChecksums, force)
+      let sync: { changed: boolean; failed: boolean }
+      try {
+        sync = copyManagedDirectory(sourceTemplateRoot, workspacePath, entry, storedChecksums, force)
+      } catch (error) {
+        hadFailures = true
+        spinosaLogWarn("update", `directory sync failed: ${entry.path} — ${String(error)}`)
+        continue
+      }
       if (sync.failed) hadFailures = true
       if (!sync.changed) {
         skipped++
@@ -360,7 +362,6 @@ export async function updateWorkspace(options: UpdateOptions): Promise<UpdateRes
     for (const mentry of wsManifest) {
       if (mentry.kind === "dir") continue
       if (!mentry.path || mentry.path === "path") continue
-      if (processedPaths.has(mentry.path)) continue
       if (declaredPaths.has(mentry.path)) {
         skipped++
         continue
@@ -373,7 +374,11 @@ export async function updateWorkspace(options: UpdateOptions): Promise<UpdateRes
         removed++
       } else {
         try {
-          rmSync(target, { force: true, recursive: true })
+          const archiveRoot = path.join(workspacePath, ".trash", "framework-update-retired")
+          const archived = resolvePathWithinRoot(archiveRoot, mentry.path, "workspace manifest path")
+          mkdirSync(path.dirname(archived), { recursive: true })
+          rmSync(archived, { force: true, recursive: true })
+          renameSync(target, archived)
           removed++
         } catch (error) {
           hadFailures = true
@@ -394,7 +399,7 @@ export async function updateWorkspace(options: UpdateOptions): Promise<UpdateRes
       manifestLines.push(`${entry.path}\t${kind}`)
     }
     mkdirSync(path.dirname(wsManifestPath), { recursive: true })
-    writeFileSync(wsManifestPath, manifestLines.join("\n") + "\n", "utf-8")
+    writeTextAtomic(wsManifestPath, manifestLines.join("\n") + "\n")
   }
 
   // Update workspace metadata
@@ -434,5 +439,82 @@ export async function updateWorkspace(options: UpdateOptions): Promise<UpdateRes
     removed,
     skipped,
     changes: added > 0 || updated > 0 || removed > 0,
+  }
+}
+
+type UpdateSnapshot = {
+  root: string
+  relativePaths: string[]
+}
+
+function createUpdateSnapshot(options: UpdateOptions): UpdateSnapshot | undefined {
+  if (options.dryRun) return
+  const sourceTemplateRoot = resolveTemplateRootFromFrameworkRoot(options.frameworkRoot)
+  if (!sourceTemplateRoot) return
+  const frameworkManifest = path.join(sourceTemplateRoot, ".spinosa", "workspace-files.tsv")
+  const workspaceManifest = path.join(options.workspacePath, ".spinosa", "manifest.tsv")
+  if (!existsSync(frameworkManifest)) return
+
+  const candidates = [
+    ...readFrameworkFilesTsv(frameworkManifest)
+      .filter((entry) => entry.policy !== "never_replace" && entry.policy !== "exclude_from_update")
+      .map((entry) => entry.path),
+    ...readWorkspaceManifest(workspaceManifest).map((entry) => entry.path),
+    ".spinosa/manifest.tsv",
+    ".spinosa/framework-checksums.json",
+    ".spinosa/workspace",
+  ].filter(Boolean)
+  const unique = [...new Set(candidates)]
+    .sort((a, b) => a.length - b.length)
+    .filter((relative, index, all) => !all.slice(0, index).some((parent) => relative.startsWith(`${parent}${path.sep}`)))
+  const root = path.join(path.dirname(options.workspacePath), `.spinosa-update-backup-${process.pid}-${crypto.randomUUID()}`)
+  mkdirSync(root, { recursive: true })
+  for (const relative of unique) {
+    const source = resolvePathWithinRoot(options.workspacePath, relative, "workspace manifest path")
+    if (!existsSync(source)) continue
+    const backup = resolvePathWithinRoot(root, relative, "workspace manifest path")
+    mkdirSync(path.dirname(backup), { recursive: true })
+    cpSync(source, backup, { recursive: true, force: true })
+  }
+  return { root, relativePaths: unique }
+}
+
+function restoreUpdateSnapshot(workspacePath: string, snapshot: UpdateSnapshot): void {
+  for (const relative of [...snapshot.relativePaths].sort((a, b) => b.length - a.length)) {
+    const target = resolvePathWithinRoot(workspacePath, relative, "workspace snapshot path")
+    rmSync(target, { recursive: true, force: true })
+  }
+  for (const relative of snapshot.relativePaths) {
+    const backup = resolvePathWithinRoot(snapshot.root, relative, "workspace snapshot path")
+    if (!existsSync(backup)) continue
+    const target = resolvePathWithinRoot(workspacePath, relative, "workspace snapshot path")
+    mkdirSync(path.dirname(target), { recursive: true })
+    cpSync(backup, target, { recursive: true, force: true })
+  }
+}
+
+export async function updateWorkspace(options: UpdateOptions): Promise<UpdateResult> {
+  const lockPath = path.join(options.workspacePath, ".spinosa", "update.lock")
+  try {
+    mkdirSync(lockPath)
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "EEXIST") {
+      return { success: false, added: 0, updated: 0, removed: 0, skipped: 0, changes: false }
+    }
+    throw error
+  }
+
+  let snapshot: UpdateSnapshot | undefined
+  try {
+    snapshot = createUpdateSnapshot(options)
+    const result = await updateWorkspaceUnlocked(options)
+    if (!result.success && snapshot) restoreUpdateSnapshot(options.workspacePath, snapshot)
+    return result
+  } catch (error) {
+    if (snapshot) restoreUpdateSnapshot(options.workspacePath, snapshot)
+    throw error
+  } finally {
+    if (snapshot) rmSync(snapshot.root, { recursive: true, force: true })
+    rmSync(lockPath, { recursive: true, force: true })
   }
 }

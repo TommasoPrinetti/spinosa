@@ -24,6 +24,7 @@ import type { PpuOcrFile } from "../import/ppu-ocr"
 import { spinosaLogInfo } from "../utils/log"
 import { MarkItDown } from "markitdown-ts"
 import { copySource } from "../import/pipeline"
+import { isSpinosaCancellationError, throwIfSpinosaCancelled } from "../import/cancellation"
 
 export interface AddFilesOptions {
   workspacePath: string
@@ -33,6 +34,7 @@ export interface AddFilesOptions {
   extensions?: string
   overwrite?: boolean
   onProgress?: (message: string) => void
+  shouldAbort?: () => boolean
 }
 
 export interface AddFilesResult {
@@ -50,7 +52,8 @@ export interface AddFilesResult {
 }
 
 export async function addFiles(options: AddFilesOptions): Promise<AddFilesResult> {
-  const { workspacePath, sourcePath, sourceIsDir, subfolder, extensions, overwrite, onProgress } = options
+  const { workspacePath, sourcePath, sourceIsDir, subfolder, extensions, overwrite, onProgress, shouldAbort } = options
+  throwIfSpinosaCancelled(shouldAbort)
   const rawDir = path.join(workspacePath, "raw")
   spinosaLogInfo("add", `sourcePath=${sourcePath} workspacePath=${workspacePath} sourceIsDir=${sourceIsDir}`)
 
@@ -59,9 +62,9 @@ export async function addFiles(options: AddFilesOptions): Promise<AddFilesResult
   }
 
   if (sourceIsDir) {
-    return addFilesFromDir(sourcePath, rawDir, subfolder, extensions, overwrite, onProgress)
+    return addFilesFromDir(sourcePath, rawDir, subfolder, extensions, overwrite, onProgress, shouldAbort)
   }
-  return addSingleFile(sourcePath, rawDir, overwrite, onProgress)
+  return addSingleFile(sourcePath, rawDir, overwrite, onProgress, shouldAbort)
 }
 
 async function addFilesFromDir(
@@ -71,9 +74,11 @@ async function addFilesFromDir(
   extensions?: string,
   overwrite?: boolean,
   onProgress?: (msg: string) => void,
+  shouldAbort?: () => boolean,
 ): Promise<AddFilesResult> {
   const importBatches = new ImportBatchManager()
   await scanSource(sourcePath, importBatches)
+  throwIfSpinosaCancelled(shouldAbort)
   if (extensions) {
     importBatches.parseExtensionsFromFlag(extensions)
   }
@@ -87,6 +92,7 @@ async function addFilesFromDir(
     overwrite,
     subfolder,
     verifyAfter: false,
+    shouldAbort,
     onPhaseChange: (phase) => {
       switch (phase) {
         case "direct":
@@ -129,8 +135,11 @@ async function addSingleFile(
   rawDir: string,
   overwrite?: boolean,
   onProgress?: (msg: string) => void,
+  shouldAbort?: () => boolean,
 ): Promise<AddFilesResult> {
+  throwIfSpinosaCancelled(shouldAbort)
   const klass = await classifySourceFile(srcFile)
+  throwIfSpinosaCancelled(shouldAbort)
 
   if (klass === "ignored") {
     return {
@@ -227,12 +236,14 @@ async function addSingleFile(
       try {
         const converter = new MarkItDown()
         const result = await converter.convert(srcFile)
+        throwIfSpinosaCancelled(shouldAbort)
         const text = result?.markdown ?? ""
         if (!text.trim()) throw new Error("MarkItDown returned no content")
         writeFileSync(destFile, text, "utf-8")
         mdConverted = 1
         injectColdFrontmatter(destFile)
-      } catch {
+      } catch (error) {
+        if (isSpinosaCancellationError(error)) throw error
         mdFailed = 1
       }
       break
@@ -255,7 +266,7 @@ async function addSingleFile(
 
       removeConvertedOutput(destFile)
 
-      await runPpuOcrBatch([{ src: srcFile, rel: fileName, dest: destFile }])
+      await runPpuOcrBatch([{ src: srcFile, rel: fileName, dest: destFile }], { shouldAbort })
 
       if (convertedOutputExists(destFile)) {
         ocrConverted = 1

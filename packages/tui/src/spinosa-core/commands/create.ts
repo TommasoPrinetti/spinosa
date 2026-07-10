@@ -5,6 +5,7 @@ import { registerWorkspace, writeSetupFiles } from "../workspace/registry"
 import { writeWorkspaceStatus } from "../workspace/meta"
 import { spinosaLogInfo } from "../utils/log"
 import { readFrameworkVersionFromRoot, resolveTemplateRootFromFrameworkRoot } from "../framework/discovery"
+import { throwIfSpinosaCancelled } from "../import/cancellation"
 
 export interface CreateWorkspaceOptions {
   corpusPath: string
@@ -14,6 +15,7 @@ export interface CreateWorkspaceOptions {
   launch?: "copy" | "run"
   workspaceName?: string
   onProgress?: (message: string) => void
+  shouldAbort?: () => boolean
 }
 
 export interface CreateWorkspaceResult {
@@ -89,7 +91,8 @@ function materializeWorkspaceConfig(workspacePath: string): void {
 }
 
 export async function createWorkspace(options: CreateWorkspaceOptions): Promise<CreateWorkspaceResult> {
-  const { corpusPath, frameworkRoot, extensions, preferredCli, launch, workspaceName, onProgress } = options
+  const { corpusPath, frameworkRoot, extensions, preferredCli, launch, workspaceName, onProgress, shouldAbort } = options
+  throwIfSpinosaCancelled(shouldAbort)
   const progress = onProgress ?? (() => {})
   spinosaLogInfo("create", `corpusPath=${corpusPath} frameworkRoot=${frameworkRoot}`)
 
@@ -114,6 +117,7 @@ export async function createWorkspace(options: CreateWorkspaceOptions): Promise<
       progress("Copying workspace template...")
       copyDirContents(srcTemplate, workspacePath)
     }
+    throwIfSpinosaCancelled(shouldAbort)
 
     cleanMacMetadata(workspacePath)
     materializeWorkspaceConfig(workspacePath)
@@ -121,6 +125,7 @@ export async function createWorkspace(options: CreateWorkspaceOptions): Promise<
     // ── Step 3: Create user-state directories (with .gitkeep) ──────────
     progress("Creating user-state directories...")
     for (const dir of ["raw", "maps", "logs", "agent_reports", ".trash"]) {
+      throwIfSpinosaCancelled(shouldAbort)
       mkdirSync(path.join(workspacePath, dir), { recursive: true })
       writeFileSync(path.join(workspacePath, dir, ".gitkeep"), "", "utf-8")
     }
@@ -144,6 +149,7 @@ export async function createWorkspace(options: CreateWorkspaceOptions): Promise<
     // ── Step 5: Register workspace ─────────────────────────────────────
     progress("Registering in global registry...")
     await registerWorkspace(workspacePath, projectName)
+    throwIfSpinosaCancelled(shouldAbort)
 
     if (preferredCli) {
       const cliLabel = preferredCli

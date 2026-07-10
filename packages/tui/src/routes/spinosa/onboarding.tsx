@@ -425,6 +425,7 @@ let nameInput: TextareaRenderable | undefined
 
   const stopActiveWork = () => {
     if (gateResolve) { gateResolve(); gateResolve = undefined }
+    workflow.bump()
     abortProcessing = true
     setBusy(false)
     setWaitingForGate(false)
@@ -649,6 +650,8 @@ let nameInput: TextareaRenderable | undefined
     setProcessingFile("")
     setProcessingStatus("Starting...")
     abortProcessing = false
+    const generation = workflow.bump()
+    const shouldAbort = () => abortProcessing || !workflow.active(generation)
     gateResolve = undefined
     spinOn()
     await delay(200)
@@ -695,7 +698,9 @@ let nameInput: TextareaRenderable | undefined
         frameworkRoot,
         workspaceName: workspaceName() || defaultWorkspaceName(),
         onProgress: (msg) => { appendLogLine(msg) },
+        shouldAbort,
       })
+      if (shouldAbort()) return
       if (!wsResult.success) { setStep("error"); return }
       await writeWorkspaceStatus(wsResult.workspacePath, "importing")
       const ctx: OnboardingContext = await prepareOnboarding({
@@ -708,7 +713,7 @@ let nameInput: TextareaRenderable | undefined
       if ("success" in ctx && !ctx.success) { setStep("error"); return }
       setCreatedWorkspace(ctx.workspacePath)
 
-      const classified = await scanAndClassifySource(ctx.sourcePath, ctx.rawDir, ctx.batches)
+      const classified = await scanAndClassifySource(ctx.sourcePath, ctx.rawDir, ctx.batches, undefined, shouldAbort)
       if (!classified) { setStep("error"); return }
       let mr: PhaseResult = { converted: 0, skipped: 0, failed: 0, recoverable: [] }
       let or: PhaseResult = { converted: 0, skipped: 0, failed: 0, recoverable: [] }
@@ -722,9 +727,9 @@ let nameInput: TextareaRenderable | undefined
       setProgCurrent(0)
       setProcessingStatus("Preparing direct copy...")
       await delay(1000)
-      const dr = await processDirectCopy(classified.directFiles, sharedProg, onPhaseLog, undefined, () => abortProcessing)
+      const dr = await processDirectCopy(classified.directFiles, sharedProg, onPhaseLog, undefined, shouldAbort)
       if (dr.failed > 0) totalFailed += dr.failed
-      if (abortProcessing) { spinOff(); setBusy(false); return }
+      if (shouldAbort()) { spinOff(); setBusy(false); return }
       setProcessingStatus(`Direct copy complete — ${totalDirect} files`)
       await delay(1000)
       if (classified.markitdownFiles.length > 0) {
@@ -736,9 +741,9 @@ let nameInput: TextareaRenderable | undefined
         setProgCurrent(0)
         setProcessingStatus("Preparing MarkItDown conversion...")
         await delay(1000)
-        mr = await processMarkitdown(classified.markitdownFiles, classified.logsDir, sharedProg, onPhaseLog, () => abortProcessing)
+        mr = await processMarkitdown(classified.markitdownFiles, classified.logsDir, sharedProg, onPhaseLog, shouldAbort)
         if (mr.failed > 0) totalFailed += mr.failed
-        if (abortProcessing) { spinOff(); setBusy(false); return }
+        if (shouldAbort()) { spinOff(); setBusy(false); return }
         setProcessingStatus(`MarkItDown complete — ${totalMd} files`)
         await delay(1000)
       } else {
@@ -754,9 +759,9 @@ let nameInput: TextareaRenderable | undefined
         setProgCurrent(0)
         setProcessingStatus("Preparing OCR...")
         await delay(1000)
-        or = await processOcr(classified.ocrFiles, classified.logsDir, sharedProg, onPhaseLog, () => abortProcessing)
+        or = await processOcr(classified.ocrFiles, classified.logsDir, sharedProg, onPhaseLog, shouldAbort)
         if (or.failed > 0) totalFailed += or.failed
-        if (abortProcessing) { spinOff(); setBusy(false); return }
+        if (shouldAbort()) { spinOff(); setBusy(false); return }
       } else {
         appendLogLine("OCR: 0 files to convert — skipping")
       }
@@ -772,7 +777,9 @@ let nameInput: TextareaRenderable | undefined
           setProcessingStatus(msg)
           appendLogLine(msg)
         },
+        shouldAbort,
       })
+      if (shouldAbort()) return
 
       if (result.success) {
         // Import additional source paths
@@ -785,6 +792,7 @@ let nameInput: TextareaRenderable | undefined
             sourceIsDir: true,
             extensions,
             onProgress: (msg) => appendLogLine(msg),
+            shouldAbort,
           })
           if (!addFileResult.success) {
             appendLogLine(`  ⚠ Partial import for ${extra}`)
@@ -805,7 +813,7 @@ let nameInput: TextareaRenderable | undefined
         setStep("error")
       }
     } catch (err) {
-      if (isSpinosaCancellationError(err) || abortProcessing) {
+      if (isSpinosaCancellationError(err) || shouldAbort()) {
         appendLogLine("Spinosa import cancelled.")
         setProcessingStatus("Cancelled.")
         return
@@ -857,12 +865,12 @@ let nameInput: TextareaRenderable | undefined
             buildStartupChatPrompt(
               prompt ?? "Error: startup-prompt.md not found. Run the startup indexing workflow manually.",
             ),
+            workspacePath,
           )
           setStartupMessage("Startup complete")
           stopStartupProgress()
           await delay(300)
-          await spinosa.openWorkspace(workspacePath)
-          navigate({ type: "workspace" })
+          await spinosa.openWorkspace(workspacePath, { route: { type: "workspace" } })
         }
       } else {
         if (workspacePath) {

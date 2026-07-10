@@ -20,4 +20,8 @@ describe("normalizeRoute", () => {
     expect("sessionID" in next).toBe(false)
     expect("prompt" in next).toBe(false)
   })
+
+  test("normalizes unknown runtime routes to the workspace", () => {
+    expect(normalizeRoute({ type: "future-route" } as never)).toEqual({ type: "workspace" })
+  })
 })

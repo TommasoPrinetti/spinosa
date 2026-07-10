@@ -3,6 +3,7 @@ import path from "node:path"
 import { resolveWorkspaceDisplayName } from "../workspace-name"
 import type { SpinosaSetupStatus, SpinosaWorkspaceMeta } from "../types"
 import { SPINOSA_AGENT_FILES } from "../constants"
+import { writeTextAtomic } from "../utils/fs"
 
 const SETUP_STATUSES = new Set<SpinosaSetupStatus>([
   "not_started",
@@ -88,7 +89,7 @@ export async function writeWorkspaceFrameworkVersion(workspacePath: string, vers
   const updated = text.match(/^framework_version:\s*.+$/m)
     ? text.replace(/^(framework_version:\s*).+$/m, `$1${normalized}`)
     : `${text.trimEnd()}\nframework_version: ${normalized}\n`
-  await Bun.write(markerPath, updated)
+  writeTextAtomic(markerPath, updated)
 }
 
 export async function writeWorkspaceStatus(workspacePath: string, status: string): Promise<void> {
@@ -101,7 +102,7 @@ export async function writeWorkspaceStatus(workspacePath: string, status: string
   }
   const text = await Bun.file(markerPath).text()
   const updated = text.replace(/^(setup_status:\s*).+$/m, `$1${status}`)
-  await Bun.write(markerPath, updated)
+  writeTextAtomic(markerPath, updated)
 }
 
 export async function readOrchestratorNotes(workspacePath: string): Promise<string | undefined> {
@@ -110,7 +111,7 @@ export async function readOrchestratorNotes(workspacePath: string): Promise<stri
 
 export async function writeOrchestratorNotes(workspacePath: string, content: string): Promise<void> {
   const target = path.join(workspacePath, ".spinosa", "memory", "orchestrator-notes.md")
-  await Bun.write(target, content)
+  writeTextAtomic(target, content)
 }
 
 export async function writePreferredCli(workspacePath: string, cli: string): Promise<void> {
@@ -119,7 +120,7 @@ export async function writePreferredCli(workspacePath: string, cli: string): Pro
   if (!text) return
 
   const updated = text.replace(/^(preferred_llm_cli:\s*).+$/m, `$1${cli}`)
-  await Bun.write(configPath, updated)
+  writeTextAtomic(configPath, updated)
 }
 
 export async function readStartupPrompt(workspacePath: string): Promise<string | undefined> {
@@ -147,12 +148,22 @@ export function getFrameworkHealth(workspacePath: string): { label: string; ok: 
     })
   }
   for (const agent of SPINOSA_AGENT_FILES) {
-    const relative = path.join(".opencode", "agents", agent)
-    checks.push({
-      label: relative,
-      ok: existsSync(path.join(workspacePath, relative)),
-      detail: "agent mirrors should be pre-baked in workspace-template",
-    })
+    const skill = agent.replace(/\.md$/, "")
+    for (const relative of [
+      path.join(".opencode", "agents", agent),
+      path.join(".claude", "agents", agent),
+      path.join(".codex", "agents", `${skill}.toml`),
+      path.join(".opencode", "skills", skill, "SKILL.md"),
+      path.join(".claude", "skills", skill, "SKILL.md"),
+      path.join(".codex", "skills", skill, "SKILL.md"),
+      path.join(".hermes", "skills", skill, "SKILL.md"),
+    ]) {
+      checks.push({
+        label: relative,
+        ok: existsSync(path.join(workspacePath, relative)),
+        detail: "agent mirrors should be pre-baked in workspace-template",
+      })
+    }
   }
   return checks
 }

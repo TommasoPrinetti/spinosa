@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, appendFileSync, readFileSync, readdirSync, writeFileSync, rmSync } from "node:fs"
+import { existsSync, mkdirSync, appendFileSync, readFileSync, readdirSync, rmSync } from "node:fs"
 import * as path from "node:path"
 import { MarkItDown } from "markitdown-ts"
 
@@ -12,7 +12,7 @@ import {
   classifySourceFile,
   importRouteForFile,
 } from "../extension/classifier"
-import { safeCopyAsync } from "../utils/fs"
+import { safeCopyAsync, writeTextAtomic } from "../utils/fs"
 import { spinosaLogInfo } from "../utils/log"
 import type { FileClass, ImportRoute } from "../extension/types"
 import { injectColdFrontmatter, convertedOutputExists } from "./frontmatter"
@@ -52,6 +52,7 @@ interface CopyOptions {
   onLog?: (line: string) => void
   onClassified?: (classified: { directFiles: ClassifiedEntry[]; markitdownFiles: ClassifiedEntry[]; ocrFiles: ClassifiedEntry[]; logsDir: string }) => void
   onPhaseChange?: (phase: string, message: string) => void
+  shouldAbort?: () => boolean
 }
 
 
@@ -76,6 +77,7 @@ export async function scanAndClassifySource(
   destDir: string,
   batchManager?: ImportBatchManager,
   subfolder?: string,
+  shouldAbort?: () => boolean,
 ): Promise<{
   directFiles: ClassifiedEntry[]
   markitdownFiles: ClassifiedEntry[]
@@ -92,11 +94,13 @@ export async function scanAndClassifySource(
 
   const entries: Array<{ filePath: string; relPath: string; ext: string; klass: FileClass }> = []
   for (const fp of allFiles) {
+    throwIfSpinosaCancelled(shouldAbort)
     if (shouldSkipSourceFile(fp)) continue
     let rel = fp.replace(sourcePath, "").replace(/^\//, "")
     if (subfolder) rel = path.join(subfolder, rel)
     const ext = fileExt(fp)
     entries.push({ filePath: fp, relPath: rel, ext, klass: await classifySourceFile(fp) })
+    throwIfSpinosaCancelled(shouldAbort)
   }
 
   // Log each file's classification for diagnostics
@@ -209,7 +213,7 @@ export async function processMarkitdown(
     onLog?.(`  ${f.rel} → pdf-js ...`)
     const startTime = Date.now()
     try {
-      await convertTextPdf(f.src, f.dest, f.rel)
+      await convertTextPdf(f.src, f.dest, f.rel, shouldAbort)
       throwIfSpinosaCancelled(shouldAbort)
       converted++
       recoverable.push({ src: f.src, dest: f.dest })
@@ -248,7 +252,7 @@ export async function processMarkitdown(
           const raw = readFileSync(f.src, "utf-8")
           throwIfSpinosaCancelled(shouldAbort)
           mkdirSync(path.dirname(f.dest), { recursive: true })
-          writeFileSync(f.dest, `# ${path.basename(f.rel)}\n\n\`\`\`${ext}\n${raw}\n\`\`\`\n`, "utf-8")
+          writeTextAtomic(f.dest, `# ${path.basename(f.rel)}\n\n\`\`\`${ext}\n${raw}\n\`\`\`\n`)
           injectColdFrontmatter(f.dest)
           converted++
           recoverable.push({ src: f.src, dest: f.dest })
@@ -283,7 +287,7 @@ export async function processMarkitdown(
         throwIfSpinosaCancelled(shouldAbort)
         const text = result?.markdown ?? ""
         if (!text.trim()) throw new Error("MarkItDown returned no content")
-        writeFileSync(f.dest, text, "utf-8")
+        writeTextAtomic(f.dest, text)
         injectColdFrontmatter(f.dest)
         converted++
         recoverable.push({ src: f.src, dest: f.dest })
@@ -430,14 +434,15 @@ function appendNdjson(path: string, obj: Record<string, unknown>): void {
   appendFileSync(path, JSON.stringify(obj) + "\n", "utf-8")
 }
 
-async function convertTextPdf(srcFile: string, destFile: string, relPath: string): Promise<void> {
+async function convertTextPdf(srcFile: string, destFile: string, relPath: string, shouldAbort?: () => boolean): Promise<void> {
   const title = path.basename(relPath, path.extname(relPath))
   const pageTexts = await pdfExtractPageTexts(srcFile)
+  throwIfSpinosaCancelled(shouldAbort)
   const pages = pageTexts.length
 
   if (pages === 1) {
     mkdirSync(path.dirname(destFile), { recursive: true })
-    writeFileSync(destFile, `# ${title}\n\n${pageTexts[0]!.text.trim() || "[No text extracted]"}\n`, "utf-8")
+    writeTextAtomic(destFile, `# ${title}\n\n${pageTexts[0]!.text.trim() || "[No text extracted]"}\n`)
     injectColdFrontmatter(destFile)
     return
   }
@@ -446,8 +451,9 @@ async function convertTextPdf(srcFile: string, destFile: string, relPath: string
   rmSync(pageDir, { recursive: true, force: true })
   mkdirSync(pageDir, { recursive: true })
   for (const { page, text } of pageTexts) {
+    throwIfSpinosaCancelled(shouldAbort)
     const pageFile = path.join(pageDir, `page-${String(page).padStart(3, "0")}.md`)
-    writeFileSync(
+    writeTextAtomic(
       pageFile,
       [
         "---",
@@ -461,15 +467,13 @@ async function convertTextPdf(srcFile: string, destFile: string, relPath: string
         text.trim() || "[No text extracted on this page]",
         "",
       ].join("\n"),
-      "utf-8",
     )
     injectColdFrontmatter(pageFile)
   }
   mkdirSync(path.dirname(destFile), { recursive: true })
-  writeFileSync(
+  writeTextAtomic(
     destFile,
     `# ${title}\n\n${pageTexts.map(({ page }) => `- [Page ${page}](${path.basename(pageDir)}/page-${String(page).padStart(3, "0")}.md)`).join("\n")}\n`,
-    "utf-8",
   )
   injectColdFrontmatter(destFile)
 }
@@ -521,6 +525,7 @@ export async function verifyAndRecoverImport(
   markitdownChoice: boolean | undefined,
   ocrChoice: boolean | undefined,
   onLog?: (msg: string) => void,
+  shouldAbort?: () => boolean,
 ): Promise<VerifyResult> {
   let missing = 0
   let recovered = 0
@@ -529,6 +534,7 @@ export async function verifyAndRecoverImport(
   onLog?.("Verify & recover: scanning source tree...")
 
   for (const srcFile of findSourceFiles(sourcePath)) {
+    throwIfSpinosaCancelled(shouldAbort)
     if (shouldSkipSourceFile(srcFile)) continue
 
     const ext = fileExt(srcFile)
@@ -538,6 +544,7 @@ export async function verifyAndRecoverImport(
       markitdownChoice: markitdownChoice ?? false,
       ocrChoice: ocrChoice ?? false,
     })
+    throwIfSpinosaCancelled(shouldAbort)
     if (!route) continue
 
     const expectedRel = expectedImportDestRel(sourcePath, srcFile, route)
@@ -558,6 +565,7 @@ export async function verifyAndRecoverImport(
       case "media_copy":
       case "binary_copy": {
         if (await safeCopyAsync(srcFile, destFile)) {
+          throwIfSpinosaCancelled(shouldAbort)
           if (destFile.endsWith(".md")) injectColdFrontmatter(destFile)
           onLog?.(`    Recovered (direct copy): ${relPath}`)
           ok = true
@@ -569,12 +577,14 @@ export async function verifyAndRecoverImport(
           mkdirSync(path.dirname(destFile), { recursive: true })
           const converter = new MarkItDown()
           const result = await converter.convert(srcFile)
+          throwIfSpinosaCancelled(shouldAbort)
           const text = result?.markdown ?? ""
-          writeFileSync(destFile, text, "utf-8")
+          writeTextAtomic(destFile, text)
           injectColdFrontmatter(destFile)
           onLog?.(`    Recovered (markitdown-ts): ${relPath}`)
           ok = true
-        } catch {
+        } catch (error) {
+          if (isSpinosaCancellationError(error)) throw error
           const fallbackDest = path.join(destDir, relPath)
           mkdirSync(path.dirname(fallbackDest), { recursive: true })
           if (await safeCopyAsync(srcFile, fallbackDest)) {
@@ -588,9 +598,10 @@ export async function verifyAndRecoverImport(
         let ppuConverted = 0
         if (ocrAvailable()) {
           try {
-            const ppuResult = await runPpuOcrBatch([{ src: srcFile, rel: relPath, dest: destFile }], { onLog })
+            const ppuResult = await runPpuOcrBatch([{ src: srcFile, rel: relPath, dest: destFile }], { onLog, shouldAbort })
             ppuConverted = ppuResult.converted
           } catch (err) {
+            if (isSpinosaCancellationError(err)) throw err
             onLog?.(`    PPU OCR engine failed: ${err instanceof Error ? err.message : String(err)} — skipping OCR recovery`)
           }
         }
@@ -636,7 +647,8 @@ export async function copySource(
     totalCopied: 0, stillMissing: 0, recovered: 0,
   }
 
-  const classified = await scanAndClassifySource(sourcePath, destDir, options?.batchManager, options?.subfolder)
+  throwIfSpinosaCancelled(options?.shouldAbort)
+  const classified = await scanAndClassifySource(sourcePath, destDir, options?.batchManager, options?.subfolder, options?.shouldAbort)
   if (!classified) {
     options?.onLog?.(`Failed to scan source: ${sourcePath}`)
     return res
@@ -659,26 +671,26 @@ export async function copySource(
 
   if (runPhase("direct") && classified.directFiles.length > 0) {
     options?.onPhaseChange?.("direct", `Copying ${classified.directFiles.length} files...`)
-    const dr = await processDirectCopy(classified.directFiles, prog, options?.onLog, options?.overwrite)
+    const dr = await processDirectCopy(classified.directFiles, prog, options?.onLog, options?.overwrite, options?.shouldAbort)
     res.copied += dr.converted; res.skipped += dr.skipped; res.failed += dr.failed
   }
 
   if (runPhase("markitdown") && classified.markitdownFiles.length > 0 && options?.markitdownChoice) {
     options?.onPhaseChange?.("markitdown", `Converting ${classified.markitdownFiles.length} files with MarkItDown...`)
-      const mr = await processMarkitdown(classified.markitdownFiles, classified.logsDir, prog, options?.onLog)
+      const mr = await processMarkitdown(classified.markitdownFiles, classified.logsDir, prog, options?.onLog, options?.shouldAbort)
     res.mdConverted += mr.converted; res.mdSkipped += mr.skipped; res.mdFailed += mr.failed
   }
 
   if (runPhase("ocr") && classified.ocrFiles.length > 0 && options?.ocrChoice) {
     options?.onPhaseChange?.("ocr", `Processing ${classified.ocrFiles.length} OCR files...`)
-      const or = await processOcr(classified.ocrFiles, classified.logsDir, prog, options?.onLog)
+      const or = await processOcr(classified.ocrFiles, classified.logsDir, prog, options?.onLog, options?.shouldAbort)
     res.ocrConverted += or.converted; res.ocrSkipped += or.skipped; res.ocrFailed += or.failed
   }
 
   res.totalCopied = res.copied + res.mdConverted + res.ocrConverted
 
   if (options?.verifyAfter !== false) {
-    const verifyResult = await verifyAndRecoverImport(sourcePath, destDir, options?.batchManager, options?.markitdownChoice, options?.ocrChoice, options?.onLog)
+    const verifyResult = await verifyAndRecoverImport(sourcePath, destDir, options?.batchManager, options?.markitdownChoice, options?.ocrChoice, options?.onLog, options?.shouldAbort)
     res.stillMissing = verifyResult.stillMissing
     res.recovered = verifyResult.recovered
   }

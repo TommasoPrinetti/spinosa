@@ -184,14 +184,14 @@ test("Spinosa app route E2E boots and navigates key workspace flows", async () =
         setup.mockInput.pressKey("2")
         await waitForText(setup, "cli-started-demo")
         setup.mockInput.pressKey("1")
-        await waitForText(setup, "Launch startup indexing")
+        await waitForText(setup, "Run startup-prompt in chat")
       },
     })
 
     expect(cliStartedFrame).toContain("cli-started-demo")
-    expect(cliStartedFrame).toContain("This workspace hasn't completed startup indexing")
-    expect(cliStartedFrame).toContain("Launch startup indexing")
-    expect(cliStartedFrame).toContain("Open chat directly")
+    expect(cliStartedFrame).toContain("This workspace is at the `cli_started` stage")
+    expect(cliStartedFrame).toContain("Run startup-prompt in chat")
+    expect(cliStartedFrame).toContain("Open normal chat")
   } finally {
     rmSync(cliRoot, { recursive: true, force: true })
   }

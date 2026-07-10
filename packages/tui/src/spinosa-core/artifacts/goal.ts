@@ -1,12 +1,7 @@
 import path from "node:path"
-import { chainForRoute, classifyPrompt, type RouteClass } from "../classify/route"
+import { chainForRoute, classifyPrompt, isNonFastPath, type RouteClass } from "../classify/route"
 import { generateSessionId } from "../session-id"
-
-export async function readGoalTemplate(workspacePath: string): Promise<string | undefined> {
-  const file = Bun.file(path.join(workspacePath, ".agents", "references", "goal-artifact-template.md"))
-  if (await file.exists()) return file.text()
-  return undefined
-}
+import { writeTextAtomic } from "../utils/fs"
 
 export function buildGoalArtifactBody(input: {
   sessionId: string
@@ -95,7 +90,7 @@ export async function writeGoalArtifact(workspacePath: string, cleanedPrompt: st
   const body = buildGoalArtifactBody({ sessionId, cleanedPrompt, route })
   const relative = path.join("agent_reports", `g_${sessionId}.md`)
   const absolute = path.join(workspacePath, relative)
-  await Bun.write(absolute, body)
+  writeTextAtomic(absolute, body)
   return { sessionId, route, goalPath: relative }
 }
 
@@ -113,13 +108,9 @@ export function orchestratorPreamble(input: {
   ]
   if (input.sessionId) lines.push(`session_id: ${input.sessionId}`)
   if (input.goalPath) lines.push(`Goal artifact: ${input.goalPath}`)
-  if (isNonFastPathRoute(input.route)) {
+  if (isNonFastPath(input.route)) {
     lines.push("Do not paste long reports into chat — write agent_reports/NN_*.md and point to the verified file.")
   }
   lines.push("</system-reminder>")
   return lines.join("\n")
-}
-
-function isNonFastPathRoute(route: RouteClass) {
-  return route !== "fast_path"
 }

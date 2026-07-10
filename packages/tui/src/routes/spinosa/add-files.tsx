@@ -255,14 +255,16 @@ export function AddFiles() {
 
   // ── Path input management ─────────────────────────────────────────────────
   const readPathText = (id: number) => {
-    const live = sourceInputs.get(id)?.plainText?.trim()
+    const input = sourceInputs.get(id)
+    const live = input && !input.isDestroyed ? input.plainText?.trim() : undefined
     if (live) return live
     return pathSnapshot.get(id)?.trim() ?? ""
   }
 
   const snapshotSourcePaths = () => {
     for (const entry of sourcePaths()) {
-      const text = sourceInputs.get(entry.id)?.plainText ?? pathSnapshot.get(entry.id) ?? ""
+      const input = sourceInputs.get(entry.id)
+      const text = input && !input.isDestroyed ? input.plainText : pathSnapshot.get(entry.id) ?? ""
       pathSnapshot.set(entry.id, text)
     }
   }
@@ -437,7 +439,6 @@ export function AddFiles() {
       void runToolRepair()
     } else if (checks.every((t) => t.status === "available")) {
       logAction("start-scan", "All tools ready")
-      pendingPaths = allPathsResolved()
       startScan().catch((err) => {
         logError("startScan-top", err)
         appendLogLine(`Fatal: ${err instanceof Error ? err.message : String(err)}`)
@@ -512,8 +513,8 @@ export function AddFiles() {
   // ── Processing ────────────────────────────────────────────────────────────
   const startProcessing = async () => {
     if (busy()) return
-    const resolved = allPathsResolved()
-    if (resolved.length === 0) {
+    const resolved = pendingPaths
+    if (!resolved || resolved.length === 0) {
       appendLogLine("At least one valid source path is required.")
       setStep("error")
       return
@@ -535,6 +536,8 @@ export function AddFiles() {
     setProcessingStatus("Starting...")
     setProcessingFile("")
     abortProcessing = false
+    const generation = workflow.bump()
+    const shouldAbort = () => abortProcessing || !workflow.active(generation)
     gateResolve = undefined
     spinOn()
     await delay(200)
@@ -555,10 +558,10 @@ export function AddFiles() {
 
     try {
       for (const src of resolved) {
-        if (abortProcessing) break
+        if (shouldAbort()) break
         appendLogLine(`Processing: ${src}`)
 
-        const classified = await scanAndClassifySource(src, rawDir, batchManager)
+        const classified = await scanAndClassifySource(src, rawDir, batchManager, undefined, shouldAbort)
         if (!classified) {
           appendLogLine(`No importable files in: ${src}`)
           continue
@@ -587,9 +590,9 @@ export function AddFiles() {
         setProcessingStatus(`Direct copy — ${directCount} files`)
         totalDirect += directCount
         await delay(500)
-        const dr = await processDirectCopy(classified.directFiles, sharedProg, onPhaseLog, undefined, () => abortProcessing)
+        const dr = await processDirectCopy(classified.directFiles, sharedProg, onPhaseLog, undefined, shouldAbort)
         if (dr.failed > 0) totalFailed += dr.failed
-        if (abortProcessing) { spinOff(); setBusy(false); return }
+        if (shouldAbort()) { spinOff(); setBusy(false); return }
         dirConverted += dr.converted
 
         // ── Phase B: MarkItDown ─────────────────────────────────────────────
@@ -599,16 +602,16 @@ export function AddFiles() {
           setBusy(false)
           await gate("Continue to MarkItDown")
           setBusy(true)
-          if (abortProcessing) { spinOff(); setBusy(false); return }
+          if (shouldAbort()) { spinOff(); setBusy(false); return }
 
           setProgTotal(mdCount || 1)
           setProgCurrent(0)
           setProcessingStatus("MarkItDown conversion...")
           totalMd += mdCount
           await delay(500)
-          const mr = await processMarkitdown(classified.markitdownFiles, classified.logsDir, sharedProg, onPhaseLog, () => abortProcessing)
+          const mr = await processMarkitdown(classified.markitdownFiles, classified.logsDir, sharedProg, onPhaseLog, shouldAbort)
           if (mr.failed > 0) totalFailed += mr.failed
-          if (abortProcessing) { spinOff(); setBusy(false); return }
+          if (shouldAbort()) { spinOff(); setBusy(false); return }
           mdConverted += mr.converted
         } else {
           appendLogLine("No files require MarkItDown conversion.")
@@ -621,16 +624,16 @@ export function AddFiles() {
           setBusy(false)
           await gate("Continue to OCR")
           setBusy(true)
-          if (abortProcessing) { spinOff(); setBusy(false); return }
+          if (shouldAbort()) { spinOff(); setBusy(false); return }
 
           setProgTotal(ocrCount || 1)
           setProgCurrent(0)
           setProcessingStatus("OCR...")
           totalOcr += ocrCount
           await delay(500)
-          const or = await processOcr(classified.ocrFiles, classified.logsDir, sharedProg, onPhaseLog, () => abortProcessing)
+          const or = await processOcr(classified.ocrFiles, classified.logsDir, sharedProg, onPhaseLog, shouldAbort)
           if (or.failed > 0) totalFailed += or.failed
-          if (abortProcessing) { spinOff(); setBusy(false); return }
+          if (shouldAbort()) { spinOff(); setBusy(false); return }
           ocrConverted += or.converted
         } else {
           appendLogLine("No files require OCR.")
@@ -645,7 +648,7 @@ export function AddFiles() {
       setProcessingDone(true)
       setStep("done")
     } catch (err) {
-      if (isSpinosaCancellationError(err) || abortProcessing) {
+      if (isSpinosaCancellationError(err) || shouldAbort()) {
         appendLogLine("Spinosa import cancelled.")
         setProcessingStatus("Cancelled.")
         return
@@ -695,6 +698,7 @@ export function AddFiles() {
         return
       }
     }
+    pendingPaths = resolved
     await runToolCheck()
   }
 
@@ -865,7 +869,7 @@ export function AddFiles() {
       step,
       (current, previous) => {
         if (current === "path" && current !== previous) focusSourceInput()
-        if (previous === "path" && current !== previous) {
+        if (current !== "path") {
           sourceInputs.clear()
           sourceInput = undefined
         }

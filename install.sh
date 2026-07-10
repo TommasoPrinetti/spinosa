@@ -2,7 +2,7 @@
 # shellcheck shell=bash
 # ── install.sh — Spinosa Framework Installer (auto-re-execs with bash) ──────
 
-PINNED_VERSION="0.9.0-beta.5"
+PINNED_VERSION="0.9.0-beta.6"
 PINNED_TAG="beta"
 BUNDLED_BUN_VERSION="1.3.14"
 
@@ -1249,7 +1249,8 @@ main() {
     note "Development mode selected (source-tree install)"
   fi
 
-  local lockdir="${SPINOSA_HOME}/versions/.install.lock"
+  INSTALL_LOCKDIR="${SPINOSA_HOME}/versions/.install.lock"
+  local lockdir="$INSTALL_LOCKDIR"
 
   # Stale lock check: reclaim if older than 30 min or PID is dead
   if [ -d "$lockdir" ]; then
@@ -1272,8 +1273,8 @@ main() {
   mkdir "$lockdir" 2>/dev/null || die "Another Spinosa installer is running. Wait and retry, or remove stale lock: rm -rf '${lockdir}'"
   printf '%s\n' "$$" > "${lockdir}/pid"
   # Early trap: ensure lock cleanup on any exit before full cleanup trap is registered
-  trap 'rm -rf "$lockdir"' EXIT
-  trap 'rm -rf "$lockdir"; exit 1' INT TERM HUP
+  trap 'rm -rf "${INSTALL_LOCKDIR:-}"' EXIT
+  trap 'rm -rf "${INSTALL_LOCKDIR:-}"; exit 1' INT TERM HUP
 
   check_release_age "$VERSION" "$MIN_DAYS"
 

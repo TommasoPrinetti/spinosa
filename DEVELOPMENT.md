@@ -45,7 +45,7 @@ package.json         ← Bun workspace root
 ## Key Files
 
 ### TUI Launch Flow
-- `workspace-template/.bin/spinosa` — thin bash bootstrap (~25 lines). Resolves root + bun, then execs `spinosa-cli.ts` or launches TUI.
+- `workspace-template/.bin/spinosa` — thin bash bootstrap (~70 lines). Resolves root + bun, then execs `spinosa-cli.ts` or launches TUI.
 - `packages/tui/src/spinosa-cli.ts` — TypeScript CLI entry point. Handles all commands: `new`, `add`, `update`, `doctor`, `upgrade`, `uninstall`, `status`, `list`, `version`, `help`.
 - `packages/tui/src/spinosa-cli/` — modular command handlers (`commands/`), argument parser, output IO with `--json`/`--quiet` support.
 - `packages/opencode/src/cli/cmd/tui.ts` — creates Web Worker, RPC bridge, TUI component tree.

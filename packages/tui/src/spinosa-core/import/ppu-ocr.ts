@@ -1,10 +1,11 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs"
 import * as path from "node:path"
 import type { PaddleOcrService, PaddleOcrResult } from "ppu-paddle-ocr"
 import { fileExt } from "../constants"
 import { isSpinosaCancellationError, throwIfSpinosaCancelled } from "./cancellation"
 import { injectColdFrontmatter } from "./frontmatter"
 import { pdfRenderDocumentPageToPng, withPdfDocument } from "../extension/pdf-js"
+import { writeTextAtomic } from "../utils/fs"
 
 export interface PpuOcrFile {
   src: string
@@ -19,6 +20,7 @@ export interface PpuOcrBatchResult {
 
 let servicePromise: Promise<PaddleOcrService> | undefined
 let service: PaddleOcrService | undefined
+let activeBatches = 0
 
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
 const JPEG_SOI = Buffer.from([0xff, 0xd8])
@@ -51,10 +53,9 @@ function pageDirFor(destFile: string): string {
 function writeMarkdown(destFile: string, title: string, body: string, sourceRel: string, confidence?: number): void {
   mkdirSync(path.dirname(destFile), { recursive: true })
   const confidenceLine = typeof confidence === "number" ? `\nOCR confidence: ${confidence.toFixed(3)}\n` : ""
-  writeFileSync(
+  writeTextAtomic(
     destFile,
     `# ${title}\n\nConverted from \`${sourceRel}\` with ppu-paddle-ocr.${confidenceLine}\n${body.trim() || "[No text detected]"}\n`,
-    "utf-8",
   )
   injectColdFrontmatter(destFile)
 }
@@ -70,7 +71,7 @@ function writeSplitPages(destFile: string, title: string, sourceRel: string, pag
   for (const pageNumber of pageNumbers) {
     const displayPage = zeroBased ? pageNumber + 1 : pageNumber
     const pageFile = path.join(pageDir, `page-${String(displayPage).padStart(3, "0")}.md`)
-    writeFileSync(
+    writeTextAtomic(
       pageFile,
       [
         "---",
@@ -84,7 +85,6 @@ function writeSplitPages(destFile: string, title: string, sourceRel: string, pag
         pages.get(pageNumber)?.trim() || "[No text detected on this page]",
         "",
       ].join("\n"),
-      "utf-8",
     )
     injectColdFrontmatter(pageFile)
   }
@@ -152,12 +152,12 @@ async function ppuService(onLog?: (line: string) => void): Promise<PaddleOcrServ
   return servicePromise
 }
 
-async function ocrImage(service: PaddleOcrService, file: PpuOcrFile): Promise<boolean> {
+async function ocrImage(service: PaddleOcrService, file: PpuOcrFile, shouldAbort?: () => boolean): Promise<boolean> {
   const data = readFileSync(file.src)
   const ext = fileExt(file.src)
   const validationError = validateOcrImageInput(data, ext)
   if (validationError) throw new Error(`invalid OCR image input: ${validationError}`)
-  return ocrImageBuffer(service, data, file.dest, titleFromRel(file.rel), file.rel)
+  return ocrImageBuffer(service, data, file.dest, titleFromRel(file.rel), file.rel, shouldAbort)
 }
 
 async function ocrImageBuffer(
@@ -166,9 +166,11 @@ async function ocrImageBuffer(
   destFile: string,
   title: string,
   sourceRel: string,
+  shouldAbort?: () => boolean,
 ): Promise<boolean> {
   const buffer = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer
   const result = await service.recognize(buffer) as PaddleOcrResult
+  throwIfSpinosaCancelled(shouldAbort)
   writeMarkdown(destFile, title, result.text, sourceRel, result.confidence)
   return true
 }
@@ -297,6 +299,7 @@ async function ocrPdf(
       throwIfSpinosaCancelled(shouldAbort)
       const buffer = pngBuffer.buffer.slice(pngBuffer.byteOffset, pngBuffer.byteOffset + pngBuffer.byteLength) as ArrayBuffer
       const result = await service.recognize(buffer) as PaddleOcrResult
+      throwIfSpinosaCancelled(shouldAbort)
       output.set(page, result.text)
       onProgress?.(page, doc.numPages)
     }
@@ -329,6 +332,7 @@ export async function runPpuOcrBatch(
     return { converted: 0, skipped }
   }
   const total = files.length
+  activeBatches++
 
   try {
     for (let i = 0; i < files.length; i++) {
@@ -339,7 +343,7 @@ export async function runPpuOcrBatch(
         const ext = fileExt(file.src)
         const ok = ext === "pdf"
           ? await ocrPdf(service, file, (page, pageTotal) => options?.onPageProgress?.(i + 1, total, file.rel, `${page}/${pageTotal}`), options?.shouldAbort)
-          : await ocrImage(service, file)
+          : await ocrImage(service, file, options?.shouldAbort)
         if (ok) {
           converted++
           injectColdFrontmatter(file.dest)
@@ -360,6 +364,7 @@ export async function runPpuOcrBatch(
 
     return { converted, skipped }
   } finally {
-    await disposePpuOcr()
+    activeBatches--
+    if (activeBatches === 0) await disposePpuOcr()
   }
 }
