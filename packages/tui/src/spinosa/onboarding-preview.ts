@@ -5,7 +5,9 @@ import { resolveUserPath } from "../spinosa-core/utils/path"
 import { pluralCount } from "../spinosa-core/utils/string"
 import { fileExt } from "../spinosa-core/constants"
 import { shouldSkipSourceFile, classifySourceFile } from "../spinosa-core/extension/classifier"
+import type { FileClass } from "../spinosa-core/extension/types"
 import { suggestWorkspacePath as coreSuggestWorkspacePath } from "../spinosa-core/scan/scanner"
+import { resolveWorkspacePath as resolveCoreWorkspacePath } from "../spinosa-core/commands/create"
 import { detectDocumentTools as coreDetectDocumentTools } from "../spinosa-core/scan/scanner"
 import type { ToolStatus as CoreToolStatus } from "../spinosa-core/scan/scanner"
 
@@ -49,7 +51,10 @@ function shouldSkipScanDir(name: string) {
   return name === ".git" || name === ".spinosa" || name === "node_modules" || name === "__MACOSX" || name === ".trash" || name.endsWith(".app") || name.endsWith(".photoslibrary")
 }
 
-async function scanByExtension(sourcePath: string): Promise<{
+async function scanByExtension(
+  sourcePath: string,
+  classify: (filePath: string) => Promise<FileClass> = classifySourceFile,
+): Promise<{
   extMap: Map<string, ExtEntry>
   totals: { markdown: number; markitdown: number; native: number; ocr: number; video: number; audio: number; unknown: number; ignored: number; total: number }
 }> {
@@ -78,7 +83,7 @@ async function scanByExtension(sourcePath: string): Promise<{
         totals.total++
         if (shouldSkipSourceFile(fullPath)) { totals.ignored++; continue }
         const ext = fileExt(fullPath)
-        const cls = await classifySourceFile(fullPath)
+        const cls = await classify(fullPath)
         switch (cls) {
           case "markdown": totals.markdown++; break
           case "markitdown": totals.markitdown++; break
@@ -160,16 +165,7 @@ export function detectLlmTools(): string[] {
 function resolveWorkspacePath(sourcePath: string, workspaceName?: string): string {
   const resolved = resolveUserPath(sourcePath)
   if (!resolved) return ""
-  const corpusName = path.basename(resolved)
-  const parentDir = path.dirname(resolved)
-  const baseName = workspaceName?.trim() || `${corpusName}-spinosa`
-  let candidate = path.join(parentDir, baseName)
-  let n = 2
-  while (existsSync(candidate)) {
-    candidate = path.join(parentDir, `${baseName}-${n}`)
-    n++
-  }
-  return candidate
+  return resolveCoreWorkspacePath(resolved, workspaceName)
 }
 
 export async function buildNewWorkspacePreview(sourcePath: string, workspaceName?: string): Promise<NewWorkspacePreview> {
@@ -188,9 +184,12 @@ export async function buildNewWorkspacePreview(sourcePath: string, workspaceName
   }
 }
 
-export async function buildImportScanPreview(sourcePath: string): Promise<ImportScanPreview> {
+export async function buildImportScanPreview(
+  sourcePath: string,
+  options?: { classify?: (filePath: string) => Promise<FileClass> },
+): Promise<ImportScanPreview> {
   const projectName = path.basename(sourcePath)
-  const { extMap, totals } = await scanByExtension(sourcePath)
+  const { extMap, totals } = await scanByExtension(sourcePath, options?.classify)
 
   return {
     projectName,

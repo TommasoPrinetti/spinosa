@@ -428,26 +428,23 @@ export function AddFiles() {
     spinOff()
   }
   const handleToolAction = () => {
-    console.error("[add-files] handleToolAction called, busy=", busy())
-    if (busy()) { console.error("[add-files] handleToolAction: busy=true, returning"); return }
-    try { blurSourceInputs() } catch {}
+    if (busy()) return
+    try { blurSourceInputs() } catch (error) { logError("blurSourceInputs", error) }
     const checks = toolChecks()
     const needsRepair = checks.some((t) => t.status === "missing")
-    console.error("[add-files] handleToolAction: needsRepair=", needsRepair, "checks=", checks.map(c => c.status))
     if (needsRepair) {
       logAction("repair-tools", `${checks.filter(t => t.status === "missing").length} tools missing`)
       void runToolRepair()
     } else if (checks.every((t) => t.status === "available")) {
       logAction("start-scan", "All tools ready")
       pendingPaths = allPathsResolved()
-      console.error("[add-files] handleToolAction: pendingPaths=", pendingPaths)
       startScan().catch((err) => {
         logError("startScan-top", err)
         appendLogLine(`Fatal: ${err instanceof Error ? err.message : String(err)}`)
         setStep("error")
       })
     } else {
-      console.error("[add-files] handleToolAction: no condition matched!")
+      logError("handleToolAction", `Unexpected tool states: ${checks.map((check) => check.status).join(",")}`)
     }
   }
 
@@ -484,21 +481,17 @@ export function AddFiles() {
   // ── Scan ──────────────────────────────────────────────────────────────────
   let pendingPaths: string[] | undefined
   const startScan = async () => {
-    console.error("[add-files] startScan called, pendingPaths=", pendingPaths)
     const resolved = pendingPaths
-    if (!resolved || resolved.length === 0) { console.error("[add-files] startScan: no pending paths!"); logError("startScan", "No pending paths"); setStep("error"); return }
+    if (!resolved || resolved.length === 0) { logError("startScan", "No pending paths"); setStep("error"); return }
     setScanDone(false)
     setStep("scan")
-    console.error("[add-files] startScan: step set to scan")
     await yieldToEventLoop()
     clearLog()
     try {
       let mergedOptions: ImportOption[] = []
       for (const src of resolved) {
         appendLogLine(`Scanning: ${src}`)
-        console.error("[add-files] startScan: scanning", src)
         const scanPreview = await buildImportScanPreview(src)
-        console.error("[add-files] startScan: scanPreview for", src, "=", scanPreview.importOptions.length, "options")
         for (const opt of scanPreview.importOptions) {
           const existing = mergedOptions.find((m) => m.ext === opt.ext)
           if (existing) existing.count += opt.count
@@ -508,10 +501,8 @@ export function AddFiles() {
       setImportOptions(mergedOptions)
       clearLog()
       setScanDone(true)
-      console.error("[add-files] startScan: done,", mergedOptions.length, "options")
       logAction("scan-done", `${mergedOptions.length} file types found`)
     } catch (err) {
-      console.error("[add-files] startScan: error", err)
       logError("startScan", err)
       appendLogLine(`Scan failed: ${err instanceof Error ? err.message : String(err)}`)
       setStep("error")
@@ -687,22 +678,18 @@ export function AddFiles() {
 
   // ── Path step navigation ──────────────────────────────────────────────────
   const continueFromPath = async () => {
-    console.error("[add-files] continueFromPath called, busy=", busy())
     if (busy()) return
     blurSourceInputs()
     logAction("continue", "Path step → Tools step")
     snapshotSourcePaths()
     const resolved = allPathsResolved()
-    console.error("[add-files] continueFromPath: resolved=", resolved)
     if (resolved.length === 0) {
-      console.error("[add-files] continueFromPath: no valid paths!")
       appendLogLine("At least one valid source path is required.")
       setStep("error")
       return
     }
     for (const p of resolved) {
       if (!existsSync(p)) {
-        console.error("[add-files] continueFromPath: path does not exist:", p)
         appendLogLine(`Source folder does not exist: ${p}`)
         setStep("error")
         return
@@ -725,7 +712,7 @@ export function AddFiles() {
   // ── Mount (keymap + timers) ──────────────────────────────────────────────
   onMount(() => {
     const onUnhandled = (ev: PromiseRejectionEvent) => {
-      console.error("[unhandled]", ev.reason)
+      logError("unhandledrejection", ev.reason)
     }
     window.addEventListener?.("unhandledrejection", onUnhandled)
     setToastError((err) => toast.error(err))

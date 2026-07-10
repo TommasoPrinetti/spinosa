@@ -7,7 +7,7 @@ async function getDoc(pdfPath: string): Promise<PDFDocumentProxy> {
   return getDocument({ data }).promise
 }
 
-async function withDoc<T>(pdfPath: string, fn: (doc: PDFDocumentProxy) => Promise<T>): Promise<T> {
+export async function withPdfDocument<T>(pdfPath: string, fn: (doc: PDFDocumentProxy) => Promise<T>): Promise<T> {
   const doc = await getDoc(pdfPath)
   try {
     return await fn(doc)
@@ -17,29 +17,39 @@ async function withDoc<T>(pdfPath: string, fn: (doc: PDFDocumentProxy) => Promis
 }
 
 export async function pdfPageCount(pdfPath: string): Promise<number> {
-  return withDoc(pdfPath, (doc) => Promise.resolve(doc.numPages))
+  return withPdfDocument(pdfPath, (doc) => Promise.resolve(doc.numPages))
 }
 
 export async function pdfTextContent(pdfPath: string, page: number): Promise<string> {
-  return withDoc(pdfPath, async (doc) => {
-    const pg = await doc.getPage(page)
-    const content = await pg.getTextContent()
-    return content.items.map((item) => ("str" in item ? item.str : "")).join(" ")
-  })
+  return withPdfDocument(pdfPath, (doc) => pdfDocumentTextContent(doc, page))
+}
+
+export async function pdfDocumentTextContent(doc: PDFDocumentProxy, page: number): Promise<string> {
+  const pg = await doc.getPage(page)
+  const content = await pg.getTextContent()
+  return content.items.map((item) => ("str" in item ? item.str : "")).join(" ")
 }
 export async function pdfPageHasExtractableText(pdfPath: string, page: number): Promise<boolean> {
-  const text = await pdfTextContent(pdfPath, page)
+  return withPdfDocument(pdfPath, (doc) => pdfDocumentPageHasExtractableText(doc, page))
+}
+
+export async function pdfDocumentPageHasExtractableText(doc: PDFDocumentProxy, page: number): Promise<boolean> {
+  const text = await pdfDocumentTextContent(doc, page)
   return text.replace(/\s/g, "").length > 0
 }
 
 export async function pdfTextPagesMeetThreshold(pdfPath: string, pageCount: number): Promise<boolean> {
+  return withPdfDocument(pdfPath, (doc) => pdfDocumentTextPagesMeetThreshold(doc, pageCount))
+}
+
+export async function pdfDocumentTextPagesMeetThreshold(doc: PDFDocumentProxy, pageCount = doc.numPages): Promise<boolean> {
   const pc = Math.max(1, Math.floor(pageCount))
 
-  if (pc === 1) return pdfPageHasExtractableText(pdfPath, 1)
+  if (pc === 1) return pdfDocumentPageHasExtractableText(doc, 1)
   if (pc === 2) {
     const [a, b] = await Promise.all([
-      pdfPageHasExtractableText(pdfPath, 1),
-      pdfPageHasExtractableText(pdfPath, 2),
+      pdfDocumentPageHasExtractableText(doc, 1),
+      pdfDocumentPageHasExtractableText(doc, 2),
     ])
     return a && b
   }
@@ -47,22 +57,24 @@ export async function pdfTextPagesMeetThreshold(pdfPath: string, pageCount: numb
   const mid = Math.floor((pc + 1) / 2)
   const last = pc
   const results = await Promise.all([
-    pdfPageHasExtractableText(pdfPath, 1),
-    pdfPageHasExtractableText(pdfPath, mid),
-    pdfPageHasExtractableText(pdfPath, last),
+    pdfDocumentPageHasExtractableText(doc, 1),
+    pdfDocumentPageHasExtractableText(doc, mid),
+    pdfDocumentPageHasExtractableText(doc, last),
   ])
   const hits = results.filter(Boolean).length
   return hits >= 2
 }
 export async function pdfRenderPageToPng(pdfPath: string, pageNumber: number, dpi = 180): Promise<Buffer> {
-  return withDoc(pdfPath, async (doc) => {
-    const pg = await doc.getPage(pageNumber)
-    const viewport = pg.getViewport({ scale: dpi / 72 })
-    const canvas = createCanvas(viewport.width, viewport.height)
-    const ctx = canvas.getContext("2d")
-    await pg.render({ canvasContext: ctx as unknown as CanvasRenderingContext2D, viewport }).promise
-    return canvas.toBuffer("image/png")
-  })
+  return withPdfDocument(pdfPath, (doc) => pdfRenderDocumentPageToPng(doc, pageNumber, dpi))
+}
+
+export async function pdfRenderDocumentPageToPng(doc: PDFDocumentProxy, pageNumber: number, dpi = 180): Promise<Buffer> {
+  const pg = await doc.getPage(pageNumber)
+  const viewport = pg.getViewport({ scale: dpi / 72 })
+  const canvas = createCanvas(viewport.width, viewport.height)
+  const ctx = canvas.getContext("2d")
+  await pg.render({ canvasContext: ctx as unknown as CanvasRenderingContext2D, viewport }).promise
+  return canvas.toBuffer("image/png")
 }
 
 export async function isTextBasedPdf(pdfPath: string): Promise<boolean> {
@@ -82,12 +94,11 @@ export async function isTextBasedPdf(pdfPath: string): Promise<boolean> {
     searchBuffer(header, Buffer.from("/CIDFont"), 0, header.length)
   ) return true
 
-  const pageCount = await pdfPageCount(pdfPath)
-  return pdfTextPagesMeetThreshold(pdfPath, pageCount)
+  return withPdfDocument(pdfPath, (doc) => pdfDocumentTextPagesMeetThreshold(doc))
 }
 
 export async function pdfExtractAllText(pdfPath: string): Promise<string> {
-  return withDoc(pdfPath, async (doc) => {
+  return withPdfDocument(pdfPath, async (doc) => {
     const pages: string[] = []
     for (let i = 1; i <= doc.numPages; i++) {
       try {
@@ -103,7 +114,7 @@ export async function pdfExtractAllText(pdfPath: string): Promise<string> {
 }
 
 export async function pdfExtractPageTexts(pdfPath: string): Promise<{ page: number; text: string }[]> {
-  return withDoc(pdfPath, async (doc) => {
+  return withPdfDocument(pdfPath, async (doc) => {
     const result: { page: number; text: string }[] = []
     for (let i = 1; i <= doc.numPages; i++) {
       try {

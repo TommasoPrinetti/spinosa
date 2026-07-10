@@ -1,4 +1,4 @@
-import { comparePrereleaseTokens } from "../utils/version"
+import { comparePrereleaseTokens, parseInstallPinnedVersion } from "../utils/version"
 
 import { existsSync, readFileSync, readdirSync, realpathSync } from "node:fs"
 import { homedir } from "node:os"
@@ -54,7 +54,7 @@ function compareFrameworkVersions(a: string, b: string): number {
 }
 
 function discoverInstalledFramework(): string | undefined {
-  const versionsDir = path.join(homedir(), ".spinosa", "versions")
+  const versionsDir = path.join(process.env.SPINOSA_HOME ?? path.join(homedir(), ".spinosa"), "versions")
   if (!existsSync(versionsDir)) return undefined
   let bestDir = ""
   let bestVersion = ""
@@ -131,33 +131,38 @@ export async function readFrameworkFile(relativePath: string): Promise<string | 
   return templateFile.text()
 }
 
-export function installedReleaseVersion(frameworkRoot: string | undefined): string {
-  if (frameworkRoot) {
-    try {
-      const versionPath = path.join(frameworkRoot, "metadata", "version")
-      if (existsSync(versionPath)) {
-        return readFileSync(versionPath, "utf-8").trim()
-      }
-    } catch {
-      // fall through
-    }
-  }
-  const versionsDir = path.join(homedir(), ".spinosa", "versions")
-  if (!existsSync(versionsDir)) return ""
-  let best = ""
+export function readFrameworkVersionFromRoot(frameworkRoot: string | undefined): string {
+  if (!frameworkRoot) return "dev"
   try {
-    for (const entry of readdirSync(versionsDir, { withFileTypes: true })) {
-      if (!entry.isDirectory()) continue
-      const ver = entry.name
-      if (!/^\d/.test(ver)) continue
-      const versionPath = path.join(versionsDir, ver)
-      if (!existsSync(path.join(versionPath, ".spinosa-install-complete"))) continue
-      if (!best || compareFrameworkVersions(ver, best) > 0) {
-        best = ver
-      }
+    const metadataPath = path.join(frameworkRoot, "metadata", "version")
+    if (existsSync(metadataPath)) {
+      const version = readFileSync(metadataPath, "utf-8").trim()
+      if (version) return version
+    }
+
+    const packagePath = path.join(frameworkRoot, "package.json")
+    if (existsSync(packagePath)) {
+      const parsed = JSON.parse(readFileSync(packagePath, "utf-8")) as { version?: unknown }
+      if (typeof parsed.version === "string" && parsed.version.trim()) return parsed.version.trim()
+    }
+
+    const installerPath = path.join(frameworkRoot, "install.sh")
+    if (existsSync(installerPath)) {
+      const pinned = parseInstallPinnedVersion(readFileSync(installerPath, "utf-8"))
+      if (pinned && pinned !== "__VERSION__") return pinned
+    }
+
+    const directoryVersion = path.basename(frameworkRoot)
+    if (/^\d+\.\d+\.\d+(?:-.+)?$/.test(directoryVersion) && hasFrameworkMarker(frameworkRoot)) {
+      return directoryVersion
     }
   } catch {
-    // ignore
+    return "dev"
   }
-  return best
+  return "dev"
+}
+
+export function installedReleaseVersion(frameworkRoot: string | undefined): string {
+  const version = readFrameworkVersionFromRoot(frameworkRoot)
+  return version === "dev" ? "" : version
 }

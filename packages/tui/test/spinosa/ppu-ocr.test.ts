@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test"
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 
@@ -34,6 +34,14 @@ describe("ppu ocr guards", () => {
       expect(recognizeCalls).toBe(0)
       expect(existsSync(dest)).toBe(false)
       expect(logs.some((line) => line.includes("invalid OCR image input: truncated png"))).toBe(true)
+
+      const logsDir = path.join(root, "logs")
+      mkdirSync(logsDir)
+      const { processOcr } = await import("../../src/spinosa-core/import/pipeline")
+      const phase = await processOcr([{ src, rel: "bad.png", dest }], logsDir)
+      expect(phase.converted).toBe(0)
+      expect(phase.skipped).toBe(0)
+      expect(phase.failed).toBe(1)
     } finally {
       mock.restore()
       rmSync(root, { recursive: true, force: true })

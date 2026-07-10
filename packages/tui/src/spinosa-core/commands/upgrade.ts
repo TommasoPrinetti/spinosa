@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs"
 import { spawnSync } from "node:child_process"
+import { createHash } from "node:crypto"
 import { homedir } from "node:os"
 import path from "node:path"
 import {
@@ -42,6 +43,16 @@ interface VersionCache {
   timestamp: number
   version: string
   skipUntil: number
+}
+
+export function verifyInstallerChecksum(installerScript: string, checksums: string): boolean {
+  const expected = checksums
+    .split(/\r?\n/)
+    .map((line) => line.trim().split(/\s+/, 2))
+    .find((parts) => parts.length === 2 && path.basename(parts[1]!) === "install.sh")?.[0]
+  if (!expected || !/^[a-f0-9]{64}$/i.test(expected)) return false
+  const actual = createHash("sha256").update(installerScript).digest("hex")
+  return actual.toLowerCase() === expected.toLowerCase()
 }
 
 const SPINOSA_RELEASE_REPO: string =
@@ -172,12 +183,22 @@ export async function upgradeFramework(
 
   let response: Response
   try {
-    response = await fetch(installerUrl, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) })
-    if (!response.ok) {
+    const checksumUrl = new URL("checksums.txt", installerUrl).toString()
+    const [installerResponse, checksumResponse] = await Promise.all([
+      fetch(installerUrl, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) }),
+      fetch(checksumUrl, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) }),
+    ])
+    response = installerResponse
+    if (!response.ok || !checksumResponse.ok) {
       rmSync(tmpdir, { recursive: true, force: true })
       return { success: false, previousVersion: normalizedInstalled || undefined, workspaceUpgradesNeeded: [] }
     }
     const installerScript = await response.text()
+    const checksums = await checksumResponse.text()
+    if (!verifyInstallerChecksum(installerScript, checksums)) {
+      rmSync(tmpdir, { recursive: true, force: true })
+      return { success: false, previousVersion: normalizedInstalled || undefined, workspaceUpgradesNeeded: [] }
+    }
     writeFileSync(installerPath, installerScript, { mode: 0o755 })
   } catch {
     rmSync(tmpdir, { recursive: true, force: true })

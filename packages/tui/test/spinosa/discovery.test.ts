@@ -8,6 +8,7 @@ import {
   resolveFrameworkRoot,
   resolveFrameworkBin,
   installedReleaseVersion,
+  readFrameworkVersionFromRoot,
 } from "../../src/spinosa-core/framework/discovery"
 
 let tmpDir: string
@@ -118,5 +119,14 @@ describe("installedReleaseVersion", () => {
 
   test("returns empty string for non-existent path", () => {
     expect(installedReleaseVersion("/nonexistent/path")).toBe("")
+  })
+
+  test("falls back to package version when metadata/version is absent", () => {
+    const d = mkdtempSync(path.join(tmpdir(), "spinosa-package-version-"))
+    mkdirSync(path.join(d, "workspace-template", ".spinosa"), { recursive: true })
+    writeFileSync(path.join(d, "workspace-template", ".spinosa", "workspace-files.tsv"), "path\trole\tupdate_policy\n")
+    writeFileSync(path.join(d, "package.json"), JSON.stringify({ version: "1.2.3-beta.4" }))
+    expect(readFrameworkVersionFromRoot(d)).toBe("1.2.3-beta.4")
+    rmSync(d, { recursive: true, force: true })
   })
 })

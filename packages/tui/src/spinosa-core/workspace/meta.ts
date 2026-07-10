@@ -2,23 +2,15 @@ import { existsSync } from "node:fs"
 import path from "node:path"
 import { resolveWorkspaceDisplayName } from "../workspace-name"
 import type { SpinosaSetupStatus, SpinosaWorkspaceMeta } from "../types"
+import { SPINOSA_AGENT_FILES } from "../constants"
 
 const SETUP_STATUSES = new Set<SpinosaSetupStatus>([
   "not_started",
+  "importing",
   "cli_started",
   "workspace_started",
   "unknown",
 ])
-
-const SPINOSA_AGENT_FILES = [
-  "spinosa-searcher.md",
-  "spinosa-mapper.md",
-  "spinosa-analyst.md",
-  "spinosa-serendippo.md",
-  "spinosa-writer.md",
-  "spinosa-verifier.md",
-  "spinosa-evaluator.md",
-]
 
 function parseSetupStatus(value: string | undefined): SpinosaSetupStatus | undefined {
   if (!value) return

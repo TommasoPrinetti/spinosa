@@ -9,4 +9,11 @@ describe("spinosa handoff builder", () => {
     expect(command).toContain("SPINOSA_STARTUP_PROMPT_2")
     expect(command).not.toContain("<<'SPINOSA_STARTUP_PROMPT'\n")
   })
+
+  test("uses installed Spinosa TUI without network package execution", () => {
+    const command = buildLaunchCommand("/tmp/workspace", "opencode", "prompt")
+    expect(command).toStartWith("spinosa-tui ")
+    expect(command).not.toContain("npx")
+    expect(command).not.toContain("bunx")
+  })
 })

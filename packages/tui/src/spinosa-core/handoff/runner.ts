@@ -132,7 +132,7 @@ export function runCliWithPrompt(root: string, cli: string, prompt: string): boo
       const promptPath = prepareTempPrompt(dir, prompt)
       const escapedRoot = root.replace(/'/g, "'\\''")
       const cliCommand = hasBundledTui
-        ? `npx @spinosa/tui --prompt "$(cat "$_prompt")" '${escapedRoot}'`
+        ? `spinosa-tui --prompt "$(cat "$_prompt")" '${escapedRoot}'`
         : `opencode --prompt "$(cat "$_prompt")" '${escapedRoot}'`
       const scriptPath = promptLaunchScript(promptPath, root, cliCommand, dir)
       launchInTerminal(scriptPath)

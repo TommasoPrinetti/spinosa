@@ -9,7 +9,8 @@
     "test": "bun test --timeout 30000 --only-failures",
     "test:spinosa": "bun test test/spinosa/",
     "typecheck": "tsc --noEmit",
-    "verify:spinosa": "bun run scripts/verify-spinosa.ts",
+    "typecheck:spinosa": "tsc --noEmit -p tsconfig.spinosa.json",
+    "verify:spinosa": "bun run scripts/verify-spinosa.ts"
   },
   "exports": {
     ".": "./src/index.tsx",

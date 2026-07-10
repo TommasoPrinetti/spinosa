@@ -7,6 +7,7 @@ import { resolveFrameworkRoot } from "../../src/spinosa-core/framework/discovery
 import { createWorkspace } from "../../src/spinosa-core/commands/create"
 import { validateWorkspace } from "../../src/spinosa-core/workspace/registry"
 import { readWorkspaceMeta } from "../../src/spinosa-core/workspace/meta"
+import { writeWorkspaceStatus } from "../../src/spinosa-core/workspace/meta"
 
 let corpusDir: string
 let testRoot: string
@@ -57,6 +58,8 @@ describe("E2E: Workspace creation flow", () => {
     expect(existsSync(path.join(ws, "startup-prompt.md"))).toBe(true)
     expect(existsSync(path.join(ws, ".bin", "spinosa"))).toBe(true)
     expect(existsSync(path.join(ws, ".agents"))).toBe(true)
+    expect(existsSync(path.join(ws, ".opencode", "node_modules"))).toBe(false)
+    expect(await Bun.file(path.join(ws, ".hermes", "workspace.config.yaml")).text()).toContain(`cwd: ${ws}`)
 
     // Check user-state directories
     expect(existsSync(path.join(ws, "raw"))).toBe(true)
@@ -107,6 +110,28 @@ describe("E2E: Workspace creation flow", () => {
     })
     expect(ws2.success).toBe(true)
     expect(ws2.workspacePath).not.toBe(ws1.workspacePath)
+  })
+
+  test("reuses an interrupted import workspace and preserves partial output", async () => {
+    const root = resolveFrameworkRoot()
+    expect(root).toBeTruthy()
+    const first = await createWorkspace({
+      corpusPath: corpusDir,
+      frameworkRoot: root!,
+      workspaceName: "e2e-resume-test",
+    })
+    await writeWorkspaceStatus(first.workspacePath, "importing")
+    await Bun.write(path.join(first.workspacePath, "raw", "partial.md"), "partial\n")
+
+    const resumed = await createWorkspace({
+      corpusPath: corpusDir,
+      frameworkRoot: root!,
+      workspaceName: "e2e-resume-test",
+    })
+
+    expect(resumed.workspacePath).toBe(first.workspacePath)
+    expect(resumed.resumed).toBe(true)
+    expect(await Bun.file(path.join(resumed.workspacePath, "raw", "partial.md")).text()).toBe("partial\n")
   })
 
   test("failed workspace creation cleans up reserved directory", async () => {

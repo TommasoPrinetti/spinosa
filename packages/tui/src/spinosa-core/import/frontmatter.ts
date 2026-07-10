@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, existsSync, rmSync } from "node:fs"
+import { readFileSync, writeFileSync, existsSync, rmSync, statSync } from "node:fs"
 
 const COLD_SCAFFOLD_FIELDS = [
   "type",
@@ -74,11 +74,13 @@ function mergeMissingFields(lines: string[]): string {
 }
 
 export function convertedOutputExists(outputPath: string): boolean {
-  if (existsSync(outputPath)) return true
-  const pageDir = outputPath.endsWith(".md")
-    ? outputPath.slice(0, -3)
-    : outputPath + "_pages"
-  return existsSync(pageDir)
+  if (!existsSync(outputPath)) return false
+  try {
+    const stat = statSync(outputPath)
+    return stat.isFile() && stat.size > 0
+  } catch {
+    return false
+  }
 }
 
 export function removeConvertedOutput(outputPath: string): void {

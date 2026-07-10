@@ -54,4 +54,69 @@ describe("workspace update flow", () => {
     expect(existsSync(path.join(workspace, "logs", "user.log"))).toBe(true)
     expect(existsSync(path.join(workspace, ".logs"))).toBe(false)
   })
+
+  test("rejects traversal paths from a workspace manifest", async () => {
+    await using tmp = await tmpdir()
+    const frameworkRoot = path.join(tmp.path, "install")
+    const templateRoot = path.join(frameworkRoot, "workspace-template")
+    const workspace = path.join(tmp.path, "workspace")
+    const sentinel = path.join(tmp.path, "sentinel.txt")
+
+    await mkdir(path.join(templateRoot, ".spinosa"), { recursive: true })
+    await mkdir(path.join(workspace, ".spinosa"), { recursive: true })
+    await Bun.write(path.join(templateRoot, ".spinosa", "workspace-files.tsv"), "path\trole\tupdate_policy\n")
+    await Bun.write(path.join(workspace, ".spinosa", "manifest.tsv"), "path\tkind\n../sentinel.txt\tfile\n")
+    await Bun.write(sentinel, "keep\n")
+
+    await expect(updateWorkspace({ workspacePath: workspace, frameworkRoot })).rejects.toThrow("Unsafe workspace manifest path")
+    expect(await Bun.file(sentinel).text()).toBe("keep\n")
+  })
+
+  test("preserves nested user edits in replace_if_unmodified directories", async () => {
+    await using tmp = await tmpdir()
+    const frameworkRoot = path.join(tmp.path, "install")
+    const templateRoot = path.join(frameworkRoot, "workspace-template")
+    const workspace = path.join(tmp.path, "workspace")
+
+    await mkdir(path.join(templateRoot, ".spinosa"), { recursive: true })
+    await mkdir(path.join(templateRoot, ".agents"), { recursive: true })
+    await mkdir(path.join(workspace, ".spinosa"), { recursive: true })
+    await mkdir(path.join(workspace, ".agents"), { recursive: true })
+    await Bun.write(
+      path.join(templateRoot, ".spinosa", "workspace-files.tsv"),
+      "path\trole\tupdate_policy\n.agents/\tframework\treplace_if_unmodified\n",
+    )
+    await Bun.write(path.join(templateRoot, ".agents", "agent.md"), "framework update\n")
+    await Bun.write(path.join(templateRoot, ".agents", "new.md"), "new managed file\n")
+    await Bun.write(path.join(workspace, ".agents", "agent.md"), "user edit\n")
+
+    const result = await updateWorkspace({ workspacePath: workspace, frameworkRoot })
+
+    expect(result.success).toBe(true)
+    expect(await Bun.file(path.join(workspace, ".agents", "agent.md")).text()).toBe("user edit\n")
+    expect(await Bun.file(path.join(workspace, ".agents", "new.md")).text()).toBe("new managed file\n")
+  })
+
+  test("updates an unmodified managed file after a checksum baseline exists", async () => {
+    await using tmp = await tmpdir()
+    const frameworkRoot = path.join(tmp.path, "install")
+    const templateRoot = path.join(frameworkRoot, "workspace-template")
+    const workspace = path.join(tmp.path, "workspace")
+
+    await mkdir(path.join(templateRoot, ".spinosa"), { recursive: true })
+    await mkdir(path.join(templateRoot, "docs"), { recursive: true })
+    await mkdir(path.join(workspace, ".spinosa"), { recursive: true })
+    await Bun.write(
+      path.join(templateRoot, ".spinosa", "workspace-files.tsv"),
+      "path\trole\tupdate_policy\ndocs/\tframework\treplace_if_unmodified\n",
+    )
+    await Bun.write(path.join(templateRoot, "docs", "guide.md"), "v1\n")
+
+    await updateWorkspace({ workspacePath: workspace, frameworkRoot })
+    await Bun.write(path.join(templateRoot, "docs", "guide.md"), "v2\n")
+    const result = await updateWorkspace({ workspacePath: workspace, frameworkRoot })
+
+    expect(result.success).toBe(true)
+    expect(await Bun.file(path.join(workspace, "docs", "guide.md")).text()).toBe("v2\n")
+  })
 })

@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, readdirSync } from "node:fs"
+import { mkdir, rename, rm, stat } from "node:fs/promises"
 import { homedir } from "node:os"
 import path from "node:path"
 import { resolveWorkspaceDisplayName } from "../workspace-name"
@@ -22,11 +23,66 @@ function metadataPath(...segments: string[]): string {
 }
 
 export function registryEscape(value: string): string {
-  return value.replace(/%/g, "%25").replace(/\|/g, "%7C")
+  return value
+    .replace(/%/g, "%25")
+    .replace(/\|/g, "%7C")
+    .replace(/\r/g, "%0D")
+    .replace(/\n/g, "%0A")
 }
 
 export function registryUnescape(value: string): string {
-  return value.replace(/%7C/g, "|").replace(/%25/g, "%")
+  return value
+    .replace(/%0A/gi, "\n")
+    .replace(/%0D/gi, "\r")
+    .replace(/%7C/gi, "|")
+    .replace(/%25/gi, "%")
+}
+
+const REGISTRY_LOCK_TIMEOUT_MS = 10_000
+const REGISTRY_LOCK_STALE_MS = 30_000
+
+async function acquireRegistryFileLock(registry: string): Promise<() => Promise<void>> {
+  const lockDir = `${registry}.lock`
+  const deadline = Date.now() + REGISTRY_LOCK_TIMEOUT_MS
+  while (true) {
+    try {
+      await mkdir(lockDir)
+      return async () => { await rm(lockDir, { recursive: true, force: true }) }
+    } catch (error) {
+      if (!error || typeof error !== "object" || !("code" in error) || error.code !== "EEXIST") throw error
+      try {
+        const lockStat = await stat(lockDir)
+        if (Date.now() - lockStat.mtimeMs > REGISTRY_LOCK_STALE_MS) {
+          await rm(lockDir, { recursive: true, force: true })
+          continue
+        }
+      } catch {
+        continue
+      }
+      if (Date.now() >= deadline) throw new Error(`Timed out waiting for workspace registry lock: ${lockDir}`)
+      await Bun.sleep(20)
+    }
+  }
+}
+
+async function writeRegistryAtomically(registry: string, content: string): Promise<void> {
+  const tmp = `${registry}.tmp-${process.pid}-${crypto.randomUUID()}`
+  await Bun.write(tmp, content)
+  try {
+    await rename(tmp, registry)
+  } catch (error) {
+    await rm(tmp, { force: true }).catch(() => {})
+    throw error
+  }
+}
+
+async function withRegistryFileLock<T>(registry: string, fn: () => Promise<T>): Promise<T> {
+  const release = await acquireRegistryFileLock(registry)
+  try {
+    return await fn()
+  } finally {
+    await release()
+  }
 }
 
 function decodeRegistryLine(line: string): { workspacePath: string; project: string } | undefined {
@@ -84,40 +140,44 @@ export async function registerWorkspace(workspacePath: string, project: string):
 
     await ensureGlobalMetadata()
 
-    const file = Bun.file(registry)
-    let lines: string[] = []
-    if (await file.exists()) {
-      const text = await file.text()
-      lines = text.split(/\r?\n/).filter(Boolean)
-    }
+    await withRegistryFileLock(registry, async () => {
+      const file = Bun.file(registry)
+      let lines: string[] = []
+      if (await file.exists()) {
+        const text = await file.text()
+        lines = text.split(/\r?\n/).filter(Boolean)
+      }
 
-    const filtered = lines.filter((line) => {
-      const rawPath = line.split("|")[0] ?? ""
-      return rawPath !== encodedPath
+      const filtered = lines.filter((line) => {
+        const rawPath = line.split("|")[0] ?? ""
+        return rawPath !== encodedPath
+      })
+
+      const today = new Date().toISOString().slice(0, 10)
+      filtered.push(`${encodedPath}|${encodedProject}|${today}`)
+      await writeRegistryAtomically(registry, filtered.join("\n") + "\n")
     })
-
-    const today = new Date().toISOString().slice(0, 10)
-    filtered.push(`${encodedPath}|${encodedProject}|${today}`)
-    await Bun.write(registry, filtered.join("\n") + "\n")
   })
 }
 
 export async function unregisterWorkspace(workspacePath: string): Promise<void> {
   return withRegistryLock(async () => {
     const registry = metadataPath("workspaces.txt")
-    const file = Bun.file(registry)
-    if (!(await file.exists())) return
+    await withRegistryFileLock(registry, async () => {
+      const file = Bun.file(registry)
+      if (!(await file.exists())) return
 
-    const text = await file.text()
-    const lines = text.split(/\r?\n/).filter(Boolean)
-    const filtered = lines.filter((line) => {
-      const rawPath = line.split("|")[0] ?? ""
-      return registryUnescape(rawPath) !== workspacePath
+      const text = await file.text()
+      const lines = text.split(/\r?\n/).filter(Boolean)
+      const filtered = lines.filter((line) => {
+        const rawPath = line.split("|")[0] ?? ""
+        return registryUnescape(rawPath) !== workspacePath
+      })
+
+      if (filtered.length < lines.length) {
+        await writeRegistryAtomically(registry, filtered.join("\n") + (filtered.length > 0 ? "\n" : ""))
+      }
     })
-
-    if (filtered.length < lines.length) {
-      await Bun.write(registry, filtered.join("\n") + (filtered.length > 0 ? "\n" : ""))
-    }
   })
 }
 

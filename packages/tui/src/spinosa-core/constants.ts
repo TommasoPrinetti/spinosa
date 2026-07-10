@@ -41,6 +41,10 @@ export const SPINOSA_AGENT_FILES = [
   "spinosa-writer.md",
   "spinosa-verifier.md",
   "spinosa-evaluator.md",
+  "spinosa-evolver.md",
+  "spinosa-janitor.md",
+  "spinosa-overseer.md",
+  "spinosa-visualizer.md",
 ]
 
 const MAX_EXTENSION_FILENAME_LENGTH = 255

@@ -28,7 +28,7 @@ import { tuiLog, logStep, logAction, logPhase, logTool, logResult, logError, log
 import { useExit } from "../../context/exit"
 import type { CliRunResult } from "../../spinosa/types"
 import { readBundledFrameworkVersion, isPrereleaseFrameworkVersion, readStartupPrompt, writePreferredCli } from "../../spinosa/service"
-import { registerWorkspace } from "../../spinosa-core/workspace/registry"
+import { writeWorkspaceStatus } from "../../spinosa-core/workspace/meta"
 import { resolveExistingUserPaths } from "../../spinosa-core/utils/path"
 import { CenteredColumn } from "../../component/centered-column"
 import { OPENCODE_BASE_MODE, useOpencodeKeymap, useOpencodeModeStack } from "../../keymap"
@@ -605,21 +605,11 @@ let nameInput: TextareaRenderable | undefined
   }
 
   const continueFromName = () => {
-    void (async () => {
-      const primarySource = pendingPaths?.[0]
-      const nextWorkspaceName = workspaceName().trim() || defaultWorkspaceName()
-      if (primarySource) {
-        const plannedWorkspacePath = resolveWorkspacePath(primarySource, nextWorkspaceName)
-        setCreatedWorkspace(plannedWorkspacePath)
-        await registerWorkspace(plannedWorkspacePath, nextWorkspaceName)
-      }
-      logAction("continue", "Name step → Tools step")
-      await runToolCheck()
-    })().catch((error) => {
-      const message = error instanceof Error ? error.message : String(error)
-      appendLogLine(`Failed to register workspace: ${message}`)
-      setStep("error")
-    })
+    const primarySource = pendingPaths?.[0]
+    const nextWorkspaceName = workspaceName().trim() || defaultWorkspaceName()
+    if (primarySource) setCreatedWorkspace(resolveWorkspacePath(primarySource, nextWorkspaceName))
+    logAction("continue", "Name step → Tools step")
+    void runToolCheck()
   }
 
   const continueFromImports = () => {
@@ -703,13 +693,11 @@ let nameInput: TextareaRenderable | undefined
       const wsResult = await createWorkspace({
         corpusPath: primarySource,
         frameworkRoot,
-        extensions,
-        preferredCli: "opencode",
-        launch: "copy",
         workspaceName: workspaceName() || defaultWorkspaceName(),
         onProgress: (msg) => { appendLogLine(msg) },
       })
       if (!wsResult.success) { setStep("error"); return }
+      await writeWorkspaceStatus(wsResult.workspacePath, "importing")
       const ctx: OnboardingContext = await prepareOnboarding({
         workspacePath: wsResult.workspacePath,
         frameworkRoot,
@@ -795,6 +783,7 @@ let nameInput: TextareaRenderable | undefined
             workspacePath: ctx.workspacePath,
             sourcePath: extra,
             sourceIsDir: true,
+            extensions,
             onProgress: (msg) => appendLogLine(msg),
           })
           if (!addFileResult.success) {

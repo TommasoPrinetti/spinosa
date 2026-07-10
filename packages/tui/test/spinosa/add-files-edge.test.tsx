@@ -1,5 +1,5 @@
 /** @jsxImportSource @opentui/solid */
-import { describe, expect, mock, test } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { ScrollBoxRenderable, type Renderable } from "@opentui/core"
 import { testRender } from "@opentui/solid"
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs"
@@ -13,6 +13,7 @@ import { buildStartupChatPrompt, formatStartupProgressMessage } from "../../src/
 import { resolveExistingUserPaths } from "../../src/spinosa-core/utils/path"
 import { DEFAULT_THEMES, resolveTheme } from "../../src/theme"
 import { ImportOptionsSelector } from "../../src/routes/spinosa/wizard-ui"
+import { buildImportScanPreview } from "../../src/spinosa/onboarding-preview"
 
 const EDGE_FILENAMES = [
   "normal.pdf",
@@ -74,21 +75,16 @@ describe("spinosa add-files edge cases", () => {
       writeFileSync(path.join(source, "ok.md"), "# ok\n")
       writeFileSync(path.join(source, "broken.md"), "# broken\n")
 
-      mock.module("../../src/spinosa-core/extension/classifier", () => ({
-        shouldSkipSourceFile: () => false,
-        classifySourceFile: async (filePath: string) => {
+      const preview = await buildImportScanPreview(source, {
+        classify: async (filePath: string) => {
           if (filePath.endsWith("broken.md")) throw new Error("boom")
           return "markdown"
         },
-      }))
-
-      const { buildImportScanPreview } = await import("../../src/spinosa/onboarding-preview")
-      const preview = await buildImportScanPreview(source)
+      })
 
       expect(preview.importOptions).toEqual([{ ext: "md", count: 1, bytes: expect.any(Number), selected: true }])
       expect(preview.scanRows.some((row) => row.label === "Unknown files")).toBe(true)
     } finally {
-      mock.restore()
       rmSync(source, { recursive: true, force: true })
     }
   })

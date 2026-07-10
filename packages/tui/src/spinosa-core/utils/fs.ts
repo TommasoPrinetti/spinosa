@@ -3,7 +3,6 @@ import {
   existsSync,
   mkdirSync,
   readdirSync,
-  readFileSync,
   readlinkSync,
   renameSync,
   rmSync,
@@ -11,9 +10,8 @@ import {
   statfsSync,
   symlinkSync,
   unlinkSync,
-  writeFileSync,
 } from "node:fs"
-import { copyFile as copyFileAsync, mkdir as mkdirAsync } from "node:fs/promises"
+import { copyFile as copyFileAsync, mkdir as mkdirAsync, rm as rmAsync } from "node:fs/promises"
 import { spawnSync } from "node:child_process"
 import path from "node:path"
 
@@ -34,25 +32,48 @@ export interface SafeCopyOptions {
   onRetry?: (attempt: number, reason: string) => void
 }
 
+export function shouldSkipTemplateCopyEntry(name: string, isDirectory: boolean): boolean {
+  if (name === ".DS_Store" || name.startsWith("._")) return true
+  if (isDirectory && (name === "node_modules" || name === ".git" || name === "__pycache__")) return true
+  return !isDirectory && name.endsWith(".pyc")
+}
+
 function safeCopyDelaySec(p: string): number {
   return isCloudStoragePath(p) ? 4 : 2
 }
 
 function sleepMs(ms: number): void {
-  const deadline = Date.now() + ms
-  while (Date.now() < deadline) {
-    /* busy wait */
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
+}
+
+function replaceFromTemp(tmp: string, dest: string): void {
+  if (existsSync(dest) && statSync(dest).isDirectory()) {
+    throw new Error(`Refusing to replace directory with file: ${dest}`)
+  }
+  const backup = `${dest}.spinosa-backup-${process.pid}-${crypto.randomUUID()}`
+  let backedUp = false
+  try {
+    if (existsSync(dest)) {
+      renameSync(dest, backup)
+      backedUp = true
+    }
+    renameSync(tmp, dest)
+    if (backedUp) rmSync(backup, { force: true })
+  } catch (error) {
+    try { unlinkSync(tmp) } catch { /* temp cleanup */ }
+    if (backedUp && !existsSync(dest)) {
+      try { renameSync(backup, dest) } catch { /* preserve original error */ }
+    }
+    throw error
   }
 }
 
-function copyFileViaStream(src: string, dest: string): boolean {
-  const tmp = dest + ".spinosa-part"
+function copyFileAtomically(src: string, dest: string): boolean {
+  const tmp = `${dest}.spinosa-part-${process.pid}-${crypto.randomUUID()}`
   try {
     mkdirSync(path.dirname(dest), { recursive: true })
-    try { unlinkSync(tmp) } catch { /* temp cleanup, ignore */ }
-    const content = readFileSync(src)
-    writeFileSync(tmp, content)
-    renameSync(tmp, dest)
+    copyFileSync(src, tmp)
+    replaceFromTemp(tmp, dest)
     return true
   } catch {
     try { unlinkSync(tmp) } catch { /* temp cleanup, ignore */ }
@@ -70,15 +91,11 @@ export function safeCopy(src: string, dest: string, options?: SafeCopyOptions): 
 
   for (let i = 1; i <= retries; i++) {
     if (useStream) {
-      if (copyFileViaStream(src, dest)) return true
-      lastReason = "stream copy failed"
+      if (copyFileAtomically(src, dest)) return true
+      lastReason = "atomic copy failed"
     } else {
-      try {
-        copyFileSync(src, dest)
-        return true
-      } catch (err) {
-        lastReason = String(err)
-      }
+      if (copyFileAtomically(src, dest)) return true
+      lastReason = "atomic copy failed"
     }
     if (i >= retries) break
     options?.onRetry?.(i, lastReason)
@@ -96,10 +113,13 @@ export async function safeCopyAsync(src: string, dest: string, options?: SafeCop
   await mkdirAsync(path.dirname(dest), { recursive: true })
 
   for (let i = 1; i <= retries; i++) {
+    const tmp = `${dest}.spinosa-part-${process.pid}-${crypto.randomUUID()}`
     try {
-      await copyFileAsync(src, dest)
+      await copyFileAsync(src, tmp)
+      replaceFromTemp(tmp, dest)
       return true
     } catch (err) {
+      await rmAsync(tmp, { force: true }).catch(() => {})
       lastReason = String(err)
     }
     if (i >= retries) break
@@ -115,22 +135,22 @@ export function safeCopyTree(src: string, dest: string): void {
   mkdirSync(dest, { recursive: true })
 
   for (const entry of readdirSync(srcReal, { withFileTypes: true })) {
-    if (entry.name === ".DS_Store" || entry.name.startsWith("._")) continue
+    if (shouldSkipTemplateCopyEntry(entry.name, entry.isDirectory())) continue
 
     const srcPath = path.join(srcReal, entry.name)
     const destPath = path.join(dest, entry.name)
 
     if (entry.isSymbolicLink()) {
-      try {
-        const target = readlinkSync(srcPath)
-        mkdirSync(path.dirname(destPath), { recursive: true })
-        try { unlinkSync(destPath) } catch (e) { console.error("spinosa: symlink dest unlink failed", destPath, e) }
-        symlinkSync(target, destPath)
-      } catch (e) { console.error("spinosa: symlink copy failed", srcPath, e) }
+      const target = readlinkSync(srcPath)
+      mkdirSync(path.dirname(destPath), { recursive: true })
+      try { unlinkSync(destPath) } catch { /* missing destination */ }
+      symlinkSync(target, destPath)
     } else if (entry.isDirectory()) {
       safeCopyTree(srcPath, destPath)
     } else if (entry.isFile()) {
-      safeCopy(srcPath, destPath)
+      if (!safeCopy(srcPath, destPath)) {
+        throw new Error(`Failed to copy file: ${srcPath}`)
+      }
     }
   }
 }
@@ -147,6 +167,14 @@ function rsyncCopyDirContents(src: string, dest: string): boolean {
     ".DS_Store",
     "--exclude",
     "._*",
+    "--exclude",
+    "node_modules/",
+    "--exclude",
+    ".git/",
+    "--exclude",
+    "__pycache__/",
+    "--exclude",
+    "*.pyc",
     `${src}/`,
     `${dest}/`,
   ])

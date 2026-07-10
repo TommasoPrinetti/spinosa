@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "skipLibCheck": true
+  },
+  "files": [
+    "src/spinosa-cli.ts",
+    "src/spinosa-core/index.ts",
+    "src/spinosa/log.ts",
+    "src/spinosa/onboarding-preview.ts",
+    "src/spinosa/service.ts",
+    "src/spinosa/status-labels.ts",
+    "src/spinosa/truncate-path.ts",
+    "src/spinosa/workspace-launch.ts"
+  ]
+}

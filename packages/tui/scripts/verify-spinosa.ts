@@ -25,8 +25,8 @@ async function main() {
   if (tests.stderr) process.stderr.write(tests.stderr)
   console.log(`exit: ${tests.status ?? "unknown"}\n`)
 
-  const typecheck = run("bun", ["typecheck"])
-  console.log("--- bun typecheck ---")
+  const typecheck = run("bun", ["run", "typecheck:spinosa"])
+  console.log("--- bun run typecheck:spinosa ---")
   if (typecheck.stdout) process.stdout.write(typecheck.stdout)
   if (typecheck.stderr) process.stderr.write(typecheck.stderr)
   console.log(`exit: ${typecheck.status ?? "unknown"}\n`)

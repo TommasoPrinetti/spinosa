@@ -1,7 +1,7 @@
 import { createEffect, createMemo, createResource, createSignal, For, onCleanup, onMount, Show } from "solid-js"
 import { TextAttributes } from "@opentui/core"
 import { dirname, join } from "node:path"
-import { rmSync, statSync } from "node:fs"
+import { statSync } from "node:fs"
 import { useTheme } from "../../context/theme"
 import { useRoute } from "../../context/route"
 import { Logo } from "../../component/logo"
@@ -29,6 +29,9 @@ import { truncatePathTail } from "../../spinosa/truncate-path"
 import { useSpinosaWorkspace } from "../../context/spinosa-workspace"
 import { getWorkspaceLaunchDecision } from "../../spinosa/workspace-launch"
 import { resolveWorkspaceDisplayName } from "../../spinosa/workspace-name"
+import { archiveWorkspaceState } from "../../spinosa-core/workspace/archive"
+import { DialogConfirm } from "../../ui/dialog-confirm"
+import { useDialog } from "../../ui/dialog"
 
 type PickerStep = "home" | "select" | "manager"
 
@@ -74,6 +77,8 @@ function workspaceCategoryLabel(status: SpinosaSetupStatus) {
       return "index"
     case "not_started":
       return "setup"
+    case "importing":
+      return "setup"
     default:
       return "unknown"
   }
@@ -116,6 +121,7 @@ function isConfirmKey(name: string): boolean {
 export function WorkspacePicker() {
   const { theme } = useTheme()
   const { navigate } = useRoute()
+  const dialog = useDialog()
   const pluginRuntime = usePluginRuntime()
   const keymap = useOpencodeKeymap()
   useOpencodeModeStack()
@@ -270,10 +276,16 @@ export function WorkspacePicker() {
 
   const deleteWorkspace = async (wsPath: string) => {
     if (deleting()) return
+    const confirmed = await DialogConfirm.show(
+      dialog,
+      "Remove Spinosa workspace",
+      "Remove this workspace from Spinosa? Its .spinosa state will be archived beside the workspace so it can be recovered. Source and raw files stay in place.",
+      "Remove",
+    )
+    if (confirmed !== true) return
     setDeleting(wsPath)
     try {
-      const spinosaDir = join(wsPath, ".spinosa")
-      rmSync(spinosaDir, { recursive: true, force: true })
+      archiveWorkspaceState(wsPath)
       await unregisterWorkspace(wsPath)
     } finally {
       setDeleting(undefined)
@@ -360,7 +372,7 @@ export function WorkspacePicker() {
       total: rows.length,
       ready: rows.filter((row) => row.status === "workspace_started").length,
       index: rows.filter((row) => row.status === "cli_started").length,
-      setup: rows.filter((row) => row.status === "not_started").length,
+      setup: rows.filter((row) => row.status === "not_started" || row.status === "importing").length,
       unknown: rows.filter((row) => row.status === "unknown").length,
     }
   })

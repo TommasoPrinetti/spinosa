@@ -1,4 +1,4 @@
-export type SpinosaSetupStatus = "not_started" | "cli_started" | "workspace_started" | "unknown"
+export type SpinosaSetupStatus = "not_started" | "importing" | "cli_started" | "workspace_started" | "unknown"
 
 export type SpinosaWorkspaceMeta = {
   path: string

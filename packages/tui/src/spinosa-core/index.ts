@@ -33,6 +33,7 @@ export * from "./framework/discovery"
 // --- workspace
 export * from "./workspace/meta"
 export * from "./workspace/registry"
+export * from "./workspace/archive"
 
 // --- tools
 export * from "./tools/detection"

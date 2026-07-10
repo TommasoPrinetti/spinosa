@@ -35,8 +35,7 @@ import {
   listRegisteredWorkspaces,
   unregisterWorkspace,
 } from "../spinosa-core/workspace/registry"
-import { readFrameworkFile } from "../spinosa-core/framework/discovery"
-import { resolveBundledFrameworkVersion } from "../spinosa-core/utils/version"
+import { readFrameworkVersionFromRoot, resolveFrameworkRoot } from "../spinosa-core/framework/discovery"
 import type {
   CorpusSummary,
   GoalArtifactSummary,
@@ -56,9 +55,7 @@ export async function countRawMarkdownFiles(rootDir: string) {
 }
 
 export async function readBundledFrameworkVersion() {
-  const metadata = (await readFrameworkFile("metadata/version"))?.trim()
-  const installScript = await readFrameworkFile("install.sh")
-  return resolveBundledFrameworkVersion(metadata, installScript)
+  return readFrameworkVersionFromRoot(resolveFrameworkRoot())
 }
 
 // --- Re-exports from spinosa-core ---

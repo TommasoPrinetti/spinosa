@@ -16,6 +16,7 @@ describe("routeForSetupStatus", () => {
 
   test("keeps unfinished statuses on the chat workspace shell", () => {
     expect(routeForSetupStatus("not_started").type).toBe("workspace")
+    expect(routeForSetupStatus("importing").type).toBe("workspace")
   })
 })
 

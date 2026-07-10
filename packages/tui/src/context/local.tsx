@@ -443,7 +443,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               pinned.filter((item): item is string => typeof item === "string"),
             )
         })
-        .catch((e) => { console.error("spinosa: failed to read session.json", e) })
+        .catch((error) => {
+          if (!error || typeof error !== "object" || !("code" in error) || error.code !== "ENOENT") {
+            console.error("spinosa: failed to read session.json", error)
+          }
+        })
         .finally(() => {
           setSessionStore("ready", true)
           if (state.pending) save()

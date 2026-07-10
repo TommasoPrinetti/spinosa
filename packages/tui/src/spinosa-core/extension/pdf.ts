@@ -3,6 +3,8 @@ import {
   pdfPageCount as jsPdfPageCount,
   pdfPageHasExtractableText as jsPdfPageHasText,
   pdfTextPagesMeetThreshold as jsPdfTextPagesThreshold,
+  withPdfDocument,
+  pdfDocumentTextPagesMeetThreshold,
 } from "./pdf-js"
 
 export { pdfExtractAllText, pdfExtractPageTexts, pdfRenderPageToPng } from "./pdf-js"
@@ -61,8 +63,11 @@ export async function isTextBasedPdf(pdfPath: string): Promise<boolean> {
     searchBuffer(header, Buffer.from("/Font"), 0, quickLen) ||
     searchBuffer(header, Buffer.from("/CIDFont"), 0, quickLen)
   ) return true
-  const pageCount = await pdfPageCount(pdfPath)
-  return pdfTextPagesMeetThreshold(pdfPath, pageCount)
+  try {
+    return await withPdfDocument(pdfPath, (doc) => pdfDocumentTextPagesMeetThreshold(doc))
+  } catch {
+    return false
+  }
 }
 
 function fileExt(filePath: string): string {

@@ -282,6 +282,7 @@ export async function processMarkitdown(
         const result = await converter.convert(f.src)
         throwIfSpinosaCancelled(shouldAbort)
         const text = result?.markdown ?? ""
+        if (!text.trim()) throw new Error("MarkItDown returned no content")
         writeFileSync(f.dest, text, "utf-8")
         injectColdFrontmatter(f.dest)
         converted++
@@ -356,7 +357,6 @@ export async function processOcr(
         },
       })
       converted += ocrResult.converted
-      skipped += ocrResult.skipped
       for (const f of toProcess) {
         const ok = convertedOutputExists(f.dest)
         appendNdjson(ocrLog, {
@@ -443,6 +443,7 @@ async function convertTextPdf(srcFile: string, destFile: string, relPath: string
   }
 
   const pageDir = destFile.endsWith(".md") ? destFile.slice(0, -3) : `${destFile}_pages`
+  rmSync(pageDir, { recursive: true, force: true })
   mkdirSync(pageDir, { recursive: true })
   for (const { page, text } of pageTexts) {
     const pageFile = path.join(pageDir, `page-${String(page).padStart(3, "0")}.md`)
@@ -496,7 +497,6 @@ async function copyDirectRawFile(
       onLog?.(`  ${relPath} → skipped`)
       return "skipped"
     }
-    rmSync(destFile, { force: true })
   }
 
   // Yield before copy so the "starting" progress event renders

@@ -13,22 +13,22 @@ This runs the TUI from source (`packages/opencode/src/index.ts`). Edit any file 
 
 ```bash
 cd ~/Documents/spinosa-main
-SPINOSA_HOME=~/.spinosa ./framework/bin/spinosa
+SPINOSA_HOME=~/.spinosa ./workspace-template/.bin/spinosa
 ```
 
-The shim auto-detects dev mode when it finds `framework/spinosa/framework-files.tsv`.
+The shim auto-detects dev mode from `workspace-template/.spinosa/workspace-files.tsv`.
 
 ## Directory Layout
 
 ```
-framework/           ← Agent files (ships to workspaces via spinosa update)
-  AGENTS.md          ← Orchestrator contract
-  bin/               ← Bash CLI shim + libraries + sync scripts
-  agents/            ← Agent definitions (source of truth)
-  spinosa/           ← Framework manifest + metadata
-  system/            ← Workspace system config
-  docs/ maps/ raw/   ← Framework resources
-vendor/              ← Generated agent mirrors (codex, claude, opencode, hermes)
+workspace-template/  ← Files shipped into Spinosa workspaces
+  .bin/spinosa       ← Bash launcher and command router
+  .spinosa/          ← Workspace manifest and local state templates
+  .agents/           ← Canonical skills and agent instructions
+  .opencode/         ← OpenCode adapter mirror
+  .claude/ .codex/   ← Vendor adapter mirrors
+  .hermes/           ← Hermes adapter and generated workspace config
+  system/ docs/      ← Workspace system files and user docs
 packages/            ← Runtime source (opencode fork + tui + spinosa-core + deps)
 install.sh           ← User-facing installer (curl | bash)
 package.json         ← Bun workspace root
@@ -40,29 +40,27 @@ package.json         ← Bun workspace root
 |---------|------|-------------|
 | **opencode** | `packages/opencode/` | CLI + TUI host — opencode fork. Entry: `src/index.ts`. Do not modify unless fixing upstream bugs. |
 | **tui** | `packages/tui/` | TUI components. Spinosa code in `src/spinosa/` and `src/routes/spinosa/`. |
-| **spinosa-core** | `packages/spinosa-core/` | Backend: workspace mgmt, import pipeline, scanning, CLI commands, channels. |
+| **spinosa-core** | `packages/tui/src/spinosa-core/` | Backend: workspace management, import pipeline, scanning, CLI commands, channels. |
 
 ## Key Files
 
 ### TUI Launch Flow
-- `framework/bin/spinosa` — bash CLI shim. No-args launches TUI from installed framework.
+- `workspace-template/.bin/spinosa` — bash CLI shim. No-args launches TUI from installed framework.
 - `packages/opencode/src/cli/cmd/tui.ts` — creates Web Worker, RPC bridge, TUI component tree.
 
 ### Onboarding (New Workspace)
 - `packages/tui/src/routes/spinosa/onboarding.tsx` — 10-step wizard UI.
-- `packages/spinosa-core/src/commands/onboard.ts` — `prepareOnboarding`, `runImportPhase`, `completeOnboarding`.
-- `packages/spinosa-core/src/import/pipeline.ts` — three-phase import (direct → MarkItDown → OCR).
+- `packages/tui/src/spinosa-core/commands/onboard.ts` — `prepareOnboarding`, `runOnboarding`, `completeOnboarding`.
+- `packages/tui/src/spinosa-core/import/pipeline.ts` — three-phase import (direct → MarkItDown → OCR).
 
 ## Publishing
 
 ### Framework Release
 ```bash
 # Bump version in package.json (canonical source)
-# install.sh uses __VERSION__ placeholder — rewritten at build time
-
-git add -A && git commit -m "release: v0.8.0-beta.N"
-git tag v0.8.0-beta.N && git push origin v0.8.0-beta.N
-# CI (release.yml) handles: build → test → package → GitHub Release
+# Keep package.json and install.sh PINNED_VERSION aligned, then run local release gate.
+bun run --cwd packages/tui test:spinosa
+bash script/release.sh vX.Y.Z[-beta.N]
 ```
 
 ### NPM Binary
@@ -74,9 +72,9 @@ cd dist/@spinosa/tui && npm publish --access public --tag beta
 
 ## Rules for Agents
 
-1. **Do NOT modify `packages/opencode/src/`** unless fixing an upstream bug. Spinosa features go in `packages/tui/src/spinosa/` or `packages/spinosa-core/src/`.
+1. **Do NOT modify `packages/opencode/src/`** unless fixing an upstream bug. Spinosa features go in `packages/tui/src/spinosa/`, `packages/tui/src/routes/spinosa/`, or `packages/tui/src/spinosa-core/`.
 2. **Channel inference**: never hardcode `"stable"`. Infer from bundle version: prerelease → beta, plain semver → stable.
 3. **Progress**: use `ProgressEmitter` for batch operations. Wire `onStdout`/`onStderr` for TUI visibility.
-4. **TypeScript**: use `tsgo` for typecheck (`npx tsgo --noEmit` from package dir).
-5. **Bash**: `framework/bin/spinosa` and `install.sh` must be macOS bash 3.2 compatible.
-6. **Sync agents after editing**: `bash framework/bin/sync-agents.sh` or `bun run sync-agents`.
+4. **TypeScript**: use the package scripts (`bun run --cwd packages/tui typecheck`).
+5. **Bash**: `workspace-template/.bin/spinosa` and `install.sh` must remain macOS Bash 3.2 compatible.
+6. Agent mirrors are pre-baked. Update canonical and adapter copies together, then run `bun run --cwd packages/tui verify:spinosa`.

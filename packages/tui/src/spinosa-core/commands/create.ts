@@ -4,7 +4,7 @@ import { copyDirContents, cleanMacMetadata } from "../utils/fs"
 import { registerWorkspace, writeSetupFiles } from "../workspace/registry"
 import { writeWorkspaceStatus } from "../workspace/meta"
 import { spinosaLogInfo } from "../utils/log"
-import { resolveTemplateRootFromFrameworkRoot } from "../framework/discovery"
+import { readFrameworkVersionFromRoot, resolveTemplateRootFromFrameworkRoot } from "../framework/discovery"
 
 export interface CreateWorkspaceOptions {
   corpusPath: string
@@ -20,6 +20,20 @@ export interface CreateWorkspaceResult {
   workspacePath: string
   projectName: string
   success: boolean
+  resumed?: boolean
+}
+
+function resumableWorkspace(candidate: string, corpusPath: string): boolean {
+  const markerPath = path.join(candidate, ".spinosa", "workspace")
+  if (!existsSync(markerPath)) return false
+  try {
+    const marker = readFileSync(markerPath, "utf-8")
+    const status = marker.match(/^setup_status:\s*(.+)$/m)?.[1]?.trim()
+    const source = marker.match(/^source_location:\s*(.+)$/m)?.[1]?.trim()
+    return status === "importing" && source === path.resolve(corpusPath)
+  } catch {
+    return false
+  }
 }
 
 export function resolveWorkspacePath(corpusPath: string, workspaceName?: string): string {
@@ -29,6 +43,7 @@ export function resolveWorkspacePath(corpusPath: string, workspaceName?: string)
   const baseName = workspaceName?.trim() || `${corpusName}-spinosa`
 
   let workspacePath = path.join(parentDir, baseName)
+  if (resumableWorkspace(workspacePath, resolvedCorpus)) return workspacePath
   let n = 2
   while (existsSync(workspacePath)) {
     workspacePath = path.join(parentDir, `${baseName}-${n}`)
@@ -38,7 +53,7 @@ export function resolveWorkspacePath(corpusPath: string, workspaceName?: string)
   return workspacePath
 }
 
-function reserveWorkspacePath(corpusPath: string, workspaceName?: string): string {
+function reserveWorkspacePath(corpusPath: string, workspaceName?: string): { path: string; resumed: boolean } {
   const resolvedCorpus = path.resolve(corpusPath)
   const corpusName = path.basename(resolvedCorpus)
   const parentDir = path.dirname(resolvedCorpus)
@@ -48,9 +63,10 @@ function reserveWorkspacePath(corpusPath: string, workspaceName?: string): strin
   while (true) {
     const suffix = n === 1 ? "" : `-${n}`
     const candidate = path.join(parentDir, `${baseName}${suffix}`)
+    if (resumableWorkspace(candidate, resolvedCorpus)) return { path: candidate, resumed: true }
     try {
       mkdirSync(candidate)
-      return candidate
+      return { path: candidate, resumed: false }
     } catch (error) {
       if (error && typeof error === "object" && "code" in error && error.code === "EEXIST") {
         n++
@@ -65,12 +81,11 @@ function today(): string {
   return new Date().toISOString().slice(0, 10)
 }
 
-function frameworkVersion(frameworkRoot: string): string {
-  const versionPath = path.join(frameworkRoot, "metadata", "version")
-  if (existsSync(versionPath)) {
-    return readFileSync(versionPath, "utf-8").trim()
-  }
-  return "dev"
+function materializeWorkspaceConfig(workspacePath: string): void {
+  const hermesConfig = path.join(workspacePath, ".hermes", "workspace.config.yaml")
+  if (!existsSync(hermesConfig)) return
+  const content = readFileSync(hermesConfig, "utf-8")
+  writeFileSync(hermesConfig, content.replaceAll("{{SPINOSA_WORKSPACE}}", workspacePath), "utf-8")
 }
 
 export async function createWorkspace(options: CreateWorkspaceOptions): Promise<CreateWorkspaceResult> {
@@ -80,12 +95,13 @@ export async function createWorkspace(options: CreateWorkspaceOptions): Promise<
 
   const resolvedCorpus = path.resolve(corpusPath)
   const corpusName = path.basename(resolvedCorpus)
-  const workspacePath = reserveWorkspacePath(corpusPath, workspaceName)
+  const reservation = reserveWorkspacePath(corpusPath, workspaceName)
+  const workspacePath = reservation.path
 
   const projectName = workspaceName?.trim() || corpusName
 
   try {
-    progress("Creating workspace directory...")
+    progress(reservation.resumed ? "Resuming interrupted workspace..." : "Creating workspace directory...")
     mkdirSync(path.join(workspacePath, ".spinosa"), { recursive: true })
 
     // ── Step 1: Copy workspace-template/ → workspace root ───────────────
@@ -94,10 +110,13 @@ export async function createWorkspace(options: CreateWorkspaceOptions): Promise<
       rmSync(workspacePath, { recursive: true, force: true })
       return { workspacePath, projectName, success: false }
     }
-    progress("Copying workspace template...")
-    copyDirContents(srcTemplate, workspacePath)
+    if (!reservation.resumed) {
+      progress("Copying workspace template...")
+      copyDirContents(srcTemplate, workspacePath)
+    }
 
     cleanMacMetadata(workspacePath)
+    materializeWorkspaceConfig(workspacePath)
 
     // ── Step 3: Create user-state directories (with .gitkeep) ──────────
     progress("Creating user-state directories...")
@@ -107,18 +126,20 @@ export async function createWorkspace(options: CreateWorkspaceOptions): Promise<
     }
 
     // ── Step 4: Write workspace metadata ───────────────────────────────
-    const sourceFrameworkVersion = frameworkVersion(frameworkRoot)
+    const sourceFrameworkVersion = readFrameworkVersionFromRoot(frameworkRoot)
     progress("Writing workspace metadata...")
-    const markerLines = [
-      `workspace_version: 1`,
-      `framework_version: ${sourceFrameworkVersion}`,
-      `created: ${today()}`,
-      `project_name: ${projectName}`,
-      `source_location: ${resolvedCorpus}`,
-      `setup_status: not_started`,
-      "",
-    ]
-    writeFileSync(path.join(workspacePath, ".spinosa", "workspace"), markerLines.join("\n"), "utf-8")
+    if (!reservation.resumed) {
+      const markerLines = [
+        `workspace_version: 1`,
+        `framework_version: ${sourceFrameworkVersion}`,
+        `created: ${today()}`,
+        `project_name: ${projectName}`,
+        `source_location: ${resolvedCorpus}`,
+        `setup_status: not_started`,
+        "",
+      ]
+      writeFileSync(path.join(workspacePath, ".spinosa", "workspace"), markerLines.join("\n"), "utf-8")
+    }
 
     // ── Step 5: Register workspace ─────────────────────────────────────
     progress("Registering in global registry...")
@@ -131,9 +152,9 @@ export async function createWorkspace(options: CreateWorkspaceOptions): Promise<
       await writeWorkspaceStatus(workspacePath, "cli_started")
     }
   } catch (error) {
-    rmSync(workspacePath, { recursive: true, force: true })
+    if (!reservation.resumed) rmSync(workspacePath, { recursive: true, force: true })
     throw error
   }
 
-  return { workspacePath, projectName, success: true }
+  return { workspacePath, projectName, success: true, resumed: reservation.resumed }
 }

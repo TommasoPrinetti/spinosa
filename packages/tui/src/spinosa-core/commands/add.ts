@@ -43,8 +43,10 @@ export interface AddFilesResult {
   failed: number
   mdConverted: number
   mdSkipped: number
+  mdFailed: number
   ocrConverted: number
   ocrSkipped: number
+  ocrFailed: number
 }
 
 export async function addFiles(options: AddFilesOptions): Promise<AddFilesResult> {
@@ -100,20 +102,25 @@ async function addFilesFromDir(
     },
   })
 
-  const totalTargeted = result.copied + result.skipped + result.failed + result.mdConverted + result.mdSkipped + result.ocrConverted + result.ocrSkipped
+  const totalTargeted = result.copied + result.skipped + result.failed
+    + result.mdConverted + result.mdSkipped + result.mdFailed
+    + result.ocrConverted + result.ocrSkipped + result.ocrFailed
+  const failed = result.failed + result.mdFailed + result.ocrFailed
 
   onProgress?.("Import complete.")
 
   return {
-    success: result.failed === 0 || totalTargeted > result.failed,
+    success: totalTargeted > 0 && failed === 0,
     totalTargeted,
     copied: result.copied,
     skipped: result.skipped,
     failed: result.failed,
     mdConverted: result.mdConverted,
     mdSkipped: result.mdSkipped,
+    mdFailed: result.mdFailed,
     ocrConverted: result.ocrConverted,
     ocrSkipped: result.ocrSkipped,
+    ocrFailed: result.ocrFailed,
   }
 }
 
@@ -134,8 +141,10 @@ async function addSingleFile(
       failed: 1,
       mdConverted: 0,
       mdSkipped: 0,
+      mdFailed: 0,
       ocrConverted: 0,
       ocrSkipped: 0,
+      ocrFailed: 0,
     }
   }
 
@@ -148,8 +157,10 @@ async function addSingleFile(
       failed: 1,
       mdConverted: 0,
       mdSkipped: 0,
+      mdFailed: 0,
       ocrConverted: 0,
       ocrSkipped: 0,
+      ocrFailed: 0,
     }
   }
 
@@ -161,8 +172,10 @@ async function addSingleFile(
   let failed = 0
   let mdConverted = 0
   let mdSkipped = 0
+  let mdFailed = 0
   let ocrConverted = 0
   let ocrSkipped = 0
+  let ocrFailed = 0
 
   switch (klass) {
     case "markdown":
@@ -215,11 +228,12 @@ async function addSingleFile(
         const converter = new MarkItDown()
         const result = await converter.convert(srcFile)
         const text = result?.markdown ?? ""
+        if (!text.trim()) throw new Error("MarkItDown returned no content")
         writeFileSync(destFile, text, "utf-8")
         mdConverted = 1
         injectColdFrontmatter(destFile)
       } catch {
-        mdSkipped = 1
+        mdFailed = 1
       }
       break
     }
@@ -247,7 +261,7 @@ async function addSingleFile(
         ocrConverted = 1
         injectColdFrontmatter(destFile)
       } else {
-        ocrSkipped = 1
+        ocrFailed = 1
       }
 
       break
@@ -280,14 +294,16 @@ async function addSingleFile(
   onProgress?.("Single file import complete.")
 
   return {
-    success: failed === 0,
+    success: failed + mdFailed + ocrFailed === 0,
     totalTargeted,
     copied,
     skipped,
     failed,
     mdConverted,
     mdSkipped,
+    mdFailed,
     ocrConverted,
     ocrSkipped,
+    ocrFailed,
   }
 }

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import path from "node:path"
 import { tmpdir } from "../fixture/fixture"
+import { verifyInstallerChecksum } from "../../src/spinosa-core/commands/upgrade"
 
 const repoRoot = path.resolve(import.meta.dir, "../../../..")
 
@@ -36,14 +37,46 @@ describe("install and release flow", () => {
     expect(output).not.toContain("spinosa-framework-")
   })
 
-  test("release workflow publishes channel asset as install.sh", async () => {
-    const workflow = await Bun.file(path.join(repoRoot, ".github", "workflows", "release.yml")).text()
+  test("committed installer version matches package version", async () => {
+    const pkg = await Bun.file(path.join(repoRoot, "package.json")).json() as { version: string }
+    const installer = await Bun.file(path.join(repoRoot, "install.sh")).text()
+    expect(installer).toContain(`PINNED_VERSION="${pkg.version}"`)
+  })
 
-    expect(workflow).toContain("workspace-template/.spinosa/workspace-files.tsv")
-    expect(workflow).toContain("CHANNEL_DIST=\"${DIST}/${CHANNEL}\"")
-    expect(workflow).toContain("\"${CHANNEL_DIST}/install.sh\"")
-    expect(workflow).not.toContain("framework/bin")
-    expect(workflow).not.toContain("spinosa-framework-")
-    expect(workflow).not.toContain("package-release.sh")
+  test("local release script publishes versioned and rolling channel assets", async () => {
+    const releaseScript = await Bun.file(path.join(repoRoot, "script", "release.sh")).text()
+    expect(releaseScript).toContain("CHANNEL_DIST=\"dist/${CHANNEL}\"")
+    expect(releaseScript).toContain("\"${CHANNEL_DIST}/install.sh\"")
+    expect(releaseScript).toContain("\"${CHANNEL_DIST}/checksums.txt\"")
+    expect(releaseScript).toContain("shasum -a 256 install.sh")
+  })
+
+  test("installer uses one global lock and stages before replacing a version", async () => {
+    const installer = await Bun.file(path.join(repoRoot, "install.sh")).text()
+    expect(installer).toContain('versions/.install.lock')
+    expect(installer).not.toContain('versions/.lock.${$}-${VERSION}')
+    expect(installer.indexOf('install_bun_dependencies "$fw_root"')).toBeLessThan(installer.indexOf('mv "$INSTALL_STAGE_DIR" "$version_dir"'))
+    expect(installer).toContain('mv "${INSTALL_BACKUP_DIR}" "${SPINOSA_HOME}/versions/${VERSION}"')
+  })
+
+  test("uninstaller rejects a non-Spinosa home", async () => {
+    await using tmp = await tmpdir()
+    const sentinel = path.join(tmp.path, "keep.txt")
+    await Bun.write(sentinel, "keep\n")
+    const result = Bun.spawnSync({
+      cmd: ["bash", path.join(repoRoot, "workspace-template", ".bin", "spinosa"), "uninstall", "--yes"],
+      cwd: repoRoot,
+      env: { ...process.env, SPINOSA_HOME: tmp.path, NO_COLOR: "1" },
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    expect(result.exitCode).toBe(1)
+    expect(await Bun.file(sentinel).text()).toBe("keep\n")
+  })
+
+  test("rejects installer checksum mismatch", () => {
+    const installer = "#!/bin/bash\necho ok\n"
+    expect(verifyInstallerChecksum(installer, `${Bun.CryptoHasher.hash("sha256", installer, "hex")}  install.sh\n`)).toBe(true)
+    expect(verifyInstallerChecksum(`${installer}# changed\n`, `${Bun.CryptoHasher.hash("sha256", installer, "hex")}  install.sh\n`)).toBe(false)
   })
 })

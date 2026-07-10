@@ -1,29 +1,40 @@
-import { appendFileSync, mkdirSync } from "node:fs"
+import { appendFileSync, existsSync, mkdirSync, renameSync, rmSync, statSync } from "node:fs"
 import { homedir } from "node:os"
 import path from "node:path"
 
-const SPINOSA_HOME = process.env.SPINOSA_HOME ?? path.join(homedir(), ".spinosa")
-const LOG_FILE = path.join(SPINOSA_HOME, "logs", "spinosa.log")
+const MAX_LOG_BYTES = 5 * 1024 * 1024
 
-let initialized = false
+function logFile(): string {
+  const home = process.env.SPINOSA_HOME ?? path.join(homedir(), ".spinosa")
+  const file = path.join(home, "logs", "spinosa.log")
+  mkdirSync(path.dirname(file), { recursive: true })
+  return file
+}
 
-function ensureLogDir(): void {
-  if (initialized) return
-  try {
-    mkdirSync(path.dirname(LOG_FILE), { recursive: true })
-  } catch (e) { console.error("spinosa: failed to create log dir", e) }
-  initialized = true
+function rotateLog(file: string): void {
+  if (!existsSync(file) || statSync(file).size < MAX_LOG_BYTES) return
+  const previous = `${file}.1`
+  rmSync(previous, { force: true })
+  renameSync(file, previous)
 }
 
 function isoNow(): string {
   return new Date().toISOString().replace("Z", "Z")
 }
 
+function sanitizeLogMessage(message: string): string {
+  return message
+    .replaceAll(homedir(), "~")
+    .replace(/\b(workspacePath|sourcePath|corpusPath|frameworkRoot)=([^\s]+)/g, (_match, key: string, value: string) => `${key}=${path.basename(value)}`)
+}
+
 export function spinosaLog(level: "INFO" | "WARN" | "ERROR", component: string, message: string): void {
   try {
-    ensureLogDir()
-    const line = `${isoNow()} level=${level} component=${component} ${message}\n`
-    appendFileSync(LOG_FILE, line)
+    const file = logFile()
+    rotateLog(file)
+    const safeMessage = sanitizeLogMessage(message)
+    const line = `${isoNow()} level=${level} component=${component} ${safeMessage}\n`
+    appendFileSync(file, line)
   } catch (e) { console.error("spinosa: failed to write log", e) }
 }
 

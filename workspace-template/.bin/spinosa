@@ -24,13 +24,14 @@ fi
 
 # 3. Check SPINOSA_HOME/versions/ for installed framework
 if [[ -z "$RESOLVED_ROOT" && -d "${SPINOSA_HOME}/versions" ]]; then
-  for v in $(ls -1 "${SPINOSA_HOME}/versions" 2>/dev/null | grep -E '^[0-9]' | sort -V -r); do
-    candidate3="${SPINOSA_HOME}/versions/${v}"
+  while IFS= read -r candidate3; do
+    v="$(basename "$candidate3")"
+    [[ "$v" =~ ^[0-9] ]] || continue
     if [[ -f "${candidate3}/workspace-template/.spinosa/workspace-files.tsv" ]]; then
       RESOLVED_ROOT="$candidate3"
       break
     fi
-  done
+  done < <(find "${SPINOSA_HOME}/versions" -mindepth 1 -maxdepth 1 -type d -print 2>/dev/null | sort -V -r)
 fi
 
 # Find bun — bundled install first, then system
@@ -44,25 +45,16 @@ if [[ -z "$BUN" ]] && command -v bun >/dev/null 2>&1; then
 fi
 
 
-# Handle upgrade — route to Spinosa framework upgrade, not OpenCode's own upgrade
-if [[ "${1:-}" == "upgrade" ]]; then
-  CHANNEL="beta"
-  # Check for --channel flag
-  if [[ "${2:-}" == "--channel" && -n "${3:-}" ]]; then
-    CHANNEL="$3"
-  fi
-  echo "  Upgrading Spinosa (${CHANNEL} channel)..."
-  # Use raw git URL to bypass GitHub release asset CDN cache
-  bash <(curl -fsSL "https://github.com/TommasoPrinetti/spinosa/raw/${CHANNEL}/install.sh") --upgrade --yes 2>&1
-  exit $?
-fi
-
 # Handle uninstall — removes framework versions, keeps metadata + workspace registry
 if [[ "${1:-}" == "uninstall" ]]; then
-  R=$'\033[31m' G=$'\033[32m' Y=$'\033[33m' DIM=$'\033[2m' BOLD=$'\033[1m' RESET=$'\033[0m'
+  if [[ "${2:-}" == "--help" || "${2:-}" == "-h" ]]; then
+    echo "Usage: spinosa uninstall [--yes]"
+    echo "Removes Spinosa runtime files while preserving workspace folders and metadata registry."
+    exit 0
+  fi
+  G=$'\033[32m' Y=$'\033[33m' DIM=$'\033[2m' BOLD=$'\033[1m' RESET=$'\033[0m'
   ok()   { printf '  %s %s\n' "${G}✦${RESET}" "$1"; }
   info() { printf '  %s %s\n' "${DIM}→${RESET}" "$1"; }
-  warn() { printf '  %s %s\n' "${Y}⚠${RESET}" "$1" >&2; }
   note() { printf '  %s↳%s %s\n' "${DIM}" "${RESET}" "$1"; }
   divider() { printf '%s\n' "${DIM}$(printf '%.0s─' {1..78})${RESET}"; }
 
@@ -141,13 +133,29 @@ if [[ "${1:-}" == "uninstall" ]]; then
     fi
   fi
 
+  case "$SPINOSA_HOME" in
+    ""|/|.|..|"$HOME"|"$HOME"/)
+      echo "Error: refusing unsafe SPINOSA_HOME for uninstall: ${SPINOSA_HOME:-<empty>}" >&2
+      exit 1
+      ;;
+    /*) ;;
+    *)
+      echo "Error: SPINOSA_HOME must be an absolute path for uninstall." >&2
+      exit 1
+      ;;
+  esac
+  if [[ ! -d "${SPINOSA_HOME}/metadata" && ! -d "${SPINOSA_HOME}/versions" ]]; then
+    echo "Error: ${SPINOSA_HOME} does not look like a Spinosa installation." >&2
+    exit 1
+  fi
+
   printf '  %s Removing framework...\n' "${G}✦${RESET}"
   rm -rf \
-    "${SPINOSA_HOME}/versions" \
-    "${SPINOSA_HOME}/bin" \
-    "${SPINOSA_HOME}/lib" \
-    "${SPINOSA_HOME}/logs" \
-    "${SPINOSA_HOME}/env.sh"
+    "${SPINOSA_HOME:?}/versions" \
+    "${SPINOSA_HOME:?}/bin" \
+    "${SPINOSA_HOME:?}/lib" \
+    "${SPINOSA_HOME:?}/logs" \
+    "${SPINOSA_HOME:?}/env.sh"
 
   divider
   printf '\n'
@@ -157,6 +165,28 @@ if [[ "${1:-}" == "uninstall" ]]; then
   printf '\n'
   exit 0
 fi
+
+# Spinosa-owned non-interactive commands. `new`/`create` without a source keep
+# the interactive dashboard behavior instead of entering the CLI dispatcher.
+case "${1:-}" in
+  help|--help|-h|version|--version|add|update|doctor|upgrade)
+    if [[ -z "$RESOLVED_ROOT" || -z "$BUN" ]]; then
+      echo "Error: Spinosa runtime not found. Reinstall Spinosa." >&2
+      exit 1
+    fi
+    exec "$BUN" run "${RESOLVED_ROOT}/packages/tui/src/spinosa-cli.ts" "$@"
+    ;;
+  new|create)
+    if [[ $# -gt 1 ]]; then
+      if [[ -z "$RESOLVED_ROOT" || -z "$BUN" ]]; then
+        echo "Error: Spinosa runtime not found. Reinstall Spinosa." >&2
+        exit 1
+      fi
+      exec "$BUN" run "${RESOLVED_ROOT}/packages/tui/src/spinosa-cli.ts" "$@"
+    fi
+    set --
+    ;;
+esac
 
 # Launch TUI from local packages/opencode
 if [[ -d "${RESOLVED_ROOT}/packages/opencode" && -n "$BUN" ]]; then

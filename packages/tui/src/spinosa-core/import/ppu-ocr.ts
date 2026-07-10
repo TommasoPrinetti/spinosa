@@ -1,10 +1,10 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import * as path from "node:path"
 import type { PaddleOcrService, PaddleOcrResult } from "ppu-paddle-ocr"
 import { fileExt } from "../constants"
 import { isSpinosaCancellationError, throwIfSpinosaCancelled } from "./cancellation"
 import { injectColdFrontmatter } from "./frontmatter"
-import { pdfPageCount, pdfRenderPageToPng } from "../extension/pdf-js"
+import { pdfRenderDocumentPageToPng, withPdfDocument } from "../extension/pdf-js"
 
 export interface PpuOcrFile {
   src: string
@@ -61,6 +61,7 @@ function writeMarkdown(destFile: string, title: string, body: string, sourceRel:
 
 function writeSplitPages(destFile: string, title: string, sourceRel: string, pages: Map<number, string>): void {
   const pageDir = pageDirFor(destFile)
+  if (existsSync(pageDir)) rmSync(pageDir, { recursive: true, force: true })
   mkdirSync(pageDir, { recursive: true })
   const pageNumbers = [...pages.keys()].sort((a, b) => a - b)
   const zeroBased = pageNumbers[0] === 0
@@ -288,17 +289,19 @@ async function ocrPdf(
   onProgress?: (page: number, total: number) => void,
   shouldAbort?: () => boolean,
 ): Promise<boolean> {
-  const pages = new Map<number, string>()
-  const totalPages = await pdfPageCount(file.src)
-  for (let page = 1; page <= totalPages; page++) {
-    throwIfSpinosaCancelled(shouldAbort)
-    const pngBuffer = await pdfRenderPageToPng(file.src, page, 180)
-    throwIfSpinosaCancelled(shouldAbort)
-    const buffer = pngBuffer.buffer.slice(pngBuffer.byteOffset, pngBuffer.byteOffset + pngBuffer.byteLength) as ArrayBuffer
-    const result = await service.recognize(buffer) as PaddleOcrResult
-    pages.set(page, result.text)
-    onProgress?.(page, totalPages)
-  }
+  const pages = await withPdfDocument(file.src, async (doc) => {
+    const output = new Map<number, string>()
+    for (let page = 1; page <= doc.numPages; page++) {
+      throwIfSpinosaCancelled(shouldAbort)
+      const pngBuffer = await pdfRenderDocumentPageToPng(doc, page, 180)
+      throwIfSpinosaCancelled(shouldAbort)
+      const buffer = pngBuffer.buffer.slice(pngBuffer.byteOffset, pngBuffer.byteOffset + pngBuffer.byteLength) as ArrayBuffer
+      const result = await service.recognize(buffer) as PaddleOcrResult
+      output.set(page, result.text)
+      onProgress?.(page, doc.numPages)
+    }
+    return output
+  })
   if (pages.size === 0) throw new Error("PDF rendered no pages")
   writeSplitPages(file.dest, titleFromRel(file.rel), file.rel, pages)
   return true

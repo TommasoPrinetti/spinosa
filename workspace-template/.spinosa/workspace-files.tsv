@@ -9,6 +9,7 @@ startup-prompt.md	framework	replace_if_unmodified
 .hermes/	framework	replace_if_unmodified
 .spinosa/memory/	user_state	never_replace
 .spinosa/archive/	user_state	never_replace
+.spinosa/archive/.gitkeep	user_state	never_replace
 .spinosa/memory/AGENTS.md	framework	replace_if_unmodified
 .spinosa/memory/orchestrator-notes.md	user_state	never_replace
 .spinosa/memory/.gitkeep	framework	replace_if_unmodified

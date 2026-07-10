@@ -48,7 +48,7 @@ export function buildLaunchCommand(root: string, cli: string, prompt: string): s
     case "codex_app":
       return `codex app ${qroot}`
     case "opencode":
-      return `npx @spinosa/tui --prompt "${qprompt}" ${qroot}`
+      return `spinosa-tui --prompt "${qprompt}" ${qroot}`
     case "opencode_desktop":
       return `opencode ${qroot}`
     case "gemini":

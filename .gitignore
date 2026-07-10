@@ -1,5 +1,10 @@
-# Dependencies
+ # Dependencies
 node_modules/
+__pycache__/
+*.pyc
+
+# Tokensave
+.tokensave/
 
 # Environment
 .env
@@ -53,4 +58,3 @@ framework/agent_reports/*.md
 
 # Bundled vendor binaries (populated by package-release.sh)
 framework/bin/lib/vendor/
-

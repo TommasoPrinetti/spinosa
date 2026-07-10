@@ -32,7 +32,7 @@ export async function resolveSpinosaEntryRoute(input: {
   if (input.kvActivePath && isSpinosaWorkspace(input.kvActivePath)) {
     const meta = await readWorkspaceMeta(input.kvActivePath)
     if (meta) {
-      if (meta.setupStatus === "cli_started") return { type: "workspace-picker" }
+      if (meta.setupStatus === "cli_started" || meta.setupStatus === "importing") return { type: "workspace-picker" }
       return routeForSetupStatus(meta.setupStatus)
     }
   }
@@ -40,7 +40,7 @@ export async function resolveSpinosaEntryRoute(input: {
   if (isSpinosaWorkspace(input.cwd)) {
     const meta = await readWorkspaceMeta(input.cwd)
     if (meta) {
-      if (meta.setupStatus === "cli_started") return { type: "workspace-picker" }
+      if (meta.setupStatus === "cli_started" || meta.setupStatus === "importing") return { type: "workspace-picker" }
       return routeForSetupStatus(meta.setupStatus)
     }
   }
