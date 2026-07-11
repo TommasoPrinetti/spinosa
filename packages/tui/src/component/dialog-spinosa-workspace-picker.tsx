@@ -202,21 +202,21 @@ function wsPathForLog(p: string) { const s = p.split("/"); return s[s.length-2]+
           <text fg={theme.textMuted}>← Back</text>
         </box>
         <text fg={theme.text}>
-          <span style={{ bold: true }}>Select workspace</span>
+          <span style={{ bold: true }}>Choose a workspace</span>
         </text>
       </box>
       <box height={1} />
 
       {/* ── loading ── */}
       <Show when={workspaces.loading}>
-        <text fg={theme.textMuted}>Loading workspaces…</text>
+        <text fg={theme.textMuted}>Loading saved workspaces…</text>
       </Show>
 
       {/* ── error ── */}
       <Show when={workspaceError()}>
         {(message) => (
           <box paddingLeft={1} paddingRight={1} paddingTop={1} paddingBottom={1}>
-            <text fg={theme.error}>Failed to load registered workspaces: {message()}</text>
+            <text fg={theme.error}>Couldn’t load workspaces: {message()}</text>
           </box>
         )}
       </Show>
@@ -300,7 +300,7 @@ function wsPathForLog(p: string) { const s = p.split("/"); return s[s.length-2]+
       {/* ── empty ── */}
       <Show when={!workspaces.loading && !workspaceError() && sorted().length === 0}>
         <box paddingLeft={1} paddingRight={1} paddingTop={1} paddingBottom={1}>
-          <text fg={theme.textMuted}>No registered workspaces found.</text>
+          <text fg={theme.textMuted}>No saved workspaces yet. Create one to begin.</text>
         </box>
       </Show>
 
@@ -322,7 +322,7 @@ function wsPathForLog(p: string) { const s = p.split("/"); return s[s.length-2]+
           <span style={{ bold: selected() === sorted().length }}>+ New workspace</span>
         </text>
         <text fg={buttonText(theme, selected() === sorted().length, theme.textMuted)}>
-          Create a new Spinosa workspace from a source folder
+          Import source folders into a new workspace
         </text>
       </box>
     </box>

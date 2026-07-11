@@ -74,7 +74,7 @@ function workspaceCategoryLabel(status: SpinosaSetupStatus) {
     case "workspace_started":
       return "ready"
     case "cli_started":
-      return "index"
+      return "startup needed"
     case "not_started":
       return "setup"
     case "importing":
@@ -388,7 +388,7 @@ export function WorkspacePicker() {
   >(() => [
     {
       id: "update-all",
-      label: updating() === MANAGER_ALL_ID ? updateLabel() || "Updating…" : "Update all outdated",
+      label: updating() === MANAGER_ALL_ID ? updateLabel() || "Updating…" : "Update all workspace frameworks",
       disabled: outdatedManagerCount() === 0 || Boolean(updating()) || Boolean(deleting()),
       run: () => void updateAllWorkspaces(),
     },
@@ -408,8 +408,8 @@ export function WorkspacePicker() {
         updating() && updating() !== MANAGER_ALL_ID
           ? selectedManagerRow()?.path === updating()
             ? updateLabel() || "Updating…"
-            : "Update selected"
-          : "Update selected",
+            : "Update workspace framework"
+          : "Update workspace framework",
       disabled: !selectedManagerRow() || !selectedManagerRowNeedsUpdate() || Boolean(updating()) || Boolean(deleting()),
       run: () => {
         const row = selectedManagerRow()
@@ -422,7 +422,7 @@ export function WorkspacePicker() {
       label:
         deleting() && selectedManagerRow()?.path === deleting()
           ? "Deleting…"
-          : "Delete selected",
+          : "Remove selected registration",
       disabled: !selectedManagerRow() || Boolean(updating()) || Boolean(deleting()),
       run: () => {
         const row = selectedManagerRow()
@@ -446,22 +446,22 @@ export function WorkspacePicker() {
   const homeOptions = (): HomeOption[] => [
     {
       id: "new",
-      title: "New workspace",
-      description: "Create a new Spinosa workspace from a source folder",
+      title: "Create workspace",
+      description: "Import source folders into a new workspace",
       hint: "1",
       run: () => navigate({ type: "onboarding" }),
     },
     {
       id: "select",
-      title: "Select workspace",
-      description: "Choose an existing workspace to work on",
+      title: "Open workspace",
+      description: "Choose a saved workspace to continue",
       hint: "2",
       run: () => goStep("select"),
     },
     {
       id: "manager",
-      title: "Workspace manager",
-      description: "View, update, or delete registered workspaces",
+      title: "Manage workspaces",
+      description: "Inspect, update, or remove saved workspaces",
       hint: "3",
       run: () => goStep("manager"),
     },
@@ -703,7 +703,7 @@ export function WorkspacePicker() {
               <text fg={theme.text}>
                 <span style={{ bold: true }}>{startupName()}</span>
               </text>
-              <text fg={theme.textMuted}>This workspace hasn't completed startup indexing.</text>
+              <text fg={theme.textMuted}>Startup indexing has not run for this workspace yet.</text>
               <box height={1} />
               <box
                 paddingLeft={2}
@@ -717,10 +717,10 @@ export function WorkspacePicker() {
                 onMouseDown={() => void launchStartupInChat()}
               >
                 <text fg={buttonText(theme, startupSelected() === 0, theme.primary)}>
-                  <span style={{ bold: startupSelected() === 0 }}>Launch startup indexing</span>
+                  <span style={{ bold: startupSelected() === 0 }}>Open setup brief in Chat</span>
                 </text>
                 <text fg={buttonText(theme, startupSelected() === 0, theme.textMuted)}>
-                  Load the startup prompt into Chat. Press Enter to run it, or edit it first.
+                  Review or edit the setup brief, then press Enter to run it.
                 </text>
               </box>
               <box
@@ -735,9 +735,9 @@ export function WorkspacePicker() {
                 onMouseDown={() => void openChatDirectly()}
               >
                 <text fg={buttonText(theme, startupSelected() === 1, theme.text)}>
-                  <span style={{ bold: startupSelected() === 1 }}>Open chat directly</span>
+                  <span style={{ bold: startupSelected() === 1 }}>Open workspace chat</span>
                 </text>
-                <text fg={buttonText(theme, startupSelected() === 1, theme.textMuted)}>Skip startup and open the workspace</text>
+                <text fg={buttonText(theme, startupSelected() === 1, theme.textMuted)}>Skip the setup brief for now.</text>
               </box>
               <box height={1} />
               <text fg={theme.textMuted} attributes={TextAttributes.DIM}>
@@ -748,10 +748,10 @@ export function WorkspacePicker() {
 
           <Show when={!startupPath()}>
             <Show when={selectRows.loading}>
-              <text fg={theme.textMuted}>Loading registered workspaces…</text>
+              <text fg={theme.textMuted}>Loading saved workspaces…</text>
             </Show>
             <Show when={selectRowsError()}>
-              {(message) => <text fg={theme.error ?? theme.textMuted}>Failed to load registered workspaces: {message()}</text>}
+              {(message) => <text fg={theme.error ?? theme.textMuted}>Couldn’t load workspaces: {message()}</text>}
             </Show>
             <Show when={selectRows()}>
               {(rows) => (
@@ -810,7 +810,7 @@ export function WorkspacePicker() {
 
                   {/* ── table rows ── */}
                   <Show when={!selectRowsError() && rows().length === 0}>
-                    <text fg={theme.textMuted}>No registered workspaces.</text>
+                    <text fg={theme.textMuted}>No saved workspaces yet.</text>
                   </Show>
                   <For each={sortedSelectRows()}>
                     {(row, index) => {
@@ -867,10 +867,10 @@ export function WorkspacePicker() {
               onMouseOver={() => setSelected(sortedSelectRows().length)}
             >
               <text fg={buttonText(theme, selected() === sortedSelectRows().length, theme.primary)}>
-                <span style={{ bold: selected() === sortedSelectRows().length }}>+ New workspace</span>
+                <span style={{ bold: selected() === sortedSelectRows().length }}>+ Create workspace</span>
               </text>
               <text fg={buttonText(theme, selected() === sortedSelectRows().length, theme.textMuted)}>
-                Create a new Spinosa workspace from a source folder
+                Import source folders into a new workspace
               </text>
             </box>
             <box
@@ -887,10 +887,10 @@ export function WorkspacePicker() {
               onMouseOver={() => setSelected(sortedSelectRows().length + 1)}
             >
               <text fg={buttonText(theme, selected() === sortedSelectRows().length + 1, theme.text)}>
-                <span style={{ bold: selected() === sortedSelectRows().length + 1 }}>OpenCode only</span>
+                <span style={{ bold: selected() === sortedSelectRows().length + 1 }}>Use OpenCode without a workspace</span>
               </text>
               <text fg={buttonText(theme, selected() === sortedSelectRows().length + 1, theme.textMuted)}>
-                Use OpenCode without a Spinosa workspace
+                Start OpenCode without loading a Spinosa workspace
               </text>
             </box>
           </Show>
@@ -933,7 +933,7 @@ export function WorkspacePicker() {
                 flexShrink={0}
               >
                 <text fg={theme.textMuted}>
-                  {managerSummary().total} total · {managerSummary().ready} ready · {managerSummary().index} to index ·{" "}
+                  {managerSummary().total} total · {managerSummary().ready} ready · {managerSummary().index} startup needed ·{" "}
                   {managerSummary().setup} setup · {managerSummary().unknown} unknown
                 </text>
 
@@ -1005,7 +1005,7 @@ export function WorkspacePicker() {
                   </box>
 
                   <Show when={rows().length === 0}>
-                    <text fg={theme.textMuted}>No registered workspaces.</text>
+                    <text fg={theme.textMuted}>No saved workspaces yet.</text>
                   </Show>
 
                   <For each={visibleManagerRows()}>

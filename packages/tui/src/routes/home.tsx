@@ -25,7 +25,9 @@ import { readBundledFrameworkVersion, compareFrameworkVersions, isPrereleaseFram
 import { workspaceAsciiBannerText } from "../spinosa/workspace-name"
 import { upgradeFramework } from "../spinosa-core/commands/upgrade"
 import { resolveReleaseVersionForChannel, type ReleaseChannel } from "../spinosa-core/system/channels"
+import { cleanupStaleInstallDirectories, inspectSpinosaMaintenance } from "../spinosa-core/system/maintenance"
 import { buttonText } from "../util/button"
+import { DialogConfirm } from "../ui/dialog-confirm"
 
 const SHELL_PLACEHOLDER = ["ls -la", "git status", "pwd"]
 const defaultPlaceholder = {
@@ -34,12 +36,13 @@ const defaultPlaceholder = {
 }
 const spinosaPlaceholder = {
   normal: [
-    "Find source-grounded evidence for…",
-    "Compare cohorts using approved corpus sources",
-    "Surface hidden connections across the corpus",
+    "Find evidence in my sources for…",
+    "Compare groups using my imported sources",
+    "Find unexpected links across my sources",
   ],
   shell: SHELL_PLACEHOLDER,
 }
+const MAINTENANCE_CHECK_DELAY_MS = 500
 
 export function Home() {
   const pluginRuntime = usePluginRuntime()
@@ -72,8 +75,9 @@ export function Home() {
     if (wsVersion()) parts.push(`workspace v${wsVersion()}`)
     return parts.join(" · ")
   })
+  const [maintenanceChecksStarted, setMaintenanceChecksStarted] = createSignal(false)
   const [latestVersion] = createResource(
-    bundledVersion,
+    () => (maintenanceChecksStarted() ? bundledVersion() : undefined),
     async (bv: string) => {
       try {
         // Infer channel from the bundled version: prerelease → beta, otherwise → stable.
@@ -89,11 +93,23 @@ export function Home() {
     if (!bv || !lv) return false
     return compareFrameworkVersions(lv, bv) === 1
   })
+  const [maintenance, { refetch: refetchMaintenance }] = createResource(
+    maintenanceChecksStarted,
+    async (started) => (started ? inspectSpinosaMaintenance() : undefined),
+  )
+  const [maintenanceAction, setMaintenanceAction] = createSignal<"idle" | "cleaning" | "repairing">("idle")
+  const maintenanceCleanupAvailable = createMemo(() => (maintenance()?.staleInstallDirectories.length ?? 0) > 0)
+  const maintenanceRepairRequired = createMemo(() => maintenance()?.dependencyRepairRequired === true)
   const [upgradeHover, setUpgradeHover] = createSignal(false)
   const [upgradeStatus, setUpgradeStatus] = createSignal<"idle" | "upgrading" | "success" | "failed">("idle")
   const modeStack = useOpencodeModeStack()
   const keymap = useOpencodeKeymap()
   const [keyboardFocus, setKeyboardFocus] = createSignal(-1)
+
+  onMount(() => {
+    const timer = setTimeout(() => setMaintenanceChecksStarted(true), MAINTENANCE_CHECK_DELAY_MS)
+    onCleanup(() => clearTimeout(timer))
+  })
 
   onMount(() => {
     const off = keymap.intercept("key", ({ event, consume }) => {
@@ -145,7 +161,7 @@ export function Home() {
           const names = wsNeeded.map((p: string) => p.split("/").pop() || p).join(", ")
           toast.show({
             variant: "success",
-            message: `${wsNeeded.length} workspace(s) need updating: ${names}. Run 'spinosa update' to sync them.`,
+            message: `${wsNeeded.length} workspace(s) use an older Spinosa version: ${names}. Run 'spinosa update' to update them.`,
             duration: 5000,
           })
         }
@@ -163,6 +179,57 @@ export function Home() {
       toast.show({ variant: "error", message: msg })
       await new Promise((r) => setTimeout(r, 3000))
       setUpgradeStatus("idle")
+    }
+  }
+  const cleanStaleInstallerData = async () => {
+    if (maintenanceAction() !== "idle") return
+    const confirmed = await DialogConfirm.show(
+      dialog,
+      "Clean up leftover install files",
+      "Remove temporary files left by an interrupted install? Your installed Spinosa versions will stay.",
+    )
+    if (!confirmed) return
+
+    setMaintenanceAction("cleaning")
+    try {
+      const result = await cleanupStaleInstallDirectories()
+      if (result.installInProgress) {
+        toast.show({ variant: "info", message: "Cleanup skipped because a Spinosa install is in progress." })
+      } else if (result.removedDirectories.length > 0) {
+        toast.show({ variant: "success", message: "Removed stale Spinosa installer files." })
+      }
+      await refetchMaintenance()
+    } catch (error) {
+      toast.show({ variant: "error", message: error instanceof Error ? error.message : String(error) })
+    } finally {
+      setMaintenanceAction("idle")
+    }
+  }
+  const repairDependencies = async () => {
+    if (maintenanceAction() !== "idle") return
+    const confirmed = await DialogConfirm.show(
+      dialog,
+      "Reinstall Spinosa runtime",
+      "Reinstall the files Spinosa needs to run? This can take a few minutes. Restart Spinosa when it finishes.",
+    )
+    if (!confirmed) return
+
+    const bundled = bundledVersion()
+    if (!bundled) return
+    setMaintenanceAction("repairing")
+    const channel: ReleaseChannel = isPrereleaseFrameworkVersion(bundled) ? "beta" : "stable"
+    try {
+      const result = await upgradeFramework({ channel, version: bundled, reinstall: true, yes: true, suppressInstallOutput: true })
+      if (!result.success) {
+        toast.show({ variant: "error", message: "Dependency repair failed." })
+        return
+      }
+      toast.show({ variant: "success", message: "Dependencies repaired. Restart Spinosa to use the repaired runtime." })
+      await refetchMaintenance()
+    } catch (error) {
+      toast.show({ variant: "error", message: error instanceof Error ? error.message : String(error) })
+    } finally {
+      setMaintenanceAction("idle")
     }
   }
   const placeholders = createMemo(() => {
@@ -210,7 +277,7 @@ export function Home() {
         lastStartupHintKey = hintKey
         toast.show({
           variant: "info",
-          message: "Startup prompt ready - press Enter to run it, or edit it first.",
+          message: "Your setup brief is ready. Press Enter to run it, or edit it first.",
           duration: 4000,
         })
       }
@@ -274,11 +341,47 @@ export function Home() {
                   onMouseOut={() => setUpgradeHover(false)}
                 >
                   <text fg={buttonText(theme, upgradeHover() || keyboardFocus() === 0, theme.primary)}>
-                    {upgradeStatus() === "upgrading" ? "Upgrading…" : upgradeStatus() === "success" ? "Upgraded!" : upgradeStatus() === "failed" ? "Can't upgrade" : "Upgrade available"}
+                    {upgradeStatus() === "upgrading" ? "Updating…" : upgradeStatus() === "success" ? "Updated!" : upgradeStatus() === "failed" ? "Can’t update" : "Update Spinosa"}
                   </text>
                 </box>
                 <box height={1} />
               </Show>
+            </Show>
+            <Show when={maintenance()?.installInProgress}>
+              <text fg={theme.textMuted}>Maintenance checks will resume when this installation finishes.</text>
+              <box height={1} />
+            </Show>
+            <Show when={maintenanceCleanupAvailable()}>
+              <box flexDirection="row" alignItems="center" gap={1}>
+                <text fg={theme.warning}>
+                  Spinosa found {maintenance()?.staleInstallDirectories.length} leftover install file{maintenance()?.staleInstallDirectories.length === 1 ? "" : "s"}.
+                </text>
+                <box
+                  paddingX={1}
+                  backgroundColor={theme.backgroundElement}
+                  onMouseDown={() => void cleanStaleInstallerData()}
+                >
+                  <text fg={theme.primary}>{maintenanceAction() === "cleaning" ? "Cleaning…" : "Clean up"}</text>
+                </box>
+              </box>
+              <box height={1} />
+            </Show>
+            <Show when={maintenanceRepairRequired()}>
+              <box flexDirection="row" alignItems="center" gap={1}>
+                <text fg={theme.warning}>Spinosa’s runtime is incomplete or damaged.</text>
+                <box
+                  paddingX={1}
+                  backgroundColor={theme.backgroundElement}
+                  onMouseDown={() => void repairDependencies()}
+                >
+                  <text fg={theme.primary}>{maintenanceAction() === "repairing" ? "Reinstalling…" : "Reinstall runtime"}</text>
+                </box>
+              </box>
+              <box height={1} />
+            </Show>
+            <Show when={maintenance.error}>
+              <text fg={theme.textMuted}>Couldn’t check Spinosa’s health. Try again later.</text>
+              <box height={1} />
             </Show>
             <pluginRuntime.Slot name="home_logo" mode="replace">
               <Show when={workspaceBannerText()} fallback={<Logo />}>

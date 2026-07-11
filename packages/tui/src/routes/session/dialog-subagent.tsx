@@ -6,7 +6,7 @@ export function DialogSubagent(props: { sessionID: string }) {
 
   return (
     <DialogSelect
-      title="Subagent Actions"
+      title="Subagent actions"
       options={[
         {
           title: "Open",

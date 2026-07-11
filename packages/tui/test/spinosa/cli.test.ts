@@ -4,6 +4,7 @@ import path from "node:path"
 import { tmpdir } from "../fixture/fixture"
 import { parseSpinosaCliArgs, runSpinosaCli } from "../../src/spinosa-cli"
 import { readFileSync } from "node:fs"
+import { mkdir, utimes } from "node:fs/promises"
 
 const repoRoot = path.resolve(import.meta.dir, "../../../..")
 const EXPECTED_VERSION = "0.9.0-beta.6"
@@ -132,8 +133,51 @@ describe("Spinosa CLI", () => {
     expect(text).toContain("spinosa status")
     expect(text).toContain("spinosa list")
     expect(text).toContain("spinosa uninstall")
+    expect(text).toContain("spinosa startup-autoclean")
     expect(text).toContain("--json")
     expect(text).toContain("--quiet")
+  })
+
+  test("startup-autoclean removes only abandoned installer directories", async () => {
+    await using tmp = await tmpdir()
+    const originalHome = process.env.SPINOSA_HOME
+    const versions = path.join(tmp.path, "versions")
+    const stale = path.join(versions, ".0.9.0.staging.123")
+    const release = path.join(versions, "0.9.0")
+    await mkdir(path.join(stale, "node_modules"), { recursive: true })
+    await mkdir(path.join(release, "node_modules"), { recursive: true })
+    const old = new Date(Date.now() - 2 * 60 * 60 * 1000)
+    await utimes(stale, old, old)
+    process.env.SPINOSA_HOME = tmp.path
+    try {
+      const result = capture()
+      expect(await runSpinosaCli(["startup-autoclean"], result.io)).toBe(0)
+      expect(existsSync(stale)).toBe(false)
+      expect(existsSync(release)).toBe(true)
+      expect(result.output.join("\n")).toContain("Removed stale installer data")
+    } finally {
+      if (originalHome === undefined) delete process.env.SPINOSA_HOME
+      else process.env.SPINOSA_HOME = originalHome
+    }
+  })
+
+  test("startup-autoclean does not modify files while an install lock exists", async () => {
+    await using tmp = await tmpdir()
+    const originalHome = process.env.SPINOSA_HOME
+    const versions = path.join(tmp.path, "versions")
+    const stale = path.join(versions, ".0.9.0.backup.123")
+    await mkdir(stale, { recursive: true })
+    await mkdir(path.join(versions, ".install.lock"), { recursive: true })
+    process.env.SPINOSA_HOME = tmp.path
+    try {
+      const result = capture()
+      expect(await runSpinosaCli(["startup-autoclean"], result.io)).toBe(1)
+      expect(existsSync(stale)).toBe(true)
+      expect(result.errors[0]).toContain("install is in progress")
+    } finally {
+      if (originalHome === undefined) delete process.env.SPINOSA_HOME
+      else process.env.SPINOSA_HOME = originalHome
+    }
   })
 
   test("version-only mode via env", async () => {

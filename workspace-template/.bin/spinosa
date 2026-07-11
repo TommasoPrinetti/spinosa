@@ -45,7 +45,7 @@ fi
 # new/create without a source argument still launches the TUI dashboard.
 dispatch=false
 case "${1:-}" in
-  help|--help|-h|version|--version|add|update|doctor|upgrade|uninstall|status|list) dispatch=true ;;
+  help|--help|-h|version|--version|add|update|doctor|upgrade|uninstall|status|list|startup-autoclean|autoclean) dispatch=true ;;
   new|create) [[ $# -gt 1 ]] && dispatch=true ;;
 esac
 if [[ "$dispatch" == "true" ]]; then

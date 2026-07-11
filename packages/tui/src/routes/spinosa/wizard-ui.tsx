@@ -63,7 +63,7 @@ export function stripAnsi(text: string): string {
 
 export function generateScanLines(preview: NewWorkspacePreview | ImportScanPreview): string[] {
   const lines: string[] = []
-  lines.push("Scanning source folder...")
+  lines.push("Scanning source files...")
   if ("preflightRows" in preview) {
     lines.push("")
     for (const row of preview.preflightRows) {

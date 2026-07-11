@@ -123,7 +123,7 @@ test("scans and imports files from the dedicated add-files screen", async () => 
   try {
     await app.renderOnce()
     const frame = app.captureCharFrame()
-    expect(frame).toContain("Add files to workspace")
+    expect(frame).toContain("Import files into workspace")
     expect(frame).toContain("choose source folders")
     expect(frame).not.toContain("Create Spinosa workspace")
     expect(frame).not.toContain("checking document tools")
@@ -139,10 +139,10 @@ test("scans and imports files from the dedicated add-files screen", async () => 
     await new Promise((resolve) => setTimeout(resolve, 150))
     await app.renderOnce()
     const toolsFrame = app.captureCharFrame()
-    expect(toolsFrame).toContain("Start scanning")
+    expect(toolsFrame).toContain("Scan source folders")
     const toolLines = toolsFrame.split("\n")
-    const scanY = toolLines.findIndex((line) => line.includes("Start scanning"))
-    const scanX = toolLines[scanY]!.indexOf("Start scanning") + 1
+    const scanY = toolLines.findIndex((line) => line.includes("Scan source folders"))
+    const scanX = toolLines[scanY]!.indexOf("Scan source folders") + 1
     await app.mockMouse.click(scanX, scanY)
 
     await new Promise((resolve) => setTimeout(resolve, 100))

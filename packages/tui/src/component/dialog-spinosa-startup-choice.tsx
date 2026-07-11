@@ -35,14 +35,14 @@ export function DialogSpinosaStartupChoice(props: {
 
   const options = createMemo(() => [
     {
-      title: "Run startup-prompt in chat",
-      description: "Load `startup-prompt.md` into chat. Press Enter to run it, or edit it first.",
+      title: "Open setup brief in Chat",
+      description: "Review or edit the setup brief, then press Enter to run it.",
       primary: true,
       run: () => void launchStartupInChat(),
     },
     {
-      title: "Open normal chat",
-      description: "Skip startup for now and enter the workspace chat.",
+      title: "Open workspace chat",
+      description: "Skip the setup brief for now and start a regular chat.",
       primary: false,
       run: () => void openChatDirectly(),
     },
@@ -88,8 +88,7 @@ export function DialogSpinosaStartupChoice(props: {
         </text>
       </box>
       <text fg={theme.textMuted}>
-        This workspace is at the `cli_started` stage. Choose whether to resume startup indexing or enter chat
-        normally.
+        Startup indexing has not run yet. Open the setup brief to continue, or enter workspace chat without it.
       </text>
       <box height={1} />
       <For each={options()}>

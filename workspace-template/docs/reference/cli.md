@@ -104,6 +104,17 @@ Exits with code `1` if any critical issue is found (version skew, missing tools)
 
 Remove Spinosa runtime files from the system. Your workspace folders stay in place, and `~/.spinosa/metadata/` is kept so future reinstalls can reuse workspace registry and configuration metadata.
 
+### `spinosa startup-autoclean`
+
+Remove abandoned installer staging and backup directories under `~/.spinosa/versions/`, including their stale `node_modules` trees. It never removes completed releases, so workspaces that still link to an older framework remain runnable.
+
+```bash
+spinosa startup-autoclean             # remove safe stale installer data
+spinosa startup-autoclean --dry-run   # show what would be removed
+```
+
+The command exits without changing files while a Spinosa install is active. `spinosa autoclean` is an alias.
+
 ### `spinosa help`
 
 Show the help message.

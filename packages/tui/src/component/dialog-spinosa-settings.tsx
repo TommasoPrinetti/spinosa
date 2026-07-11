@@ -67,9 +67,9 @@ export function DialogSpinosaSettings() {
 
   const options = createMemo<DialogSelectOption<SettingsValue>[]>(() => [
     {
-      title: "Install updates automatically",
+      title: "Install Spinosa updates automatically",
       value: "auto-true",
-      description: "Download and apply Spinosa updates automatically.",
+      description: "Download and install updates when they become available.",
       category: "Updates",
       gutter: currentAutoUpdate() === true ? () => <text fg={theme.success}>✓</text> : undefined,
       onSelect: () => void updateAutoUpdate(true),
@@ -83,15 +83,15 @@ export function DialogSpinosaSettings() {
       onSelect: () => void updateAutoUpdate("notify"),
     },
     {
-      title: "Disable auto updates",
+      title: "Disable automatic updates",
       value: "auto-false",
-      description: "Never update automatically and suppress update automation.",
+      description: "Don’t check for or install updates automatically.",
       category: "Updates",
       gutter: currentAutoUpdate() === false ? () => <text fg={theme.success}>✓</text> : undefined,
       onSelect: () => void updateAutoUpdate(false),
     },
     {
-      title: "Reset dismissed update reminder",
+      title: "Show skipped update again",
       value: "reset-skipped",
       description: skippedVersion()
         ? `Previously skipped update v${skippedVersion()} will be shown again.`

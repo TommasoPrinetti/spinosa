@@ -202,8 +202,8 @@ export function AddFiles() {
     const checks = toolChecks()
     if (checks.length === 0) return ""
     if (checks.some((t) => t.status === "checking")) return "Checking..."
-    if (checks.some((t) => t.status === "missing")) return "Repair tools"
-    return "Start scanning"
+    if (checks.some((t) => t.status === "missing")) return "Reinstall missing tools"
+    return "Scan source folders"
   })
 
   const toolAllReady = createMemo(() => {
@@ -600,7 +600,7 @@ export function AddFiles() {
         if (mdCount > 0) {
           setStep("markitdown")
           setBusy(false)
-          await gate("Continue to MarkItDown")
+          await gate("Convert with MarkItDown")
           setBusy(true)
           if (shouldAbort()) { spinOff(); setBusy(false); return }
 
@@ -622,7 +622,7 @@ export function AddFiles() {
         if (ocrCount > 0) {
           setStep("ocr")
           setBusy(false)
-          await gate("Continue to OCR")
+          await gate("Run OCR")
           setBusy(true)
           if (shouldAbort()) { spinOff(); setBusy(false); return }
 
@@ -900,7 +900,7 @@ export function AddFiles() {
               <text fg={buttonText(theme, hoveredButton() === "back", theme.text)}>←</text>
             </box>
             <text fg={theme.text}>
-              <span style={{ bold: true }}>Add files to workspace</span>
+              <span style={{ bold: true }}>Import files into workspace</span>
             </text>
           </box>
           <text fg={theme.textMuted}>
@@ -917,7 +917,7 @@ export function AddFiles() {
             <WizardPanel theme={theme} accent>
               <text fg={theme.textMuted}>Source folders</text>
               <text fg={theme.textMuted}>
-                Add one or more folder paths below. Each is queued for import into the current workspace.
+                Add one or more source folders. Spinosa scans them, then imports the file types you choose into this workspace.
               </text>
               <text fg={theme.textMuted}>Click a path to edit · ↑↓ move between paths</text>
               <box flexDirection="column" gap={1} paddingTop={1}>
@@ -1041,7 +1041,7 @@ export function AddFiles() {
               </Show>
               <Show when={step() === "scan"}>
                 <Show when={!scanDone()}>
-                  <text fg={theme.textMuted}>Scanning source folder...</text>
+                  <text fg={theme.textMuted}>Scanning source folders...</text>
                   <Show when={logLines().length > 0}>
                     <box height={1} />
                     <LogScrollbox theme={theme} lines={logLines()} viewportHeight={dimensions().height} />
@@ -1107,7 +1107,7 @@ export function AddFiles() {
               <Show when={step() === "done"}>
                 <box gap={1}>
                   <LogoSummary theme={theme} label="Files imported." />
-                  <text fg={theme.textMuted}>Selected file types have been added to the workspace.</text>
+                  <text fg={theme.textMuted}>Import finished. Review the summary below.</text>
                   <Show when={importSummary() !== ""}>
                     <box paddingTop={1} flexDirection="column" gap={0}>
                       <text fg={theme.textMuted}>{importSummary()}</text>

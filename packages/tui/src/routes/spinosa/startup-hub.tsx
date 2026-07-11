@@ -26,7 +26,7 @@ export function StartupHub() {
 
   return (
     <CenteredColumn>
-      <Show when={!decision.loading} fallback={<text fg={theme.textMuted}>Loading workspace startup…</text>}>
+      <Show when={!decision.loading} fallback={<text fg={theme.textMuted}>Checking workspace startup status…</text>}>
         <Show when={launch()}>
           {(choice) => (
             <DialogSpinosaStartupChoice

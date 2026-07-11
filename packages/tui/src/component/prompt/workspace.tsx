@@ -94,7 +94,7 @@ export function usePromptWorkspace(sessionID?: string) {
   }
 
   function showNotice(name: string) {
-    setNotice(`Warped to ${name}`)
+    setNotice(`Moved to ${name}`)
     setTimeout(() => setNotice(undefined), 4000)
   }
 

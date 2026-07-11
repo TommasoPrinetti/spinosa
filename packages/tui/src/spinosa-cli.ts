@@ -22,6 +22,7 @@ import { createIo, emitResult, type SpinosaCliIo } from "./spinosa-cli/io"
 import { runUninstall } from "./spinosa-cli/commands/uninstall"
 import { runStatus } from "./spinosa-cli/commands/status"
 import { runList } from "./spinosa-cli/commands/list"
+import { runStartupAutoclean } from "./spinosa-cli/commands/startup-autoclean"
 
 export { parseSpinosaCliArgs }
 
@@ -39,6 +40,7 @@ function helpText(): string {
     "  spinosa doctor [--workspace path]",
     "  spinosa status [workspace]",
     "  spinosa list",
+    "  spinosa startup-autoclean [--dry-run]",
     "  spinosa version",
     "  spinosa upgrade [--channel stable|beta] [--version X.Y.Z] [--yes] [--reinstall]",
     "  spinosa uninstall [--yes]",
@@ -216,6 +218,9 @@ export async function runSpinosaCli(args: string[], io?: SpinosaCliIo): Promise<
         return await runStatus(parsed.values.get("workspace") ?? undefined, resolvedIo)
       case "list":
         return await runList(resolvedIo)
+      case "startup-autoclean":
+      case "autoclean":
+        return await runStartupAutoclean({ io: resolvedIo, dryRun: parsed.flags.has("dry-run") })
       case "version":
       case "--version":
         return runVersion(resolvedIo)

@@ -81,9 +81,9 @@ export function SpinosaPromptChips() {
     setUpdateLabel("Updating workspace…")
 
     toast.show({
-      title: "Workspace update failed",
+      title: "Couldn’t update this workspace",
       variant: "error",
-      message: "Workspace update failed",
+      message: "Nothing was changed. Check the error details and try again.",
       duration: 10000,
     })
   }
@@ -98,12 +98,12 @@ export function SpinosaPromptChips() {
           },
           {
             key: "add-files",
-            label: "Add files",
+            label: "Import sources",
             onPress: () => navigate({ type: "add-files" }),
           },
           {
             key: "change-workspace",
-            label: "Change workspace",
+            label: "Switch workspace",
             onPress: () => spinosa.showPicker(),
           },
           ...(needsWorkspaceUpdate() || busyAction() === "update" || busyAction() === "completed"
@@ -115,7 +115,7 @@ export function SpinosaPromptChips() {
                       ? "Updated workspace!"
                       : busyAction() === "update"
                         ? updateLabel()
-                        : "Update workspace",
+                        : "Update workspace files",
                   onPress: () => void runWorkspaceUpdate(),
                 },
               ]
@@ -129,7 +129,7 @@ export function SpinosaPromptChips() {
           },
           {
             key: "select-workspace",
-            label: "Select workspace",
+            label: "Choose a workspace",
             onPress: () => spinosa.showPicker(),
           },
         ] as const),
@@ -196,10 +196,10 @@ export function SpinosaPromptChips() {
       { key: "Right", desc: "Next action", group: "Home", cmd: () => moveSelection(1) },
       { key: "Enter", desc: "Run selected action", group: "Home", cmd: () => runSelectedAction() },
       { key: "n", desc: "New workspace", group: "Home", cmd: () => navigate({ type: "onboarding" }) },
-      { key: "a", desc: "Add files", group: "Home", cmd: () => navigate({ type: "add-files" }) },
-      { key: "w", desc: "Change workspace", group: "Home", cmd: () => spinosa.showPicker() },
+      { key: "a", desc: "Import sources", group: "Home", cmd: () => navigate({ type: "add-files" }) },
+      { key: "w", desc: "Switch workspace", group: "Home", cmd: () => spinosa.showPicker() },
       ...(workspaceReady() && needsWorkspaceUpdate()
-        ? [{ key: "u", desc: "Update workspace", group: "Home", cmd: () => void runWorkspaceUpdate() }]
+        ? [{ key: "u", desc: "Update workspace files", group: "Home", cmd: () => void runWorkspaceUpdate() }]
         : []),
     ],
   }))

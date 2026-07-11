@@ -216,8 +216,8 @@ export function Onboarding() {
     const checks = toolChecks()
     if (checks.length === 0) return ""
     if (checks.some((t) => t.status === "checking")) return "Checking..."
-    if (checks.some((t) => t.status === "missing")) return "Repair tools"
-    return "Start scanning"
+    if (checks.some((t) => t.status === "missing")) return "Reinstall missing tools"
+    return "Scan source folders"
   })
   const toolAllReady = createMemo(() => {
     const checks = toolChecks()
@@ -734,7 +734,7 @@ let nameInput: TextareaRenderable | undefined
       await delay(1000)
       if (classified.markitdownFiles.length > 0) {
         setBusy(false)
-        await gate("Continue to MarkItDown")
+        await gate("Convert with MarkItDown")
         setBusy(true)
         setStep("markitdown")
         setProgTotal(totalMd)
@@ -752,7 +752,7 @@ let nameInput: TextareaRenderable | undefined
 
       if (classified.ocrFiles.length > 0) {
         setBusy(false)
-        await gate("Continue to OCR")
+        await gate("Run OCR")
         setBusy(true)
         setStep("ocr")
         setProgTotal(totalOcr)
@@ -1144,9 +1144,9 @@ let nameInput: TextareaRenderable | undefined
 
           <Show when={step() === "path"}>
             <WizardPanel theme={theme} accent>
-              <text fg={theme.textMuted}>Corpus folder</text>
+              <text fg={theme.textMuted}>Source folders</text>
               <text fg={theme.textMuted}>
-                Paste the folder path. Spinosa will inspect the corpus, let you choose file types, then create a sibling `-spinosa` workspace.
+                Add one or more source folders. Spinosa scans them, lets you choose file types, then creates a workspace beside the first folder and imports the selected files.
               </text>
               <box flexDirection="column" gap={1} paddingTop={1}>
                 <For each={sourcePaths()}>
@@ -1251,7 +1251,7 @@ let nameInput: TextareaRenderable | undefined
             <WizardPanel theme={theme} accent>
               <text fg={theme.textMuted}>Workspace name</text>
               <text fg={theme.textMuted}>
-                The folder will be created as a sibling of the source with `-spinosa` appended.
+                The workspace folder is created beside the first source folder using this name.
               </text>
               <box paddingTop={1} alignItems="stretch">
                 <textarea
@@ -1312,7 +1312,7 @@ let nameInput: TextareaRenderable | undefined
               </Show>
               <Show when={step() === "scan"}>
                 <Show when={!scanDone()}>
-                  <text fg={theme.textMuted}>Scanning source folder...</text>
+                  <text fg={theme.textMuted}>Scanning source folders...</text>
                   <Show when={logLines().length > 0}>
                     <box height={1} />
                     <LogScrollbox theme={theme} lines={logLines()} viewportHeight={dimensions().height} />
@@ -1386,9 +1386,9 @@ let nameInput: TextareaRenderable | undefined
 
           <Show when={step() === "provider"}>
             <WizardPanel theme={theme}>
-              <text fg={theme.textMuted}>Preferred LLM CLI</text>
+              <text fg={theme.textMuted}>Choose how to launch startup</text>
               <text fg={theme.textMuted}>
-                Choose which tool to use for running the startup indexing prompt in this workspace.
+                Choose the tool Spinosa will use after import. Spinosa opens Chat with the setup brief ready; other tools launch with the prompt.
               </text>
                <scrollbox maxHeight={wizardScrollboxMaxHeight(dimensions().height, { min: 4, ratio: 0.5, max: 12 })}>
                 <For each={CLI_OPTIONS}>
@@ -1416,7 +1416,7 @@ let nameInput: TextareaRenderable | undefined
 
           <Show when={step() === "startup"}>
             <WizardPanel theme={theme}>
-              <text fg={theme.textMuted}>Workspace startup</text>
+              <text fg={theme.textMuted}>Launching startup</text>
               <text fg={startupError() ? theme.error : theme.text}>
                 <span style={{ bold: true }}>{startupError() ? "Startup failed" : startupMessage()}</span>
               </text>
@@ -1424,7 +1424,7 @@ let nameInput: TextareaRenderable | undefined
                 <text fg={theme.textMuted}>
                   {startupElapsedMs() >= STARTUP_PROGRESS_THRESHOLD_MS
                     ? `Elapsed ${Math.round(startupElapsedMs() / 100) / 10}s`
-                    : "Preparing your workspace handoff..."}
+                    : "Preparing the setup brief…"}
                 </text>
               </Show>
               <Show when={startupError()}>
@@ -1451,7 +1451,7 @@ let nameInput: TextareaRenderable | undefined
                 <box gap={1}>
                   <LogoSummary theme={theme} label="Workspace created." />
                   <text fg={theme.textMuted}>
-                    Spinosa workspace is ready. Open it to begin working with your corpus.
+                    Your files are imported. Open the workspace to continue with the setup brief.
                   </text>
                 </box>
               </Show>

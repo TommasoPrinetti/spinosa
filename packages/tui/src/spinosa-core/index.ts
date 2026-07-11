@@ -60,3 +60,4 @@ export * from "./commands/upgrade"
 
 // --- system
 export * from "./system/channels"
+export * from "./system/maintenance"

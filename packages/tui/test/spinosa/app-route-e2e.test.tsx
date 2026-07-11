@@ -1,7 +1,7 @@
 import { expect, mock, test } from "bun:test"
 import { createTestRenderer } from "@opentui/core/testing"
 import { Effect, Fiber } from "effect"
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs"
+import { mkdirSync, mkdtempSync, rmSync, utimesSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -9,7 +9,7 @@ import { Global } from "@opencode-ai/core/global"
 import { createTuiResolvedConfig } from "../fixture/tui-runtime"
 import { createEventSource, createFetch, directory, json } from "../fixture/tui-sdk"
 
-type SpinosaRoute = "workspace-picker" | "onboarding" | "add-files"
+type SpinosaRoute = "workspace" | "workspace-picker" | "onboarding" | "add-files"
 type TestRenderer = Awaited<ReturnType<typeof createTestRenderer>>
 
 async function renderRouteFrame(
@@ -154,16 +154,15 @@ test("Spinosa app route E2E boots and navigates key workspace flows", async () =
   const frame = await renderRouteFrame("workspace-picker")
   expect(frame).toContain("Spinosa")
   expect(frame).toContain("workspace menu")
-  expect(frame).toContain("New workspace")
-  expect(frame).toContain("Select workspace")
+  expect(frame).toContain("Create workspace")
+  expect(frame).toContain("Open workspace")
 
   const onboardingFrame = await renderRouteFrame("onboarding")
   expect(onboardingFrame).toContain("Create Spinosa workspace")
-  expect(onboardingFrame).toContain("Paste the folder path")
   expect(onboardingFrame).toContain("Paste the corpus folder path")
 
   const addFilesFrame = await renderRouteFrame("add-files")
-  expect(addFilesFrame).toContain("Add files to workspace")
+  expect(addFilesFrame).toContain("Import files into workspace")
   expect(addFilesFrame).toContain("Source folders")
   expect(addFilesFrame).toContain("Folder path 1")
 
@@ -184,14 +183,14 @@ test("Spinosa app route E2E boots and navigates key workspace flows", async () =
         setup.mockInput.pressKey("2")
         await waitForText(setup, "cli-started-demo")
         setup.mockInput.pressKey("1")
-        await waitForText(setup, "Run startup-prompt in chat")
+        await waitForText(setup, "Open setup brief in Chat")
       },
     })
 
     expect(cliStartedFrame).toContain("cli-started-demo")
-    expect(cliStartedFrame).toContain("This workspace is at the `cli_started` stage")
-    expect(cliStartedFrame).toContain("Run startup-prompt in chat")
-    expect(cliStartedFrame).toContain("Open normal chat")
+    expect(cliStartedFrame).toContain("Startup indexing has not run yet")
+    expect(cliStartedFrame).toContain("Open setup brief in Chat")
+    expect(cliStartedFrame).toContain("Open workspace chat")
   } finally {
     rmSync(cliRoot, { recursive: true, force: true })
   }
@@ -218,8 +217,8 @@ test("Spinosa app route E2E boots and navigates key workspace flows", async () =
     })
 
     expect(readyFrame).toContain("workspace v0.1.0")
-    expect(readyFrame).toContain("Change workspace")
-    expect(readyFrame).not.toContain("Launch startup indexing")
+    expect(readyFrame).toContain("Switch workspace")
+    expect(readyFrame).not.toContain("Open setup brief in Chat")
   } finally {
     rmSync(readyRoot, { recursive: true, force: true })
   }
@@ -248,5 +247,24 @@ test("Spinosa app route E2E boots and navigates key workspace flows", async () =
     expect(filteredFrame).not.toContain("stale-demo")
   } finally {
     rmSync(filteredRoot, { recursive: true, force: true })
+  }
+}, 30_000)
+
+test("homepage surfaces stale installer cleanup after it has rendered", async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "spinosa-home-maintenance-"))
+  const home = path.join(root, "home")
+  const stale = path.join(home, ".spinosa", "versions", ".0.9.0.staging.999999")
+  mkdirSync(path.join(stale, "node_modules"), { recursive: true })
+  const old = new Date(Date.now() - 2 * 60 * 60 * 1000)
+  utimesSync(stale, old, old)
+  try {
+    const frame = await renderRouteFrame("workspace", {
+      home,
+      act: (setup) => waitForText(setup, "leftover install file"),
+    })
+    expect(frame).toContain("leftover install file")
+    expect(frame).toContain("Clean up")
+  } finally {
+    rmSync(root, { recursive: true, force: true })
   }
 }, 30_000)
