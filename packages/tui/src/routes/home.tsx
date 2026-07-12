@@ -5,7 +5,6 @@ import { useSync } from "../context/sync"
 import { Toast, useToast } from "../ui/toast"
 import { useArgs } from "../context/args"
 import { useLegacyHomeRoute } from "../context/route"
-import { useExit } from "../context/exit"
 import { usePromptRef } from "../context/prompt"
 import { useLocal } from "../context/local"
 import { usePluginRuntime } from "../plugin/runtime"
@@ -20,13 +19,11 @@ import { useSpinosaWorkspace } from "../context/spinosa-workspace"
 import { useTheme } from "../context/theme"
 import { useDialog } from "../ui/dialog"
 import { DialogSpinosaWorkspacePicker } from "../component/dialog-spinosa-workspace-picker"
-import { OPENCODE_BASE_MODE, useOpencodeKeymap, useOpencodeModeStack } from "../keymap"
-import { readBundledFrameworkVersion, compareFrameworkVersions, isPrereleaseFrameworkVersion } from "../spinosa/service"
+import { readBundledFrameworkVersion, isPrereleaseFrameworkVersion } from "../spinosa/service"
 import { workspaceAsciiBannerText } from "../spinosa/workspace-name"
 import { upgradeFramework } from "../spinosa-core/commands/upgrade"
-import { resolveReleaseVersionForChannel, type ReleaseChannel } from "../spinosa-core/system/channels"
+import { type ReleaseChannel } from "../spinosa-core/system/channels"
 import { cleanupStaleInstallDirectories, inspectSpinosaMaintenance } from "../spinosa-core/system/maintenance"
-import { buttonText } from "../util/button"
 import { DialogConfirm } from "../ui/dialog-confirm"
 
 const SHELL_PLACEHOLDER = ["ls -la", "git status", "pwd"]
@@ -46,7 +43,6 @@ const MAINTENANCE_CHECK_DELAY_MS = 500
 
 export function Home() {
   const pluginRuntime = usePluginRuntime()
-  const exit = useExit()
   const sync = useSync()
   const route = useLegacyHomeRoute()
   const dialog = useDialog()
@@ -76,23 +72,6 @@ export function Home() {
     return parts.join(" · ")
   })
   const [maintenanceChecksStarted, setMaintenanceChecksStarted] = createSignal(false)
-  const [latestVersion] = createResource(
-    () => (maintenanceChecksStarted() ? bundledVersion() : undefined),
-    async (bv: string) => {
-      try {
-        // Infer channel from the bundled version: prerelease → beta, otherwise → stable.
-        // This prevents offering stable upgrades when the user runs a beta build.
-        const inferredChannel: ReleaseChannel = isPrereleaseFrameworkVersion(bv) ? "beta" : "stable"
-        return await resolveReleaseVersionForChannel(inferredChannel)
-      } catch { return undefined }
-    },
-  )
-  const upgradeAvailable = createMemo(() => {
-    const bv = bundledVersion()
-    const lv = latestVersion()
-    if (!bv || !lv) return false
-    return compareFrameworkVersions(lv, bv) === 1
-  })
   const [maintenance, { refetch: refetchMaintenance }] = createResource(
     maintenanceChecksStarted,
     async (started) => (started ? inspectSpinosaMaintenance() : undefined),
@@ -100,87 +79,13 @@ export function Home() {
   const [maintenanceAction, setMaintenanceAction] = createSignal<"idle" | "cleaning" | "repairing">("idle")
   const maintenanceCleanupAvailable = createMemo(() => (maintenance()?.staleInstallDirectories.length ?? 0) > 0)
   const maintenanceRepairRequired = createMemo(() => maintenance()?.dependencyRepairRequired === true)
-  const [upgradeHover, setUpgradeHover] = createSignal(false)
-  const [upgradeStatus, setUpgradeStatus] = createSignal<"idle" | "upgrading" | "success" | "failed">("idle")
-  const modeStack = useOpencodeModeStack()
-  const keymap = useOpencodeKeymap()
-  const [keyboardFocus, setKeyboardFocus] = createSignal(-1)
 
   onMount(() => {
     const timer = setTimeout(() => setMaintenanceChecksStarted(true), MAINTENANCE_CHECK_DELAY_MS)
     onCleanup(() => clearTimeout(timer))
   })
 
-  onMount(() => {
-    const off = keymap.intercept("key", ({ event, consume }) => {
-      if (modeStack.current() !== OPENCODE_BASE_MODE) return
-
-      // Only intercept when the upgrade button is actually focused.
-      // Otherwise let events fall through to child components (SpinosaPromptChips etc.)
-      if (keyboardFocus() === 0) {
-        if (event.name === "up" || event.name === "k") {
-          setKeyboardFocus(-1)
-          consume(); return
-        }
-        if (event.name === "down" || event.name === "j") {
-          setKeyboardFocus(-1)
-          consume(); return
-        }
-        if (event.name === "return") {
-          void doUpgrade()
-          consume(); return
-        }
-      } else if (event.name === "down" || event.name === "j") {
-        // Not focused — try to focus the upgrade button if available
-        if (upgradeAvailable()) {
-          setKeyboardFocus(0)
-          consume(); return
-        }
-        // No upgrade button — don't consume, event falls through
-      }
-    })
-    onCleanup(off)
-  })
-
   const toast = useToast()
-  const doUpgrade = async () => {
-    if (upgradeStatus() !== "idle") return
-    setUpgradeStatus("upgrading")
-    const bv = bundledVersion()
-    const channel: ReleaseChannel = bv && isPrereleaseFrameworkVersion(bv) ? "beta" : "stable"
-    try {
-      const result = await upgradeFramework({
-        channel,
-        yes: true,
-        suppressInstallOutput: true,
-      })
-      if (result.success) {
-        setUpgradeStatus("success")
-        const wsNeeded = result.workspaceUpgradesNeeded
-        if (wsNeeded.length > 0) {
-          const names = wsNeeded.map((p: string) => p.split("/").pop() || p).join(", ")
-          toast.show({
-            variant: "success",
-            message: `${wsNeeded.length} workspace(s) use an older Spinosa version: ${names}. Run 'spinosa update' to update them.`,
-            duration: 5000,
-          })
-        }
-        await new Promise((r) => setTimeout(r, 2000))
-        exit()
-      } else {
-        setUpgradeStatus("failed")
-        toast.show({ variant: "error", message: "Upgrade failed" })
-        await new Promise((r) => setTimeout(r, 3000))
-        setUpgradeStatus("idle")
-      }
-    } catch (err) {
-      setUpgradeStatus("failed")
-      const msg = err instanceof Error ? err.message : String(err)
-      toast.show({ variant: "error", message: msg })
-      await new Promise((r) => setTimeout(r, 3000))
-      setUpgradeStatus("idle")
-    }
-  }
   const cleanStaleInstallerData = async () => {
     if (maintenanceAction() !== "idle") return
     const confirmed = await DialogConfirm.show(
@@ -332,20 +237,6 @@ export function Home() {
             <Show when={versionLabel()}>
               <text fg={theme.textMuted}>{versionLabel()}</text>
               <box height={1} />
-              <Show when={upgradeAvailable()}>
-                <box
-                  paddingX={1}
-                  backgroundColor={upgradeHover() || keyboardFocus() === 0 ? theme.text : undefined}
-                  onMouseDown={doUpgrade}
-                  onMouseOver={() => upgradeStatus() === "idle" && setUpgradeHover(true)}
-                  onMouseOut={() => setUpgradeHover(false)}
-                >
-                  <text fg={buttonText(theme, upgradeHover() || keyboardFocus() === 0, theme.primary)}>
-                    {upgradeStatus() === "upgrading" ? "Updating…" : upgradeStatus() === "success" ? "Updated!" : upgradeStatus() === "failed" ? "Can’t update" : "Update Spinosa"}
-                  </text>
-                </box>
-                <box height={1} />
-              </Show>
             </Show>
             <Show when={maintenance()?.installInProgress}>
               <text fg={theme.textMuted}>Maintenance checks will resume when this installation finishes.</text>

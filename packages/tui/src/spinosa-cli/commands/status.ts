@@ -1,4 +1,3 @@
-import { existsSync } from "node:fs"
 import path from "node:path"
 import type { SpinosaCliIo } from "../io"
 import { emitResult } from "../io"
@@ -31,6 +30,11 @@ export async function runStatus(workspacePath: string | undefined, io: SpinosaCl
   for (const [name, available] of Object.entries(tools)) {
     if (!available) { allOk = false; checks.push(`${name}: missing`) }
     else checks.push(`${name}: ok`)
+  }
+
+  if (workspacePath && !isWorkspace) {
+    allOk = false
+    checks.push(`Workspace: invalid (${resolvedWorkspace})`)
   }
 
   if (meta) {

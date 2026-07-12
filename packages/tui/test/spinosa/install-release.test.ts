@@ -79,6 +79,9 @@ describe("install and release flow", () => {
     const launcher = await Bun.file(path.join(repoRoot, "workspace-template", ".bin", "spinosa")).text()
     expect(launcher).toContain('"${SCRIPT_DIR}/../versions"')
     expect(launcher).toContain("export SPINOSA_HOME")
+    expect(launcher).toContain('spinosa-cli.ts" preflight')
+    expect(launcher).toContain('[[ "$preflight_status" -eq 10 ]] && exit 0')
+    expect(launcher).toContain('launcher_command="${launcher_args[$command_index]:-}"')
   })
 
   test("rejects installer checksum mismatch", () => {

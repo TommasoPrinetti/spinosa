@@ -23,10 +23,23 @@ import { runUninstall } from "./spinosa-cli/commands/uninstall"
 import { runStatus } from "./spinosa-cli/commands/status"
 import { runList } from "./spinosa-cli/commands/list"
 import { runStartupAutoclean } from "./spinosa-cli/commands/startup-autoclean"
+import { PREFLIGHT_RESTART_EXIT_CODE, runLaunchPreflight } from "./spinosa-cli/commands/preflight"
 
 export { parseSpinosaCliArgs }
 
 export type { SpinosaCliIo, ParsedArgs }
+
+const leadingGlobalFlags = new Set(["--json", "--quiet", "--no-color"])
+
+export function splitSpinosaCliCommand(args: string[]): { command: string; rest: string[] } {
+  const globals: string[] = []
+  let index = 0
+  while (index < args.length && leadingGlobalFlags.has(args[index]!)) globals.push(args[index++]!)
+  return {
+    command: args[index] ?? "help",
+    rest: [...globals, ...args.slice(index + 1)],
+  }
+}
 
 function helpText(): string {
   return [
@@ -190,7 +203,7 @@ async function runUpgrade(parsed: ParsedArgs, io: SpinosaCliIo): Promise<number>
 }
 
 export async function runSpinosaCli(args: string[], io?: SpinosaCliIo): Promise<number> {
-  const [command = "help", ...rest] = args
+  const { command, rest } = splitSpinosaCliCommand(args)
   try {
     if (command === "help" || command === "--help" || command === "-h" || rest.includes("--help") || rest.includes("-h")) {
       const out = io ?? { out: (m: string) => process.stdout.write(`${m}\n`), error: (m: string) => process.stderr.write(`${m}\n`), format: "human" as const }
@@ -215,12 +228,14 @@ export async function runSpinosaCli(args: string[], io?: SpinosaCliIo): Promise<
       case "uninstall":
         return await runUninstall(resolvedIo, parsed.flags.has("yes"))
       case "status":
-        return await runStatus(parsed.values.get("workspace") ?? undefined, resolvedIo)
+        return await runStatus(parsed.values.get("workspace") ?? parsed.positionals[0], resolvedIo)
       case "list":
         return await runList(resolvedIo)
       case "startup-autoclean":
       case "autoclean":
         return await runStartupAutoclean({ io: resolvedIo, dryRun: parsed.flags.has("dry-run") })
+      case "preflight":
+        return await runLaunchPreflight() === "restart" ? PREFLIGHT_RESTART_EXIT_CODE : 0
       case "version":
       case "--version":
         return runVersion(resolvedIo)

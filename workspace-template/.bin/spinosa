@@ -43,10 +43,16 @@ fi
 
 # Dispatch to TS CLI for all non-interactive commands.
 # new/create without a source argument still launches the TUI dashboard.
+launcher_args=("$@")
+command_index=0
+while [[ "${launcher_args[$command_index]:-}" == "--json" || "${launcher_args[$command_index]:-}" == "--quiet" || "${launcher_args[$command_index]:-}" == "--no-color" ]]; do
+  command_index=$((command_index + 1))
+done
+launcher_command="${launcher_args[$command_index]:-}"
 dispatch=false
-case "${1:-}" in
+case "$launcher_command" in
   help|--help|-h|version|--version|add|update|doctor|upgrade|uninstall|status|list|startup-autoclean|autoclean) dispatch=true ;;
-  new|create) [[ $# -gt 1 ]] && dispatch=true ;;
+  new|create) [[ $(( $# - command_index )) -gt 1 ]] && dispatch=true ;;
 esac
 if [[ "$dispatch" == "true" ]]; then
   [[ -z "$RESOLVED_ROOT" || -z "$BUN" ]] && { echo "Error: Spinosa runtime not found. Reinstall Spinosa." >&2; exit 1; }
@@ -55,8 +61,8 @@ if [[ "$dispatch" == "true" ]]; then
 fi
 
 # Unknown command — reject instead of silently falling through to TUI
-if [[ $# -gt 0 && "${1:-}" != "new" && "${1:-}" != "create" ]]; then
-  echo "Error: Unknown Spinosa command: ${1}" >&2
+if [[ -n "$launcher_command" && "$launcher_command" != "new" && "$launcher_command" != "create" ]]; then
+  echo "Error: Unknown Spinosa command: ${launcher_command}" >&2
   echo "Run 'spinosa help' for usage." >&2
   exit 1
 fi
@@ -64,6 +70,13 @@ fi
 # No-args or new/create without source → launch TUI
 if [[ -d "${RESOLVED_ROOT}/packages/opencode" && -n "$BUN" ]]; then
   export SPINOSA_TEMPLATE_ROOT="$RESOLVED_ROOT"
+  if "$BUN" run "${RESOLVED_ROOT}/packages/tui/src/spinosa-cli.ts" preflight; then
+    :
+  else
+    preflight_status=$?
+    [[ "$preflight_status" -eq 10 ]] && exit 0
+    exit "$preflight_status"
+  fi
   exec "$BUN" run --cwd "${RESOLVED_ROOT}/packages/opencode" --conditions=browser src/index.ts "$@"
 fi
 

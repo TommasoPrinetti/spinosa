@@ -6,6 +6,19 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 **Release policy:** versions are published only with explicit maintainer approval.
 
+## [0.9.0-beta.9] — 2026-07-12
+
+### Changed
+
+- Upgrade checks now run in the CLI before the TUI starts. Successful upgrades optionally update every registered workspace, then request a fresh `spinosa` launch so the new runtime is loaded.
+- Removed upgrade networking and installer ownership from the TUI home screen.
+
+### Fixed
+
+- Global output flags now work before commands, for example `spinosa --json status`.
+- `spinosa status [workspace]` now honors positional workspace paths and rejects explicitly invalid workspaces.
+- Human CLI summaries now use the configured output channel instead of leaking directly to process stdout.
+
 ## [0.9.0-beta.8] — 2026-07-12
 
 ### Fixed

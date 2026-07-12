@@ -37,6 +37,6 @@ export function emitResult(io: SpinosaCliIo, command: string, data: Record<strin
   if (io.format === "json") {
     process.stdout.write(`${JSON.stringify({ command, ...data })}\n`)
   } else if (io.format === "human") {
-    if (summary) process.stdout.write(`${summary}\n`)
+    if (summary) io.out(summary)
   }
 }

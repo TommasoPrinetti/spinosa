@@ -2,12 +2,12 @@ import { describe, expect, test } from "bun:test"
 import { existsSync } from "node:fs"
 import path from "node:path"
 import { tmpdir } from "../fixture/fixture"
-import { parseSpinosaCliArgs, runSpinosaCli } from "../../src/spinosa-cli"
+import { parseSpinosaCliArgs, runSpinosaCli, splitSpinosaCliCommand } from "../../src/spinosa-cli"
 import { readFileSync } from "node:fs"
 import { mkdir, utimes } from "node:fs/promises"
 
 const repoRoot = path.resolve(import.meta.dir, "../../../..")
-const EXPECTED_VERSION = "0.9.0-beta.8"
+const EXPECTED_VERSION = "0.9.0-beta.9"
 
 function capture() {
   const output: string[] = []
@@ -29,6 +29,13 @@ describe("Spinosa CLI", () => {
     expect(parsed.flags.has("yes")).toBe(true)
     expect(parsed.values.get("version")).toBe("1.2.3")
     expect(parsed.values.get("channel")).toBe("beta")
+  })
+
+  test("accepts global output flags before the command", () => {
+    expect(splitSpinosaCliCommand(["--json", "--no-color", "status", "/workspace"])).toEqual({
+      command: "status",
+      rest: ["--json", "--no-color", "/workspace"],
+    })
   })
 
   test("prints repository version", async () => {
@@ -118,6 +125,19 @@ describe("Spinosa CLI", () => {
       if (originalRoot === undefined) delete process.env.SPINOSA_TEMPLATE_ROOT
       else process.env.SPINOSA_TEMPLATE_ROOT = originalRoot
     }
+  })
+
+  test("status honors a positional workspace path", async () => {
+    const workspace = path.join(repoRoot, "packages/tui/test/spinosa/fixtures/workspace-started")
+    const result = capture()
+    expect(await runSpinosaCli(["status", workspace], result.io)).toBe(1)
+    expect(result.output).toContain(`  Workspace: ${workspace}`)
+  })
+
+  test("status rejects an explicitly invalid workspace path", async () => {
+    const result = capture()
+    expect(await runSpinosaCli(["status", "/definitely/missing"], result.io)).toBe(1)
+    expect(result.output).toContain("  Workspace: invalid (/definitely/missing)")
   })
 
   test("list shows workspaces", async () => {
