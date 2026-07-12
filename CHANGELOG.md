@@ -6,6 +6,13 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 **Release policy:** versions are published only with explicit maintainer approval.
 
+## [0.9.0-beta.8] — 2026-07-12
+
+### Fixed
+
+- `spinosa upgrade` now verifies the newly installed target release instead of the still-running previous release, preventing successful upgrades from being reported as failures.
+- Maintenance checks now import the Node `Dirent` type from its correct module, restoring clean Spinosa typechecks.
+
 ## [0.8.0-beta.16] — 2026-07-08
 
 ### Fixed

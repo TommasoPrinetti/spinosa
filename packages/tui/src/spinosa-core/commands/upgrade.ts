@@ -67,6 +67,10 @@ function metadataDir(): string {
   return process.env.SPINOSA_METADATA_DIR ?? `${spinosaHome()}/metadata`
 }
 
+export function installedUpgradeVersion(version: string, home = spinosaHome()): string {
+  return installedReleaseVersion(path.join(home, "versions", version))
+}
+
 function versionCachePath(channel: string): string {
   return path.join(metadataDir(), `version_check_cache_${channel}`)
 }
@@ -244,8 +248,9 @@ export async function upgradeFramework(
   }
   rmSync(tmpdir, { recursive: true, force: true })
 
-  const installedTargetRoot = path.join(spinosaHome(), "versions", resolvedVersion)
-  const postInstallVersion = installedReleaseVersion(installedTargetRoot)
+  // This process is still running from the previous release. Verify the newly
+  // installed target directly instead of re-resolving the active framework.
+  const postInstallVersion = installedUpgradeVersion(resolvedVersion)
   if (postInstallVersion !== resolvedVersion) {
     return {
       success: false,

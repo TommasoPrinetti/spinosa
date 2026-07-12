@@ -1,4 +1,5 @@
-import { readdir, rm, stat, type Dirent } from "node:fs/promises"
+import { type Dirent } from "node:fs"
+import { readdir, rm, stat } from "node:fs/promises"
 import { homedir } from "node:os"
 import path from "node:path"
 import { resolveFrameworkRoot } from "../framework/discovery"

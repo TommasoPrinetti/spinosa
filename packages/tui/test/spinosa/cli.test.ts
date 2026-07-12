@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs"
 import { mkdir, utimes } from "node:fs/promises"
 
 const repoRoot = path.resolve(import.meta.dir, "../../../..")
-const EXPECTED_VERSION = "0.9.0-beta.6"
+const EXPECTED_VERSION = "0.9.0-beta.8"
 
 function capture() {
   const output: string[] = []

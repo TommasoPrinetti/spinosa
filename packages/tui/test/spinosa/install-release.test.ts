@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test"
+import { mkdir } from "node:fs/promises"
 import path from "node:path"
 import { tmpdir } from "../fixture/fixture"
-import { verifyInstallerChecksum } from "../../src/spinosa-core/commands/upgrade"
+import { installedUpgradeVersion, verifyInstallerChecksum } from "../../src/spinosa-core/commands/upgrade"
 
 const repoRoot = path.resolve(import.meta.dir, "../../../..")
 
@@ -84,5 +85,14 @@ describe("install and release flow", () => {
     const installer = "#!/bin/bash\necho ok\n"
     expect(verifyInstallerChecksum(installer, `${Bun.CryptoHasher.hash("sha256", installer, "hex")}  install.sh\n`)).toBe(true)
     expect(verifyInstallerChecksum(`${installer}# changed\n`, `${Bun.CryptoHasher.hash("sha256", installer, "hex")}  install.sh\n`)).toBe(false)
+  })
+
+  test("verifies an upgrade against the newly installed target", async () => {
+    await using tmp = await tmpdir()
+    const target = path.join(tmp.path, "versions", "1.2.3", "metadata")
+    await mkdir(target, { recursive: true })
+    await Bun.write(path.join(target, "version"), "1.2.3\n")
+
+    expect(installedUpgradeVersion("1.2.3", tmp.path)).toBe("1.2.3")
   })
 })
