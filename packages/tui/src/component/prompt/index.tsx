@@ -1202,7 +1202,7 @@ export function Prompt(props: PromptProps) {
       if (editorParts.length > 0) editor.preserveSelectionFromNewSession()
       setTimeout(() => {
         route.navigate({
-          type: "session",
+          type: "workspace",
           sessionID,
         })
       }, 50)

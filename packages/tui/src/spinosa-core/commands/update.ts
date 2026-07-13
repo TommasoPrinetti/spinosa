@@ -495,13 +495,30 @@ function restoreUpdateSnapshot(workspacePath: string, snapshot: UpdateSnapshot):
 
 export async function updateWorkspace(options: UpdateOptions): Promise<UpdateResult> {
   const lockPath = path.join(options.workspacePath, ".spinosa", "update.lock")
-  try {
-    mkdirSync(lockPath)
-  } catch (error) {
-    if (error && typeof error === "object" && "code" in error && error.code === "EEXIST") {
-      return { success: false, added: 0, updated: 0, removed: 0, skipped: 0, changes: false }
+  const deadline = Date.now() + 10_000
+  while (true) {
+    try {
+      mkdirSync(lockPath)
+      break
+    } catch (error) {
+      if (error && typeof error === "object" && "code" in error && error.code === "EEXIST") {
+        try {
+          const lockStat = statSync(lockPath)
+          if (Date.now() - lockStat.mtimeMs > 30_000) {
+            rmSync(lockPath, { recursive: true, force: true })
+            continue
+          }
+        } catch {
+          continue
+        }
+        if (Date.now() >= deadline) {
+          return { success: false, added: 0, updated: 0, removed: 0, skipped: 0, changes: false }
+        }
+        await Bun.sleep(100)
+        continue
+      }
+      throw error
     }
-    throw error
   }
 
   let snapshot: UpdateSnapshot | undefined

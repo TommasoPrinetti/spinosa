@@ -61,7 +61,7 @@ export const { use: useSpinosaWorkspace, provider: SpinosaWorkspaceProvider } = 
       setActivePath(undefined)
       setGenericMode(true)
       setPickerRequested(false)
-      route.navigate({ type: "workspace" })
+      route.navigate({ type: "global" })
     }
 
     const showPicker = () => {
@@ -74,7 +74,7 @@ export const { use: useSpinosaWorkspace, provider: SpinosaWorkspaceProvider } = 
         setPickerReturnSessionId(undefined)
       }
       setPickerRequested(true)
-      route.navigate({ type: "workspace" })
+      route.navigate({ type: "global" })
     }
 
     const refresh = async (): Promise<void> => {
@@ -120,7 +120,7 @@ export const { use: useSpinosaWorkspace, provider: SpinosaWorkspaceProvider } = 
       restorePickerRoute() {
         const sessionID = pickerReturnSessionId()
         setPickerReturnSessionId(undefined)
-        route.navigate(sessionID ? { type: "workspace", sessionID } : { type: "workspace" })
+        route.navigate(sessionID ? { type: "workspace", sessionID } : { type: "global" })
       },
       refresh,
       setLastRoute,

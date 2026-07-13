@@ -499,7 +499,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           const target = slots()[slot - 1]
           if (!target) return
           if (route.data.type === "workspace" && route.data.sessionID === target) return
-          route.navigate({ type: "session", sessionID: target })
+          route.navigate({ type: "workspace", sessionID: target })
         },
       }
     }

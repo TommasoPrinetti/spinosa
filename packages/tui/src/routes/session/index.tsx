@@ -16,7 +16,7 @@ import {
 import { Dynamic } from "solid-js/web"
 import path from "node:path"
 import { mkdir, writeFile } from "node:fs/promises"
-import { useRoute, useLegacySessionRoute } from "../../context/route"
+import { useRoute, useSessionRoute } from "../../context/route"
 import { useProject } from "../../context/project"
 import { useSync } from "../../context/sync"
 import { useEvent } from "../../context/event"
@@ -208,7 +208,7 @@ export function Session() {
     await writeFile(file, content)
   }
   const pluginRuntime = usePluginRuntime()
-  const route = useLegacySessionRoute()
+  const route = useSessionRoute()
   const { navigate } = useRoute()
   const sync = useSync()
   const event = useEvent()
@@ -379,7 +379,7 @@ export function Session() {
           variant: "error",
           duration: 5000,
         })
-        navigate({ type: "home" })
+        navigate({ type: "global" })
         return
       }
 
@@ -404,7 +404,7 @@ export function Session() {
         variant: "error",
         duration: 5000,
       })
-      navigate({ type: "home" })
+      navigate({ type: "global" })
     })
   })
 
@@ -518,7 +518,7 @@ export function Session() {
 
   function enterChild(sessionID: string) {
     navigate({
-      type: "session",
+      type: "workspace",
       sessionID,
     })
     const status = sync.data.session_status[sessionID]
@@ -553,7 +553,7 @@ export function Session() {
     {
       title: session()?.share?.url ? "Copy share link" : "Share session",
       value: "session.share",
-      suggested: route.type === "session",
+      suggested: route.type === "workspace",
       category: "Session",
       enabled: sync.data.config.share !== "disabled",
       slash: {
@@ -1130,7 +1130,7 @@ export function Session() {
         const parentID = session()?.parentID
         if (parentID) {
           navigate({
-            type: "session",
+            type: "workspace",
             sessionID: parentID,
           })
         }
@@ -1254,7 +1254,7 @@ export function Session() {
               zIndex={10}
               onMouseOver={() => setBackHover(true)}
               onMouseOut={() => setBackHover(false)}
-              onMouseUp={() => navigate({ type: "workspace" })}
+              onMouseUp={() => navigate({ type: "global" })}
               paddingLeft={2}
               paddingRight={2}
               paddingTop={1}
@@ -2812,7 +2812,7 @@ function Task(props: ToolProps) {
       part={props.part}
       onClick={() => {
         if (sessionID()) {
-          navigate({ type: "session", sessionID: sessionID()! })
+          navigate({ type: "workspace", sessionID: sessionID()! })
         }
         const status = retry()
         if (status) void DialogAlert.show(dialog, "Retry Error", status.message)

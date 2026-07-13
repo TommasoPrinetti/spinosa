@@ -8,6 +8,8 @@ async function renderWorkspaceForRoute(input: {
   mock.module("../../src/context/route", () => ({
     useRouteData: () => ({ type: "workspace", sessionID: input.sessionID }),
     useRoute: () => ({ navigate() {} }),
+    useGlobalRoute: () => ({ type: "global" as const }),
+    useSessionRoute: () => ({ type: "workspace" as const, sessionID: input.sessionID ?? "" }),
   }))
   mock.module("../../src/context/kv", () => ({
     useKV: () => ({
@@ -24,9 +26,24 @@ async function renderWorkspaceForRoute(input: {
   mock.module("../../src/routes/session", () => ({
     Session: () => <text>session-pane</text>,
   }))
+  mock.module("../../src/spinosa/service", () => ({
+    readBundledFrameworkVersion: () => undefined,
+    isPrereleaseFrameworkVersion: () => false,
+    listRegisteredWorkspaces: () => [],
+    readWorkspaceMeta: () => undefined,
+    countRawMarkdownFiles: () => 0,
+  }))
+  mock.module("../../src/spinosa/workspace-name", () => ({
+    workspaceAsciiBannerText: () => undefined,
+  }))
+  mock.module("../../src/spinosa-core/system/maintenance", () => ({
+    inspectSpinosaMaintenance: () => undefined,
+  }))
 
-  const { Workspace } = await import("../../src/routes/workspace")
-  const app = await testRender(() => <Workspace />, { width: 60, height: 6 })
+  const Component = input.sessionID
+    ? (await import("../../src/routes/session")).Session
+    : (await import("../../src/routes/home")).Home
+  const app = await testRender(() => <Component />, { width: 60, height: 6 })
   await app.renderOnce()
   const frame = app.captureCharFrame()
   app.renderer.destroy()

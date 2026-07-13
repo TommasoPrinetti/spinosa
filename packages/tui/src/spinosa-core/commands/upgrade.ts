@@ -239,14 +239,16 @@ export async function upgradeFramework(
   }
 
   const cacheDir = metadataDir()
-  if (existsSync(cacheDir)) {
-    for (const entry of readdirSync(cacheDir)) {
-      if (entry.startsWith("version_check_cache")) {
-        rmSync(path.join(cacheDir, entry), { force: true })
+  try {
+    if (existsSync(cacheDir)) {
+      for (const entry of readdirSync(cacheDir)) {
+        if (entry.startsWith("version_check_cache")) {
+          rmSync(path.join(cacheDir, entry), { force: true })
+        }
       }
     }
-  }
-  rmSync(tmpdir, { recursive: true, force: true })
+  } catch { /* cleanup is best-effort */ }
+  try { rmSync(tmpdir, { recursive: true, force: true }) } catch { /* cleanup is best-effort */ }
 
   // This process is still running from the previous release. Verify the newly
   // installed target directly instead of re-resolving the active framework.
@@ -260,18 +262,21 @@ export async function upgradeFramework(
     }
   }
 
-  const workspaces = await discoverRegisteredWorkspaces()
+  const workspaces: string[] = []
+  try { workspaces.push(...(await discoverRegisteredWorkspaces())) } catch { /* workspace discovery is best-effort */ }
   const needsUpdate: string[] = []
   for (const ws of workspaces) {
-    const meta = await readWorkspaceMeta(ws)
-    if (
-      meta &&
-      meta.frameworkVersion &&
-      meta.frameworkVersion !== "unknown" &&
-      meta.frameworkVersion !== resolvedVersion
-    ) {
-      needsUpdate.push(ws)
-    }
+    try {
+      const meta = await readWorkspaceMeta(ws)
+      if (
+        meta &&
+        meta.frameworkVersion &&
+        meta.frameworkVersion !== "unknown" &&
+        meta.frameworkVersion !== resolvedVersion
+      ) {
+        needsUpdate.push(ws)
+      }
+    } catch { /* individual workspace read failure is non-fatal */ }
   }
 
   return {

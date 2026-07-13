@@ -1,15 +1,16 @@
 import { Prompt, type PromptRef } from "../component/prompt"
-import { createEffect, createMemo, createResource, createSignal, onCleanup, onMount, Show } from "solid-js"
+import { For, createEffect, createMemo, createResource, createSignal, onCleanup, onMount, Show } from "solid-js"
 import { Logo } from "../component/logo"
 import { useSync } from "../context/sync"
 import { Toast, useToast } from "../ui/toast"
 import { useArgs } from "../context/args"
-import { useLegacyHomeRoute } from "../context/route"
+import { useGlobalRoute } from "../context/route"
 import { usePromptRef } from "../context/prompt"
 import { useLocal } from "../context/local"
 import { usePluginRuntime } from "../plugin/runtime"
 import { useEditorContext } from "../context/editor"
 import { useTerminalDimensions } from "@opentui/solid"
+import { TextAttributes } from "@opentui/core"
 import { useTuiConfig } from "../config"
 import { HomeSessionDestinationProvider } from "./home/session-destination"
 import { SpinosaPromptChips } from "./workspace/spinosa-prompt-chips"
@@ -17,14 +18,22 @@ import { MAIN_CONTENT_MAX_WIDTH } from "../util/layout"
 import { CenteredColumn } from "../component/centered-column"
 import { useSpinosaWorkspace } from "../context/spinosa-workspace"
 import { useTheme } from "../context/theme"
+import type { Theme } from "../context/theme"
 import { useDialog } from "../ui/dialog"
 import { DialogSpinosaWorkspacePicker } from "../component/dialog-spinosa-workspace-picker"
-import { readBundledFrameworkVersion, isPrereleaseFrameworkVersion } from "../spinosa/service"
-import { workspaceAsciiBannerText } from "../spinosa/workspace-name"
+import { DialogSpinosaStartupChoice } from "../component/dialog-spinosa-startup-choice"
+import { getWorkspaceLaunchDecision } from "../spinosa/workspace-launch"
+import { HomeFooter } from "../component/home-footer"
+import { buttonBackground, buttonBorder, buttonText } from "../util/button"
+import { countRawMarkdownFiles, listRegisteredWorkspaces, readBundledFrameworkVersion, isPrereleaseFrameworkVersion, readWorkspaceMeta } from "../spinosa/service"
+import { workspaceAsciiBannerText, resolveWorkspaceDisplayName } from "../spinosa/workspace-name"
 import { upgradeFramework } from "../spinosa-core/commands/upgrade"
 import { type ReleaseChannel } from "../spinosa-core/system/channels"
 import { cleanupStaleInstallDirectories, inspectSpinosaMaintenance } from "../spinosa-core/system/maintenance"
+import type { SpinosaSetupStatus } from "../spinosa/types"
 import { DialogConfirm } from "../ui/dialog-confirm"
+import { dirname, join } from "node:path"
+import { statSync } from "node:fs"
 
 const SHELL_PLACEHOLDER = ["ls -la", "git status", "pwd"]
 const defaultPlaceholder = {
@@ -40,11 +49,30 @@ const spinosaPlaceholder = {
   shell: SHELL_PLACEHOLDER,
 }
 const MAINTENANCE_CHECK_DELAY_MS = 500
+const RECENT_WORKSPACE_COUNT = 4
+
+function getLastAccessed(workspacePath: string): number {
+  try {
+    return statSync(join(workspacePath, ".spinosa", "workspace")).mtimeMs
+  } catch {
+    return 0
+  }
+}
+
+function recentDotColor(status: SpinosaSetupStatus, theme: Theme) {
+  switch (status) {
+    case "workspace_started": return theme.success
+    case "cli_started": return theme.warning
+    case "not_started":
+    case "importing": return theme.error
+    default: return theme.textMuted
+  }
+}
 
 export function Home() {
   const pluginRuntime = usePluginRuntime()
   const sync = useSync()
-  const route = useLegacyHomeRoute()
+  const route = useGlobalRoute()
   const dialog = useDialog()
   const promptRef = usePromptRef()
   const [ref, setRef] = createSignal<PromptRef | undefined>()
@@ -59,6 +87,33 @@ export function Home() {
   const startupPrompt = createMemo(() => route.prompt ?? spinosa.pendingPrompt)
   const startupPromptIsQueued = createMemo(() => !route.prompt && Boolean(spinosa.pendingPrompt))
   const [bundledVersion] = createResource(readBundledFrameworkVersion)
+  const [recentWorkspaces, setRecentWorkspaces] = createSignal<{ path: string; name: string; status: SpinosaSetupStatus; fileCount: number }[]>([])
+  const [recentLoading, setRecentLoading] = createSignal(true)
+  const [selectedRecent, setSelectedRecent] = createSignal(0)
+  const loadRecentWorkspaces = async () => {
+    setRecentLoading(true)
+    try {
+      const workspaces = await listRegisteredWorkspaces()
+      const rows: ({ path: string; name: string; status: SpinosaSetupStatus; fileCount: number; lastAccessed: number })[] = []
+      for (const ws of workspaces) {
+        const meta = await readWorkspaceMeta(ws.path)
+        if (!meta) continue
+        rows.push({
+          path: ws.path,
+          name: resolveWorkspaceDisplayName(ws.path, meta?.projectName ?? ws.projectName),
+          status: meta?.setupStatus || "unknown",
+          fileCount: await countRawMarkdownFiles(join(ws.path, "raw")),
+          lastAccessed: getLastAccessed(ws.path),
+        })
+      }
+      rows.sort((a, b) => b.lastAccessed - a.lastAccessed)
+      setRecentWorkspaces(rows.slice(0, RECENT_WORKSPACE_COUNT))
+    } catch {
+      // ignore
+    } finally {
+      setRecentLoading(false)
+    }
+  }
   const wsVersion = createMemo(() => spinosa.meta?.frameworkVersion)
   const workspaceBannerText = createMemo(() => {
     const workspacePath = spinosa.activePath
@@ -83,6 +138,7 @@ export function Home() {
   onMount(() => {
     const timer = setTimeout(() => setMaintenanceChecksStarted(true), MAINTENANCE_CHECK_DELAY_MS)
     onCleanup(() => clearTimeout(timer))
+    void loadRecentWorkspaces()
   })
 
   const toast = useToast()
@@ -227,6 +283,22 @@ export function Home() {
     dialog.replace(() => <DialogSpinosaWorkspacePicker onClose={() => spinosa.restorePickerRoute()} />)
   })
 
+  const pickRecentWorkspace = async (workspacePath: string) => {
+    const launch = await getWorkspaceLaunchDecision(workspacePath)
+    if (launch.type === "startup-choice") {
+      dialog.replace(() => (
+        <DialogSpinosaStartupChoice
+          workspacePath={launch.workspacePath}
+          workspaceName={launch.workspaceName}
+          prompt={launch.prompt}
+          onBack={() => dialog.clear()}
+        />
+      ))
+      return
+    }
+    await spinosa.openWorkspace(workspacePath)
+  }
+
   return (
     <HomeSessionDestinationProvider>
       <CenteredColumn>
@@ -288,6 +360,47 @@ export function Home() {
             </pluginRuntime.Slot>
           </box>
           <box height={1} minHeight={0} flexShrink={1} />
+
+          {/* recent workspaces (global home only) */}
+          <Show when={!workspaceReady() && recentLoading()}>
+            <text fg={theme.textMuted}>Loading recent workspaces…</text>
+            <box height={1} />
+          </Show>
+          <Show when={!workspaceReady() && !recentLoading() && recentWorkspaces().length > 0}>
+            <box width="100%" maxWidth={promptMaxWidth()} flexDirection="column" flexShrink={0}>
+              <text fg={theme.textMuted}>Recent workspaces</text>
+              <box height={1} />
+              <For each={recentWorkspaces()}>
+                {(ws, i) => {
+                  const idx = i()
+                  const active = () => selectedRecent() === idx
+                  return (
+                    <box
+                      paddingLeft={2}
+                      paddingRight={2}
+                      paddingTop={1}
+                      paddingBottom={1}
+                      backgroundColor={buttonBackground(theme, active())}
+                      border={["left"]}
+                      borderColor={buttonBorder(theme, active(), theme.borderActive)}
+                      flexDirection="row"
+                      gap={1}
+                      onMouseOver={() => setSelectedRecent(idx)}
+                      onMouseDown={() => { setSelectedRecent(idx); void pickRecentWorkspace(ws.path) }}
+                    >
+                      <text fg={recentDotColor(ws.status, theme)}>●</text>
+                      <text fg={buttonText(theme, active(), theme.text)}>
+                        <span style={{ bold: active() }}>{ws.name}</span>
+                      </text>
+                      <text fg={buttonText(theme, active(), theme.textMuted)}>{ws.fileCount} files</text>
+                    </box>
+                  )
+                }}
+              </For>
+            </box>
+            <box height={1} />
+          </Show>
+
           <box width="100%" maxWidth={promptMaxWidth()} zIndex={1000} paddingTop={1} flexShrink={0}>
             <SpinosaPromptChips />
             <Show when={workspaceReady()}>
@@ -305,6 +418,10 @@ export function Home() {
           </box>
           <pluginRuntime.Slot name="home_bottom" />
           <box flexGrow={1} minHeight={0} />
+          <box height={1} />
+          <box width="100%" maxWidth={promptMaxWidth()}>
+            <HomeFooter />
+          </box>
           <Toast />
         </box>
       </CenteredColumn>

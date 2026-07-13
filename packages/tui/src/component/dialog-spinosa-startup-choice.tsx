@@ -24,13 +24,13 @@ export function DialogSpinosaStartupChoice(props: {
     dialog.clear()
     spinosa.queuePrompt(buildStartupChatPrompt(props.prompt), props.workspacePath)
     await spinosa.openWorkspace(props.workspacePath)
-    route.navigate({ type: "workspace" })
+    route.navigate({ type: "global" })
   }
 
   const openChatDirectly = async () => {
     dialog.clear()
     await spinosa.openWorkspace(props.workspacePath)
-    route.navigate({ type: "workspace" })
+    route.navigate({ type: "global" })
   }
 
   const options = createMemo(() => [
@@ -41,7 +41,7 @@ export function DialogSpinosaStartupChoice(props: {
       run: () => void launchStartupInChat(),
     },
     {
-      title: "Open workspace chat",
+      title: "Open workspace",
       description: "Skip the setup brief for now and start a regular chat.",
       primary: false,
       run: () => void openChatDirectly(),

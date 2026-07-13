@@ -5,9 +5,10 @@ import {
   readdirSync,
   statSync,
   writeFileSync,
+  renameSync,
 } from "node:fs"
 import * as path from "node:path"
-import { safeCopy } from "../utils/fs"
+import { safeCopy, writeTextAtomic } from "../utils/fs"
 import {
   findSourceFiles,
   classifySourceFile,
@@ -239,7 +240,7 @@ async function addSingleFile(
         throwIfSpinosaCancelled(shouldAbort)
         const text = result?.markdown ?? ""
         if (!text.trim()) throw new Error("MarkItDown returned no content")
-        writeFileSync(destFile, text, "utf-8")
+        writeTextAtomic(destFile, text)
         mdConverted = 1
         injectColdFrontmatter(destFile)
       } catch (error) {
@@ -252,7 +253,7 @@ async function addSingleFile(
     case "ocr_convertible": {
       const fileName = path.basename(srcFile)
       const stem = fileName.replace(/\.[^.]+$/, "")
-      const destName = `${stem}.md`
+      const destName = `${stem}__${fileExt(fileName)}.md`
       const destFile = path.join(rawDir, destName)
 
       mkdirSync(path.dirname(destFile), { recursive: true })
@@ -266,13 +267,20 @@ async function addSingleFile(
 
       removeConvertedOutput(destFile)
 
-      await runPpuOcrBatch([{ src: srcFile, rel: fileName, dest: destFile }], { shouldAbort })
-
-      if (convertedOutputExists(destFile)) {
-        ocrConverted = 1
-        injectColdFrontmatter(destFile)
-      } else {
+      const tmpDest = destFile + `.spinosa-part-${process.pid}-${crypto.randomUUID()}`
+      try {
+        await runPpuOcrBatch([{ src: srcFile, rel: fileName, dest: tmpDest }], { shouldAbort })
+        if (convertedOutputExists(tmpDest)) {
+          renameSync(tmpDest, destFile)
+          ocrConverted = 1
+          injectColdFrontmatter(destFile)
+        } else {
+          ocrFailed = 1
+        }
+      } catch {
         ocrFailed = 1
+      } finally {
+        try { rmSync(tmpDest, { force: true }) } catch { /* cleanup */ }
       }
 
       break

@@ -6,14 +6,6 @@ describe("normalizeRoute", () => {
     expect(normalizeRoute({ type: "add-files" })).toEqual({ type: "add-files" })
   })
 
-  test("maps legacy onboarding add mode to add-files", () => {
-    expect(normalizeRoute({ type: "onboarding", mode: "add" })).toEqual({ type: "add-files" })
-  })
-
-  test("maps legacy onboarding new mode to onboarding", () => {
-    expect(normalizeRoute({ type: "onboarding", mode: "new" })).toEqual({ type: "onboarding" })
-  })
-
   test("drops workspace-only fields when switching to add-files", () => {
     const next = normalizeRoute({ type: "add-files" })
     expect(next).toEqual({ type: "add-files" })
@@ -21,7 +13,7 @@ describe("normalizeRoute", () => {
     expect("prompt" in next).toBe(false)
   })
 
-  test("normalizes unknown runtime routes to the workspace", () => {
-    expect(normalizeRoute({ type: "future-route" } as never)).toEqual({ type: "workspace" })
+  test("normalizes unknown runtime routes to the global", () => {
+    expect(normalizeRoute({ type: "future-route" } as never)).toEqual({ type: "global" })
   })
 })

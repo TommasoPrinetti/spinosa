@@ -194,8 +194,8 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
     if (!current) return false
     const fallback = projectContext.data.project.mainDir
     if (fallback) setReplacementCurrent(fallback)
-    if (route.data.type === "workspace" && route.data.sessionID) {
-      route.navigate({ type: "home" })
+    if (route.data.type === "workspace") {
+      route.navigate({ type: "global" })
       dialog.clear()
       return true
     }

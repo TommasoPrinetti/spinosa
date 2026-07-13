@@ -97,7 +97,7 @@ export function DialogMessage(props: {
               : undefined
             route.navigate({
               sessionID: result.data!.id,
-              type: "session",
+              type: "workspace",
               prompt,
             })
             dialog.clear()

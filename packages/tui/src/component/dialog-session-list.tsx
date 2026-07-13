@@ -166,7 +166,7 @@ export function DialogSessionList() {
           await refetchBrowse()
           if (search()) await refetch()
           if (info?.workspaceID === session.workspaceID) {
-            route.navigate({ type: "home" })
+            route.navigate({ type: "global" })
           }
           return true
         }}
@@ -284,7 +284,7 @@ export function DialogSessionList() {
       }}
       onSelect={(option) => {
         route.navigate({
-          type: "session",
+          type: "workspace",
           sessionID: option.value,
         })
         dialog.clear()

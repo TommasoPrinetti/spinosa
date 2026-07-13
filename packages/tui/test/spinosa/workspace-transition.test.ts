@@ -7,5 +7,5 @@ test("initial metadata load does not override an intentional workspace route", (
 
 test("a real status change in the same workspace still navigates", () => {
   expect(routeForWorkspaceStatusTransition(["/workspace", "workspace_started"], ["/workspace", "cli_started"]))
-    .toEqual({ type: "workspace" })
+    .toEqual({ type: "global" })
 })

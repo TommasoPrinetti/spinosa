@@ -15,10 +15,10 @@ export function routeForSetupStatus(
     case "importing":
       return { type: "onboarding" }
     case "cli_started":
-      return { type: "startup-hub" }
+      return { type: "global" }
     case "workspace_started":
     case "unknown":
-      return { type: "workspace" }
+      return { type: "global" }
   }
 }
 
@@ -45,10 +45,10 @@ export async function resolveSpinosaEntryRoute(input: {
   forceGeneric?: boolean
 }): Promise<RouteNavigateInput> {
   if (input.skipPicker) {
-    if (input.forceGeneric) return { type: "workspace" }
+    if (input.forceGeneric) return { type: "global" }
     const path = input.kvActivePath && isSpinosaWorkspace(input.kvActivePath) ? input.kvActivePath : input.cwd
-    if (isSpinosaWorkspace(path)) return (await routeForWorkspace(path)) ?? { type: "workspace" }
-    return { type: "workspace" }
+    if (isSpinosaWorkspace(path)) return (await routeForWorkspace(path)) ?? { type: "global" }
+    return { type: "global" }
   }
 
   if (input.kvActivePath && isSpinosaWorkspace(input.kvActivePath)) {
@@ -61,5 +61,5 @@ export async function resolveSpinosaEntryRoute(input: {
     if (route) return route
   }
 
-  return { type: "workspace" }
+  return { type: "global" }
 }

@@ -98,7 +98,7 @@ export function SpinosaPromptChips() {
           },
           {
             key: "add-files",
-            label: "Import sources",
+            label: "Import files",
             onPress: () => navigate({ type: "add-files" }),
           },
           {
@@ -196,7 +196,7 @@ export function SpinosaPromptChips() {
       { key: "Right", desc: "Next action", group: "Home", cmd: () => moveSelection(1) },
       { key: "Enter", desc: "Run selected action", group: "Home", cmd: () => runSelectedAction() },
       { key: "n", desc: "New workspace", group: "Home", cmd: () => navigate({ type: "onboarding" }) },
-      { key: "a", desc: "Import sources", group: "Home", cmd: () => navigate({ type: "add-files" }) },
+      { key: "a", desc: "Import files", group: "Home", cmd: () => navigate({ type: "add-files" }) },
       { key: "w", desc: "Switch workspace", group: "Home", cmd: () => spinosa.showPicker() },
       ...(workspaceReady() && needsWorkspaceUpdate()
         ? [{ key: "u", desc: "Update workspace files", group: "Home", cmd: () => void runWorkspaceUpdate() }]

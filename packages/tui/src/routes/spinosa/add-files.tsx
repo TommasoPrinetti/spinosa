@@ -360,7 +360,7 @@ export function AddFiles() {
     setWaitingForGate(false)
   }
 
-  const goToWorkspace = () => navigate({ type: "workspace" })
+  const goToWorkspace = () => navigate({ type: "global" })
   const leavePathStep = () => {
     stopActiveWork()
     goToWorkspace()

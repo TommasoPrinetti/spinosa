@@ -39,7 +39,7 @@ type Input = {
 
 function routeNavigate(route: ReturnType<typeof useRoute>, name: string, params?: Record<string, unknown>) {
   if (name === "home") {
-    route.navigate({ type: "workspace" })
+    route.navigate({ type: "global" })
     return
   }
 
@@ -54,8 +54,8 @@ function routeNavigate(route: ReturnType<typeof useRoute>, name: string, params?
 }
 
 function routeCurrent(route: ReturnType<typeof useRoute>): TuiPluginApi["route"]["current"] {
-  if (route.data.type === "workspace" && !route.data.sessionID) return { name: "home" }
-  if (route.data.type === "workspace" && route.data.sessionID) {
+  if (route.data.type === "global") return { name: "home" }
+  if (route.data.type === "workspace") {
     return {
       name: "session",
       params: {
@@ -65,7 +65,6 @@ function routeCurrent(route: ReturnType<typeof useRoute>): TuiPluginApi["route"]
     }
   }
   if (
-    route.data.type === "workspace-picker" ||
     route.data.type === "onboarding" ||
     route.data.type === "add-files"
   ) {

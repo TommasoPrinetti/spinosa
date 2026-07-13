@@ -413,7 +413,7 @@ let nameInput: TextareaRenderable | undefined
     return entries.some((e) => pathValidities[e.id] === "valid")
   })
 
-  const goHome = () => navigate({ type: "home" })
+  const goHome = () => navigate({ type: "global" })
   const leavePathStep = () => {
     goHome()
   }
@@ -870,7 +870,7 @@ let nameInput: TextareaRenderable | undefined
           setStartupMessage("Startup complete")
           stopStartupProgress()
           await delay(300)
-          await spinosa.openWorkspace(workspacePath, { route: { type: "workspace" } })
+          await spinosa.openWorkspace(workspacePath, { route: { type: "global" } })
         }
       } else {
         if (workspacePath) {

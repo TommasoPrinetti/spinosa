@@ -85,22 +85,12 @@ export function DialogSpinosaWorkspacePicker(props: { onClose?: () => void } = {
   }
 
   const [workspaces] = createResource(async () => {
-    console.error("[spinosa-workspace-picker] Fetching workspace list...")
     const list = await listRegisteredWorkspaces()
-    console.error("[spinosa-workspace-picker] listRegisteredWorkspaces returned", list.length, "entries")
     const bundled = await readBundledFrameworkVersion()
-    console.error("[spinosa-workspace-picker] bundled version:", bundled)
     const pairs = await Promise.all(
       list.map(async (ws) => ({ ws, meta: await readWorkspaceMeta(ws.path) })),
     )
-    const valid = pairs.filter((p): p is { ws: typeof p.ws; meta: NonNullable<typeof p.meta> } => {
-      if (!p.meta) console.error("[spinosa-workspace-picker]  SKIP (no meta):", wsPathForLog(p.ws.path))
-      return !!p.meta
-    })
-    console.error("[spinosa-workspace-picker] After readWorkspaceMeta:", valid.length, "valid")
-    for (const v of valid) {
-      console.error("[spinosa-workspace-picker]  VALID:", v.ws.projectName, "|", v.ws.path, "| status:", v.meta.setupStatus)
-    }
+    const valid = pairs.filter((p): p is { ws: typeof p.ws; meta: NonNullable<typeof p.meta> } => !!p.meta)
     return valid.map(({ ws, meta }) => ({
       path: ws.path,
       name: resolveWorkspaceDisplayName(ws.path, meta?.projectName ?? ws.projectName),
@@ -111,7 +101,6 @@ export function DialogSpinosaWorkspacePicker(props: { onClose?: () => void } = {
       lastAccessed: getLastAccessed(ws.path),
     } satisfies SelectWorkspaceRow))
   })
-function wsPathForLog(p: string) { const s = p.split("/"); return s[s.length-2]+"/"+s[s.length-1] }
 
   const workspaceError = createMemo(() => {
     const error = workspaces.error
@@ -227,18 +216,19 @@ function wsPathForLog(p: string) { const s = p.split("/"); return s[s.length-2]+
           {/* header row */}
           <box
             flexDirection="row"
+            gap={1}
             paddingLeft={1}
             paddingRight={1}
             paddingTop={1}
             paddingBottom={1}
             backgroundColor={theme.backgroundPanel}
           >
-            <box flexGrow={3} onMouseDown={() => toggleSort("name")}>
+            <box width={30} onMouseDown={() => toggleSort("name")}>
               <text fg={theme.textMuted}>
                 Name{sortColumn() === "name" ? (sortDir() === "asc" ? " ↑" : " ↓") : ""}
               </text>
             </box>
-            <box flexGrow={2} onMouseDown={() => toggleSort("folder")}>
+            <box width={30} onMouseDown={() => toggleSort("folder")}>
               <text fg={theme.textMuted}>
                 Parent{sortColumn() === "folder" ? (sortDir() === "asc" ? " ↑" : " ↓") : ""}
               </text>
@@ -253,7 +243,7 @@ function wsPathForLog(p: string) { const s = p.split("/"); return s[s.length-2]+
                 Ver{sortColumn() === "version" ? (sortDir() === "asc" ? " ↑" : " ↓") : ""}
               </text>
             </box>
-            <box flexGrow={1} onMouseDown={() => toggleSort("accessed")}>
+            <box width={20} onMouseDown={() => toggleSort("accessed")}>
               <text fg={theme.textMuted}>
                 Accessed{sortColumn() === "accessed" ? (sortDir() === "asc" ? " ↑" : " ↓") : ""}
               </text>
@@ -272,24 +262,35 @@ function wsPathForLog(p: string) { const s = p.split("/"); return s[s.length-2]+
                   border={["left"]}
                   borderColor={active() ? theme.borderActive : theme.border}
                   flexDirection="row"
+                  gap={1}
                   onMouseOver={() => setSelected(i())}
                   onMouseDown={() => { setSelected(i()); void chooseWorkspace(row.path) }}
                 >
-                  <text fg={theme.text} flexGrow={3}>
-                    <span style={{ bold: active() }}>{row.name}</span>
-                  </text>
-                  <text fg={theme.textMuted} flexGrow={2}>
-                    {truncatePathTail(row.parentFolder, 30)}
-                  </text>
-                  <text fg={theme.textMuted} width={14}>
-                    {setupStatusLabel(row.status)}
-                  </text>
-                  <text fg={theme.textMuted} width={10}>
-                    v{row.version}{row.needsUpdate ? " ⚠" : ""}
-                  </text>
-                  <text fg={theme.textMuted} flexGrow={1}>
-                    {relativeTime(row.lastAccessed)}
-                  </text>
+                  <box width={30}>
+                    <text fg={theme.text} overflow="hidden" wrapMode="none">
+                      <span style={{ bold: active() }}>{row.name}</span>
+                    </text>
+                  </box>
+                  <box width={30}>
+                    <text fg={theme.textMuted} overflow="hidden" wrapMode="none">
+                      {truncatePathTail(row.parentFolder, 28)}
+                    </text>
+                  </box>
+                  <box width={14} flexShrink={0}>
+                    <text fg={theme.textMuted} overflow="hidden" wrapMode="none">
+                      {setupStatusLabel(row.status)}
+                    </text>
+                  </box>
+                  <box width={10} flexShrink={0}>
+                    <text fg={theme.textMuted} overflow="hidden" wrapMode="none">
+                      v{row.version}{row.needsUpdate ? " ⚠" : ""}
+                    </text>
+                  </box>
+                  <box width={20} flexShrink={0}>
+                    <text fg={theme.textMuted} overflow="hidden" wrapMode="none">
+                      {relativeTime(row.lastAccessed)}
+                    </text>
+                  </box>
                 </box>
               )
             }}

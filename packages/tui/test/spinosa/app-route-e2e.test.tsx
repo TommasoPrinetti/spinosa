@@ -9,7 +9,7 @@ import { Global } from "@opencode-ai/core/global"
 import { createTuiResolvedConfig } from "../fixture/tui-runtime"
 import { createEventSource, createFetch, directory, json } from "../fixture/tui-sdk"
 
-type SpinosaRoute = "workspace" | "workspace-picker" | "onboarding" | "add-files"
+type SpinosaRoute = "workspace" | "global" | "onboarding" | "add-files"
 type TestRenderer = Awaited<ReturnType<typeof createTestRenderer>>
 
 async function renderRouteFrame(
@@ -151,7 +151,7 @@ async function waitForText(setup: TestRenderer, text: string) {
 }
 
 test("Spinosa app route E2E boots and navigates key workspace flows", async () => {
-  const frame = await renderRouteFrame("workspace-picker")
+  const frame = await renderRouteFrame("global")
   expect(frame).toContain("Spinosa")
   expect(frame).toContain("workspace menu")
   expect(frame).toContain("Create workspace")
@@ -177,7 +177,7 @@ test("Spinosa app route E2E boots and navigates key workspace flows", async () =
       setupStatus: "cli_started",
     })
 
-    const cliStartedFrame = await renderRouteFrame("workspace-picker", {
+    const cliStartedFrame = await renderRouteFrame("global", {
       home: cliHome,
       act: async (setup) => {
         setup.mockInput.pressKey("2")
@@ -206,7 +206,7 @@ test("Spinosa app route E2E boots and navigates key workspace flows", async () =
       setupStatus: "workspace_started",
     })
 
-    const readyFrame = await renderRouteFrame("workspace-picker", {
+    const readyFrame = await renderRouteFrame("global", {
       home: readyHome,
       act: async (setup) => {
         setup.mockInput.pressKey("2")
@@ -235,7 +235,7 @@ test("Spinosa app route E2E boots and navigates key workspace flows", async () =
     })
     await appendRegistryEntry(filteredHome, path.join(filteredRoot, "stale-demo-spinosa"), "stale-demo")
 
-    const filteredFrame = await renderRouteFrame("workspace-picker", {
+    const filteredFrame = await renderRouteFrame("global", {
       home: filteredHome,
       act: async (setup) => {
         setup.mockInput.pressKey("2")
@@ -260,7 +260,7 @@ test("homepage surfaces stale installer cleanup after it has rendered", async ()
   try {
     const frame = await renderRouteFrame("workspace", {
       home,
-      act: (setup) => waitForText(setup, "leftover install file"),
+      act: async (setup) => { await waitForText(setup, "leftover install file") },
     })
     expect(frame).toContain("leftover install file")
     expect(frame).toContain("Clean up")

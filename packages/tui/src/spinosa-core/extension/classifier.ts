@@ -181,6 +181,8 @@ export function ocrOutputRelPath(relPath: string): string {
   const dir = path.dirname(relPath)
   const name = path.basename(relPath)
   const stem = name.slice(0, name.lastIndexOf("."))
-  if (dir === ".") return `${stem}.md`
-  return `${dir}/${stem}.md`
+  const ext = fileExt(relPath)
+  const outName = ext === "md" || !ext ? `${stem}.md` : `${stem}__${ext}.md`
+  if (dir === ".") return outName
+  return `${dir}/${outName}`
 }

@@ -47,8 +47,9 @@ import { DialogSessionList } from "./component/dialog-session-list"
 import { DialogWorkspaceList } from "./component/dialog-workspace-list"
 import { DialogConsoleOrg } from "./component/dialog-console-org"
 import { ThemeProvider, useTheme } from "./context/theme"
-import { Workspace } from "./routes/workspace"
-import { workspaceHasSession } from "./context/route"
+import { Home } from "./routes/home"
+import { Session } from "./routes/session"
+
 import { SpinosaWorkspaceProvider } from "./context/spinosa-workspace"
 import { PromptHistoryProvider } from "./component/prompt/history"
 import { FrecencyProvider } from "./component/prompt/frecency"
@@ -85,8 +86,6 @@ import { destroyRenderer } from "./util/renderer"
 import { cliErrorMessage, errorFormat } from "./util/error"
 import { AddFiles } from "./routes/spinosa/add-files"
 import { Onboarding } from "./routes/spinosa/onboarding"
-import { WorkspacePicker } from "./routes/spinosa/workspace-picker"
-import { StartupHub } from "./routes/spinosa/startup-hub"
 
 const appGlobalBindingCommands = [
   "session.list",
@@ -293,16 +292,16 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                     initialRoute={
                                       input.args.continue
                                         ? {
-                                            type: "session",
+                                            type: "workspace",
                                             sessionID: "dummy",
                                           }
                                         : input.args.sessionID
                                           ? {
-                                              type: "session",
+                                              type: "workspace",
                                               sessionID: input.args.sessionID,
                                             }
-                                          : input.args.prompt
-                                            ? { type: "workspace" }
+        : input.args.prompt
+          ? { type: "global", prompt: { input: input.args.prompt, parts: [] } }
                                             : undefined
                                     }
                                   >
@@ -479,7 +478,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
   createEffect(() => {
     if (!terminalTitleEnabled() || Flag.OPENCODE_DISABLE_TERMINAL_TITLE) return
 
-    if (workspaceHasSession(route.data)) {
+    if (route.data.type === "workspace") {
       const session = sync.session.get(route.data.sessionID)
       if (!session || isDefaultTitle(session.title)) {
         renderer.setTerminalTitle("OpenCode")
@@ -488,11 +487,6 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
 
       const title = session.title.length > 40 ? session.title.slice(0, 37) + "..." : session.title
       renderer.setTerminalTitle(`OC | ${title}`)
-      return
-    }
-
-    if (route.data.type === "workspace") {
-      renderer.setTerminalTitle("OpenCode")
       return
     }
 
@@ -517,7 +511,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       }
       if (args.sessionID && !args.fork) {
         route.navigate({
-          type: "session",
+          type: "workspace",
           sessionID: args.sessionID,
         })
       }
@@ -536,13 +530,13 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       if (args.fork) {
         void sdk.client.session.fork({ sessionID: match }).then((result) => {
           if (result.data?.id) {
-            route.navigate({ type: "session", sessionID: result.data.id })
+            route.navigate({ type: "workspace", sessionID: result.data.id })
           } else {
             toast.show({ message: "Failed to fork session", variant: "error" })
           }
         })
       } else {
-        route.navigate({ type: "session", sessionID: match })
+        route.navigate({ type: "workspace", sessionID: match })
       }
     }
   })
@@ -556,7 +550,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     forked = true
     void sdk.client.session.fork({ sessionID: args.sessionID }).then((result) => {
       if (result.data?.id) {
-        route.navigate({ type: "session", sessionID: result.data.id })
+        route.navigate({ type: "workspace", sessionID: result.data.id })
       } else {
         toast.show({ message: "Failed to fork session", variant: "error" })
       }
@@ -607,13 +601,13 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       {
         name: "session.new",
         title: "New session",
-        suggested: workspaceHasSession(route.data),
+        suggested: route.data.type === "workspace",
         category: "Session",
         slashName: "new",
         slashAliases: ["clear"],
         run: () => {
           route.navigate({
-            type: "home",
+            type: "global",
           })
           dialog.clear()
         },
@@ -1017,14 +1011,14 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
   event.on("tui.session.select", (evt, { workspace }) => {
     if (workspace !== project.workspace.current()) return
     route.navigate({
-      type: "session",
+      type: "workspace",
       sessionID: evt.properties.sessionID,
     })
   })
 
   event.on("session.deleted", (evt) => {
-    if (workspaceHasSession(route.data) && route.data.sessionID === evt.properties.info.id) {
-      route.navigate({ type: "home" })
+    if (route.data.type === "workspace" && route.data.sessionID === evt.properties.info.id) {
+      route.navigate({ type: "global" })
       toast.show({
         variant: "info",
         message: "The current session was deleted",
@@ -1097,7 +1091,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     if (!ready()) return
     if (route.data.type !== "plugin") return
     const render = pluginRuntime.routes.get(route.data.id)
-    if (!render) return <PluginRouteMissing id={route.data.id} onHome={() => route.navigate({ type: "home" })} />
+    if (!render) return <PluginRouteMissing id={route.data.id} onHome={() => route.navigate({ type: "global" })} />
     return render({ params: route.data.data })
   })
 
@@ -1127,13 +1121,10 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       <Show when={ready()}>
         <box flexGrow={1} minHeight={0} flexDirection="column">
           <Show when={route.data.type === "workspace"}>
-            <Workspace />
+            <Session />
           </Show>
-          <Show when={route.data.type === "workspace-picker"}>
-            <WorkspacePicker />
-          </Show>
-          <Show when={route.data.type === "startup-hub"}>
-            <StartupHub />
+          <Show when={route.data.type === "global"}>
+            <Home />
           </Show>
           <Show when={route.data.type === "onboarding"}>
             <Onboarding />
