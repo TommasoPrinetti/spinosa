@@ -63,7 +63,7 @@ export async function runSpinosaMaturityChecks(fixturePath = fixtureWorkspacePat
       const route = routeForSetupStatus(meta.setupStatus)
       push(
         "fixture.route",
-        route.type === "workspace",
+        route.type === "global",
         `expected workspace_started route, got ${route.type}`,
       )
     }

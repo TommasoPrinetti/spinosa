@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs"
 import { mkdir, utimes } from "node:fs/promises"
 
 const repoRoot = path.resolve(import.meta.dir, "../../../..")
-const EXPECTED_VERSION = "0.9.0-beta.9"
+const EXPECTED_VERSION = JSON.parse(readFileSync(path.join(repoRoot, "package.json"), "utf-8")).version as string
 
 function capture() {
   const output: string[] = []

@@ -153,9 +153,8 @@ async function waitForText(setup: TestRenderer, text: string) {
 test("Spinosa app route E2E boots and navigates key workspace flows", async () => {
   const frame = await renderRouteFrame("global")
   expect(frame).toContain("Spinosa")
-  expect(frame).toContain("workspace menu")
-  expect(frame).toContain("Create workspace")
-  expect(frame).toContain("Open workspace")
+  expect(frame).toContain("New workspace")
+  expect(frame).toContain("Choose a workspace")
 
   const onboardingFrame = await renderRouteFrame("onboarding")
   expect(onboardingFrame).toContain("Create Spinosa workspace")
@@ -180,17 +179,15 @@ test("Spinosa app route E2E boots and navigates key workspace flows", async () =
     const cliStartedFrame = await renderRouteFrame("global", {
       home: cliHome,
       act: async (setup) => {
-        setup.mockInput.pressKey("2")
+        setup.mockInput.pressKey("w")
         await waitForText(setup, "cli-started-demo")
-        setup.mockInput.pressKey("1")
-        await waitForText(setup, "Open setup brief in Chat")
+        setup.mockInput.pressEnter()
+        await waitForText(setup, "Startup indexing has not run yet")
       },
     })
 
     expect(cliStartedFrame).toContain("cli-started-demo")
     expect(cliStartedFrame).toContain("Startup indexing has not run yet")
-    expect(cliStartedFrame).toContain("Open setup brief in Chat")
-    expect(cliStartedFrame).toContain("Open workspace chat")
   } finally {
     rmSync(cliRoot, { recursive: true, force: true })
   }
@@ -209,9 +206,9 @@ test("Spinosa app route E2E boots and navigates key workspace flows", async () =
     const readyFrame = await renderRouteFrame("global", {
       home: readyHome,
       act: async (setup) => {
-        setup.mockInput.pressKey("2")
+        setup.mockInput.pressKey("w")
         await waitForText(setup, "ready-demo")
-        setup.mockInput.pressKey("1")
+        setup.mockInput.pressEnter()
         await waitForText(setup, "workspace v0.1.0")
       },
     })
@@ -238,7 +235,7 @@ test("Spinosa app route E2E boots and navigates key workspace flows", async () =
     const filteredFrame = await renderRouteFrame("global", {
       home: filteredHome,
       act: async (setup) => {
-        setup.mockInput.pressKey("2")
+        setup.mockInput.pressKey("w")
         await waitForText(setup, "visible-demo")
       },
     })

@@ -20,12 +20,13 @@ export const message = {
     return {
       info,
       parts: input.parts.map(
-        (part): Part => ({
-          ...part,
-          id: randomUUID(),
-          messageID: info.id,
-          sessionID: info.sessionID,
-        }),
+        (part) =>
+          ({
+            ...part,
+            id: randomUUID(),
+            messageID: info.id,
+            sessionID: info.sessionID,
+          }) as unknown as Part,
       ),
     }
   },

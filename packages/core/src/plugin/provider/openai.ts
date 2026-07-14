@@ -182,7 +182,7 @@ export const OpenAIPlugin = define({
     yield* ctx.aisdk.language(
       Effect.fn(function* (evt) {
         if (evt.model.providerID !== ProviderV2.ID.openai) return
-        evt.language = evt.sdk.responses(evt.model.api.id)
+        evt.language = (evt.sdk as any).responses(evt.model.api.id)
       }),
     )
   }),

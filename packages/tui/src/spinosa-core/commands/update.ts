@@ -25,6 +25,7 @@ export interface UpdateOptions {
   frameworkRoot: string
   dryRun?: boolean
   force?: boolean
+  lockTimeoutMs?: number
   onPhase?: (phase: string, detail: string) => void
 }
 
@@ -495,7 +496,7 @@ function restoreUpdateSnapshot(workspacePath: string, snapshot: UpdateSnapshot):
 
 export async function updateWorkspace(options: UpdateOptions): Promise<UpdateResult> {
   const lockPath = path.join(options.workspacePath, ".spinosa", "update.lock")
-  const deadline = Date.now() + 10_000
+  const deadline = Date.now() + (options.lockTimeoutMs ?? 10_000)
   while (true) {
     try {
       mkdirSync(lockPath)

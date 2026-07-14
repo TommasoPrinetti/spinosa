@@ -1,6 +1,5 @@
 import { createMemo, createSignal, For, onMount, Show } from "solid-js"
-import { TextAttributes, type RGBA } from "@opentui/core"
-import { useTerminalDimensions } from "@opentui/solid"
+import type { RGBA } from "@opentui/core"
 import { useRoute } from "../../context/route"
 import { useDialog } from "../../ui/dialog"
 import { useTheme } from "../../context/theme"
@@ -11,10 +10,14 @@ import { buttonBackground, buttonBorder, buttonText } from "../../util/button"
 import { listRegisteredWorkspaces, readWorkspaceMeta } from "../../spinosa/service"
 import { resolveWorkspaceDisplayName } from "../../spinosa/workspace-name"
 import { CenteredColumn } from "../../component/centered-column"
-import { MAIN_CONTENT_MAX_WIDTH } from "../../util/layout"
 import { errorMessage } from "../../util/error"
 import type { SpinosaSetupStatus } from "../../spinosa/types"
-import { DialogToolDetail } from "./dialog-tool-detail"
+import type { ToolCallRecord, VisualizerMode } from "./visualizer-types"
+import { Viewport, VisualizerCanvas } from "./visualizer-viewport"
+import { toolCalloutColor } from "./visualizer-utils"
+import { TimelineView } from "./visualizer-timeline"
+import { TypesView } from "./visualizer-types-view"
+import { SessionsView } from "./visualizer-sessions"
 
 type WorkspaceInfo = {
   path: string
@@ -22,19 +25,8 @@ type WorkspaceInfo = {
   status: SpinosaSetupStatus
 }
 
-type ToolCallRecord = {
-  id: string
-  tool: string
-  status: string
-  input: Record<string, unknown>
-  output?: string
-  error?: string
-  title?: string
-  timeStart: number
-  timeEnd?: number
-  sessionTitle: string
-  part: any
-}
+const CANVAS_MAX_WIDTH = 92
+const CANVAS_HEIGHT = 28
 
 export function Visualizer() {
   const { theme } = useTheme()
@@ -42,15 +34,15 @@ export function Visualizer() {
   const dialog = useDialog()
   const spinosa = useSpinosaWorkspace()
   const sdk = useSDK()
-  const dimensions = useTerminalDimensions()
 
   const [selectedWorkspace, setSelectedWorkspace] = createSignal<WorkspaceInfo | undefined>()
   const [selectedSession, setSelectedSession] = createSignal<{ id: string; title: string } | undefined>()
   const [toolCalls, setToolCalls] = createSignal<ToolCallRecord[]>([])
   const [isLoading, setIsLoading] = createSignal(false)
+  const [loadedOnce, setLoadedOnce] = createSignal(false)
   const [loadError, setLoadError] = createSignal<string | undefined>()
   const [activeFilter, setActiveFilter] = createSignal<string>("__all__")
-  const [mode, setMode] = createSignal<"timeline" | "stats">("timeline")
+  const [mode, setMode] = createSignal<VisualizerMode>("timeline")
 
   onMount(async () => {
     const activePath = spinosa.activePath
@@ -62,10 +54,15 @@ export function Visualizer() {
       name: resolveWorkspaceDisplayName(activePath, meta.projectName ?? ""),
       status: meta.setupStatus,
     })
+    const sessionsResult = await sdk.client.session.list({ roots: true, limit: 5, directory: activePath }).catch(() => ({ data: undefined }))
+    const sessions = sessionsResult.data ?? []
+    if (sessions.length > 0) {
+      sessions.sort((a, b) => b.time.updated - a.time.updated)
+      const latest = sessions[0]
+      setSelectedSession({ id: latest.id, title: latest.title })
+      await loadToolCallsForSession(latest.id)
+    }
   })
-
-  const canvasWidth = createMemo(() => Math.min(MAIN_CONTENT_MAX_WIDTH, dimensions().width - 4))
-  const CANVAS_HEIGHT = 24
 
   const uniqueTools = createMemo(() => {
     const calls = toolCalls()
@@ -78,6 +75,8 @@ export function Visualizer() {
     if (filter === "__all__") return calls
     return calls.filter((c) => c.tool === filter)
   })
+
+  const modes: VisualizerMode[] = ["timeline", "types", "sessions"]
 
   const openWorkspacePicker = async () => {
     const list = await listRegisteredWorkspaces()
@@ -99,6 +98,7 @@ export function Visualizer() {
           setSelectedWorkspace(option.value)
           setSelectedSession(undefined)
           setToolCalls([])
+          setLoadedOnce(false)
           setLoadError(undefined)
           dialog.clear()
         }}
@@ -110,8 +110,8 @@ export function Visualizer() {
     const ws = selectedWorkspace()
     if (!ws) return
     dialog.setSize("large")
-    const result = await sdk.client.session.list({ roots: true, limit: 50 }).catch(() => ({ data: undefined }))
-    const sessions = (result.data ?? []).filter((s) => s.workspaceID === ws.path || s.directory?.startsWith(ws.path))
+    const result = await sdk.client.session.list({ roots: true, limit: 50, directory: ws.path }).catch(() => ({ data: undefined }))
+    const sessions = result.data ?? []
     const options = [
       { value: { id: "__all__", title: "All sessions" }, title: "All sessions", description: `Load tool calls from all ${sessions.length} session(s)`, category: "ALL" },
       ...sessions.map((s) => ({
@@ -129,6 +129,7 @@ export function Visualizer() {
         onSelect={(option) => {
           setSelectedSession(option.value)
           setToolCalls([])
+          setLoadedOnce(false)
           setLoadError(undefined)
           dialog.clear()
         }}
@@ -136,95 +137,94 @@ export function Visualizer() {
     ))
   }
 
-  const loadToolCalls = async () => {
-    const ws = selectedWorkspace()
-    const sess = selectedSession()
-    if (!ws || !sess) return
-
+  const loadToolCallsForSession = async (sessionID: string) => {
     setIsLoading(true)
     setLoadError(undefined)
     setToolCalls([])
-
     try {
-      let records: ToolCallRecord[] = []
-      const sessionIDs: string[] = []
-
-      if (sess.id === "__all__") {
-        const listResult = await sdk.client.session.list({ workspace: ws.path, roots: true, limit: 50 }).catch(() => ({ data: undefined }))
-        sessionIDs.push(...((listResult.data ?? []).map((s) => s.id)))
-      } else {
-        sessionIDs.push(sess.id)
-      }
-
-      for (const sid of sessionIDs) {
-        const msgResult = await sdk.client.session.messages({ sessionID: sid, limit: 100 }).catch(() => ({ data: undefined }))
-        const messages = msgResult.data ?? []
-        for (const msg of messages) {
-          for (const part of msg.parts ?? []) {
-            if (part.type !== "tool") continue
-            const state = part.state
-            records.push({
-              id: part.id,
-              tool: part.tool,
-              status: state.status,
-              input: state.input ?? {},
-              output: state.status === "completed" ? (state as any).output : undefined,
-              error: state.status === "error" ? (state as any).error : undefined,
-              title: (state as any).title,
-              timeStart: (state as any).time?.start ?? 0,
-              timeEnd: (state as any).time?.end,
-              sessionTitle: "",
-              part,
-            })
-          }
+      const records: ToolCallRecord[] = []
+      const msgResult = await sdk.client.session.messages({ sessionID, limit: 100 }).catch(() => ({ data: undefined }))
+      for (const msg of msgResult.data ?? []) {
+        for (const part of msg.parts ?? []) {
+          if (part.type !== "tool") continue
+          const state = part.state
+          records.push({
+            id: part.id, tool: part.tool, status: state.status,
+            input: state.input ?? {},
+            output: state.status === "completed" ? (state as any).output : undefined,
+            error: state.status === "error" ? (state as any).error : undefined,
+            title: (state as any).title,
+            timeStart: (state as any).time?.start ?? 0,
+            timeEnd: (state as any).time?.end,
+            sessionTitle: "",
+            part,
+          })
         }
       }
-
       records.sort((a, b) => a.timeStart - b.timeStart)
       setToolCalls(records)
     } catch (err) {
       setLoadError(errorMessage(err))
     } finally {
       setIsLoading(false)
+      setLoadedOnce(true)
     }
   }
 
+  const loadToolCalls = async () => {
+    const ws = selectedWorkspace()
+    const sess = selectedSession()
+    if (!ws || !sess) return
+
+    if (sess.id === "__all__") {
+      setIsLoading(true)
+      setLoadError(undefined)
+      setToolCalls([])
+      try {
+        const listResult = await sdk.client.session.list({ directory: ws.path, roots: true, limit: 50 }).catch(() => ({ data: undefined }))
+        let allRecords: ToolCallRecord[] = []
+        for (const s of listResult.data ?? []) {
+          const msgResult = await sdk.client.session.messages({ sessionID: s.id, limit: 100 }).catch(() => ({ data: undefined }))
+          for (const msg of msgResult.data ?? []) {
+            for (const part of msg.parts ?? []) {
+              if (part.type !== "tool") continue
+              const state = part.state
+              allRecords.push({
+                id: part.id, tool: part.tool, status: state.status,
+                input: state.input ?? {},
+                output: state.status === "completed" ? (state as any).output : undefined,
+                error: state.status === "error" ? (state as any).error : undefined,
+                title: (state as any).title,
+                timeStart: (state as any).time?.start ?? 0,
+                timeEnd: (state as any).time?.end,
+                sessionTitle: s.title,
+                part,
+              })
+            }
+          }
+        }
+        allRecords.sort((a, b) => a.timeStart - b.timeStart)
+        setToolCalls(allRecords)
+      } catch (err) {
+        setLoadError(errorMessage(err))
+      } finally {
+        setIsLoading(false)
+        setLoadedOnce(true)
+      }
+      return
+    }
+
+    await loadToolCallsForSession(sess.id)
+  }
+
   return (
-    <CenteredColumn>
-      <box flexGrow={1} flexDirection="column" alignItems="center" paddingLeft={2} paddingRight={2}>
+    <CenteredColumn maxWidth={CANVAS_MAX_WIDTH}>
+      <box flexGrow={1} flexDirection="column" alignItems="center" paddingLeft={0} paddingRight={0}>
         <box flexGrow={1} minHeight={0} />
-        <box width="100%" maxWidth={MAIN_CONTENT_MAX_WIDTH} flexDirection="column" alignItems="center" flexShrink={0}>
-          <box flexDirection="row" alignItems="center" width="100%">
+        <box width="100%" flexDirection="column" alignItems="center" flexShrink={0}>
+          {/* Canvas actions */}
+          <box flexDirection="row" alignItems="center" justifyContent="space-between" width="100%">
             <BackButton onClick={() => navigate({ type: "global" })} />
-          </box>
-          <box height={1} />
-
-          {/* canvas */}
-          <box width={canvasWidth()} height={CANVAS_HEIGHT} backgroundColor={theme.backgroundPanel} overflow="hidden">
-            <CanvasContent
-              isLoading={isLoading()}
-              loadError={loadError()}
-              toolCalls={filteredCalls()}
-              mode={mode()}
-              theme={theme}
-              dialog={dialog}
-            />
-          </box>
-          <box height={2} />
-
-          {/* picker buttons */}
-          <box flexDirection="row" gap={2} width="100%" justifyContent="center">
-            <WorkspaceButton
-              label={selectedWorkspace()?.name ?? "Pick workspace"}
-              active={!!selectedWorkspace()}
-              onClick={openWorkspacePicker}
-            />
-            <SessionButton
-              label={selectedSession()?.title ?? "Pick session"}
-              active={!!selectedSession()}
-              onClick={openSessionPicker}
-              disabled={!selectedWorkspace() || isLoading()}
-            />
             <LoadButton
               loading={isLoading()}
               disabled={!selectedSession() || isLoading()}
@@ -233,9 +233,57 @@ export function Visualizer() {
           </box>
           <box height={1} />
 
+          {/* canvas */}
+          <VisualizerCanvas height={CANVAS_HEIGHT}>
+            <Viewport
+              mode={mode()}
+              toolCalls={filteredCalls()}
+              loading={isLoading()}
+              loadedOnce={loadedOnce()}
+              error={loadError()}
+            >
+              <Show when={mode() === "timeline"}><TimelineView toolCalls={filteredCalls()} theme={theme} dialog={dialog} workdir={selectedWorkspace()?.path} /></Show>
+              <Show when={mode() === "types"}><TypesView toolCalls={filteredCalls()} theme={theme} dialog={dialog} /></Show>
+              <Show when={mode() === "sessions"}><SessionsView toolCalls={filteredCalls()} theme={theme} dialog={dialog} /></Show>
+            </Viewport>
+          </VisualizerCanvas>
+          <box height={1} />
+
+          {/* Data source selectors */}
+          <box flexDirection="row" alignItems="center" width="100%" gap={1}>
+            <WorkspaceButton
+              label={`Workspace: ${selectedWorkspace()?.name ?? "Pick workspace"}`}
+              active={!!selectedWorkspace()}
+              onClick={openWorkspacePicker}
+            />
+            <SessionButton
+              label={`Session: ${selectedSession()?.title ?? "Pick session"}`}
+              active={!!selectedSession()}
+              onClick={openSessionPicker}
+              disabled={!selectedWorkspace() || isLoading()}
+            />
+          </box>
+          <box height={2} />
+
+          {/* mode tabs */}
+          <box flexDirection="row" gap={1} width="100%" justifyContent="flex-start" alignItems="center">
+            <text fg={theme.textMuted}>Visualization type:</text>
+            <For each={modes}>
+              {(m) => (
+                <ModeButton
+                  label={m.charAt(0).toUpperCase() + m.slice(1)}
+                  active={mode() === m}
+                  onClick={() => setMode(m)}
+                />
+              )}
+            </For>
+          </box>
+          <box height={1} />
+
           {/* filter chips */}
           <Show when={toolCalls().length > 0}>
-            <box flexDirection="row" gap={1} width="100%" justifyContent="center" flexWrap="wrap">
+            <box flexDirection="row" gap={1} width="100%" justifyContent="flex-start" alignItems="center" flexWrap="wrap">
+              <text fg={theme.textMuted}>Tools:</text>
               <FilterChip
                 label="All"
                 count={toolCalls().length}
@@ -248,16 +296,11 @@ export function Visualizer() {
                     label={tool}
                     count={toolCalls().filter((c) => c.tool === tool).length}
                     active={activeFilter() === tool}
+                    selectedColor={toolCalloutColor(tool, theme)}
                     onClick={() => setActiveFilter(tool)}
                   />
                 )}
               </For>
-              <box
-                paddingX={1}
-                onMouseDown={() => setMode((m) => (m === "timeline" ? "stats" : "timeline"))}
-              >
-                <text fg={theme.textMuted}>[{mode() === "timeline" ? "Stats" : "Timeline"}]</text>
-              </box>
             </box>
           </Show>
         </box>
@@ -267,176 +310,28 @@ export function Visualizer() {
   )
 }
 
-function CanvasContent(props: {
-  isLoading: boolean
-  loadError: string | undefined
-  toolCalls: ToolCallRecord[]
-  mode: "timeline" | "stats"
-  theme: any
-  dialog: any
-}) {
-  const { theme } = props
-
-  if (props.isLoading) {
-    return (
-      <box alignItems="center" justifyContent="center" width="100%" height="100%">
-        <text fg={theme.textMuted}>Loading tool calls…</text>
-      </box>
-    )
-  }
-
-  if (props.loadError) {
-    return (
-      <box alignItems="center" justifyContent="center" width="100%" height="100%" flexDirection="column" gap={1}>
-        <text fg={theme.error}>Failed to load</text>
-        <text fg={theme.textMuted} attributes={TextAttributes.DIM}>{props.loadError}</text>
-      </box>
-    )
-  }
-
-  if (props.toolCalls.length === 0) {
-    return (
-      <box alignItems="center" justifyContent="center" width="100%" height="100%" flexDirection="column" gap={1}>
-        <text fg={theme.textMuted} attributes={TextAttributes.DIM}>Pick a workspace and session, then load</text>
-      </box>
-    )
-  }
-
-  if (props.mode === "stats") {
-    return <StatsView toolCalls={props.toolCalls} theme={theme} />
-  }
-
-  return <TimelineView toolCalls={props.toolCalls} theme={theme} dialog={props.dialog} />
-}
-
-function TimelineView(props: { toolCalls: ToolCallRecord[]; theme: any; dialog: any }) {
-  const { theme } = props
-  const calls = props.toolCalls
-
-  const maxDuration = createMemo(() => {
-    let max = 1
-    for (const c of calls) {
-      if (c.timeStart && c.timeEnd) {
-        max = Math.max(max, c.timeEnd - c.timeStart)
-      }
-    }
-    return max
-  })
-
-  return (
-    <box flexDirection="column" width="100%">
-      <For each={calls}>
-        {(call, idx) => {
-          const duration = call.timeStart && call.timeEnd ? call.timeEnd - call.timeStart : 0
-          const barLen = maxDuration() > 0 ? Math.round((duration / maxDuration()) * 8) : 0
-          const dotColor = call.status === "completed" ? theme.success : call.status === "error" ? theme.error : call.status === "running" ? theme.warning : theme.textMuted
-          const dotIcon = call.status === "completed" ? "✔" : call.status === "error" ? "✗" : call.status === "running" ? "◌" : "●"
-          const isLast = idx() === calls.length - 1
-          const conn = isLast ? " └─" : " ├─"
-
-          return (
-            <box
-              flexDirection="row"
-              gap={0}
-              paddingLeft={1}
-              paddingRight={1}
-              onMouseDown={() => props.dialog.replace(() => <DialogToolDetail part={call.part} />)}
-            >
-              <text fg={theme.border} width={4}>{conn}</text>
-              <text fg={dotColor} width={2}>{dotIcon}</text>
-              <text fg={theme.text} width={14}>{call.tool}</text>
-              <text fg={theme.textMuted} overflow="hidden" wrapMode="none" flexGrow={1}>
-                {inputSummary(call.tool, call.input)}
-              </text>
-              <text fg={dotColor} width={9}>
-                {"█".repeat(barLen) + "░".repeat(8 - barLen)}
-              </text>
-            </box>
-          )
-        }}
-      </For>
-    </box>
-  )
-}
-
-function StatsView(props: { toolCalls: ToolCallRecord[]; theme: any }) {
-  const { theme } = props
-  const calls = props.toolCalls
-
-  const stats = createMemo(() => {
-    const byTool: Record<string, { total: number; completed: number; error: number; running: number }> = {}
-    for (const c of calls) {
-      if (!byTool[c.tool]) byTool[c.tool] = { total: 0, completed: 0, error: 0, running: 0 }
-      byTool[c.tool].total++
-      byTool[c.tool][c.status as keyof typeof byTool[string]]++
-    }
-    return Object.entries(byTool).sort((a, b) => b[1].total - a[1].total)
-  })
-
-  const maxCount = createMemo(() => Math.max(...stats().map(([, s]) => s.total), 1))
-  const barWidth = 52
-  const PARTIAL = ["", "▁", "▂", "▃", "▄", "▅", "▆", "▇"]
-
-  return (
-    <box flexDirection="column" width="100%">
-      <box paddingLeft={1}>
-        <text fg={theme.textMuted} attributes={TextAttributes.DIM}>
-          Total: {calls.length}  Err: {calls.filter((c) => c.status === "error").length}  Run: {calls.filter((c) => c.status === "running").length}
-        </text>
-      </box>
-      <box height={1} />
-
-      <For each={stats()}>
-        {([tool, s]) => {
-          const scaled = (s.total / maxCount()) * barWidth
-          const full = Math.floor(scaled)
-          const partial = Math.round((scaled - full) * 8)
-          const bar = "█".repeat(full) + (partial > 0 ? PARTIAL[partial] : "")
-          return (
-            <box flexDirection="row" paddingLeft={1} gap={1}>
-              <text fg={theme.text} width={12}>{tool}</text>
-              <text fg={theme.primary}>{bar.padEnd(barWidth)}</text>
-              <text fg={theme.text} width={4}>{String(s.total).padStart(3)}</text>
-              <Show when={s.error > 0}>
-                <text fg={theme.error}>✕{s.error}</text>
-              </Show>
-            </box>
-          )
-        }}
-      </For>
-    </box>
-  )
-}
-
-function inputSummary(tool: string, input: Record<string, unknown>): string {
-  if (tool === "bash") return `$ ${String(input.command ?? "")}`
-  if (tool === "read" || tool === "edit" || tool === "write") return String(input.filePath ?? input.file_path ?? "")
-  if (tool === "grep" || tool === "glob") return `"${String(input.pattern ?? "")}"`
-  if (tool === "webfetch") return String(input.url ?? "")
-  if (tool === "websearch") return String(input.query ?? "")
-  if (tool === "task") return String(input.description ?? "").slice(0, 60)
-  if (tool === "question") return `Ask ${Array.isArray(input.questions) ? input.questions.length : 0} questions`
-  return JSON.stringify(input).slice(0, 60)
-}
-
 // ── Button components ──
 
 function WorkspaceButton(props: { label: string; active: boolean; onClick: () => void }) {
   const { theme } = useTheme()
   const [hover, setHover] = createSignal(false)
   const over = () => hover() || props.active
+  const background = () => hover() ? buttonBackground(theme, true) : props.active ? theme.backgroundElement : buttonBackground(theme, false)
+  const foreground = () => hover() ? buttonText(theme, true) : props.active ? theme.success : theme.textMuted
   return (
     <box
-      paddingLeft={2} paddingRight={2} paddingTop={1} paddingBottom={1}
-      backgroundColor={buttonBackground(theme, over())}
+      flexGrow={1} minWidth={0}
+      paddingLeft={1} paddingRight={1} paddingTop={1} paddingBottom={1}
+      justifyContent="center" alignItems="center"
+      backgroundColor={background()}
       border={["left"]}
-      borderColor={buttonBorder(theme, over(), theme.success)}
+      borderColor={hover() ? buttonBorder(theme, true) : props.active ? theme.success : theme.success}
       onMouseOver={() => setHover(true)}
       onMouseOut={() => setHover(false)}
       onMouseDown={props.onClick}
     >
-      <text fg={buttonText(theme, over(), props.active ? theme.success : theme.textMuted)}>
-        <span style={{ bold: over() }}>{props.label}</span>
+      <text fg={foreground()} overflow="hidden" wrapMode="none">
+        <span style={{ bold: over() }}>{props.label}{props.active ? " ▼" : ""}</span>
       </text>
     </box>
   )
@@ -446,18 +341,22 @@ function SessionButton(props: { label: string; active: boolean; onClick: () => v
   const { theme } = useTheme()
   const [hover, setHover] = createSignal(false)
   const over = () => hover() || props.active
+  const background = () => hover() ? buttonBackground(theme, true) : props.active ? theme.backgroundElement : props.disabled ? undefined : buttonBackground(theme, false)
+  const foreground = () => hover() ? buttonText(theme, true) : props.active ? theme.success : theme.textMuted
   return (
     <box
-      paddingLeft={2} paddingRight={2} paddingTop={1} paddingBottom={1}
-      backgroundColor={props.disabled ? undefined : buttonBackground(theme, over())}
+      flexGrow={1} minWidth={0}
+      paddingLeft={1} paddingRight={1} paddingTop={1} paddingBottom={1}
+      justifyContent="center" alignItems="center"
+      backgroundColor={background()}
       border={["left"]}
-      borderColor={props.disabled ? theme.border : buttonBorder(theme, over(), theme.warning)}
+      borderColor={hover() ? buttonBorder(theme, true) : props.active ? theme.success : props.disabled ? theme.border : theme.success}
       onMouseOver={() => !props.disabled && setHover(true)}
       onMouseOut={() => setHover(false)}
       onMouseDown={props.disabled ? undefined : props.onClick}
     >
-      <text fg={props.disabled ? theme.textMuted : buttonText(theme, over(), props.active ? theme.warning : theme.textMuted)}>
-        <span style={{ bold: over() }}>{props.label}</span>
+      <text fg={foreground()} overflow="hidden" wrapMode="none">
+        <span style={{ bold: over() }}>{props.label}{props.active ? " ▼" : ""}</span>
       </text>
     </box>
   )
@@ -466,9 +365,12 @@ function SessionButton(props: { label: string; active: boolean; onClick: () => v
 function LoadButton(props: { loading: boolean; disabled: boolean; onClick: () => void }) {
   const { theme } = useTheme()
   const [hover, setHover] = createSignal(false)
+  const label = props.loading ? "⟳ Loading…" : "⟳ Reload"
   return (
     <box
-      paddingLeft={2} paddingRight={2} paddingTop={1} paddingBottom={1}
+      flexShrink={0}
+      paddingLeft={1} paddingRight={1} paddingTop={1} paddingBottom={1}
+      justifyContent="center" alignItems="center"
       backgroundColor={props.disabled ? undefined : buttonBackground(theme, hover())}
       border={["left"]}
       borderColor={props.disabled ? theme.border : buttonBorder(theme, hover(), theme.primary)}
@@ -477,28 +379,55 @@ function LoadButton(props: { loading: boolean; disabled: boolean; onClick: () =>
       onMouseDown={props.disabled ? undefined : props.onClick}
     >
       <text fg={props.disabled ? theme.textMuted : buttonText(theme, hover(), theme.primary)}>
-        <span style={{ bold: hover() }}>{props.loading ? "Loading…" : "Load"}</span>
+        <span style={{ bold: hover() }}>{label}</span>
       </text>
     </box>
   )
 }
 
-function FilterChip(props: { label: string; count?: number; active: boolean; onClick: () => void }) {
+function FilterChip(props: { label: string; count?: number; active: boolean; selectedColor?: RGBA; onClick: () => void }) {
   const { theme } = useTheme()
   const [hover, setHover] = createSignal(false)
-  const over = () => hover() || props.active
+  const selectedColor = () => props.selectedColor ?? theme.success
+  const background = () => hover() ? buttonBackground(theme, true) : props.active ? theme.backgroundElement : buttonBackground(theme, false)
+  const foreground = () => hover() ? buttonText(theme, true) : props.active ? selectedColor() : theme.textMuted
   return (
     <box
       paddingX={1}
-      backgroundColor={buttonBackground(theme, over())}
+      justifyContent="center" alignItems="center"
+      backgroundColor={background()}
       border={["left"]}
-      borderColor={buttonBorder(theme, over(), theme.primary)}
+      borderColor={hover() ? buttonBorder(theme, true) : props.active ? selectedColor() : theme.primary}
       onMouseOver={() => setHover(true)}
       onMouseOut={() => setHover(false)}
       onMouseDown={props.onClick}
     >
-      <text fg={buttonText(theme, over(), props.active ? theme.primary : theme.textMuted)}>
-        <span style={{ bold: props.active }}>{props.label}{props.count !== undefined ? ` (${props.count})` : ""}</span>
+      <text fg={foreground()}>
+        <span style={{ bold: hover() || props.active }}>{props.label}{props.count !== undefined ? ` (${props.count})` : ""}</span>
+      </text>
+    </box>
+  )
+}
+
+function ModeButton(props: { label: string; active: boolean; onClick: () => void }) {
+  const { theme } = useTheme()
+  const [hover, setHover] = createSignal(false)
+  const background = () => hover() ? buttonBackground(theme, true) : props.active ? theme.backgroundElement : buttonBackground(theme, false)
+  const foreground = () => hover() ? buttonText(theme, true) : props.active ? theme.success : theme.textMuted
+  return (
+    <box
+      paddingX={1}
+      justifyContent="center"
+      alignItems="center"
+      backgroundColor={background()}
+      border={["left"]}
+      borderColor={hover() ? buttonBorder(theme, true) : props.active ? theme.success : theme.primary}
+      onMouseOver={() => setHover(true)}
+      onMouseOut={() => setHover(false)}
+      onMouseDown={props.onClick}
+    >
+      <text fg={foreground()}>
+        <span style={{ bold: hover() || props.active }}>{props.label}</span>
       </text>
     </box>
   )
@@ -509,7 +438,9 @@ function BackButton(props: { onClick: () => void }) {
   const [hover, setHover] = createSignal(false)
   return (
     <box
-      paddingLeft={1} paddingRight={1} paddingTop={1} paddingBottom={1}
+      flexShrink={0}
+      paddingLeft={0} paddingRight={1} paddingTop={1} paddingBottom={1}
+      justifyContent="center" alignItems="center"
       backgroundColor={buttonBackground(theme, hover())}
       border={["left"]}
       borderColor={buttonBorder(theme, hover(), theme.borderActive)}

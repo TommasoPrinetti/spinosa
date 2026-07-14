@@ -6,6 +6,21 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 **Release policy:** versions are published only with explicit maintainer approval.
 
+## [0.9.0-beta.13] — 2026-07-14
+
+### Added
+
+- The first-run global home now requires provider selection before creating or opening a workspace.
+- The visualizer now supports session and workspace selection, multiple visualization modes, clickable tool details, and copyable tool commands.
+
+### Changed
+
+- Visualizer controls, hover states, scrolling, spacing, tool colors, and canvas top alignment now follow the TUI layout conventions.
+
+### Fixed
+
+- TUI release tests now track current home navigation, routing, versioning, and update-lock behavior without leaking module mocks across test files.
+
 ## [0.9.0-beta.9] — 2026-07-12
 
 ### Changed

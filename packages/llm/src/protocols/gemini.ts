@@ -417,6 +417,7 @@ const step = (state: ParserState, event: GeminiEvent) => {
   let nextReasoningId = nextState.nextReasoningId
   let reasoningSignature = nextState.reasoningSignature
   let reasoningActive = false
+  let lifecycle = state.lifecycle
 
   for (const part of candidate.content.parts) {
     if ("text" in part && part.text.length > 0) {

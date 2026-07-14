@@ -59,7 +59,7 @@ const decodeSerializedEvent = (event: SerializedEvent): Effect.Effect<Payload, I
   return Effect.sync(() => ({
     id: event.id,
     type: definition.type,
-    durable: { aggregateID: event.aggregateID, seq: event.seq, version: definition.durable.version },
+    durable: { aggregateID: event.aggregateID, seq: event.seq, version },
     data: Schema.decodeUnknownSync(definition.data)(event.data),
   }))
 }
@@ -605,7 +605,7 @@ export const layerWith = (options?: LayerOptions) =>
             )
             return Stream.concat(Stream.fromIterable(historical), live)
           }),
-        )
+        ) as Stream.Stream<Payload>
 
       const listen = (listener: Subscriber): Effect.Effect<Unsubscribe> =>
         Effect.sync(() => {

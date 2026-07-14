@@ -14,6 +14,9 @@ import {
 import { useBindings, OPENCODE_BASE_MODE } from "../../keymap"
 import { usePromptRef } from "../../context/prompt"
 import { buttonBackground, buttonBorder, buttonText } from "../../util/button"
+import { useConnected } from "../../component/use-connected"
+import { useDialog } from "../../ui/dialog"
+import { DialogProvider } from "../../component/dialog-provider"
 
 type ActionRowItem = {
   key: string
@@ -27,6 +30,8 @@ export function SpinosaPromptChips() {
   const { navigate } = useRoute()
   const spinosa = useSpinosaWorkspace()
   const promptRef = usePromptRef()
+  const connected = useConnected()
+  const dialog = useDialog()
   const [busyAction, setBusyAction] = createSignal<"update" | "completed" | undefined>()
   const [updateLabel, setUpdateLabel] = createSignal("Updating workspace…")
   const [selectedAction, setSelectedAction] = createSignal(0)
@@ -89,7 +94,13 @@ export function SpinosaPromptChips() {
   }
 
   const primaryActions = createMemo<ActionRowItem[]>(() =>
-    workspaceReady()
+    !connected()
+      ? ([{
+          key: "select-provider",
+          label: "Select provider",
+          onPress: () => dialog.replace(() => <DialogProvider />),
+        }] as const)
+      : workspaceReady()
       ? ([
           {
             key: "add-files",
@@ -195,13 +206,17 @@ export function SpinosaPromptChips() {
       { key: "Left", desc: "Previous action", group: "Home", cmd: () => moveSelection(-1) },
       { key: "Right", desc: "Next action", group: "Home", cmd: () => moveSelection(1) },
       { key: "Enter", desc: "Run selected action", group: "Home", cmd: () => runSelectedAction() },
-      { key: "n", desc: "New workspace", group: "Home", cmd: () => navigate({ type: "onboarding" }) },
-      { key: "a", desc: "Import files", group: "Home", cmd: () => navigate({ type: "add-files" }) },
-      { key: "w", desc: "Switch workspace", group: "Home", cmd: () => spinosa.showPicker() },
-      { key: "v", desc: "Visualizer", group: "Home", cmd: () => navigate({ type: "visualizer" }) },
-      ...(workspaceReady() && needsWorkspaceUpdate()
-        ? [{ key: "u", desc: "Update workspace files", group: "Home", cmd: () => void runWorkspaceUpdate() }]
-        : []),
+      ...(!connected()
+        ? [{ key: "p", desc: "Select provider", group: "Home", cmd: () => dialog.replace(() => <DialogProvider />) }]
+        : [
+            { key: "n", desc: "New workspace", group: "Home", cmd: () => navigate({ type: "onboarding" }) },
+            { key: "a", desc: "Import files", group: "Home", cmd: () => navigate({ type: "add-files" }) },
+            { key: "w", desc: "Switch workspace", group: "Home", cmd: () => spinosa.showPicker() },
+            { key: "v", desc: "Visualizer", group: "Home", cmd: () => navigate({ type: "visualizer" }) },
+            ...(workspaceReady() && needsWorkspaceUpdate()
+              ? [{ key: "u", desc: "Update workspace files", group: "Home", cmd: () => void runWorkspaceUpdate() }]
+              : []),
+          ]),
     ],
   }))
 

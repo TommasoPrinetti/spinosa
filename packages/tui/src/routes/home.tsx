@@ -34,6 +34,8 @@ import type { SpinosaSetupStatus } from "../spinosa/types"
 import { DialogConfirm } from "../ui/dialog-confirm"
 import { dirname, join } from "node:path"
 import { statSync } from "node:fs"
+import { useConnected } from "../component/use-connected"
+import { DialogProvider } from "../component/dialog-provider"
 
 const SHELL_PLACEHOLDER = ["ls -la", "git status", "pwd"]
 const defaultPlaceholder = {
@@ -82,6 +84,7 @@ export function Home() {
   const dimensions = useTerminalDimensions()
   const tuiConfig = useTuiConfig()
   const spinosa = useSpinosaWorkspace()
+  const providerConnected = useConnected()
   const { theme } = useTheme()
   const workspaceReady = createMemo(() => Boolean(spinosa.activePath && !spinosa.genericMode))
   const startupPrompt = createMemo(() => route.prompt ?? spinosa.pendingPrompt)
@@ -280,10 +283,18 @@ export function Home() {
   createEffect(() => {
     if (!spinosa.pickerRequested) return
     spinosa.clearPickerRequest()
+    if (!providerConnected()) {
+      dialog.replace(() => <DialogProvider />)
+      return
+    }
     dialog.replace(() => <DialogSpinosaWorkspacePicker onClose={() => spinosa.restorePickerRoute()} />)
   })
 
   const pickRecentWorkspace = async (workspacePath: string) => {
+    if (!providerConnected()) {
+      dialog.replace(() => <DialogProvider />)
+      return
+    }
     const launch = await getWorkspaceLaunchDecision(workspacePath)
     if (launch.type === "startup-choice") {
       dialog.replace(() => (
@@ -362,11 +373,11 @@ export function Home() {
           <box height={1} minHeight={0} flexShrink={1} />
 
           {/* recent workspaces (global home only) */}
-          <Show when={!workspaceReady() && recentLoading()}>
+          <Show when={providerConnected() && !workspaceReady() && recentLoading()}>
             <text fg={theme.textMuted}>Loading recent workspaces…</text>
             <box height={1} />
           </Show>
-          <Show when={!workspaceReady() && !recentLoading() && recentWorkspaces().length > 0}>
+          <Show when={providerConnected() && !workspaceReady() && !recentLoading() && recentWorkspaces().length > 0}>
             <box width="100%" maxWidth={promptMaxWidth()} flexDirection="column" flexShrink={0}>
               <text fg={theme.textMuted}>Recent workspaces</text>
               <box height={1} />
@@ -403,7 +414,7 @@ export function Home() {
 
           <box width="100%" maxWidth={promptMaxWidth()} zIndex={1000} paddingTop={1} flexShrink={0}>
             <SpinosaPromptChips />
-            <Show when={workspaceReady()}>
+            <Show when={providerConnected() && workspaceReady()}>
               <box>
                 <pluginRuntime.Slot name="home_prompt" mode="replace" ref={bind}>
                   <Prompt

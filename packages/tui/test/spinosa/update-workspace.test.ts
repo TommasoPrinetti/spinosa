@@ -184,7 +184,7 @@ describe("workspace update flow", () => {
     await mkdir(path.join(workspace, ".spinosa", "update.lock"), { recursive: true })
     await Bun.write(path.join(templateRoot, ".spinosa", "workspace-files.tsv"), "path\trole\tupdate_policy\n")
 
-    expect(await updateWorkspace({ workspacePath: workspace, frameworkRoot })).toEqual({
+    expect(await updateWorkspace({ workspacePath: workspace, frameworkRoot, lockTimeoutMs: 0 })).toEqual({
       success: false, added: 0, updated: 0, removed: 0, skipped: 0, changes: false,
     })
   })

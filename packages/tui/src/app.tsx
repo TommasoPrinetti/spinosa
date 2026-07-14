@@ -558,18 +558,19 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     })
   })
 
+  const connected = useConnected()
+
   createEffect(
     on(
-      () => sync.status === "complete" && sync.data.provider.length === 0,
-      (isEmpty, wasEmpty) => {
-        // only trigger when we transition into an empty-provider state
-        if (!isEmpty || wasEmpty) return
+      () => sync.status === "complete" && !connected(),
+      (needsProvider, neededProvider) => {
+        // Open once when bootstrap confirms there is no usable provider.
+        if (!needsProvider || neededProvider) return
         dialog.replace(() => <DialogProviderList />)
       },
     ),
   )
 
-  const connected = useConnected()
   const currentWorktreeWorkspace = createMemo(() => {
     const workspaceID = project.workspace.current()
     if (!workspaceID) return
