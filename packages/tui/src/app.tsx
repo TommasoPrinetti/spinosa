@@ -86,6 +86,7 @@ import { destroyRenderer } from "./util/renderer"
 import { cliErrorMessage, errorFormat } from "./util/error"
 import { AddFiles } from "./routes/spinosa/add-files"
 import { Onboarding } from "./routes/spinosa/onboarding"
+import { Visualizer } from "./routes/spinosa/visualizer"
 
 const appGlobalBindingCommands = [
   "session.list",
@@ -1131,6 +1132,9 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
           </Show>
           <Show when={route.data.type === "add-files"}>
             <AddFiles />
+          </Show>
+          <Show when={route.data.type === "visualizer"}>
+            <Visualizer />
           </Show>
           {plugin()}
         </box>

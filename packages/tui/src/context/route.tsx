@@ -28,14 +28,21 @@ export type PluginRoute = {
   data?: Record<string, unknown>
 }
 
+export type VisualizerRoute = {
+  type: "visualizer"
+  workspacePath?: string
+  sessionID?: string
+}
+
 export type RouteNavigateInput =
   | GlobalRoute
   | WorkspaceRoute
   | OnboardingRoute
   | AddFilesRoute
   | PluginRoute
+  | VisualizerRoute
 
-export type Route = GlobalRoute | WorkspaceRoute | OnboardingRoute | AddFilesRoute | PluginRoute
+export type Route = GlobalRoute | WorkspaceRoute | OnboardingRoute | AddFilesRoute | PluginRoute | VisualizerRoute
 
 export const { use: useRoute, provider: RouteProvider } = createSimpleContext({
   name: "Route",
@@ -58,7 +65,7 @@ export const { use: useRoute, provider: RouteProvider } = createSimpleContext({
 })
 
 export function normalizeRoute(route: RouteNavigateInput): Route {
-  if (route.type === "global" || route.type === "onboarding" || route.type === "add-files") {
+  if (route.type === "global" || route.type === "onboarding" || route.type === "add-files" || route.type === "visualizer") {
     return route
   }
   if (route.type === "workspace") {
@@ -87,6 +94,13 @@ function initialRoute(value: unknown): RouteNavigateInput | undefined {
   }
   if (value.type === "plugin" && "id" in value && typeof value.id === "string") {
     return { type: "plugin", id: value.id }
+  }
+  if (value.type === "visualizer") {
+    return {
+      type: "visualizer",
+      workspacePath: "workspacePath" in value && typeof value.workspacePath === "string" ? value.workspacePath : undefined,
+      sessionID: "sessionID" in value && typeof value.sessionID === "string" ? value.sessionID : undefined,
+    }
   }
 }
 

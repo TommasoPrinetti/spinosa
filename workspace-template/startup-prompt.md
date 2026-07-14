@@ -22,6 +22,7 @@ Before Phase 1 dispatch, write `agent_reports/g_{session_id}.md` using `.agents/
 
 ## Gate: do not stop until ALL of
 
+- `setup_status` is `workspace_started` in `.spinosa/workspace` (the canonical status file the TUI reads)
 - `setup_status` is `workspace_started` in both `system/context.md` and `system/configuration.md`
 - `system/dictionary.md` contains the master dictionary
 - `system/workspace_index.md` records total raw files, extraction coverage, maps, and known gaps

@@ -59,6 +59,10 @@ export async function generateStartupPrompt(
   prompt += `- **Workspace root:** ${root}\n`
   prompt += `- **Preferred CLI:** ${preferredCli}\n`
   prompt += `- **Onboarding summary:** .spinosa/onboarding-summary.md\n\n`
+  prompt += `## Setup Status Gate\n\n`
+  prompt += `When all phases are complete, update the workspace status file:\n`
+  prompt += `Edit \`.spinosa/workspace\` and change \`setup_status: cli_started\` to \`setup_status: workspace_started\`.\n`
+  prompt += `This is the canonical status — the TUI reads it to know the workspace is ready.\n\n`
   prompt += `## Corpus Boundary\n\n`
   prompt += `- Treat raw/ as the only source corpus.\n`
   prompt += `- Do not inspect, validate, mention, or rely on the original import folder.\n`

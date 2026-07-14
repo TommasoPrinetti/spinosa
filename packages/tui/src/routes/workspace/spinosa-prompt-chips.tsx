@@ -92,11 +92,6 @@ export function SpinosaPromptChips() {
     workspaceReady()
       ? ([
           {
-            key: "new-workspace",
-            label: "New workspace",
-            onPress: () => navigate({ type: "onboarding" }),
-          },
-          {
             key: "add-files",
             label: "Import files",
             onPress: () => navigate({ type: "add-files" }),
@@ -105,6 +100,11 @@ export function SpinosaPromptChips() {
             key: "change-workspace",
             label: "Switch workspace",
             onPress: () => spinosa.showPicker(),
+          },
+          {
+            key: "visualizer",
+            label: "Visualizer",
+            onPress: () => navigate({ type: "visualizer" }),
           },
           ...(needsWorkspaceUpdate() || busyAction() === "update" || busyAction() === "completed"
             ? [
@@ -198,6 +198,7 @@ export function SpinosaPromptChips() {
       { key: "n", desc: "New workspace", group: "Home", cmd: () => navigate({ type: "onboarding" }) },
       { key: "a", desc: "Import files", group: "Home", cmd: () => navigate({ type: "add-files" }) },
       { key: "w", desc: "Switch workspace", group: "Home", cmd: () => spinosa.showPicker() },
+      { key: "v", desc: "Visualizer", group: "Home", cmd: () => navigate({ type: "visualizer" }) },
       ...(workspaceReady() && needsWorkspaceUpdate()
         ? [{ key: "u", desc: "Update workspace files", group: "Home", cmd: () => void runWorkspaceUpdate() }]
         : []),
