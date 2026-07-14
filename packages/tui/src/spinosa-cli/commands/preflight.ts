@@ -18,15 +18,17 @@ export interface PreflightDependencies {
   upgradeFramework(): Promise<UpgradeResult>
   discoverRegisteredWorkspaces(): Promise<string[]>
   updateWorkspace(workspacePath: string, frameworkRoot: string): Promise<UpdateResult>
-  confirm(question: string): Promise<boolean>
+  confirm(question: string, defaultYes?: boolean): Promise<boolean>
   frameworkRoot(version: string): string
   out(message: string): void
 }
 
-async function confirm(question: string): Promise<boolean> {
+async function confirm(question: string, defaultYes = false): Promise<boolean> {
   const prompt = createInterface({ input: process.stdin, output: process.stdout })
   try {
-    const answer = (await prompt.question(`${question} [y/N] `)).trim().toLowerCase()
+    const hint = defaultYes ? "[Y/n]" : "[y/N]"
+    const answer = (await prompt.question(`✨ ${question} ${hint} `)).trim().toLowerCase()
+    if (!answer) return defaultYes
     return answer === "y" || answer === "yes"
   } finally {
     prompt.close()
@@ -47,8 +49,8 @@ export async function runLaunchPreflight(deps: PreflightDependencies = defaults)
   const available = await deps.checkUpgradeAvailable()
   if (!available.available || !available.latestVersion) return "continue"
 
-  const current = available.currentVersion ? ` (current v${available.currentVersion})` : ""
-  if (!(await deps.confirm(`Spinosa v${available.latestVersion} is available${current}. Upgrade now?`))) {
+  const current = available.currentVersion ? ` (current \x1b[32mv${available.currentVersion}\x1b[0m)` : ""
+  if (!(await deps.confirm(`✨ \x1b[1mSpinosa v${available.latestVersion}\x1b[0m is available${current}. Upgrade now?`, true))) {
     return "continue"
   }
 

@@ -39,7 +39,7 @@ describe("launch preflight", () => {
     })
 
     expect(await runLaunchPreflight(deps)).toBe("continue")
-    expect(questions).toEqual(["Spinosa v1.1.0 is available (current v1.0.0). Upgrade now?"])
+    expect(questions).toEqual(["✨ \x1b[1mSpinosa v1.1.0\x1b[0m is available (current \x1b[32mv1.0.0\x1b[0m). Upgrade now?"])
   })
 
   test("upgrades every registered workspace and requests a fresh launch", async () => {
