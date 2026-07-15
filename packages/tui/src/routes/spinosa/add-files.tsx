@@ -600,7 +600,7 @@ export function AddFiles() {
         if (mdCount > 0) {
           setStep("markitdown")
           setBusy(false)
-          await gate("Convert with MarkItDown")
+          await gate("Process text files")
           setBusy(true)
           if (shouldAbort()) { spinOff(); setBusy(false); return }
 
@@ -622,7 +622,7 @@ export function AddFiles() {
         if (ocrCount > 0) {
           setStep("ocr")
           setBusy(false)
-          await gate("Run OCR")
+          await gate("Process images and PDFs")
           setBusy(true)
           if (shouldAbort()) { spinOff(); setBusy(false); return }
 
@@ -900,7 +900,7 @@ export function AddFiles() {
               <text fg={buttonText(theme, hoveredButton() === "back", theme.text)}>←</text>
             </box>
             <text fg={theme.text}>
-              <span style={{ bold: true }}>Import files into workspace</span>
+              <span style={{ bold: true }}>{busy() ? `${SPINNER_FRAMES[spinIdx()]} ` : ""}Import files into workspace</span>
             </text>
           </box>
           <text fg={theme.textMuted}>

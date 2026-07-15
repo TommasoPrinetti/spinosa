@@ -46,12 +46,6 @@ export function DialogSpinosaStartupChoice(props: {
       primary: false,
       run: () => void openChatDirectly(),
     },
-    {
-      title: "Back",
-      description: "Return to the workspace list.",
-      primary: false,
-      run: () => props.onBack?.(),
-    },
   ] as const)
 
   const move = (offset: number) => {
@@ -88,7 +82,7 @@ export function DialogSpinosaStartupChoice(props: {
         </text>
       </box>
       <text fg={theme.textMuted}>
-        Startup indexing has not run yet. Open the setup brief to continue, or enter workspace chat without it.
+        Startup the workspace with prompt, or open workspace chat without it.
       </text>
       <box height={1} />
       <For each={options()}>

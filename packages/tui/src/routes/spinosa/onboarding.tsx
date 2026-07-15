@@ -734,7 +734,7 @@ let nameInput: TextareaRenderable | undefined
       await delay(1000)
       if (classified.markitdownFiles.length > 0) {
         setBusy(false)
-        await gate("Convert with MarkItDown")
+        await gate("Process text files")
         setBusy(true)
         setStep("markitdown")
         setProgTotal(totalMd)
@@ -752,7 +752,7 @@ let nameInput: TextareaRenderable | undefined
 
       if (classified.ocrFiles.length > 0) {
         setBusy(false)
-        await gate("Run OCR")
+        await gate("Process images and PDFs")
         setBusy(true)
         setStep("ocr")
         setProgTotal(totalOcr)
@@ -806,8 +806,8 @@ let nameInput: TextareaRenderable | undefined
         )
         setProcessingDone(true)
         setProcessingStatus("All done")
-        setGateLabel("PROCEED")
-        setGateAction(() => () => { setWaitingForGate(false); setStep("provider") })
+        setGateLabel("Go to the workspace")
+        setGateAction(() => () => { setWaitingForGate(false); void finishProvider("spinosa") })
         setWaitingForGate(true)
       } else {
         setStep("error")
@@ -1126,7 +1126,7 @@ let nameInput: TextareaRenderable | undefined
               <text fg={buttonText(theme, hoveredButton() === "back", theme.text)}>←</text>
             </box>
             <text fg={theme.text}>
-              <span style={{ bold: true }}>Create Spinosa workspace</span>
+              <span style={{ bold: true }}>{busy() ? `${SPINNER_FRAMES[spinIdx()]} ` : ""}Create Spinosa workspace</span>
             </text>
           </box>
           <text fg={theme.textMuted}>

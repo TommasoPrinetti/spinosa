@@ -184,12 +184,12 @@ test("Spinosa app route E2E boots and navigates key workspace flows", async () =
         setup.mockInput.pressKey("w")
         await waitForText(setup, "cli-started-demo")
         setup.mockInput.pressEnter()
-        await waitForText(setup, "Startup indexing has not run yet")
+        await waitForText(setup, "Startup the workspace with prompt")
       },
     })
 
     expect(cliStartedFrame).toContain("cli-started-demo")
-    expect(cliStartedFrame).toContain("Startup indexing has not run yet")
+    expect(cliStartedFrame).toContain("Startup the workspace with prompt")
   } finally {
     rmSync(cliRoot, { recursive: true, force: true })
   }

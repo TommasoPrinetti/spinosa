@@ -213,6 +213,7 @@ export function Home() {
   let once = false
   let lastRoutePromptKey: string | undefined
   let lastStartupHintKey: string | undefined
+  let providerPromptRequested = false
 
   onMount(() => {
     editor.clearSelection()
@@ -246,6 +247,14 @@ export function Home() {
         })
       }
     }
+  })
+
+  // A queued workspace prompt always needs a usable model. Reuse the native
+  // connect → model flow, then leave the prompt in place for the user.
+  createEffect(() => {
+    if (!startupPrompt() || providerConnected() || providerPromptRequested) return
+    providerPromptRequested = true
+    dialog.replace(() => <DialogProvider />)
   })
 
   // Auto-submit route prompt once the prompt, sync, and model state are ready.

@@ -15,6 +15,8 @@ import { isConsoleManagedProvider } from "../util/provider-origin"
 import { useConnected } from "./use-connected"
 import { useBindings } from "../keymap"
 import { useClipboard } from "../context/clipboard"
+import { useLocal } from "../context/local"
+import { DialogConfirm } from "../ui/dialog-confirm"
 
 const PROVIDER_PRIORITY: Record<string, number> = {
   opencode: 0,
@@ -90,6 +92,7 @@ export function createDialogProviderOptions() {
   const toast = useToast()
   const { theme } = useTheme()
   const onboarded = useConnected()
+  const local = useLocal()
 
   async function promptCustomProviderID(): Promise<string | undefined> {
     const value = await DialogPrompt.show(dialog, "Other", {
@@ -114,7 +117,30 @@ export function createDialogProviderOptions() {
   }
 
   const options = createMemo(() => {
-    return pipe(
+    const spinosaDefault = (() => {
+      const provider = sync.data.provider.find((item) => item.id === "opencode")
+      const model = Object.values(provider?.models ?? {}).find((item) => item.cost?.input === 0 && item.status !== "deprecated")
+      if (!provider || !model) return []
+      return [{
+        title: "Spinosa default",
+        value: "__spinosa_default__",
+        description: "Free OpenCode model — no API key",
+        category: "Recommended",
+        async onSelect() {
+          const confirmed = await DialogConfirm.show(
+            dialog,
+            "Use Spinosa default?",
+            "Your prompts and source-derived content will transit through OpenCode's servers. Spinosa does not control that processing.",
+          )
+          if (!confirmed) return
+          local.model.set({ providerID: provider.id, modelID: model.id }, { recent: true })
+          dialog.clear()
+        },
+      }]
+    })()
+    return [
+      ...spinosaDefault,
+      ...pipe(
       providerOptions(sync.data.provider_next.all),
       map((provider) => {
         if (provider.type === "custom") {
@@ -220,7 +246,8 @@ export function createDialogProviderOptions() {
           },
         }
       }),
-    )
+      ),
+    ]
   })
   return options
 }

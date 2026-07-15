@@ -234,11 +234,7 @@ export function Visualizer() {
           {/* Canvas actions */}
           <box flexDirection="row" alignItems="center" justifyContent="space-between" width="100%">
             <BackButton onClick={() => navigate({ type: "global" })} />
-            <LoadButton
-              loading={isLoading()}
-              disabled={!selectedSession() || isLoading()}
-              onClick={loadToolCalls}
-            />
+            <ExportButton />
           </box>
           <box height={1} />
 
@@ -371,24 +367,23 @@ function SessionButton(props: { label: string; active: boolean; onClick: () => v
   )
 }
 
-function LoadButton(props: { loading: boolean; disabled: boolean; onClick: () => void }) {
+function ExportButton() {
   const { theme } = useTheme()
   const [hover, setHover] = createSignal(false)
-  const label = props.loading ? "⟳ Loading…" : "⟳ Reload"
   return (
     <box
       flexShrink={0}
       paddingLeft={1} paddingRight={1} paddingTop={1} paddingBottom={1}
       justifyContent="center" alignItems="center"
-      backgroundColor={props.disabled ? undefined : buttonBackground(theme, hover())}
+      backgroundColor={buttonBackground(theme, hover())}
       border={["left"]}
-      borderColor={props.disabled ? theme.border : buttonBorder(theme, hover(), theme.primary)}
-      onMouseOver={() => !props.disabled && setHover(true)}
+      borderColor={buttonBorder(theme, hover(), theme.primary)}
+      onMouseOver={() => setHover(true)}
       onMouseOut={() => setHover(false)}
-      onMouseDown={props.disabled ? undefined : props.onClick}
+      onMouseDown={() => {}}
     >
-      <text fg={props.disabled ? theme.textMuted : buttonText(theme, hover(), theme.primary)}>
-        <span style={{ bold: hover() }}>{label}</span>
+      <text fg={buttonText(theme, hover(), theme.primary)}>
+        <span style={{ bold: hover() }}>⇩ Export</span>
       </text>
     </box>
   )
