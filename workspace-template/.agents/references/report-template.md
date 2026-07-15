@@ -1,5 +1,7 @@
 # Report Template
 
+The **`write_report` tool** is the canonical way to produce numbered reports. It handles YAML frontmatter, section headers, separators, and the reproducibility table. Use this template as a content reference for what goes in each field.
+
 ## File Naming Convention
 
 **Full rules:** [[.agents/references/artifact-naming.md]]

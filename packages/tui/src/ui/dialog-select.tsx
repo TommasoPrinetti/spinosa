@@ -668,7 +668,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                         >
                           <box
                             flexDirection="row"
-                            paddingLeft={current() || option.gutter ? 1 : 3}
+                            paddingLeft={option.gutter ? 1 : 3}
                             paddingRight={3}
                             gap={1}
                             backgroundColor={
@@ -756,7 +756,7 @@ function Option(props: {
   return (
     <>
       <Show when={props.current && !props.gutter}>
-        <text flexShrink={0} fg={text()} marginRight={0}>
+        <text flexShrink={0} fg={text()} marginRight={1}>
           ●
         </text>
       </Show>

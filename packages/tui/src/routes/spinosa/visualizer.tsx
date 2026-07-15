@@ -1,23 +1,41 @@
-import { createMemo, createSignal, For, onMount, Show } from "solid-js"
-import type { RGBA } from "@opentui/core"
-import { useRoute } from "../../context/route"
-import { useDialog } from "../../ui/dialog"
-import { useTheme } from "../../context/theme"
-import { useSpinosaWorkspace } from "../../context/spinosa-workspace"
-import { useSDK } from "../../context/sdk"
-import { DialogSelect } from "../../ui/dialog-select"
-import { buttonBackground, buttonBorder, buttonText } from "../../util/button"
-import { listRegisteredWorkspaces, readWorkspaceMeta } from "../../spinosa/service"
-import { resolveWorkspaceDisplayName } from "../../spinosa/workspace-name"
+import { mkdir } from "node:fs/promises"
+import path from "node:path"
+import { TextAttributes } from "@opentui/core"
+import { useTerminalDimensions } from "@opentui/solid"
+import { createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js"
 import { CenteredColumn } from "../../component/centered-column"
-import { errorMessage } from "../../util/error"
+import { useRoute } from "../../context/route"
+import { useSDK } from "../../context/sdk"
+import { useSpinosaWorkspace } from "../../context/spinosa-workspace"
+import { useTheme } from "../../context/theme"
+import { OPENCODE_BASE_MODE, useBindings } from "../../keymap"
+import { listRegisteredWorkspaces, readWorkspaceMeta } from "../../spinosa/service"
+import { setupStatusThemeKey } from "../../spinosa/status-labels"
 import type { SpinosaSetupStatus } from "../../spinosa/types"
-import type { ToolCallRecord, VisualizerMode } from "./visualizer-types"
-import { Viewport, VisualizerCanvas } from "./visualizer-viewport"
-import { toolCalloutColor } from "./visualizer-utils"
-import { TimelineView } from "./visualizer-timeline"
-import { TypesView } from "./visualizer-types-view"
-import { SessionsView } from "./visualizer-sessions"
+import { resolveWorkspaceDisplayName } from "../../spinosa/workspace-name"
+import { DialogSelect } from "../../ui/dialog-select"
+import { useDialog } from "../../ui/dialog"
+import { DialogPrompt } from "../../ui/dialog-prompt"
+import { useToast } from "../../ui/toast"
+import { buttonBackground, buttonBorder, buttonText } from "../../util/button"
+import { errorMessage } from "../../util/error"
+import { DialogToolDetail } from "./dialog-tool-detail"
+import { GraphCanvas, type GraphCanvasHandle } from "./visualizer-graph-canvas"
+import { aggregateFileUsage, type WorkspaceFile } from "./visualizer-graph-data"
+import { exportGraphScene, type GraphExportFormat } from "./visualizer-graph-export"
+import { GraphInspector } from "./visualizer-graph-inspector"
+import { buildGraphScene, type GraphHit, type GraphMode } from "./visualizer-graph-layout"
+import {
+  loadSelectedSessionTree,
+  loadWorkspaceFileInventory,
+  VisualizerGraphLoadError,
+  type SessionTreeCoverage,
+  type VisualizerGraphClient,
+  type VisualizerSession,
+  type WorkspaceFileCoverage,
+} from "./visualizer-graph-loader"
+import { buildVisualizerGraphModel, type VisualizerGraphScopeCoverage } from "./visualizer-graph-model"
+import type { ToolCallRecord } from "./visualizer-types"
 
 type WorkspaceInfo = {
   path: string
@@ -25,389 +43,536 @@ type WorkspaceInfo = {
   status: SpinosaSetupStatus
 }
 
-const CANVAS_MAX_WIDTH = 92
-const CANVAS_HEIGHT = 28
+type LoadLifecycle = "idle" | "loading" | "ready" | "error"
+
+type FileLoadState = {
+  status: LoadLifecycle
+  files: WorkspaceFile[]
+  coverage?: WorkspaceFileCoverage
+  error?: string
+}
+
+type CallLoadState = {
+  status: LoadLifecycle
+  calls: ToolCallRecord[]
+  sessions: VisualizerSession[]
+  scope: VisualizerGraphScopeCoverage
+  coverage?: SessionTreeCoverage
+  error?: string
+}
+
+const MODES: readonly { value: GraphMode; label: string }[] = [
+  { value: "files", label: "1 Files" },
+  { value: "flow", label: "2 Flow" },
+  { value: "activity", label: "3 Activity" },
+]
+
+const MAX_WIDTH = 136
+const MIN_WIDTH = 48
+const MIN_HEIGHT = 16
 
 export function Visualizer() {
   const { theme } = useTheme()
   const route = useRoute()
-  const { navigate } = route
   const dialog = useDialog()
+  const toast = useToast()
+  const dimensions = useTerminalDimensions()
   const spinosa = useSpinosaWorkspace()
   const sdk = useSDK()
+  const graphClient = sdk.client as unknown as VisualizerGraphClient
 
-  const [selectedWorkspace, setSelectedWorkspace] = createSignal<WorkspaceInfo | undefined>()
-  const [selectedSession, setSelectedSession] = createSignal<{ id: string; title: string } | undefined>()
-  const [toolCalls, setToolCalls] = createSignal<ToolCallRecord[]>([])
-  const [isLoading, setIsLoading] = createSignal(false)
-  const [loadedOnce, setLoadedOnce] = createSignal(false)
-  const [loadError, setLoadError] = createSignal<string | undefined>()
-  const [activeFilter, setActiveFilter] = createSignal<string>("__all__")
-  const [mode, setMode] = createSignal<VisualizerMode>("timeline")
+  const [workspace, setWorkspace] = createSignal<WorkspaceInfo>()
+  const [session, setSession] = createSignal<VisualizerSession>()
+  const [fileLoad, setFileLoad] = createSignal<FileLoadState>({ status: "idle", files: [] })
+  const [callLoad, setCallLoad] = createSignal<CallLoadState>({
+    status: "idle",
+    calls: [],
+    sessions: [],
+    scope: { scope: "loaded-calls" },
+  })
+  const [mode, setMode] = createSignal<GraphMode>("files")
+  const [hovered, setHovered] = createSignal<GraphHit>()
+  const [selected, setSelected] = createSignal<GraphHit>()
+  let graph: GraphCanvasHandle | undefined
+  let workspaceRequest = 0
+  let sessionRequest = 0
 
-  onMount(async () => {
+  const fileGraph = createMemo(() =>
+    aggregateFileUsage(workspace()?.path ?? "/", fileLoad().files, callLoad().calls),
+  )
+  const graphModel = createMemo(() =>
+    buildVisualizerGraphModel({
+      calls: callLoad().calls,
+      fileGraph: fileGraph(),
+      workspaceRoot: workspace()?.path ?? "/",
+      coverage: callLoad().scope,
+    }),
+  )
+  const scene = createMemo(() => buildGraphScene(mode(), graphModel()))
+  const isWide = () => dimensions().width >= 108
+  const isTooSmall = () => dimensions().width < MIN_WIDTH || dimensions().height < MIN_HEIGHT
+  const canvasHeight = () => Math.max(10, dimensions().height - 13)
+
+  const resetInspection = () => {
+    setHovered(undefined)
+    setSelected(undefined)
+    graph?.clearSelection()
+  }
+
+  const scanWorkspace = async (target: WorkspaceInfo) => {
+    const request = ++workspaceRequest
+    setFileLoad({ status: "loading", files: [] })
+    try {
+      const result = await loadWorkspaceFileInventory(graphClient, target.path)
+      if (request !== workspaceRequest || workspace()?.path !== target.path) return
+      setFileLoad({ status: "ready", files: result.files, coverage: result.coverage })
+    } catch (error) {
+      if (request !== workspaceRequest || workspace()?.path !== target.path) return
+      setFileLoad({ status: "error", files: [], error: graphLoadMessage(error) })
+    }
+  }
+
+  const loadSession = async (target: VisualizerSession, targetWorkspace = workspace()) => {
+    if (!targetWorkspace) return
+    const request = ++sessionRequest
+    resetInspection()
+    setCallLoad({
+      status: "loading",
+      calls: [],
+      sessions: [],
+      scope: { scope: "selected-tree", rootSessionID: target.id },
+    })
+    try {
+      const result = await loadSelectedSessionTree(graphClient, target, { directory: targetWorkspace.path })
+      if (request !== sessionRequest || workspace()?.path !== targetWorkspace.path) return
+      setCallLoad({
+        status: "ready",
+        calls: result.toolCalls,
+        sessions: result.sessions,
+        coverage: result.coverage,
+        scope: scopeFromCoverage(result.coverage),
+      })
+    } catch (error) {
+      if (request !== sessionRequest || workspace()?.path !== targetWorkspace.path) return
+      setCallLoad({
+        status: "error",
+        calls: [],
+        sessions: [],
+        scope: scopeFromError(error, target.id),
+        error: graphLoadMessage(error),
+      })
+    }
+  }
+
+  const selectWorkspace = (target: WorkspaceInfo) => {
+    sessionRequest++
+    setWorkspace(target)
+    setSession(undefined)
+    setCallLoad({ status: "idle", calls: [], sessions: [], scope: { scope: "loaded-calls" } })
+    setMode("files")
+    resetInspection()
+    void scanWorkspace(target)
+  }
+
+  onMount(() => {
     const initial = route.data.type === "visualizer" ? route.data : undefined
     const workspacePath = initial?.workspacePath ?? (spinosa.genericMode ? undefined : spinosa.activePath)
     if (!workspacePath) return
-    const meta = await readWorkspaceMeta(workspacePath).catch(() => undefined)
-    if (!meta) return
-    setSelectedWorkspace({
-      path: workspacePath,
-      name: resolveWorkspaceDisplayName(workspacePath, meta.projectName ?? ""),
-      status: meta.setupStatus,
-    })
-    const sessionsResult = await sdk.client.session.list({ roots: true, limit: 5, directory: workspacePath }).catch(() => ({ data: undefined }))
-    const sessions = sessionsResult.data ?? []
-    const requested = initial?.sessionID
-    const initialSession = requested
-      ? sessions.find((session) => session.id === requested) ?? { id: requested, title: requested }
-      : undefined
-    if (initialSession) {
-      setSelectedSession({ id: initialSession.id, title: initialSession.title })
-      await loadToolCallsForSession(initialSession.id)
-    } else if (sessions.length > 0) {
-      sessions.sort((a, b) => b.time.updated - a.time.updated)
-      const latest = sessions[0]
-      setSelectedSession({ id: latest.id, title: latest.title })
-      await loadToolCallsForSession(latest.id)
-    }
+
+    void (async () => {
+      const meta = await readWorkspaceMeta(workspacePath).catch(() => undefined)
+      if (!meta) return
+      const target: WorkspaceInfo = {
+        path: workspacePath,
+        name: resolveWorkspaceDisplayName(workspacePath, meta.projectName ?? ""),
+        status: meta.setupStatus,
+      }
+      setWorkspace(target)
+      void scanWorkspace(target)
+
+      try {
+        const result = await sdk.client.session.list({ roots: true, limit: 50, directory: workspacePath })
+        if (result.error) throw result.error
+        const roots = [...(result.data ?? [])].sort((a, b) => b.time.updated - a.time.updated)
+        const requested = initial?.sessionID
+        const picked = requested
+          ? roots.find((item) => item.id === requested) ?? { id: requested, title: requested }
+          : roots[0]
+        if (!picked || workspace()?.path !== workspacePath) return
+        const selectedRoot = { id: picked.id, title: picked.title, parentID: picked.parentID }
+        setSession(selectedRoot)
+        await loadSession(selectedRoot, target)
+      } catch (error) {
+        setCallLoad({
+          status: "error",
+          calls: [],
+          sessions: [],
+          scope: { scope: "selected-tree", rootSessionID: initial?.sessionID },
+          error: `Couldn’t list sessions: ${errorMessage(error)}`,
+        })
+      }
+    })()
   })
 
-  const uniqueTools = createMemo(() => {
-    const calls = toolCalls()
-    return [...new Set(calls.map((c) => c.tool))].sort()
+  onCleanup(() => {
+    workspaceRequest++
+    sessionRequest++
   })
-
-  const filteredCalls = createMemo(() => {
-    const calls = toolCalls()
-    const filter = activeFilter()
-    if (filter === "__all__") return calls
-    return calls.filter((c) => c.tool === filter)
-  })
-
-  const modes: VisualizerMode[] = ["timeline", "types", "sessions"]
 
   const openWorkspacePicker = async () => {
-    const list = await listRegisteredWorkspaces()
-    const rows: { value: WorkspaceInfo; title: string; description: string }[] = []
-    for (const ws of list) {
-      const meta = await readWorkspaceMeta(ws.path).catch(() => undefined)
+    const registered = await listRegisteredWorkspaces()
+    const options: {
+      value: WorkspaceInfo
+      title: string
+      description?: string
+      gutter?: () => JSX.Element
+    }[] = []
+    for (const item of registered) {
+      const meta = await readWorkspaceMeta(item.path).catch(() => undefined)
       if (!meta) continue
-      rows.push({
-        value: { path: ws.path, name: resolveWorkspaceDisplayName(ws.path, meta.projectName ?? ws.projectName), status: meta.setupStatus },
-        title: resolveWorkspaceDisplayName(ws.path, meta.projectName ?? ws.projectName),
-        description: meta.setupStatus === "workspace_started" ? "Ready" : "Setup needed",
+      const name = resolveWorkspaceDisplayName(item.path, meta.projectName ?? item.projectName)
+      options.push({
+        value: { path: item.path, name, status: meta.setupStatus },
+        title: name,
+        gutter: () => (
+          <text fg={theme[setupStatusThemeKey(meta.setupStatus)]} attributes={TextAttributes.BOLD}>●</text>
+        ),
       })
     }
     dialog.replace(() => (
       <DialogSelect
         title="Choose a workspace"
-        options={rows}
+        options={options}
         onSelect={(option) => {
-          setSelectedWorkspace(option.value)
-          setSelectedSession(undefined)
-          setToolCalls([])
-          setLoadedOnce(false)
-          setLoadError(undefined)
           dialog.clear()
+          selectWorkspace(option.value)
         }}
       />
     ))
   }
 
   const openSessionPicker = async () => {
-    const ws = selectedWorkspace()
-    if (!ws) return
-    dialog.setSize("large")
-    const result = await sdk.client.session.list({ roots: true, limit: 50, directory: ws.path }).catch(() => ({ data: undefined }))
-    const sessions = result.data ?? []
-    const options = [
-      { value: { id: "__all__", title: "All sessions" }, title: "All sessions", description: `Load tool calls from all ${sessions.length} session(s)`, category: "ALL" },
-      ...sessions.map((s) => ({
-        value: { id: s.id, title: s.title },
-        title: s.title,
-        description: `Updated ${new Date(s.time.updated).toLocaleDateString()}`,
-        category: "Sessions",
-      })),
+    const targetWorkspace = workspace()
+    if (!targetWorkspace) return
+    try {
+      const result = await sdk.client.session.list({ roots: true, limit: 50, directory: targetWorkspace.path })
+      if (result.error) throw result.error
+      const roots = [...(result.data ?? [])].sort((a, b) => b.time.updated - a.time.updated)
+      if (roots.length === 0) {
+        toast.show({ variant: "info", message: "No conversation sessions found in this workspace." })
+        return
+      }
+      dialog.setSize("large")
+      dialog.replace(() => (
+        <DialogSelect
+          title="Choose a session tree"
+          options={roots.map((item) => ({
+            value: { id: item.id, title: item.title, parentID: item.parentID },
+            title: item.title,
+            description: `Includes descendants · updated ${new Date(item.time.updated).toLocaleDateString()}`,
+            category: "Latest 50 roots",
+          }))}
+          onSelect={(option) => {
+            dialog.clear()
+            setSession(option.value)
+            void loadSession(option.value, targetWorkspace)
+          }}
+        />
+      ))
+    } catch (error) {
+      toast.show({ variant: "error", message: `Couldn’t list sessions: ${errorMessage(error)}` })
+    }
+  }
+
+  const activate = (hit: GraphHit) => {
+    if (hit.kind !== "call") return
+    const id = hit.id.startsWith("call:") ? hit.id.slice(5) : hit.id
+    const call = callLoad().calls.find((item) => item.id === id)
+    if (!call || !("type" in call.part) || call.part.type !== "tool") return
+    dialog.replace(() => <DialogToolDetail part={call.part} workdir={workspace()?.path} />)
+  }
+
+  const exportCurrentGraph = async (format: GraphExportFormat) => {
+    const targetWorkspace = workspace()
+    if (!targetWorkspace) return
+    const suffix = format
+    const sessionName = session()?.title ?? targetWorkspace.name
+    const defaultName = `spinosa-${mode()}-${slug(sessionName)}.${suffix}`
+    const requested = await DialogPrompt.show(dialog, "Export graph", {
+      value: defaultName,
+      description: () => <text fg={theme.textMuted}>Exports workspace-relative paths only.</text>,
+    })
+    dialog.clear()
+    if (!requested?.trim()) return
+
+    let filename = path.basename(requested.trim())
+    if (!filename || filename === "." || filename === "..") filename = defaultName
+    if (!filename.toLowerCase().endsWith(`.${suffix}`)) filename += `.${suffix}`
+    const directory = path.join(targetWorkspace.path, "exports")
+    try {
+      await mkdir(directory, { recursive: true })
+      await Bun.write(path.join(directory, filename), exportGraphScene(scene(), format))
+      toast.show({ variant: "success", message: `Graph exported to exports/${filename}` })
+    } catch (error) {
+      toast.show({ variant: "error", message: `Graph export failed: ${errorMessage(error)}` })
+    }
+  }
+
+  const openExport = () => {
+    if (!workspace()) return
+    const options: { value: GraphExportFormat; title: string; description: string }[] = [
+      { value: "svg", title: "SVG", description: "Full vector graph" },
+      { value: "csv", title: "CSV", description: "Plotted tabular data" },
+      { value: "json", title: "JSON", description: "Versioned derived graph model" },
     ]
-    if (sessions.length === 0) options.push({ value: { id: "__all__", title: "All sessions" }, title: "(no sessions found)", description: "Create a chat session first", category: "" })
     dialog.replace(() => (
       <DialogSelect
-        title="Choose a session"
+        title="Export graph"
         options={options}
         onSelect={(option) => {
-          setSelectedSession(option.value)
-          setToolCalls([])
-          setLoadedOnce(false)
-          setLoadError(undefined)
           dialog.clear()
-          void loadToolCalls(option.value)
+          void exportCurrentGraph(option.value)
         }}
       />
     ))
   }
 
-  const loadToolCallsForSession = async (sessionID: string) => {
-    setIsLoading(true)
-    setLoadError(undefined)
-    setToolCalls([])
-    try {
-      const records: ToolCallRecord[] = []
-      const msgResult = await sdk.client.session.messages({ sessionID, limit: 100 }).catch(() => ({ data: undefined }))
-      for (const msg of msgResult.data ?? []) {
-        for (const part of msg.parts ?? []) {
-          if (part.type !== "tool") continue
-          const state = part.state
-          records.push({
-            id: part.id, tool: part.tool, status: state.status,
-            input: state.input ?? {},
-            output: state.status === "completed" ? (state as any).output : undefined,
-            error: state.status === "error" ? (state as any).error : undefined,
-            title: (state as any).title,
-            timeStart: (state as any).time?.start ?? 0,
-            timeEnd: (state as any).time?.end,
-            sessionTitle: "",
-            part,
-          })
-        }
-      }
-      records.sort((a, b) => a.timeStart - b.timeStart)
-      setToolCalls(records)
-    } catch (err) {
-      setLoadError(errorMessage(err))
-    } finally {
-      setIsLoading(false)
-      setLoadedOnce(true)
-    }
-  }
+  const openHelp = () => dialog.replace(() => <GraphHelp />)
 
-  const loadToolCalls = async (session = selectedSession()) => {
-    const ws = selectedWorkspace()
-    if (!ws || !session) return
+  useBindings(() => ({
+    mode: OPENCODE_BASE_MODE,
+    enabled: () => dialog.stack.length === 0,
+    bindings: [
+      ...MODES.map((item, index) => ({
+        key: String(index + 1),
+        desc: `Show ${item.value} graph`,
+        group: "Visualizer",
+        cmd: () => setMode(item.value),
+      })),
+      { key: "+", desc: "Zoom in", group: "Visualizer", cmd: () => graph?.zoom(1.2) },
+      { key: "=", desc: "Zoom in", group: "Visualizer", cmd: () => graph?.zoom(1.2) },
+      { key: "-", desc: "Zoom out", group: "Visualizer", cmd: () => graph?.zoom(1 / 1.2) },
+      { key: "0", desc: "Fit graph", group: "Visualizer", cmd: () => graph?.fit() },
+      { key: "Left", desc: "Previous mark", group: "Visualizer", cmd: () => graph?.selectNext(-1) },
+      { key: "Right", desc: "Next mark", group: "Visualizer", cmd: () => graph?.selectNext(1) },
+      { key: "shift+Left", desc: "Pan left", group: "Visualizer", cmd: () => graph?.pan(3, 0) },
+      { key: "shift+Right", desc: "Pan right", group: "Visualizer", cmd: () => graph?.pan(-3, 0) },
+      { key: "shift+Up", desc: "Pan up", group: "Visualizer", cmd: () => graph?.pan(0, 2) },
+      { key: "shift+Down", desc: "Pan down", group: "Visualizer", cmd: () => graph?.pan(0, -2) },
+      { key: "Enter", desc: "Inspect mark", group: "Visualizer", cmd: () => graph?.activateSelected() },
+      {
+        key: "Escape",
+        desc: "Clear or go back",
+        group: "Visualizer",
+        cmd: () => {
+          if (selected()) return resetInspection()
+          route.navigate({ type: "global" })
+        },
+      },
+      { key: "e", desc: "Export graph", group: "Visualizer", cmd: openExport },
+      { key: "?", desc: "Graph controls", group: "Visualizer", cmd: openHelp },
+    ],
+  }))
 
-    if (session.id === "__all__") {
-      setIsLoading(true)
-      setLoadError(undefined)
-      setToolCalls([])
-      try {
-        const listResult = await sdk.client.session.list({ directory: ws.path, roots: true, limit: 50 }).catch(() => ({ data: undefined }))
-        let allRecords: ToolCallRecord[] = []
-        for (const s of listResult.data ?? []) {
-          const msgResult = await sdk.client.session.messages({ sessionID: s.id, limit: 100 }).catch(() => ({ data: undefined }))
-          for (const msg of msgResult.data ?? []) {
-            for (const part of msg.parts ?? []) {
-              if (part.type !== "tool") continue
-              const state = part.state
-              allRecords.push({
-                id: part.id, tool: part.tool, status: state.status,
-                input: state.input ?? {},
-                output: state.status === "completed" ? (state as any).output : undefined,
-                error: state.status === "error" ? (state as any).error : undefined,
-                title: (state as any).title,
-                timeStart: (state as any).time?.start ?? 0,
-                timeEnd: (state as any).time?.end,
-                sessionTitle: s.title,
-                part,
-              })
-            }
-          }
-        }
-        allRecords.sort((a, b) => a.timeStart - b.timeStart)
-        setToolCalls(allRecords)
-      } catch (err) {
-        setLoadError(errorMessage(err))
-      } finally {
-        setIsLoading(false)
-        setLoadedOnce(true)
-      }
+  const stateMessage = () => {
+    if (!workspace()) return "Choose a workspace to map its files."
+    if (mode() === "files") {
+      if (fileLoad().status === "loading") return "Scanning workspace files…"
+      if (fileLoad().status === "error") return `Couldn’t scan workspace files: ${fileLoad().error}`
+      if (fileLoad().status === "idle") return "Choose a workspace to map its files."
       return
     }
+    if (callLoad().status === "loading") return "Loading session trace…"
+    if (callLoad().status === "error") return `Couldn’t load session trace: ${callLoad().error}`
+    if (callLoad().status === "idle") return "Choose a session to load its trace."
+    if (callLoad().calls.length === 0) return "No tool calls in this session tree. File inventory is still available."
+    return
+  }
 
-    await loadToolCallsForSession(session.id)
+  const statusText = () => {
+    const status = graphModel().status
+    const fileSuffix = fileLoad().status === "ready" ? ` · ${status.observedFiles}/${status.totalFiles} files observed` : ""
+    return `${status.calls} calls · ${status.errors} errors${fileSuffix} · ${status.scope}`
   }
 
   return (
-    <CenteredColumn maxWidth={CANVAS_MAX_WIDTH}>
-      <box flexGrow={1} flexDirection="column" alignItems="center" paddingLeft={0} paddingRight={0}>
-        <box flexGrow={1} minHeight={0} />
-        <box width="100%" flexDirection="column" alignItems="center" flexShrink={0}>
-          {/* Canvas actions */}
-          <box flexDirection="row" alignItems="center" justifyContent="space-between" width="100%">
-            <BackButton onClick={() => navigate({ type: "global" })} />
-            <ExportButton />
+    <CenteredColumn maxWidth={MAX_WIDTH}>
+      <box width="100%" flexGrow={1} minHeight={0} flexDirection="column" paddingX={1}>
+        <box flexDirection="row" alignItems="center" justifyContent="space-between" width="100%">
+          <ActionButton label="← Back" onClick={() => route.navigate({ type: "global" })} />
+          <text fg={theme.text}><span style={{ bold: true }}>Conversation graphs</span></text>
+          <ActionButton label="⇩ Export" accent onClick={openExport} disabled={!workspace()} />
+        </box>
+
+        <Show
+          when={!isTooSmall()}
+          fallback={
+            <box flexGrow={1} alignItems="center" justifyContent="center">
+              <text fg={theme.warning}>Visualizer needs at least 48×16. Resize the terminal.</text>
+            </box>
+          }
+        >
+          <box height={1} />
+          <box
+            width="100%"
+            height={canvasHeight()}
+            minHeight={10}
+            minWidth={0}
+            flexDirection={isWide() ? "row" : "column"}
+            backgroundColor={theme.backgroundPanel}
+          >
+            <box flexGrow={1} minWidth={0} minHeight={0} padding={1}>
+              <Show
+                when={!stateMessage()}
+                fallback={
+                  <box width="100%" height="100%" alignItems="center" justifyContent="center" paddingX={2}>
+                    <text fg={callLoad().status === "error" || fileLoad().status === "error" ? theme.error : theme.textMuted}>
+                      {stateMessage()}
+                    </text>
+                  </box>
+                }
+              >
+                <GraphCanvas
+                  ref={(handle) => (graph = handle)}
+                  scene={scene()}
+                  width="100%"
+                  height="100%"
+                  onHoverChange={(hit) => setHovered(hit as GraphHit | undefined)}
+                  onSelectionChange={(hit) => setSelected(hit as GraphHit | undefined)}
+                  onActivate={(hit) => activate(hit as GraphHit)}
+                />
+              </Show>
+            </box>
+            <Show when={!stateMessage()}>
+              <GraphInspector scene={scene()} hit={selected() ?? hovered()} compact={!isWide()} />
+            </Show>
           </box>
-          <box height={1} />
 
-          {/* canvas */}
-          <VisualizerCanvas height={CANVAS_HEIGHT}>
-            <Viewport
-              mode={mode()}
-              toolCalls={filteredCalls()}
-              loading={isLoading()}
-              loadedOnce={loadedOnce()}
-              error={loadError()}
-            >
-              <Show when={mode() === "timeline"}><TimelineView toolCalls={filteredCalls()} theme={theme} dialog={dialog} workdir={selectedWorkspace()?.path} /></Show>
-              <Show when={mode() === "types"}><TypesView toolCalls={filteredCalls()} theme={theme} dialog={dialog} /></Show>
-              <Show when={mode() === "sessions"}><SessionsView toolCalls={filteredCalls()} theme={theme} dialog={dialog} /></Show>
-            </Viewport>
-          </VisualizerCanvas>
           <box height={1} />
-
-          {/* Data source selectors */}
-          <box flexDirection="row" alignItems="center" width="100%" gap={1}>
-            <WorkspaceButton
-              label={`Workspace: ${selectedWorkspace()?.name ?? "Pick workspace"}`}
-              active={!!selectedWorkspace()}
+          <box flexDirection="row" width="100%" gap={1}>
+            <SelectorButton
+              label={`Workspace: ${workspace()?.name ?? "Choose"}`}
+              active={!!workspace()}
               onClick={openWorkspacePicker}
             />
-            <SessionButton
-              label={`Session: ${selectedSession()?.title ?? "Pick session"}`}
-              active={!!selectedSession()}
+            <SelectorButton
+              label={`Session: ${session()?.title ?? "Choose"}`}
+              active={!!session()}
+              disabled={!workspace() || callLoad().status === "loading"}
               onClick={openSessionPicker}
-              disabled={!selectedWorkspace() || isLoading()}
             />
           </box>
-          <box height={2} />
 
-          {/* mode tabs */}
-          <box flexDirection="row" gap={1} width="100%" justifyContent="flex-start" alignItems="center">
-            <text fg={theme.textMuted}>Visualization type:</text>
-            <For each={modes}>
-              {(m) => (
+          <box height={1} />
+          <box flexDirection="row" width="100%" gap={1} alignItems="center">
+            <For each={MODES}>
+              {(item) => (
                 <ModeButton
-                  label={m.charAt(0).toUpperCase() + m.slice(1)}
-                  active={mode() === m}
-                  onClick={() => setMode(m)}
+                  label={item.label}
+                  active={mode() === item.value}
+                  onClick={() => {
+                    setMode(item.value)
+                    resetInspection()
+                  }}
                 />
               )}
             </For>
           </box>
-          <box height={1} />
 
-          {/* filter chips */}
-          <Show when={toolCalls().length > 0}>
-            <box flexDirection="row" gap={1} width="100%" justifyContent="flex-start" alignItems="center" flexWrap="wrap">
-              <text fg={theme.textMuted}>Tools:</text>
-              <FilterChip
-                label="All"
-                count={toolCalls().length}
-                active={activeFilter() === "__all__"}
-                onClick={() => setActiveFilter("__all__")}
-              />
-              <For each={uniqueTools()}>
-                {(tool) => (
-                  <FilterChip
-                    label={tool}
-                    count={toolCalls().filter((c) => c.tool === tool).length}
-                    active={activeFilter() === tool}
-                    selectedColor={toolCalloutColor(tool, theme)}
-                    onClick={() => setActiveFilter(tool)}
-                  />
-                )}
-              </For>
-            </box>
-          </Show>
-        </box>
-        <box flexGrow={1} minHeight={0} />
+          <box paddingTop={1} width="100%">
+            <text fg={theme.textMuted} attributes={TextAttributes.DIM} wrapMode="none" overflow="hidden">
+              {statusText()}
+            </text>
+            <text fg={theme.textMuted} attributes={TextAttributes.DIM} wrapMode="none" overflow="hidden">
+              {isWide()
+                ? "drag pan · wheel pan · ctrl+wheel zoom · +/− zoom · 0 fit · ←/→ select · enter inspect · ? help"
+                : "drag pan · ctrl+wheel zoom · +/− zoom · 0 fit · ? help"}
+            </text>
+          </box>
+        </Show>
       </box>
     </CenteredColumn>
   )
 }
 
-// ── Button components ──
-
-function WorkspaceButton(props: { label: string; active: boolean; onClick: () => void }) {
-  const { theme } = useTheme()
-  const [hover, setHover] = createSignal(false)
-  const over = () => hover() || props.active
-  const background = () => hover() ? buttonBackground(theme, true) : props.active ? theme.backgroundElement : buttonBackground(theme, false)
-  const foreground = () => hover() ? buttonText(theme, true) : props.active ? theme.success : theme.textMuted
-  return (
-    <box
-      flexGrow={1} minWidth={0}
-      paddingLeft={1} paddingRight={1} paddingTop={1} paddingBottom={1}
-      justifyContent="center" alignItems="center"
-      backgroundColor={background()}
-      border={["left"]}
-      borderColor={hover() ? buttonBorder(theme, true) : props.active ? theme.success : theme.success}
-      onMouseOver={() => setHover(true)}
-      onMouseOut={() => setHover(false)}
-      onMouseDown={props.onClick}
-    >
-      <text fg={foreground()} overflow="hidden" wrapMode="none">
-        <span style={{ bold: over() }}>{props.label}{props.active ? " ▼" : ""}</span>
-      </text>
-    </box>
-  )
+function scopeFromCoverage(coverage: SessionTreeCoverage): VisualizerGraphScopeCoverage {
+  return {
+    scope: "selected-tree",
+    rootSessionID: coverage.rootSessionID,
+    sessionsLoaded: coverage.sessionsLoaded,
+    sessionsDiscovered: coverage.sessionsDiscovered,
+    messagesLoaded: coverage.messagesLoaded,
+  }
 }
 
-function SessionButton(props: { label: string; active: boolean; onClick: () => void; disabled: boolean }) {
+function scopeFromError(error: unknown, rootSessionID: string): VisualizerGraphScopeCoverage {
+  const scope: VisualizerGraphScopeCoverage = { scope: "selected-tree", rootSessionID }
+  if (!(error instanceof VisualizerGraphLoadError)) return scope
+  const coverage = error.coverage
+  if ("sessionsLoaded" in coverage) scope.sessionsLoaded = coverage.sessionsLoaded
+  if ("sessionsDiscovered" in coverage) scope.sessionsDiscovered = coverage.sessionsDiscovered
+  if ("messagesLoaded" in coverage) scope.messagesLoaded = coverage.messagesLoaded
+  return scope
+}
+
+function graphLoadMessage(error: unknown) {
+  if (error instanceof VisualizerGraphLoadError) return error.message
+  return errorMessage(error)
+}
+
+function slug(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48) || "workspace"
+}
+
+function ActionButton(props: { label: string; onClick: () => void; accent?: boolean; disabled?: boolean }) {
   const { theme } = useTheme()
   const [hover, setHover] = createSignal(false)
-  const over = () => hover() || props.active
-  const background = () => hover() ? buttonBackground(theme, true) : props.active ? theme.backgroundElement : props.disabled ? undefined : buttonBackground(theme, false)
-  const foreground = () => hover() ? buttonText(theme, true) : props.active ? theme.success : theme.textMuted
+  const activeHover = () => hover() && !props.disabled
+  const accent = () => props.accent ? theme.primary : theme.borderActive
   return (
     <box
-      flexGrow={1} minWidth={0}
-      paddingLeft={1} paddingRight={1} paddingTop={1} paddingBottom={1}
-      justifyContent="center" alignItems="center"
-      backgroundColor={background()}
-      border={["left"]}
-      borderColor={hover() ? buttonBorder(theme, true) : props.active ? theme.success : props.disabled ? theme.border : theme.success}
+      flexShrink={0}
+      paddingX={1}
+      paddingY={1}
+      backgroundColor={buttonBackground(theme, activeHover())}
+      border={['left']}
+      borderColor={props.disabled ? theme.border : buttonBorder(theme, activeHover(), accent())}
       onMouseOver={() => !props.disabled && setHover(true)}
       onMouseOut={() => setHover(false)}
       onMouseDown={props.disabled ? undefined : props.onClick}
     >
-      <text fg={foreground()} overflow="hidden" wrapMode="none">
-        <span style={{ bold: over() }}>{props.label}{props.active ? " ▼" : ""}</span>
+      <text fg={props.disabled ? theme.textMuted : buttonText(theme, activeHover(), props.accent ? theme.primary : theme.text)}>
+        <span style={{ bold: activeHover() }}>{props.label}</span>
       </text>
     </box>
   )
 }
 
-function ExportButton() {
+function SelectorButton(props: { label: string; active: boolean; disabled?: boolean; onClick: () => void }) {
   const { theme } = useTheme()
   const [hover, setHover] = createSignal(false)
+  const over = () => hover() && !props.disabled
   return (
     <box
-      flexShrink={0}
-      paddingLeft={1} paddingRight={1} paddingTop={1} paddingBottom={1}
-      justifyContent="center" alignItems="center"
-      backgroundColor={buttonBackground(theme, hover())}
-      border={["left"]}
-      borderColor={buttonBorder(theme, hover(), theme.primary)}
-      onMouseOver={() => setHover(true)}
-      onMouseOut={() => setHover(false)}
-      onMouseDown={() => {}}
-    >
-      <text fg={buttonText(theme, hover(), theme.primary)}>
-        <span style={{ bold: hover() }}>⇩ Export</span>
-      </text>
-    </box>
-  )
-}
-
-function FilterChip(props: { label: string; count?: number; active: boolean; selectedColor?: RGBA; onClick: () => void }) {
-  const { theme } = useTheme()
-  const [hover, setHover] = createSignal(false)
-  const selectedColor = () => props.selectedColor ?? theme.success
-  const background = () => hover() ? buttonBackground(theme, true) : props.active ? theme.backgroundElement : buttonBackground(theme, false)
-  const foreground = () => hover() ? buttonText(theme, true) : props.active ? selectedColor() : theme.textMuted
-  return (
-    <box
+      flexGrow={1}
+      minWidth={0}
       paddingX={1}
-      justifyContent="center" alignItems="center"
-      backgroundColor={background()}
-      border={["left"]}
-      borderColor={hover() ? buttonBorder(theme, true) : props.active ? selectedColor() : theme.primary}
-      onMouseOver={() => setHover(true)}
+      paddingY={1}
+      alignItems="center"
+      justifyContent="center"
+      backgroundColor={over() ? buttonBackground(theme, true) : props.active ? theme.backgroundElement : undefined}
+      border={['left']}
+      borderColor={props.disabled ? theme.border : props.active ? theme.success : theme.primary}
+      onMouseOver={() => !props.disabled && setHover(true)}
       onMouseOut={() => setHover(false)}
-      onMouseDown={props.onClick}
+      onMouseDown={props.disabled ? undefined : props.onClick}
     >
-      <text fg={foreground()}>
-        <span style={{ bold: hover() || props.active }}>{props.label}{props.count !== undefined ? ` (${props.count})` : ""}</span>
+      <text fg={props.disabled ? theme.textMuted : over() ? buttonText(theme, true) : props.active ? theme.success : theme.textMuted} wrapMode="none" overflow="hidden">
+        <span style={{ bold: over() || props.active }}>{props.label}{props.active ? " ▼" : ""}</span>
       </text>
     </box>
   )
@@ -416,45 +581,31 @@ function FilterChip(props: { label: string; count?: number; active: boolean; sel
 function ModeButton(props: { label: string; active: boolean; onClick: () => void }) {
   const { theme } = useTheme()
   const [hover, setHover] = createSignal(false)
-  const background = () => hover() ? buttonBackground(theme, true) : props.active ? theme.backgroundElement : buttonBackground(theme, false)
-  const foreground = () => hover() ? buttonText(theme, true) : props.active ? theme.success : theme.textMuted
   return (
     <box
       paddingX={1}
-      justifyContent="center"
-      alignItems="center"
-      backgroundColor={background()}
-      border={["left"]}
-      borderColor={hover() ? buttonBorder(theme, true) : props.active ? theme.success : theme.primary}
+      backgroundColor={hover() ? buttonBackground(theme, true) : props.active ? theme.backgroundElement : undefined}
+      border={['left']}
+      borderColor={props.active ? theme.success : theme.primary}
       onMouseOver={() => setHover(true)}
       onMouseOut={() => setHover(false)}
       onMouseDown={props.onClick}
     >
-      <text fg={foreground()}>
+      <text fg={hover() ? buttonText(theme, true) : props.active ? theme.success : theme.textMuted}>
         <span style={{ bold: hover() || props.active }}>{props.label}</span>
       </text>
     </box>
   )
 }
 
-function BackButton(props: { onClick: () => void }) {
+function GraphHelp() {
   const { theme } = useTheme()
-  const [hover, setHover] = createSignal(false)
   return (
-    <box
-      flexShrink={0}
-      paddingLeft={0} paddingRight={1} paddingTop={1} paddingBottom={1}
-      justifyContent="center" alignItems="center"
-      backgroundColor={buttonBackground(theme, hover())}
-      border={["left"]}
-      borderColor={buttonBorder(theme, hover(), theme.borderActive)}
-      onMouseOver={() => setHover(true)}
-      onMouseOut={() => setHover(false)}
-      onMouseDown={props.onClick}
-    >
-      <text fg={buttonText(theme, hover(), theme.text)}>
-        <span style={{ bold: hover() }}>← Back</span>
-      </text>
+    <box paddingX={2} paddingBottom={1} flexDirection="column" gap={1}>
+      <text fg={theme.text}><span style={{ bold: true }}>Graph controls</span></text>
+      <text fg={theme.textMuted}>Mouse: hover preview · click pin · double-click inspect · drag pan · wheel pan · ctrl+wheel zoom</text>
+      <text fg={theme.textMuted}>Keyboard: 1–4 views · ←/→ select · shift+arrows pan · +/− zoom · 0 fit · enter inspect</text>
+      <text fg={theme.textMuted}>e export · esc clear selection, then go back</text>
     </box>
   )
 }

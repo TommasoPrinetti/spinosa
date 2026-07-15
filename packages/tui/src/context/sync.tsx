@@ -151,14 +151,10 @@ export const {
       hydratingSessions.get(sessionID)?.parts.add(partID)
     }
 
-    function sessionListQuery(): { scope?: "project"; path?: string } {
+    function sessionListQuery(): { scope?: "project"; directory?: string; path?: string } {
       if (!kv.get("session_directory_filter_enabled", true)) return { scope: "project" }
       if (!project.data.instance.path.worktree || !project.data.instance.path.directory) return { scope: "project" }
-      return {
-        path: path
-          .relative(path.resolve(project.data.instance.path.worktree), project.data.instance.path.directory)
-          .replaceAll("\\", "/"),
-      }
+      return { directory: project.data.instance.path.directory }
     }
 
     function listSessions() {

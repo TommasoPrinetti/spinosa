@@ -207,6 +207,48 @@ export function Session() {
     await mkdir(path.dirname(file), { recursive: true })
     await writeFile(file, content)
   }
+  const openExportDialog = async () => {
+    try {
+      const sessionData = session()
+      if (!sessionData) return
+      const sessionMessages = messages()
+      const defaultFilename = `session-${sessionData.id.slice(0, 8)}.md`
+      const options = await DialogExportOptions.show(
+        dialog, defaultFilename,
+        showThinking(), showDetails(), showAssistantMetadata(), false,
+      )
+      if (options === null) return
+      const transcript = formatTranscript(
+        sessionData,
+        sessionMessages.map((msg) => ({ info: msg, parts: sync.data.part[msg.id] ?? [] })),
+        {
+          thinking: options.thinking,
+          toolDetails: options.toolDetails,
+          assistantMetadata: options.assistantMetadata,
+          providers: sync.data.provider,
+        },
+      )
+      if (options.openWithoutSaving) {
+        await openEditor({
+          renderer, value: transcript,
+          cwd: (project.instance.path().worktree === "/" ? undefined : project.instance.path().worktree) || project.instance.directory() || paths.cwd,
+        })
+      } else {
+        const exportDir = paths.cwd
+        const filepath = path.join(exportDir, options.filename.trim())
+        await writeExport(filepath, transcript)
+        const result = await openEditor({
+          renderer, value: transcript,
+          cwd: (project.instance.path().worktree === "/" ? undefined : project.instance.path().worktree) || project.instance.directory() || paths.cwd,
+        })
+        if (result !== undefined) await writeExport(filepath, result)
+        toast.show({ message: `Session exported to ${options.filename.trim()}`, variant: "success" })
+      }
+    } catch {
+      toast.show({ message: "Failed to export session", variant: "error" })
+    }
+    dialog.clear()
+  }
   const pluginRuntime = usePluginRuntime()
   const route = useSessionRoute()
   const { navigate } = useRoute()
@@ -219,6 +261,7 @@ export function Session() {
   const { theme } = useTheme()
   const promptRef = usePromptRef()
   const [backHover, setBackHover] = createSignal(false)
+  const [exportHover, setExportHover] = createSignal(false)
   const session = createMemo(() => sync.session.get(route.sessionID))
   const location = createMemo(() => {
     const current = session()
@@ -350,7 +393,7 @@ export function Session() {
       )
       const tag = count > 1 ? `${summary.tag} x${count}` : summary.tag
       const groupSummary: ToolCalloutSummary = { tag, command: summary.command }
-      const side = ["todowrite", "task"].includes(group.display) ? "right" : "left"
+      const side = ["bash", "read", "grep", "glob", "webfetch", "websearch"].includes(group.display) ? "left" : "right"
       const offsetTop = side === "left" ? leftHeight : rightHeight
       sides.set(first.callID, { side, offsetTop, summary: groupSummary })
       const height = estimateToolCalloutHeight(groupSummary, layout.railWidth, first.tool, first.state.status === "pending" ? {} : (first.state.metadata ?? {}), first.state.input ?? {})
@@ -1266,6 +1309,25 @@ export function Session() {
             >
               <text fg={buttonText(theme, backHover())}>{"< Back"}</text>
             </box>
+            <box
+              position="absolute"
+              top={0}
+              right={2}
+              zIndex={10}
+              onMouseOver={() => setExportHover(true)}
+              onMouseOut={() => setExportHover(false)}
+              onMouseUp={openExportDialog}
+              paddingLeft={2}
+              paddingRight={2}
+              paddingTop={1}
+              paddingBottom={1}
+              backgroundColor={buttonBackground(theme, exportHover())}
+              flexDirection="row"
+              alignItems="center"
+              width={10}
+            >
+              <text fg={buttonText(theme, exportHover())}>Export</text>
+            </box>
           </Show>
           <box flexGrow={1} minHeight={0}>
             <box
@@ -1592,12 +1654,21 @@ function ToolRailCallout(props: {
         <Show when={props.side === "right"}>
           <text width={3} fg={color()}>├──</text>
         </Show>
-        <box onMouseUp={handleCopy}>
+        <Show when={props.side === "right"}>
+          <text width={3} fg={color()}>├──</text>
+        </Show>
+        <Show when={props.side === "right"} fallback={
+          <box onMouseUp={handleCopy}>
+            <text fg={theme.textMuted} wrapMode="none">
+              <span style={{ bg: color(), fg: selectedForeground(theme, color()), bold: true }}> {props.callout.summary!.tag} </span>
+              <span style={{ bg: theme.backgroundElement, fg: theme.textMuted }}>{copied() ? " ✓ " : " copy "}</span>
+            </text>
+          </box>
+        }>
           <text fg={theme.textMuted} wrapMode="none">
             <span style={{ bg: color(), fg: selectedForeground(theme, color()), bold: true }}> {props.callout.summary!.tag} </span>
-            <span style={{ bg: theme.backgroundElement, fg: theme.textMuted }}>{copied() ? " ✓ " : " copy "}</span>
           </text>
-        </box>
+        </Show>
         <Show when={props.side === "left"}>
           <text width={3} fg={color()}>──┤</text>
         </Show>
