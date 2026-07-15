@@ -46,6 +46,14 @@ if [ -n "$(git status --porcelain)" ]; then
   exit 1
 fi
 
+# Validate before creating an irreversible tag or GitHub release.
+bash script/verify-release.sh
+
+if [ -n "$(git status --porcelain)" ]; then
+  echo "Error: release verification changed the working tree — commit or revert generated files first" >&2
+  exit 1
+fi
+
 # Prepare tag assets
 DIST="dist/v${VERSION}"
 mkdir -p "$DIST"

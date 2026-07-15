@@ -64,6 +64,7 @@
     "generate:v2-oc2": "bun run script/build-oc2-v2-overrides.ts"
   },
   "devDependencies": {
+    "@opencode-ai/script": "workspace:*",
     "@solidjs/meta": "catalog:",
     "@tailwindcss/vite": "catalog:",
     "@tsconfig/node22": "catalog:",

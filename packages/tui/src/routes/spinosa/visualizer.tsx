@@ -30,7 +30,8 @@ const CANVAS_HEIGHT = 28
 
 export function Visualizer() {
   const { theme } = useTheme()
-  const { navigate } = useRoute()
+  const route = useRoute()
+  const { navigate } = route
   const dialog = useDialog()
   const spinosa = useSpinosaWorkspace()
   const sdk = useSDK()
@@ -45,18 +46,26 @@ export function Visualizer() {
   const [mode, setMode] = createSignal<VisualizerMode>("timeline")
 
   onMount(async () => {
-    const activePath = spinosa.activePath
-    if (!activePath || spinosa.genericMode) return
-    const meta = await readWorkspaceMeta(activePath).catch(() => undefined)
+    const initial = route.data.type === "visualizer" ? route.data : undefined
+    const workspacePath = initial?.workspacePath ?? (spinosa.genericMode ? undefined : spinosa.activePath)
+    if (!workspacePath) return
+    const meta = await readWorkspaceMeta(workspacePath).catch(() => undefined)
     if (!meta) return
     setSelectedWorkspace({
-      path: activePath,
-      name: resolveWorkspaceDisplayName(activePath, meta.projectName ?? ""),
+      path: workspacePath,
+      name: resolveWorkspaceDisplayName(workspacePath, meta.projectName ?? ""),
       status: meta.setupStatus,
     })
-    const sessionsResult = await sdk.client.session.list({ roots: true, limit: 5, directory: activePath }).catch(() => ({ data: undefined }))
+    const sessionsResult = await sdk.client.session.list({ roots: true, limit: 5, directory: workspacePath }).catch(() => ({ data: undefined }))
     const sessions = sessionsResult.data ?? []
-    if (sessions.length > 0) {
+    const requested = initial?.sessionID
+    const initialSession = requested
+      ? sessions.find((session) => session.id === requested) ?? { id: requested, title: requested }
+      : undefined
+    if (initialSession) {
+      setSelectedSession({ id: initialSession.id, title: initialSession.title })
+      await loadToolCallsForSession(initialSession.id)
+    } else if (sessions.length > 0) {
       sessions.sort((a, b) => b.time.updated - a.time.updated)
       const latest = sessions[0]
       setSelectedSession({ id: latest.id, title: latest.title })
@@ -132,6 +141,7 @@ export function Visualizer() {
           setLoadedOnce(false)
           setLoadError(undefined)
           dialog.clear()
+          void loadToolCalls(option.value)
         }}
       />
     ))
@@ -171,12 +181,11 @@ export function Visualizer() {
     }
   }
 
-  const loadToolCalls = async () => {
+  const loadToolCalls = async (session = selectedSession()) => {
     const ws = selectedWorkspace()
-    const sess = selectedSession()
-    if (!ws || !sess) return
+    if (!ws || !session) return
 
-    if (sess.id === "__all__") {
+    if (session.id === "__all__") {
       setIsLoading(true)
       setLoadError(undefined)
       setToolCalls([])
@@ -214,7 +223,7 @@ export function Visualizer() {
       return
     }
 
-    await loadToolCallsForSession(sess.id)
+    await loadToolCallsForSession(session.id)
   }
 
   return (

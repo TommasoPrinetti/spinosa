@@ -5,12 +5,6 @@ export default {
   id: "20260604172448_event_sourced_session_input",
   up(tx) {
     return Effect.gen(function* () {
-      yield* tx.run(`DELETE FROM \`session_input\`;`)
-      yield* tx.run(`DELETE FROM \`session_message\`;`)
-      yield* tx.run(`DELETE FROM \`event\`;`)
-      yield* tx.run(`DELETE FROM \`event_sequence\`;`)
-      yield* tx.run(`UPDATE \`session\` SET \`workspace_id\` = NULL;`)
-      yield* tx.run(`DELETE FROM \`workspace\`;`)
       yield* tx.run(`DROP INDEX IF EXISTS \`event_aggregate_seq_idx\`;`)
       yield* tx.run(`CREATE UNIQUE INDEX \`event_aggregate_seq_idx\` ON \`event\` (\`aggregate_id\`,\`seq\`);`)
       yield* tx.run(`DROP INDEX IF EXISTS \`session_message_session_seq_idx\`;`)
@@ -29,6 +23,11 @@ export default {
           \`time_created\` integer NOT NULL,
           CONSTRAINT \`fk_session_input_session_id_session_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session\`(\`id\`) ON DELETE CASCADE
         );
+      `)
+      yield* tx.run(`
+        INSERT INTO \`__new_session_input\` (\`id\`, \`session_id\`, \`prompt\`, \`delivery\`, \`admitted_seq\`, \`promoted_seq\`, \`time_created\`)
+        SELECT \`id\`, \`session_id\`, \`prompt\`, \`delivery\`, \`seq\`, \`promoted_seq\`, \`time_created\`
+        FROM \`session_input\`;
       `)
       yield* tx.run(`DROP TABLE \`session_input\`;`)
       yield* tx.run(`ALTER TABLE \`__new_session_input\` RENAME TO \`session_input\`;`)

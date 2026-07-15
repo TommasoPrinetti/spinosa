@@ -13,9 +13,19 @@ import { disposeAllInstancesAndEmitGlobalDisposed } from "@/server/global-lifecy
 
 Heap.start()
 
-const onUnhandledRejection = (_error: unknown) => {}
+let fatal = false
+const failWorker = (error: unknown) => {
+  if (fatal) return
+  fatal = true
+  const detail = error instanceof Error ? error.stack ?? error.message : String(error)
+  process.stderr.write(`Fatal TUI worker error: ${detail}\n`)
+  process.exitCode = 1
+  queueMicrotask(() => process.exit(1))
+}
 
-const onUncaughtException = (_error: Error) => {}
+const onUnhandledRejection = (error: unknown) => failWorker(error)
+
+const onUncaughtException = (error: Error) => failWorker(error)
 
 process.on("unhandledRejection", onUnhandledRejection)
 process.on("uncaughtException", onUncaughtException)

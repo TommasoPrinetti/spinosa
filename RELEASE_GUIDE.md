@@ -57,14 +57,12 @@ test -f workspace-template/.bin/spinosa
 ### TypeScript typecheck
 
 ```bash
-bun run typecheck
+bash script/verify-release.sh
 ```
 
-### Spinosa-core tests
-
-```bash
-(cd packages/tui && bun test test/spinosa)
-```
+This runs shell and manifest checks, typechecks every workspace that declares one,
+the Spinosa test suite, and a host binary build/smoke test. The release script and
+CI run the same gate automatically.
 
 ### Version match
 

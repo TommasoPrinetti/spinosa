@@ -9,17 +9,19 @@ import { Global } from "@opencode-ai/core/global"
 import { createTuiResolvedConfig } from "../fixture/tui-runtime"
 import { createEventSource, createFetch, directory, json } from "../fixture/tui-sdk"
 
-type SpinosaRoute = "workspace" | "global" | "onboarding" | "add-files"
+type SpinosaRoute = "workspace" | "global" | "onboarding" | "add-files" | "visualizer"
 type TestRenderer = Awaited<ReturnType<typeof createTestRenderer>>
 
 async function renderRouteFrame(
   route: SpinosaRoute,
   options: {
     home?: string
+    initialRoute?: Record<string, unknown>
+    height?: number
     act?: (setup: TestRenderer) => Promise<void> | void
   } = {},
 ) {
-  const setup = await createTestRenderer({ width: 100, height: 30, useThread: false })
+  const setup = await createTestRenderer({ width: 100, height: options.height ?? 30, useThread: false })
   const core = await import("@opentui/core")
   mock.module("@opentui/core", () => ({ ...core, createCliRenderer: async () => setup.renderer }))
   const previousRoute = process.env.OPENCODE_ROUTE
@@ -27,7 +29,7 @@ async function renderRouteFrame(
   const previousHome = process.env.HOME
   const previousTestHome = process.env.OPENCODE_TEST_HOME
   const previousSpinosaHome = process.env.SPINOSA_HOME
-  process.env.OPENCODE_ROUTE = JSON.stringify({ type: route })
+  process.env.OPENCODE_ROUTE = JSON.stringify(options.initialRoute ?? { type: route })
   process.env.OPENCODE_FAST_BOOT = "1"
   if (options.home) {
     process.env.HOME = options.home
@@ -257,10 +259,35 @@ test("homepage surfaces stale installer cleanup after it has rendered", async ()
   try {
     const frame = await renderRouteFrame("workspace", {
       home,
+      height: 50,
       act: async (setup) => { await waitForText(setup, "leftover install file") },
     })
     expect(frame).toContain("leftover install file")
     expect(frame).toContain("Clean up")
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+}, 30_000)
+
+test("Visualizer honors its workspace and session route parameters", async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "spinosa-visualizer-route-"))
+  const home = path.join(root, "home")
+  mkdirSync(home, { recursive: true })
+  try {
+    const workspacePath = await createRegisteredWorkspace({
+      root,
+      home,
+      projectName: "routed-demo",
+      setupStatus: "workspace_started",
+    })
+    const frame = await renderRouteFrame("visualizer", {
+      home,
+      height: 50,
+      initialRoute: { type: "visualizer", workspacePath, sessionID: "ses_routed" },
+      act: async (setup) => { await waitForText(setup, "Workspace: routed-demo") },
+    })
+    expect(frame).toContain("Workspace: routed-demo")
+    expect(frame).toContain("Session: ses_routed")
   } finally {
     rmSync(root, { recursive: true, force: true })
   }
