@@ -17,6 +17,7 @@ import { Dynamic } from "solid-js/web"
 import path from "node:path"
 import { mkdir, writeFile } from "node:fs/promises"
 import { useRoute, useSessionRoute } from "../../context/route"
+import { useArgs } from "../../context/args"
 import { useProject } from "../../context/project"
 import { useSync } from "../../context/sync"
 import { useEvent } from "../../context/event"
@@ -270,7 +271,14 @@ export function Session() {
 
   createEffect(() => {
     const title = Locale.truncate(session()?.title ?? "", 50)
-    setEpilogue(sessionEpilogue({ title, sessionID: session()?.id }))
+    setEpilogue(
+      sessionEpilogue({
+        title,
+        sessionID: session()?.id,
+        spinosa: useArgs().spinosa,
+        projectDir: session()?.directory,
+      }),
+    )
   })
   onCleanup(() => { setEpilogue(); clearTimeout(toBottomTimer) })
   const children = createMemo(() => {
@@ -1651,9 +1659,6 @@ function ToolRailCallout(props: {
   return (
     <box width={railWidth()} marginTop={props.firstInBlock ? 1 : 0}>
       <box flexDirection="row" alignItems="center" width="100%" justifyContent={props.side === "left" ? "flex-end" : undefined}>
-        <Show when={props.side === "right"}>
-          <text width={3} fg={color()}>├──</text>
-        </Show>
         <Show when={props.side === "right"}>
           <text width={3} fg={color()}>├──</text>
         </Show>
