@@ -13,7 +13,7 @@ import {
   scanClassifySourceFile,
   importRouteForFile,
 } from "../extension/classifier"
-import { safeCopyAsync, writeTextAtomic } from "../utils/fs"
+import { safeCopyAsync, writeTextAtomic, writeTextAtomicSafe } from "../utils/fs"
 import { spinosaLogInfo } from "../utils/log"
 import type { FileClass, ImportRoute } from "../extension/types"
 import { injectColdFrontmatter, convertedOutputExists } from "./frontmatter"
@@ -170,16 +170,22 @@ export async function processDirectCopy(
   let completed = 0
   const total = files.length
 
+  // Stable per-file sequence number so the progress numerator never exceeds
+  // the total during parallel + retry rounds (it tracks the logical file,
+  // not the per-attempt copy).
+  const seqOf = new Map<ClassifiedEntry, number>()
+  files.forEach((f, i) => seqOf.set(f, i))
+
   const tryCopy = async (entry: ClassifiedEntry, attempt: number, current: number): Promise<"copied" | "skipped" | "failed"> => {
     const { src, rel, dest } = entry
-    return copyDirectRawFile(src, dest, rel, prog, onLog, current, total, overwrite, (a, r) => onRetry?.(attempt || a, r), (o, rn) => onRename?.(o, rn))
+    return copyDirectRawFile(src, dest, rel, prog, onLog, current, total, overwrite, (a, r) => onRetry?.(attempt || a, r), (o, rn) => { renamed++; onRename?.(o, rn) })
   }
 
   const handleResult = (entry: ClassifiedEntry, result: "copied" | "skipped" | "failed", bucket: ClassifiedEntry[]) => {
     completed++
     // Clamp the live numerator so parallel + retry re-counting never shows
     // more than the logical total.
-    prog?.file("direct-progress", Math.min(completed, total), total, entry.rel)
+    prog?.file("direct-progress", Math.min(seqOf.get(entry) ?? completed, total) + 1, total, entry.rel)
     if (result === "copied") {
       converted++
       if (entry.dest.endsWith(".md")) injectColdFrontmatter(entry.dest)
@@ -193,7 +199,7 @@ export async function processDirectCopy(
   const runChunk = async (chunk: ClassifiedEntry[]) => {
     await Promise.all(chunk.map(async (entry, idx) => {
       throwIfSpinosaCancelled(shouldAbort)
-      const result = await tryCopy(entry, 0, completed + idx + 1)
+      const result = await tryCopy(entry, 0, (seqOf.get(entry) ?? idx) + 1)
       handleResult(entry, result, retryBucket)
     }))
   }
@@ -211,7 +217,7 @@ export async function processDirectCopy(
     const stillFailing: ClassifiedEntry[] = []
     await Promise.all(pending.map(async (entry, idx) => {
       throwIfSpinosaCancelled(shouldAbort)
-      const result = await tryCopy(entry, attempt, completed + idx + 1)
+      const result = await tryCopy(entry, attempt, (seqOf.get(entry) ?? idx) + 1)
       handleResult(entry, result, stillFailing)
     }))
     retryBucket.push(...stillFailing)
@@ -298,7 +304,7 @@ export async function processMarkitdown(
           const raw = readFileSync(f.src, "utf-8")
           throwIfSpinosaCancelled(shouldAbort)
           mkdirSync(path.dirname(f.dest), { recursive: true })
-          writeTextAtomic(f.dest, `# ${path.basename(f.rel)}\n\n\`\`\`${ext}\n${raw}\n\`\`\`\n`)
+          writeTextAtomicSafe(f.dest, `# ${path.basename(f.rel)}\n\n\`\`\`${ext}\n${raw}\n\`\`\`\n`)
           injectColdFrontmatter(f.dest)
           converted++
           recoverable.push({ src: f.src, dest: f.dest })
@@ -333,7 +339,7 @@ export async function processMarkitdown(
         throwIfSpinosaCancelled(shouldAbort)
         const text = result?.markdown ?? ""
         if (!text.trim()) throw new Error("MarkItDown returned no content")
-        writeTextAtomic(f.dest, text)
+        writeTextAtomicSafe(f.dest, text)
         injectColdFrontmatter(f.dest)
         converted++
         recoverable.push({ src: f.src, dest: f.dest })
@@ -488,7 +494,7 @@ async function convertTextPdf(srcFile: string, destFile: string, relPath: string
 
   if (pages === 1) {
     mkdirSync(path.dirname(destFile), { recursive: true })
-    writeTextAtomic(destFile, `# ${title}\n\n${pageTexts[0]!.text.trim() || "[No text extracted]"}\n`)
+    writeTextAtomicSafe(destFile, `# ${title}\n\n${pageTexts[0]!.text.trim() || "[No text extracted]"}\n`)
     injectColdFrontmatter(destFile)
     return
   }
@@ -499,7 +505,7 @@ async function convertTextPdf(srcFile: string, destFile: string, relPath: string
   for (const { page, text } of pageTexts) {
     throwIfSpinosaCancelled(shouldAbort)
     const pageFile = path.join(pageDir, `page-${String(page).padStart(3, "0")}.md`)
-    writeTextAtomic(
+    writeTextAtomicSafe(
       pageFile,
       [
         "---",
@@ -517,7 +523,7 @@ async function convertTextPdf(srcFile: string, destFile: string, relPath: string
     injectColdFrontmatter(pageFile)
   }
   mkdirSync(path.dirname(destFile), { recursive: true })
-  writeTextAtomic(
+  writeTextAtomicSafe(
     destFile,
     `# ${title}\n\n${pageTexts.map(({ page }) => `- [Page ${page}](${path.basename(pageDir)}/page-${String(page).padStart(3, "0")}.md)`).join("\n")}\n`,
   )
@@ -636,7 +642,7 @@ export async function verifyAndRecoverImport(
           const result = await converter.convert(srcFile)
           throwIfSpinosaCancelled(shouldAbort)
           const text = result?.markdown ?? ""
-          writeTextAtomic(destFile, text)
+          writeTextAtomicSafe(destFile, text)
           injectColdFrontmatter(destFile)
           onLog?.(`    Recovered (markitdown-ts): ${relPath}`)
           ok = true

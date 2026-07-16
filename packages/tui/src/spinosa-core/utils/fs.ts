@@ -42,7 +42,7 @@ const MAX_PATH_BYTES = 1000
 // limits (macOS: 255 bytes/component, ~1024 for the full path). Used when a
 // copy fails with ENAMETOOLONG so we reprocess under a safe name instead of
 // dropping the file.
-function truncateDestPath(dest: string): string {
+export function truncateDestPath(dest: string): string {
   const dir = path.dirname(dest)
   const base = path.basename(dest)
   const ext = base.includes(".") ? base.slice(base.lastIndexOf(".")) : ""
@@ -154,6 +154,23 @@ export function writeTextAtomic(dest: string, content: string): void {
   }
 }
 
+// Like writeTextAtomic but, on ENAMETOOLONG, retries once under a truncated
+// destination so converted output never fails purely because a source name is
+// too long. Returns the path actually written (truncated if renamed).
+export function writeTextAtomicSafe(dest: string, content: string): string {
+  try {
+    writeTextAtomic(dest, content)
+    return dest
+  } catch (err) {
+    if (String(err).includes("ENAMETOOLONG")) {
+      const safe = truncateDestPath(dest)
+      writeTextAtomic(safe, content)
+      return safe
+    }
+    throw err
+  }
+}
+
 function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const t = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)
@@ -191,12 +208,14 @@ export async function safeCopyAsync(src: string, dest: string, options?: SafeCop
     // instead of failing/retrying the doomed path.
     if (reason.includes("ENAMETOOLONG") && target === dest) {
       target = truncateDestPath(dest)
-      options?.onRename?.(dest, target)
       tmp = `${target}.spinosa-part-${process.pid}-${crypto.randomUUID()}`
       try {
         await mkdirAsync(path.dirname(target), { recursive: true })
         await withTimeout(copyFileAsync(src, tmp), timeoutMs, `copy of ${src}`)
         replaceFromTemp(tmp, target)
+        // Only report the rename after the truncated copy actually succeeded,
+        // so a renamed-then-failed file is not double-counted.
+        options?.onRename?.(dest, target)
         return true
       } catch (err2) {
         await rmAsync(tmp, { force: true }).catch(() => {})

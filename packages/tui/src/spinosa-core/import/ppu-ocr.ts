@@ -5,7 +5,7 @@ import { fileExt } from "../constants"
 import { isSpinosaCancellationError, throwIfSpinosaCancelled } from "./cancellation"
 import { injectColdFrontmatter } from "./frontmatter"
 import { pdfRenderDocumentPageToPng, withPdfDocument } from "../extension/pdf-js"
-import { writeTextAtomic } from "../utils/fs"
+import { writeTextAtomic, writeTextAtomicSafe } from "../utils/fs"
 
 export interface PpuOcrFile {
   src: string
@@ -53,7 +53,7 @@ function pageDirFor(destFile: string): string {
 function writeMarkdown(destFile: string, title: string, body: string, sourceRel: string, confidence?: number): void {
   mkdirSync(path.dirname(destFile), { recursive: true })
   const confidenceLine = typeof confidence === "number" ? `\nOCR confidence: ${confidence.toFixed(3)}\n` : ""
-  writeTextAtomic(
+  writeTextAtomicSafe(
     destFile,
     `# ${title}\n\nConverted from \`${sourceRel}\` with ppu-paddle-ocr.${confidenceLine}\n${body.trim() || "[No text detected]"}\n`,
   )
@@ -71,7 +71,7 @@ function writeSplitPages(destFile: string, title: string, sourceRel: string, pag
   for (const pageNumber of pageNumbers) {
     const displayPage = zeroBased ? pageNumber + 1 : pageNumber
     const pageFile = path.join(pageDir, `page-${String(displayPage).padStart(3, "0")}.md`)
-    writeTextAtomic(
+    writeTextAtomicSafe(
       pageFile,
       [
         "---",
