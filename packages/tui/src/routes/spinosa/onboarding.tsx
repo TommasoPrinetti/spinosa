@@ -774,7 +774,9 @@ let nameInput: TextareaRenderable | undefined
       setProgCurrent(0)
       setProcessingStatus("Preparing direct copy...")
       await delay(1000)
-      const dr = await processDirectCopy(classified.directFiles, sharedProg, onPhaseLog, undefined, shouldAbort)
+      const dr = await processDirectCopy(classified.directFiles, sharedProg, onPhaseLog, undefined, shouldAbort, (attempt, reason) => {
+        setProcessingStatus(`Retrying file (attempt ${attempt}): ${reason}`)
+      })
       if (dr.failed > 0) totalFailed += dr.failed
       if (shouldAbort()) { spinOff(); setBusy(false); return }
       setProcessingStatus(`Direct copy complete — ${totalDirect} files`)

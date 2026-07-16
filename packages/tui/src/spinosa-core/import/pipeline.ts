@@ -156,6 +156,7 @@ export async function processDirectCopy(
   onLog?: (msg: string) => void,
   overwrite?: boolean,
   shouldAbort?: () => boolean,
+  onRetry?: (attempt: number, reason: string) => void,
 ): Promise<PhaseResult> {
   let converted = 0; let skipped = 0; let failed = 0
   const recoverable: { src: string; dest: string }[] = []
@@ -163,7 +164,7 @@ export async function processDirectCopy(
   for (const [i, entry] of files.entries()) {
     throwIfSpinosaCancelled(shouldAbort)
     const { src, rel, dest } = entry
-    const result = await copyDirectRawFile(src, dest, rel, prog, onLog, i + 1, files.length, overwrite)
+    const result = await copyDirectRawFile(src, dest, rel, prog, onLog, i + 1, files.length, overwrite, onRetry)
     throwIfSpinosaCancelled(shouldAbort)
     if (result === "copied") {
       converted++
@@ -490,6 +491,7 @@ async function copyDirectRawFile(
   current?: number,
   total?: number,
   overwrite?: boolean,
+  onRetry?: (attempt: number, reason: string) => void,
 ): Promise<CopyDirectResult> {
   const c = current ?? 0
   const t = total ?? 0
@@ -507,7 +509,12 @@ async function copyDirectRawFile(
   // Yield before copy so the "starting" progress event renders
   await yieldToEL()
 
-  if (await safeCopyAsync(srcFile, destFile)) {
+  if (await safeCopyAsync(srcFile, destFile, {
+    onRetry: (attempt, reason) => {
+      onLog?.(`  ${relPath} → retry ${attempt} (${reason})`)
+      onRetry?.(attempt, reason)
+    },
+  })) {
     prog?.file("direct-copied", c, t, relPath)
     onLog?.(`  ${relPath} → copied`)
     return "copied"

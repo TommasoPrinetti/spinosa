@@ -119,6 +119,16 @@ export function writeTextAtomic(dest: string, content: string): void {
   }
 }
 
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)
+    p.then(
+      (v) => { clearTimeout(t); resolve(v) },
+      (e) => { clearTimeout(t); reject(e) },
+    )
+  })
+}
+
 export async function safeCopyAsync(src: string, dest: string, options?: SafeCopyOptions): Promise<boolean> {
   const previous = asyncCopyQueues.get(dest) ?? Promise.resolve()
   const gate = Promise.withResolvers<void>()
@@ -129,13 +139,14 @@ export async function safeCopyAsync(src: string, dest: string, options?: SafeCop
   const retries = options?.retries ?? DEFAULT_RETRIES
   let delayMs = safeCopyDelaySec(dest) * 1000
   let lastReason = ""
+  const timeoutMs = safeCopyTimeoutSecFor(src) * 1000
 
   await mkdirAsync(path.dirname(dest), { recursive: true })
 
   for (let i = 1; i <= retries; i++) {
     const tmp = `${dest}.spinosa-part-${process.pid}-${crypto.randomUUID()}`
     try {
-      await copyFileAsync(src, tmp)
+      await withTimeout(copyFileAsync(src, tmp), timeoutMs, `copy of ${src}`)
       replaceFromTemp(tmp, dest)
       return true
     } catch (err) {
