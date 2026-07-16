@@ -505,7 +505,7 @@ export function AddFiles() {
       for (const src of resolved) {
         appendLogLine(`Scanning: ${src}`)
         const scanPreview = await buildImportScanPreview(src, {
-          onFile: (rel, isFile, discovered) => { setScanningFile(rel); setScanTotal(discovered); if (isFile) setScanCount((c) => c + 1) },
+          onFile: (rel, isFile, discovered) => { setScanningFile(rel); setScanTotal((t) => t + discovered); if (isFile) setScanCount((c) => c + 1) },
           shouldAbort,
         })
         for (const opt of scanPreview.importOptions) {

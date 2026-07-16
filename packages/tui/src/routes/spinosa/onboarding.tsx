@@ -496,6 +496,7 @@ let nameInput: TextareaRenderable | undefined
     ]
     setToolChecks(checks)
     setStep("tools")
+    spinOn()
 
     await delay(80)
     const toolStatus = await detectDocumentTools()
@@ -506,6 +507,7 @@ let nameInput: TextareaRenderable | undefined
     ]
     setToolChecks(results)
     for (const r of results) logTool(r.label, r.status, r.detail)
+    spinOff()
   }
 
   const runToolRepair = async () => {
@@ -578,7 +580,7 @@ let nameInput: TextareaRenderable | undefined
         console.error("[scan] buildNewWorkspacePreview ->", src)
         const scanPreview = await buildNewWorkspacePreview(src, workspaceName() || defaultWorkspaceName(), (rel, isFile, discovered) => {
           setScanningFile(rel)
-          setScanTotal(discovered)
+          setScanTotal((t) => t + discovered)
           if (isFile) { scanned++; setScanCount((c) => c + 1) }
         }, shouldAbort)
         console.error("[scan] buildNewWorkspacePreview done ->", src, "options:", scanPreview.importOptions.length)
@@ -789,6 +791,7 @@ let nameInput: TextareaRenderable | undefined
       if (classified.markitdownFiles.length > 0) {
         setBusy(false)
         await gate("Process text files")
+        if (shouldAbort()) { spinOff(); setBusy(false); return }
         setBusy(true)
         setStep("markitdown")
         setProgTotal(totalMd)
@@ -808,6 +811,7 @@ let nameInput: TextareaRenderable | undefined
       if (classified.ocrFiles.length > 0) {
         setBusy(false)
         await gate("Process images and PDFs")
+        if (shouldAbort()) { spinOff(); setBusy(false); return }
         setBusy(true)
         setStep("ocr")
         setProgTotal(totalOcr)
@@ -839,6 +843,7 @@ let nameInput: TextareaRenderable | undefined
 
       if (result.success) {
         // Import additional source paths
+        let extraCopied = 0, extraMd = 0, extraOcr = 0, extraDirect = 0, extraMdTotal = 0, extraOcrTotal = 0, extraFailed = 0
         for (let i = 1; i < resolved.length; i++) {
           const extra = resolved[i]!
           setProcessingStatus(`Importing: ${extra}`)
@@ -850,14 +855,27 @@ let nameInput: TextareaRenderable | undefined
             onProgress: (msg) => appendLogLine(msg),
             shouldAbort,
           })
+          // Fold the extra-source results into the summary totals so a
+          // multi-source import is reported accurately.
+          extraCopied += addFileResult.copied
+          extraMd += addFileResult.mdConverted
+          extraOcr += addFileResult.ocrConverted
+          extraDirect += addFileResult.copied + addFileResult.skipped
+          extraMdTotal += addFileResult.mdConverted + addFileResult.mdSkipped
+          extraOcrTotal += addFileResult.ocrConverted + addFileResult.ocrSkipped
+          extraFailed += addFileResult.failed + addFileResult.mdFailed + addFileResult.ocrFailed
           if (!addFileResult.success) {
             appendLogLine(`  ⚠ Partial import for ${extra}`)
           }
         }
+        dr.converted += extraCopied
+        mr.converted += extraMd
+        or.converted += extraOcr
+        totalFailed += extraFailed
 
         setFailedCount(totalFailed)
         setImportSummary(
-          `${dr.converted}/${totalDirect} copied · ${mr.converted}/${totalMd} markitdown · ${or.converted}/${totalOcr} ocr` +
+          `${dr.converted}/${totalDirect + extraDirect} copied · ${mr.converted}/${totalMd + extraMdTotal} markitdown · ${or.converted}/${totalOcr + extraOcrTotal} ocr` +
           (totalRenamed > 0 ? ` · ${totalRenamed} renamed` : "") +
           (totalFailed > 0 ? ` · ${totalFailed} failed` : ""),
         )
