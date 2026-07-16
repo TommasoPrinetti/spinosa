@@ -1180,15 +1180,15 @@ let nameInput: TextareaRenderable | undefined
           </box>
           <text fg={theme.textMuted}>
             Step {stepIndex()} of {totalSteps}
-            {step() === "name" ? " — name your workspace" : ""}
-            {step() === "tools" ? " — checking document tools" : ""}
-            {step() === "scan" ? " — scanning source" : ""}
-            {step() === "imports" ? " — choose file types to import" : ""}
-            {step() === "setup" ? " — setting up workspace" : step() === "direct" ? " — direct copy" : step() === "markitdown" ? " — MarkItDown" : step() === "ocr" ? " — OCR" : step() === "verification" ? " — verification" : ""}
-            {step() === "provider" ? " — choose LLM provider" : ""}
-            {step() === "startup" ? " — preparing startup" : ""}
-            {step() === "done" ? " — workspace ready" : ""}
-            {step() === "error" ? " — fix the issue and retry" : ""}
+            {step() === "name" ? " — naming your workspace" : ""}
+            {step() === "tools" ? " — checking your document tools" : ""}
+            {step() === "scan" ? " — scanning your source" : ""}
+            {step() === "imports" ? " — selecting file types to import" : ""}
+            {step() === "setup" ? " — creating your workspace" : step() === "direct" ? " — copying files into raw/" : step() === "markitdown" ? " — converting documents with MarkItDown" : step() === "ocr" ? " — running OCR on images and PDFs" : step() === "verification" ? " — verifying the import" : ""}
+            {step() === "provider" ? " — choosing your LLM provider" : ""}
+            {step() === "startup" ? " — preparing your startup" : ""}
+            {step() === "done" ? " — your workspace is ready" : ""}
+            {step() === "error" ? " — fixing the issue and retrying" : ""}
           </text>
 
           <Show when={step() === "path"}>

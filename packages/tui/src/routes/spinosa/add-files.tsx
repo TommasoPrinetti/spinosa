@@ -917,12 +917,12 @@ export function AddFiles() {
           </box>
           <text fg={theme.textMuted}>
             Step {stepIndex()} of {totalSteps}
-            {step() === "path" ? " — choose source folders" : ""}
-            {step() === "tools" ? " — checking document tools" : ""}
-            {step() === "scan" ? " — scanning source" : ""}
-            {step() === "direct" ? " — direct copy" : step() === "markitdown" ? " — MarkItDown" : step() === "ocr" ? " — OCR" : ""}
+            {step() === "path" ? " — choosing source folders" : ""}
+            {step() === "tools" ? " — checking your document tools" : ""}
+            {step() === "scan" ? " — scanning your source" : ""}
+            {step() === "direct" ? " — copying files into raw/" : step() === "markitdown" ? " — converting documents with MarkItDown" : step() === "ocr" ? " — running OCR on images and PDFs" : ""}
             {step() === "done" ? " — import complete" : ""}
-            {step() === "error" ? " — fix the issue and retry" : ""}
+            {step() === "error" ? " — fixing the issue and retrying" : ""}
           </text>
 
           <Show when={step() === "path"}>
