@@ -1,5 +1,5 @@
-import { existsSync, mkdirSync, readdirSync } from "node:fs"
-import { mkdir, rename, rm, stat } from "node:fs/promises"
+import { existsSync, mkdirSync, readdirSync, openSync, writeSync, closeSync, fsyncSync } from "node:fs"
+import { mkdir, rename, rm, stat, readFile, writeFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import path from "node:path"
 import { resolveWorkspaceDisplayName } from "../workspace-name"
@@ -22,6 +22,9 @@ function metadataPath(...segments: string[]): string {
   return path.join(spinosaHome(), "metadata", ...segments)
 }
 
+// Single-pass escape using a longest-match replacer so a literal "%" that
+// precedes a digit sequence is never mis-decoded.
+const REGISTRY_ESCAPE_RE = /%25|%0A|%0D|%7C/gi
 export function registryEscape(value: string): string {
   return value
     .replace(/%/g, "%25")
@@ -31,15 +34,40 @@ export function registryEscape(value: string): string {
 }
 
 export function registryUnescape(value: string): string {
-  return value
-    .replace(/%0A/gi, "\n")
-    .replace(/%0D/gi, "\r")
-    .replace(/%7C/gi, "|")
-    .replace(/%25/gi, "%")
+  return value.replace(REGISTRY_ESCAPE_RE, (m) => {
+    switch (m.toUpperCase()) {
+      case "%25": return "%"
+      case "%0A": return "\n"
+      case "%0D": return "\r"
+      case "%7C": return "|"
+      default: return m
+    }
+  })
 }
 
 const REGISTRY_LOCK_TIMEOUT_MS = 8_000
-const REGISTRY_LOCK_STALE_MS = 5_000
+
+// Read the owner pid recorded inside a lock dir; returns null if unreadable.
+async function readLockOwnerPid(lockDir: string): Promise<number | null> {
+  try {
+    const raw = await readFile(path.join(lockDir, "pid"), "utf8")
+    const pid = Number.parseInt(raw.trim(), 10)
+    return Number.isFinite(pid) ? pid : null
+  } catch {
+    return null
+  }
+}
+
+// A process is considered alive if we can signal it (kill(pid,0) succeeds).
+function isProcessAlive(pid: number): boolean {
+  if (pid <= 0) return false
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch {
+    return false
+  }
+}
 
 async function acquireRegistryFileLock(
   registry: string,
@@ -51,24 +79,23 @@ async function acquireRegistryFileLock(
   while (true) {
     try {
       await mkdir(lockDir)
+      // Record our pid so a later holder can tell whether we are still alive.
+      await writeFile(path.join(lockDir, "pid"), String(process.pid), "utf8").catch(() => {})
       return async () => { await rm(lockDir, { recursive: true, force: true }) }
     } catch (error) {
       if (!error || typeof error !== "object" || !("code" in error) || error.code !== "EEXIST") throw error
-      try {
-        const lockStat = await stat(lockDir)
-        if (Date.now() - lockStat.mtimeMs > REGISTRY_LOCK_STALE_MS) {
-          // Orphaned lock from a crashed/killed process: reclaim it now so the
-          // user is never blocked waiting on a lock nobody holds.
-          await rm(lockDir, { recursive: true, force: true })
-          onRecover?.("Cleared a stale registry lock left by a previous run.")
-          continue
-        }
-      } catch {
+      // Only reclaim a lock whose owner process is confirmed dead. This makes
+      // acquisition atomic with respect to liveness and avoids two holders
+      // both winning the rm+continue race.
+      const ownerPid = await readLockOwnerPid(lockDir)
+      if (ownerPid !== null && !isProcessAlive(ownerPid)) {
+        await rm(lockDir, { recursive: true, force: true }).catch(() => {})
+        onRecover?.("Cleared a stale registry lock left by a previous run.")
         continue
       }
       if (!forceReclaimed && Date.now() >= deadline) {
-        // Lock is held but never released (wedged). Force-reclaim rather than
-        // hang the caller forever, and tell the user what happened.
+        // Lock is held but never released (wedged, e.g. network hang on a
+        // cloud mount). Force-reclaim rather than hang the caller forever.
         forceReclaimed = true
         await rm(lockDir, { recursive: true, force: true }).catch(() => {})
         onRecover?.("Force-cleared a wedged registry lock.")
@@ -82,6 +109,18 @@ async function acquireRegistryFileLock(
 async function writeRegistryAtomically(registry: string, content: string): Promise<void> {
   const tmp = `${registry}.tmp-${process.pid}-${crypto.randomUUID()}`
   await Bun.write(tmp, content)
+  // fsync the temp file before renaming so a crash mid-rename cannot leave a
+  // partial registry on network/FUSE-backed filesystems.
+  try {
+    const fd = openSync(tmp, "r+")
+    try {
+      fsyncSync(fd)
+    } finally {
+      closeSync(fd)
+    }
+  } catch {
+    // best-effort; rename still proceeds
+  }
   try {
     await rename(tmp, registry)
   } catch (error) {
@@ -138,7 +177,7 @@ export async function loadRegistry(
     const decoded = decodeRegistryLine(line)
     if (!decoded) continue
     const { workspacePath, project } = decoded
-    if (!options?.allowMissingMarker && !existsSync(path.join(workspacePath, ".spinosa", "workspace"))) continue
+    if (!options?.allowMissingMarker && !validateWorkspace(workspacePath)) continue
     if (seen.has(workspacePath)) continue
     seen.add(workspacePath)
     results.push({
@@ -209,17 +248,20 @@ export async function unregisterWorkspace(
 export async function listRegisteredWorkspaces(): Promise<SpinosaRegisteredWorkspace[]> {
   const entries = await loadRegistry(undefined, { allowMissingMarker: true })
   const valid: { path: string; project: string }[] = []
-  const invalid: string[] = []
+  const trulyGone: string[] = []
   for (const entry of entries) {
     if (validateWorkspace(entry.path)) {
       valid.push(entry)
-    } else {
-      invalid.push(entry.path)
+    } else if (!existsSync(entry.path)) {
+      // Only prune when the workspace directory is entirely absent (truly
+      // deleted). A registered path that still exists but lacks its marker is
+      // mid-setup or half-failed — never prune it from under the user.
+      trulyGone.push(entry.path)
     }
   }
-  // Prune stale entries in the background
-  if (invalid.length > 0) {
-    Promise.all(invalid.map((p) => unregisterWorkspace(p).catch(() => {})))
+  // Prune genuinely-deleted entries in the background.
+  if (trulyGone.length > 0) {
+    Promise.all(trulyGone.map((p) => unregisterWorkspace(p).catch(() => {})))
   }
   return valid.map((entry) => ({
     path: entry.path,

@@ -1,5 +1,6 @@
 import type { RouteNavigateInput } from "../context/route"
 import { isSpinosaWorkspace, readWorkspaceMeta } from "../spinosa-core/workspace/meta"
+import { registerWorkspace } from "../spinosa-core/workspace/registry"
 import type { SpinosaSetupStatus } from "../spinosa-core/types"
 
 export const SPINOSA_ACTIVE_WORKSPACE_KV = "spinosa_active_workspace_path"
@@ -52,6 +53,15 @@ export async function resolveSpinosaEntryRoute(input: {
   }
 
   if (input.kvActivePath && isSpinosaWorkspace(input.kvActivePath)) {
+    // The KV active path may have been pruned from the registry (e.g. another
+    // process cleaned it) while still being a valid workspace. Re-register it
+    // so navigation and the picker stay consistent.
+    try {
+      const meta = await readWorkspaceMeta(input.kvActivePath)
+      await registerWorkspace(input.kvActivePath, meta?.projectName ?? "").catch(() => {})
+    } catch {
+      // best-effort; proceed to route regardless
+    }
     const route = await routeForWorkspace(input.kvActivePath)
     if (route) return route
   }
