@@ -27,7 +27,7 @@ import {
 import type { CliRunResult } from "../../spinosa/types"
 import { readBundledFrameworkVersion, isPrereleaseFrameworkVersion } from "../../spinosa/service"
 import { resolveFrameworkRoot } from "../../spinosa-core/framework/discovery"
-import { resolveExistingUserPaths } from "../../spinosa-core/utils/path"
+import { normalizePathInput, resolveExistingUserPaths } from "../../spinosa-core/utils/path"
 import {
   blurIfFocused,
   createWorkflowGuard,
@@ -169,6 +169,9 @@ export function AddFiles() {
   const [waitingForGate, setWaitingForGate] = createSignal(false)
   const [toolChecks, setToolChecks] = createSignal<ToolCheckResult[]>([])
   const [scanDone, setScanDone] = createSignal(false)
+  const [scanningFile, setScanningFile] = createSignal("")
+  const [scanCount, setScanCount] = createSignal(0)
+  const [scanTotal, setScanTotal] = createSignal(0)
   const [progCurrent, setProgCurrent] = createSignal(0)
   const [progTotal, setProgTotal] = createSignal(1)
   const [processingStatus, setProcessingStatus] = createSignal("")
@@ -177,10 +180,13 @@ export function AddFiles() {
   const [importSummary, setImportSummary] = createSignal("")
   const [pathValidities, setPathValidities] = createStore<Record<number, "unchecked" | "valid" | "invalid">>({})
 
-  const SPINNER_FRAMES = ["|", "/", "—", "\\"]
+  const WAVE = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"]
+  const waveString = (f: number) => { let r = ""; for (let i = 0; i < 6; i++) { const p = (i + f) % 14, l = p <= 6 ? p : 13 - p; r += WAVE[l] }; return r }
+  const wavePulse = (f: number) => { const p = f % 14; return WAVE[p <= 6 ? p : 13 - p] }
+  const waveRow = (f: number, width: number) => { let r = ""; for (let i = 0; i < width; i++) { const angle = (i * Math.PI) / 7 + f * Math.PI / 7; const l = Math.max(0, Math.min(7, Math.round(3.5 + 3.5 * Math.sin(angle)))); r += WAVE[l] }; return r }
   const [spinIdx, setSpinIdx] = createSignal(0)
   let spinTimer: ReturnType<typeof setInterval> | undefined
-  const spinOn = () => { if (!spinTimer) spinTimer = setInterval(() => setSpinIdx((i) => (i + 1) % 4), 200) }
+  const spinOn = () => { if (!spinTimer) spinTimer = setInterval(() => setSpinIdx((i) => (i + 1) % 14), 200) }
   const spinOff = () => { if (spinTimer) { clearInterval(spinTimer); spinTimer = undefined; setSpinIdx(0) } }
 
   const workflow = createWorkflowGuard()
@@ -485,14 +491,19 @@ export function AddFiles() {
     const resolved = pendingPaths
     if (!resolved || resolved.length === 0) { logError("startScan", "No pending paths"); setStep("error"); return }
     setScanDone(false)
+    setScanningFile("")
+    setScanCount(0)
     setStep("scan")
-    await yieldToEventLoop()
+    await delay(100)
+    spinOn()
     clearLog()
     try {
       let mergedOptions: ImportOption[] = []
       for (const src of resolved) {
         appendLogLine(`Scanning: ${src}`)
-        const scanPreview = await buildImportScanPreview(src)
+        const scanPreview = await buildImportScanPreview(src, {
+          onFile: (rel, isFile, discovered) => { setScanningFile(rel); setScanTotal(discovered); if (isFile) setScanCount((c) => c + 1) },
+        })
         for (const opt of scanPreview.importOptions) {
           const existing = mergedOptions.find((m) => m.ext === opt.ext)
           if (existing) existing.count += opt.count
@@ -501,6 +512,7 @@ export function AddFiles() {
       }
       setImportOptions(mergedOptions)
       clearLog()
+      spinOff()
       setScanDone(true)
       logAction("scan-done", `${mergedOptions.length} file types found`)
     } catch (err) {
@@ -739,7 +751,7 @@ export function AddFiles() {
     const validateTimer = setInterval(() => {
       if (step() !== "path") return
       for (const entry of sourcePaths()) {
-        const text = readPathText(entry.id)
+        const text = normalizePathInput(readPathText(entry.id))
         if (!text) {
           setPathValidities(entry.id, "unchecked")
           continue
@@ -900,7 +912,7 @@ export function AddFiles() {
               <text fg={buttonText(theme, hoveredButton() === "back", theme.text)}>←</text>
             </box>
             <text fg={theme.text}>
-              <span style={{ bold: true }}>{busy() ? `${SPINNER_FRAMES[spinIdx()]} ` : ""}Import files into workspace</span>
+              <span style={{ bold: true }}>{busy() ? `${waveString(spinIdx())} ` : ""}Import files into workspace</span>
             </text>
           </box>
           <text fg={theme.textMuted}>
@@ -1022,7 +1034,7 @@ export function AddFiles() {
                 <box flexDirection="column" gap={1} paddingTop={1}>
                   <For each={toolChecks()}>
                     {(check) => {
-                      const icon = check.status === "available" ? "●" : check.status === "missing" ? "●" : SPINNER_FRAMES[spinIdx()]
+                      const icon = check.status === "available" ? "●" : check.status === "missing" ? "●" : wavePulse(spinIdx())
                       const color = check.status === "available" ? theme.success : check.status === "missing" ? theme.error : theme.textMuted
                       return (
                         <box flexDirection="row" gap={1} alignItems="center" paddingLeft={1} paddingRight={1}>
@@ -1041,7 +1053,9 @@ export function AddFiles() {
               </Show>
               <Show when={step() === "scan"}>
                 <Show when={!scanDone()}>
-                  <text fg={theme.textMuted}>Scanning source folders...</text>
+                  <text fg={theme.text}>{waveString(spinIdx())}</text>
+                  <text fg={theme.textMuted}>{scanningFile() || "…"}</text>
+                  <text fg={theme.textMuted}>Scanning {scanCount()} / {scanTotal()}</text>
                   <Show when={logLines().length > 0}>
                     <box height={1} />
                     <LogScrollbox theme={theme} lines={logLines()} viewportHeight={dimensions().height} />

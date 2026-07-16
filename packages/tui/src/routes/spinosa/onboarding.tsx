@@ -29,7 +29,7 @@ import { useExit } from "../../context/exit"
 import type { CliRunResult } from "../../spinosa/types"
 import { readBundledFrameworkVersion, isPrereleaseFrameworkVersion, readStartupPrompt, writePreferredCli } from "../../spinosa/service"
 import { writeWorkspaceStatus } from "../../spinosa-core/workspace/meta"
-import { resolveExistingUserPaths } from "../../spinosa-core/utils/path"
+import { normalizePathInput, resolveExistingUserPaths } from "../../spinosa-core/utils/path"
 import { CenteredColumn } from "../../component/centered-column"
 import { OPENCODE_BASE_MODE, useOpencodeKeymap, useOpencodeModeStack } from "../../keymap"
 import { buttonBackground, buttonBorder, buttonText } from "../../util/button"
@@ -232,6 +232,8 @@ export function Onboarding() {
   const [failedCount, setFailedCount] = createSignal(0)
   const [processingFile, setProcessingFile] = createSignal("")
   const [scanDone, setScanDone] = createSignal(false)
+  const [scanningFile, setScanningFile] = createSignal("")
+  const [scanCount, setScanCount] = createSignal(0)
   function formatBytes(b: number): string {
     if (b >= 1_000_000_000) return `${(b / 1_000_000_000).toFixed(1)} GB`
     if (b >= 1_000_000) return `${(b / 1_000_000).toFixed(1)} MB`
@@ -245,10 +247,13 @@ export function Onboarding() {
   const [startupElapsedMs, setStartupElapsedMs] = createSignal(0)
   const [startupError, setStartupError] = createSignal<string | undefined>()
   const [pathValidities, setPathValidities] = createStore<Record<number, "unchecked" | "valid" | "invalid">>({})
-  const SPINNER_FRAMES = ["|", "/", "—", "\\"]
+  const WAVE = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"]
+  const waveString = (f: number) => { let r = ""; for (let i = 0; i < 6; i++) { const p = (i + f) % 14, l = p <= 6 ? p : 13 - p; r += WAVE[l] }; return r }
+  const wavePulse = (f: number) => { const p = f % 14; return WAVE[p <= 6 ? p : 13 - p] }
+  const waveRow = (f: number, width: number) => { let r = ""; for (let i = 0; i < width; i++) { const angle = (i * Math.PI) / 7 + f * Math.PI / 7; const l = Math.max(0, Math.min(7, Math.round(3.5 + 3.5 * Math.sin(angle)))); r += WAVE[l] }; return r }
   const [spinIdx, setSpinIdx] = createSignal(0)
   let spinTimer: ReturnType<typeof setInterval> | undefined
-  const spinOn = () => { if (!spinTimer) spinTimer = setInterval(() => setSpinIdx((i) => (i + 1) % 4), 200) }
+  const spinOn = () => { if (!spinTimer) spinTimer = setInterval(() => setSpinIdx((i) => (i + 1) % 14), 200) }
   const spinOff = () => { if (spinTimer) { clearInterval(spinTimer); spinTimer = undefined; setSpinIdx(0) } }
   const [gateLabel, setGateLabel] = createSignal("")
   const [gateAction, setGateAction] = createSignal<() => void>(() => {})
@@ -555,14 +560,25 @@ let nameInput: TextareaRenderable | undefined
     logStep("scan", "Scanning source folder")
     clearLog()
     setScanDone(false)
+    setScanningFile("")
+    setScanCount(0)
     setStep("scan")
-    await yieldToEventLoop()
+    await delay(100)
+    spinOn()
 
     try {
+      console.error("[scan] startScan begin", resolved)
       let mergedOptions: ImportOption[] = []
       for (const src of resolved) {
         appendLogLine(`Scanning: ${src}`)
-        const scanPreview = await buildNewWorkspacePreview(src, workspaceName() || defaultWorkspaceName())
+        let scanned = 0
+        console.error("[scan] buildNewWorkspacePreview ->", src)
+        const scanPreview = await buildNewWorkspacePreview(src, workspaceName() || defaultWorkspaceName(), (rel, isFile, discovered) => {
+          setScanningFile(rel)
+          setScanTotal(discovered)
+          if (isFile) { scanned++; setScanCount((c) => c + 1) }
+        })
+        console.error("[scan] buildNewWorkspacePreview done ->", src, "options:", scanPreview.importOptions.length)
         setPreview(scanPreview)
         for (const opt of scanPreview.importOptions) {
           const existing = mergedOptions.find((m) => m.ext === opt.ext)
@@ -570,11 +586,15 @@ let nameInput: TextareaRenderable | undefined
           else { mergedOptions.push({ ...opt }) }
         }
       }
+      console.error("[scan] merged options:", mergedOptions.length)
       setImportOptions(mergedOptions)
       clearLog()
+      spinOff()
       setScanDone(true)
+      console.error("[scan] scanDone=true")
       logAction("scan-done", `${mergedOptions.length} file types found`)
     } catch (err) {
+      console.error("[scan] startScan threw", err)
       logError("startScan", err)
       appendLogLine(`Scan failed: ${err instanceof Error ? err.message : String(err)}`)
       setStep("error")
@@ -684,6 +704,28 @@ let nameInput: TextareaRenderable | undefined
     try {
       setStep("setup")
       setProcessingStatus("Creating workspace...")
+      // Drive the progress bar off the setup sub-steps emitted by createWorkspace
+      // so the bar is truthful (0% → 100%) instead of a frozen placeholder.
+      const setupSteps = [
+        "Creating workspace directory",
+        "Resuming interrupted workspace",
+        "Copying workspace template",
+        "Creating user-state directories",
+        "Writing workspace metadata",
+        "Registering in global registry",
+        "Writing setup files",
+      ]
+      let setupDone = 0
+      setProgTotal(setupSteps.length)
+      setProgCurrent(0)
+      const setupProgress = (msg: string) => {
+        appendLogLine(msg)
+        setProcessingStatus(msg)
+        if (setupSteps.some((s) => msg.startsWith(s))) {
+          setupDone = Math.min(setupSteps.length, setupDone + 1)
+          setProgCurrent(setupDone)
+        }
+      }
       await yieldToEventLoop()
       const frameworkRoot = resolveFrameworkRoot()
       if (!frameworkRoot) {
@@ -697,7 +739,7 @@ let nameInput: TextareaRenderable | undefined
         corpusPath: primarySource,
         frameworkRoot,
         workspaceName: workspaceName() || defaultWorkspaceName(),
-        onProgress: (msg) => { appendLogLine(msg) },
+        onProgress: setupProgress,
         shouldAbort,
       })
       if (shouldAbort()) return
@@ -931,7 +973,7 @@ let nameInput: TextareaRenderable | undefined
     const validateTimer = setInterval(() => {
       if (step() !== "path") return
       for (const entry of sourcePaths()) {
-        const text = readPathText(entry.id)
+        const text = normalizePathInput(readPathText(entry.id))
         if (!text) {
           setPathValidities(entry.id, "unchecked")
           continue
@@ -1126,7 +1168,7 @@ let nameInput: TextareaRenderable | undefined
               <text fg={buttonText(theme, hoveredButton() === "back", theme.text)}>←</text>
             </box>
             <text fg={theme.text}>
-              <span style={{ bold: true }}>{busy() ? `${SPINNER_FRAMES[spinIdx()]} ` : ""}Create Spinosa workspace</span>
+              <span style={{ bold: true }}>{busy() ? `${waveString(spinIdx())} ` : ""}Create Spinosa workspace</span>
             </text>
           </box>
           <text fg={theme.textMuted}>
@@ -1293,7 +1335,7 @@ let nameInput: TextareaRenderable | undefined
                 <box flexDirection="column" gap={1} paddingTop={1}>
                   <For each={toolChecks()}>
                     {(check) => {
-                      const icon = check.status === "available" ? "●" : check.status === "missing" ? "●" : SPINNER_FRAMES[spinIdx()]
+                      const icon = check.status === "available" ? "●" : check.status === "missing" ? "●" : wavePulse(spinIdx())
                       const color = check.status === "available" ? theme.success : check.status === "missing" ? theme.error : theme.textMuted
                       return (
                         <box flexDirection="row" gap={1} alignItems="center" paddingLeft={1} paddingRight={1}>
@@ -1312,7 +1354,9 @@ let nameInput: TextareaRenderable | undefined
               </Show>
               <Show when={step() === "scan"}>
                 <Show when={!scanDone()}>
-                  <text fg={theme.textMuted}>Scanning source folders...</text>
+                  <text fg={theme.text}>{waveString(spinIdx())}</text>
+                  <text fg={theme.textMuted}>{scanningFile() || "…"}</text>
+                  <text fg={theme.textMuted}>Scanning {scanCount()} / {scanTotal()}</text>
                   <Show when={logLines().length > 0}>
                     <box height={1} />
                     <LogScrollbox theme={theme} lines={logLines()} viewportHeight={dimensions().height} />

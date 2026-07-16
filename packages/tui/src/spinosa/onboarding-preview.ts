@@ -1,10 +1,11 @@
-import { existsSync, lstatSync, readdirSync } from "node:fs"
+import { existsSync } from "node:fs"
+import { lstat, readdir } from "node:fs/promises"
 import path from "node:path"
 import { detectLlmTools as coreDetectLlmTools } from "../spinosa-core/tools/detection"
 import { resolveUserPath } from "../spinosa-core/utils/path"
 import { pluralCount } from "../spinosa-core/utils/string"
 import { fileExt } from "../spinosa-core/constants"
-import { shouldSkipSourceFile, classifySourceFile } from "../spinosa-core/extension/classifier"
+import { shouldSkipSourceFile, classifySourceFile, scanClassifySourceFile } from "../spinosa-core/extension/classifier"
 import type { FileClass } from "../spinosa-core/extension/types"
 import { suggestWorkspacePath as coreSuggestWorkspacePath } from "../spinosa-core/scan/scanner"
 import { resolveWorkspacePath as resolveCoreWorkspacePath } from "../spinosa-core/commands/create"
@@ -53,25 +54,28 @@ function shouldSkipScanDir(name: string) {
 
 async function scanByExtension(
   sourcePath: string,
-  classify: (filePath: string) => Promise<FileClass> = classifySourceFile,
+  classify: (filePath: string) => Promise<FileClass> = scanClassifySourceFile,
+  onFile?: (relativePath: string, isFile: boolean, discovered: number) => void,
 ): Promise<{
   extMap: Map<string, ExtEntry>
   totals: { markdown: number; markitdown: number; native: number; ocr: number; video: number; audio: number; unknown: number; ignored: number; total: number }
 }> {
   const extMap = new Map<string, ExtEntry>()
   const totals = { markdown: 0, markitdown: 0, native: 0, ocr: 0, video: 0, audio: 0, unknown: 0, ignored: 0, total: 0 }
+  let discovered = 0
 
   const stack = [sourcePath]
   while (stack.length > 0) {
     const dir = stack.pop()
     if (!dir) continue
     let entries: string[]
-    try { entries = readdirSync(dir) } catch { continue }
+    try { entries = await readdir(dir) } catch { continue }
     for (const entry of entries) {
       if (entry.startsWith(".") && entry !== "." && entry !== "..") continue
       const fullPath = path.join(dir, entry)
-      let st: ReturnType<typeof lstatSync>
-      try { st = lstatSync(fullPath) } catch { continue }
+      if (onFile) onFile(path.relative(sourcePath, fullPath) || entry, false, discovered)
+      let st
+      try { st = await lstat(fullPath) } catch { continue }
       if (st.isSymbolicLink()) continue
       if (st.isDirectory()) {
         if (shouldSkipScanDir(entry)) continue
@@ -79,6 +83,8 @@ async function scanByExtension(
         continue
       }
       if (!st.isFile()) continue
+      discovered++
+      if (onFile) onFile(path.relative(sourcePath, fullPath) || entry, true, discovered)
       try {
         totals.total++
         if (shouldSkipSourceFile(fullPath)) { totals.ignored++; continue }
@@ -168,11 +174,11 @@ function resolveWorkspacePath(sourcePath: string, workspaceName?: string): strin
   return resolveCoreWorkspacePath(resolved, workspaceName)
 }
 
-export async function buildNewWorkspacePreview(sourcePath: string, workspaceName?: string): Promise<NewWorkspacePreview> {
+export async function buildNewWorkspacePreview(sourcePath: string, workspaceName?: string, onFile?: (relativePath: string, isFile: boolean, discovered: number) => void): Promise<NewWorkspacePreview> {
   const projectName = workspaceName?.trim() || path.basename(sourcePath)
   const workspacePath = resolveWorkspacePath(sourcePath, workspaceName)
   const toolStatus = await detectDocumentTools()
-  const { extMap, totals } = await scanByExtension(sourcePath)
+  const { extMap, totals } = await scanByExtension(sourcePath, scanClassifySourceFile, onFile)
 
   return {
     projectName,
@@ -186,10 +192,10 @@ export async function buildNewWorkspacePreview(sourcePath: string, workspaceName
 
 export async function buildImportScanPreview(
   sourcePath: string,
-  options?: { classify?: (filePath: string) => Promise<FileClass> },
+  options?: { classify?: (filePath: string) => Promise<FileClass>; onFile?: (relativePath: string, isFile: boolean, discovered: number) => void },
 ): Promise<ImportScanPreview> {
   const projectName = path.basename(sourcePath)
-  const { extMap, totals } = await scanByExtension(sourcePath, options?.classify)
+  const { extMap, totals } = await scanByExtension(sourcePath, options?.classify, options?.onFile)
 
   return {
     projectName,

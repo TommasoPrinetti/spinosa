@@ -1,10 +1,10 @@
-import { readFileSync } from "node:fs"
+import { readFile } from "node:fs/promises"
 import { getDocument, type PDFDocumentProxy } from "pdfjs-dist/legacy/build/pdf.mjs"
 import { createCanvas } from "@napi-rs/canvas"
 
 async function getDoc(pdfPath: string): Promise<PDFDocumentProxy> {
-  const data = readFileSync(pdfPath)
-  return getDocument({ data }).promise
+  const data = await readFile(pdfPath)
+  return withTimeout(getDocument({ data }).promise, 2000)
 }
 
 export async function withPdfDocument<T>(pdfPath: string, fn: (doc: PDFDocumentProxy) => Promise<T>): Promise<T> {
@@ -78,7 +78,7 @@ export async function pdfRenderDocumentPageToPng(doc: PDFDocumentProxy, pageNumb
 }
 
 export async function isTextBasedPdf(pdfPath: string): Promise<boolean> {
-  const header = readFileSync(pdfPath)
+  const header = await readFile(pdfPath)
   if (header.subarray(0, 5).toString() !== "%PDF-") return false
 
   if (searchBuffer(header, Buffer.from("/Encrypt"), 0, header.length)) return false
@@ -94,7 +94,7 @@ export async function isTextBasedPdf(pdfPath: string): Promise<boolean> {
     searchBuffer(header, Buffer.from("/CIDFont"), 0, header.length)
   ) return true
 
-  return withPdfDocument(pdfPath, (doc) => pdfDocumentTextPagesMeetThreshold(doc))
+  return withPdfDocument(pdfPath, (doc) => pdfDocumentTextPagesMeetThreshold(doc)).catch(() => false)
 }
 
 export async function pdfExtractAllText(pdfPath: string): Promise<string> {
@@ -134,4 +134,14 @@ export async function pdfExtractPageTexts(pdfPath: string): Promise<{ page: numb
 
 function searchBuffer(haystack: Buffer, needle: Buffer, start: number, end: number): boolean {
   return haystack.subarray(start, end).indexOf(needle) !== -1
+}
+
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error("timeout")), ms)
+    p.then(
+      (v) => { clearTimeout(t); resolve(v) },
+      (e) => { clearTimeout(t); reject(e) },
+    )
+  })
 }

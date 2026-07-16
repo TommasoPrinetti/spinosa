@@ -127,6 +127,37 @@ export async function classifySourceFile(filePath: string): Promise<FileClass> {
   }
 }
 
+// Lightweight classifier used during the scan phase. Identical to
+// classifySourceFile except PDFs are treated as ocr_convertible without
+// running a (main-thread, CPU-heavy) pdf.js parse — the precise
+// text-vs-scanned detection is deferred to the processing phase.
+export async function scanClassifySourceFile(filePath: string): Promise<FileClass> {
+  try {
+    if (shouldSkipSourceFile(filePath)) return "ignored"
+
+    const ext = fileExt(filePath)
+
+    if (extInList(ext, MARKDOWN_EXTENSIONS)) return "markdown"
+    if (extInList(ext, MARKITDOWN_EXTENSIONS)) return "markitdown"
+    if (extInList(ext, NATIVE_EXTENSIONS)) return "native"
+
+    if (ext === "pdf") return "ocr_convertible"
+
+    if (extInList(ext, IMAGE_EXTENSIONS)) return "ocr_convertible"
+
+    if (extInList(ext, AUDIO_VIDEO_EXTENSIONS)) {
+      const audioExts = ["mp3", "wav", "m4a", "aac", "flac", "ogg", "opus", "aiff"]
+      return audioExts.includes(ext) ? "audio" : "video"
+    }
+
+    if (extInList(ext, BINARY_COPYABLE_EXTENSIONS)) return "binary_copyable"
+
+    return "unknown"
+  } catch {
+    return "unknown"
+  }
+}
+
 export async function importRouteForFile(
   srcFile: string,
   opts?: { markitdownChoice?: boolean; ocrChoice?: boolean },

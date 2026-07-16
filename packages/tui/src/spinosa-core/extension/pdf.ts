@@ -1,4 +1,4 @@
-import { closeSync, openSync, readSync } from "node:fs"
+import { readFile } from "node:fs/promises"
 import {
   pdfPageCount as jsPdfPageCount,
   pdfPageHasExtractableText as jsPdfPageHasText,
@@ -44,14 +44,7 @@ export async function isTextBasedPdf(pdfPath: string): Promise<boolean> {
 
   let header: Buffer
   try {
-    const fd = openSync(pdfPath, "r")
-    try {
-      header = Buffer.alloc(262144)
-      const read = readSync(fd, header, 0, header.length, 0)
-      header = header.subarray(0, read)
-    } finally {
-      closeSync(fd)
-    }
+    header = (await readFile(pdfPath)).subarray(0, 262144)
   } catch {
     return false
   }
