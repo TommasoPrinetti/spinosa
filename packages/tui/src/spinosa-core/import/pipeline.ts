@@ -249,6 +249,10 @@ export async function processMarkitdown(
 ): Promise<PhaseResult> {
   let converted = 0; let skipped = 0; let failed = 0
   const recoverable: { src: string; dest: string }[] = []
+  // Monotonic count of files that have reached a terminal state (skip,
+  // success, or failure). Drives the progress numerator so the bar reflects
+  // the amount of work done and reaches 100% once every file is resolved.
+  let processed = 0
 
   const preSkipped: ClassifiedEntry[] = []
   const toProcess: ClassifiedEntry[] = []
@@ -266,7 +270,7 @@ export async function processMarkitdown(
       output: markitdownOutputRelPath(ps.rel),
       engine: "markitdown", pages: "", duration_s: 0,
     })
-    prog?.file("MarkItDown", i + 1, total, ps.rel)
+    prog?.file("MarkItDown", ++processed, total, ps.rel)
   }
 
   const nonPdfFiles: ClassifiedEntry[] = []
@@ -288,7 +292,7 @@ export async function processMarkitdown(
         engine: "pdf-js", pages: "",
         duration_s: (Date.now() - startTime) / 1000,
       })
-      prog?.file("MarkItDown", preSkipped.length + converted + skipped, total, f.rel)
+      prog?.file("MarkItDown", ++processed, total, f.rel)
       await yieldToEL()
     } catch (err) {
       if (isSpinosaCancellationError(err)) throw err
@@ -310,7 +314,6 @@ export async function processMarkitdown(
 
       // Inline conversion for formats markitdown-ts doesn't support
       if (INLINE_FORMATS.has(ext)) {
-        prog?.file("MarkItDown", preCount + i + 1, total, f.rel)
         onLog?.(`  ${f.rel} → ${ext} ...`)
         const startTime = Date.now()
         try {
@@ -320,6 +323,7 @@ export async function processMarkitdown(
           writeTextAtomicSafe(f.dest, `# ${path.basename(f.rel)}\n\n\`\`\`${ext}\n${raw}\n\`\`\`\n`)
           injectColdFrontmatter(f.dest)
           converted++
+          prog?.file("MarkItDown", ++processed, total, f.rel)
           recoverable.push({ src: f.src, dest: f.dest })
           appendNdjson(mdLog, {
             ts: isoNow(), status: "ok", source: f.rel,
@@ -331,6 +335,7 @@ export async function processMarkitdown(
           if (isSpinosaCancellationError(err)) throw err
           const errMsg = err instanceof Error ? err.message : String(err)
           failed++
+          prog?.file("MarkItDown", ++processed, total, f.rel)
           appendNdjson(mdLog, {
             ts: isoNow(), status: "fail", source: f.rel,
             output: markitdownOutputRelPath(f.rel),
@@ -343,7 +348,6 @@ export async function processMarkitdown(
         continue
       }
 
-      prog?.file("MarkItDown", preCount + i + 1, total, f.rel)
       onLog?.(`  ${f.rel} → markitdown-ts ...`)
       const startTime = Date.now()
       try {
@@ -355,6 +359,7 @@ export async function processMarkitdown(
         writeTextAtomicSafe(f.dest, text)
         injectColdFrontmatter(f.dest)
         converted++
+        prog?.file("MarkItDown", ++processed, total, f.rel)
         recoverable.push({ src: f.src, dest: f.dest })
         appendNdjson(mdLog, {
           ts: isoNow(), status: "ok", source: f.rel,
@@ -366,6 +371,7 @@ export async function processMarkitdown(
         if (isSpinosaCancellationError(err)) throw err
         const errMsg = err instanceof Error ? err.message : String(err)
         failed++
+        prog?.file("MarkItDown", ++processed, total, f.rel)
         appendNdjson(mdLog, {
           ts: isoNow(), status: "fail", source: f.rel,
           output: markitdownOutputRelPath(f.rel),
@@ -390,6 +396,10 @@ export async function processOcr(
 ): Promise<PhaseResult> {
   let converted = 0; let skipped = 0; let failed = 0
   const recoverable: { src: string; dest: string }[] = []
+  // Monotonic count of files that have reached a terminal state (skip,
+  // success, or failure). Drives the progress numerator so the bar reflects
+  // the amount of work done and reaches 100% once every file is resolved.
+  let processed = 0
 
   const toProcess: ClassifiedEntry[] = []
   const preSkipped: ClassifiedEntry[] = []
@@ -407,7 +417,7 @@ export async function processOcr(
       output: ocrOutputRelPath(ps.rel),
       engine: "ppu-paddle-ocr", pages: "", duration_s: 0,
     })
-    prog?.file("OCR", i + 1, total, ps.rel)
+    prog?.file("OCR", ++processed, total, ps.rel)
   }
 
   if (toProcess.length > 0) {
@@ -419,10 +429,10 @@ export async function processOcr(
         onLog,
         shouldAbort,
         onProgress: (current, total, relPath) => {
-          prog?.file("OCR", preSkipped.length + current, preSkipped.length + total, relPath)
+          prog?.file("OCR", ++processed, total, relPath)
         },
         onPageProgress: (current, total, relPath, page) => {
-          prog?.file("OCR", preSkipped.length + current, preSkipped.length + total, `${relPath} page ${page}`)
+          prog?.file("OCR", processed, total, `${relPath} page ${page}`)
         },
       })
       converted += ocrResult.converted
@@ -439,10 +449,17 @@ export async function processOcr(
           failed++
         }
       }
+      // Reconcile the progress numerator to the true total so the bar reaches
+      // 100% once every OCR file has been resolved (the batch may report
+      // progress per page rather than per file).
+      processed = total
+      prog?.file("OCR", processed, total, "")
     } catch (err) {
       if (isSpinosaCancellationError(err)) throw err
       onLog?.(`PPU PaddleOCR engine failed: ${err instanceof Error ? err.message : String(err)} — skipping OCR pass`)
       failed = toProcess.length
+      processed = total
+      prog?.file("OCR", processed, total, "")
     }
   }
 
