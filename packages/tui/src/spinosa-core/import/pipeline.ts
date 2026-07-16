@@ -62,6 +62,7 @@ export interface PhaseResult {
   converted: number
   skipped: number
   failed: number
+  renamed: number
   recoverable: { src: string; dest: string }[]
 }
 
@@ -162,20 +163,23 @@ export async function processDirectCopy(
   overwrite?: boolean,
   shouldAbort?: () => boolean,
   onRetry?: (attempt: number, reason: string) => void,
+  onRename?: (original: string, renamed: string) => void,
 ): Promise<PhaseResult> {
-  let converted = 0; let skipped = 0; let failed = 0
+  let converted = 0; let skipped = 0; let failed = 0; let renamed = 0
   const recoverable: { src: string; dest: string }[] = []
   let completed = 0
   const total = files.length
 
   const tryCopy = async (entry: ClassifiedEntry, attempt: number, current: number): Promise<"copied" | "skipped" | "failed"> => {
     const { src, rel, dest } = entry
-    return copyDirectRawFile(src, dest, rel, prog, onLog, current, total, overwrite, (a, r) => onRetry?.(attempt || a, r))
+    return copyDirectRawFile(src, dest, rel, prog, onLog, current, total, overwrite, (a, r) => onRetry?.(attempt || a, r), (o, rn) => onRename?.(o, rn))
   }
 
   const handleResult = (entry: ClassifiedEntry, result: "copied" | "skipped" | "failed", bucket: ClassifiedEntry[]) => {
     completed++
-    prog?.file("direct-progress", completed, total, entry.rel)
+    // Clamp the live numerator so parallel + retry re-counting never shows
+    // more than the logical total.
+    prog?.file("direct-progress", Math.min(completed, total), total, entry.rel)
     if (result === "copied") {
       converted++
       if (entry.dest.endsWith(".md")) injectColdFrontmatter(entry.dest)
@@ -214,7 +218,7 @@ export async function processDirectCopy(
   }
 
   failed = retryBucket.length
-  return { converted, skipped, failed, recoverable }
+  return { converted, skipped, failed, renamed, recoverable }
 }
 
 export async function processMarkitdown(
@@ -355,7 +359,7 @@ export async function processMarkitdown(
     }
   }
 
-  return { converted, skipped, failed, recoverable }
+  return { converted, skipped, failed, renamed: 0, recoverable }
 }
 
 export async function processOcr(
@@ -423,7 +427,7 @@ export async function processOcr(
     }
   }
 
-  return { converted, skipped, failed, recoverable }
+  return { converted, skipped, failed, renamed: 0, recoverable }
 }
 
 
@@ -532,6 +536,7 @@ async function copyDirectRawFile(
   total?: number,
   overwrite?: boolean,
   onRetry?: (attempt: number, reason: string) => void,
+  onRename?: (original: string, renamed: string) => void,
 ): Promise<CopyDirectResult> {
   const c = current ?? 0
   const t = total ?? 0
@@ -553,6 +558,10 @@ async function copyDirectRawFile(
     onRetry: (attempt, reason) => {
       onLog?.(`  ${relPath} → retry ${attempt} (${reason})`)
       onRetry?.(attempt, reason)
+    },
+    onRename: (original, renamed) => {
+      onLog?.(`  ${relPath} → renamed (name too long)`)
+      onRename?.(original, renamed)
     },
   })) {
     prog?.file("direct-copied", c, t, relPath)

@@ -265,10 +265,10 @@ export async function runOnboarding(
   })
 
   return completeOnboarding(ctx, {
-    direct: { converted: result.copied, skipped: result.skipped, failed: result.failed, recoverable: [] },
-    markitdown: { converted: result.mdConverted, skipped: result.mdSkipped, failed: result.mdFailed, recoverable: [] },
-    ocr: { converted: result.ocrConverted, skipped: result.ocrSkipped, failed: result.ocrFailed, recoverable: [] },
-}, options)
+    direct: { converted: result.copied, skipped: result.skipped, failed: result.failed, renamed: 0, recoverable: [] },
+    markitdown: { converted: result.mdConverted, skipped: result.mdSkipped, failed: result.mdFailed, renamed: 0, recoverable: [] },
+    ocr: { converted: result.ocrConverted, skipped: result.ocrSkipped, failed: result.ocrFailed, renamed: 0, recoverable: [] },
+  }, options)
 }
 
 async function writeOnboardingSummary(summary: OnboardingSummary): Promise<void> {

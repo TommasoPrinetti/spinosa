@@ -66,6 +66,7 @@ function truncateDestPath(dest: string): string {
 export interface SafeCopyOptions {
   retries?: number
   onRetry?: (attempt: number, reason: string) => void
+  onRename?: (original: string, renamed: string) => void
 }
 
 export function shouldSkipTemplateCopyEntry(name: string, isDirectory: boolean): boolean {
@@ -190,6 +191,7 @@ export async function safeCopyAsync(src: string, dest: string, options?: SafeCop
     // instead of failing/retrying the doomed path.
     if (reason.includes("ENAMETOOLONG") && target === dest) {
       target = truncateDestPath(dest)
+      options?.onRename?.(dest, target)
       tmp = `${target}.spinosa-part-${process.pid}-${crypto.randomUUID()}`
       try {
         await mkdirAsync(path.dirname(target), { recursive: true })

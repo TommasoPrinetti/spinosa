@@ -680,6 +680,7 @@ let nameInput: TextareaRenderable | undefined
     const plannedWorkspace = preview()?.workspacePath ?? suggestWorkspacePath(primarySource)
     if (plannedWorkspace) setCreatedWorkspace(plannedWorkspace)
     let totalFailed = 0
+    let totalRenamed = 0
 
     const sharedProg = new ProgressEmitter()
     sharedProg.on((e) => {
@@ -762,8 +763,8 @@ let nameInput: TextareaRenderable | undefined
       setProcessingStatus("Preparing import plan...")
       const classified = await scanAndClassifySource(ctx.sourcePath, ctx.rawDir, ctx.batches, undefined, shouldAbort)
       if (!classified) { setStep("error"); return }
-      let mr: PhaseResult = { converted: 0, skipped: 0, failed: 0, recoverable: [] }
-      let or: PhaseResult = { converted: 0, skipped: 0, failed: 0, recoverable: [] }
+      let mr: PhaseResult = { converted: 0, skipped: 0, failed: 0, renamed: 0, recoverable: [] }
+      let or: PhaseResult = { converted: 0, skipped: 0, failed: 0, renamed: 0, recoverable: [] }
       const totalMd = classified.markitdownFiles.length
       const totalOcr = classified.ocrFiles.length
       // Phase B1: Direct copy
@@ -776,8 +777,9 @@ let nameInput: TextareaRenderable | undefined
       await delay(1000)
       const dr = await processDirectCopy(classified.directFiles, sharedProg, onPhaseLog, undefined, shouldAbort, (attempt, reason) => {
         setProcessingStatus(`Retrying file (attempt ${attempt}): ${reason}`)
-      })
+      }, (original, renamed) => { totalRenamed++; appendLogLine(`  renamed (name too long): ${original} → ${renamed}`) })
       if (dr.failed > 0) totalFailed += dr.failed
+      if (dr.renamed > 0) totalRenamed += dr.renamed
       if (shouldAbort()) { spinOff(); setBusy(false); return }
       setProcessingStatus(`Direct copy complete — ${totalDirect} files`)
       await delay(1000)
@@ -792,6 +794,7 @@ let nameInput: TextareaRenderable | undefined
         await delay(1000)
         mr = await processMarkitdown(classified.markitdownFiles, classified.logsDir, sharedProg, onPhaseLog, shouldAbort)
         if (mr.failed > 0) totalFailed += mr.failed
+        if (mr.renamed > 0) totalRenamed += mr.renamed
         if (shouldAbort()) { spinOff(); setBusy(false); return }
         setProcessingStatus(`MarkItDown complete — ${totalMd} files`)
         await delay(1000)
@@ -810,6 +813,7 @@ let nameInput: TextareaRenderable | undefined
         await delay(1000)
         or = await processOcr(classified.ocrFiles, classified.logsDir, sharedProg, onPhaseLog, shouldAbort)
         if (or.failed > 0) totalFailed += or.failed
+        if (or.renamed > 0) totalRenamed += or.renamed
         if (shouldAbort()) { spinOff(); setBusy(false); return }
       } else {
         appendLogLine("OCR: 0 files to convert — skipping")
@@ -851,6 +855,7 @@ let nameInput: TextareaRenderable | undefined
         setFailedCount(totalFailed)
         setImportSummary(
           `${dr.converted}/${totalDirect} copied · ${mr.converted}/${totalMd} markitdown · ${or.converted}/${totalOcr} ocr` +
+          (totalRenamed > 0 ? ` · ${totalRenamed} renamed` : "") +
           (totalFailed > 0 ? ` · ${totalFailed} failed` : ""),
         )
         setProcessingDone(true)

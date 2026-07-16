@@ -561,6 +561,7 @@ export function AddFiles() {
     batchManager.parseExtensionsFromFlag(selectedExtensions().join(","))
 
     let totalFailed = 0
+    let totalRenamed = 0
     let totalDirect = 0
     let totalMd = 0
     let totalOcr = 0
@@ -602,8 +603,9 @@ export function AddFiles() {
         setProcessingStatus(`Direct copy — ${directCount} files`)
         totalDirect += directCount
         await delay(500)
-        const dr = await processDirectCopy(classified.directFiles, sharedProg, onPhaseLog, undefined, shouldAbort)
+        const dr = await processDirectCopy(classified.directFiles, sharedProg, onPhaseLog, undefined, shouldAbort, undefined, (original, renamed) => { totalRenamed++; appendLogLine(`  renamed (name too long): ${original} → ${renamed}`) })
         if (dr.failed > 0) totalFailed += dr.failed
+        if (dr.renamed > 0) totalRenamed += dr.renamed
         if (shouldAbort()) { spinOff(); setBusy(false); return }
         dirConverted += dr.converted
 
@@ -623,6 +625,7 @@ export function AddFiles() {
           await delay(500)
           const mr = await processMarkitdown(classified.markitdownFiles, classified.logsDir, sharedProg, onPhaseLog, shouldAbort)
           if (mr.failed > 0) totalFailed += mr.failed
+          if (mr.renamed > 0) totalRenamed += mr.renamed
           if (shouldAbort()) { spinOff(); setBusy(false); return }
           mdConverted += mr.converted
         } else {
@@ -645,6 +648,7 @@ export function AddFiles() {
           await delay(500)
           const or = await processOcr(classified.ocrFiles, classified.logsDir, sharedProg, onPhaseLog, shouldAbort)
           if (or.failed > 0) totalFailed += or.failed
+          if (or.renamed > 0) totalRenamed += or.renamed
           if (shouldAbort()) { spinOff(); setBusy(false); return }
           ocrConverted += or.converted
         } else {
@@ -655,6 +659,7 @@ export function AddFiles() {
       setFailedCount(totalFailed)
       setImportSummary(
         `${dirConverted}/${totalDirect} copied · ${mdConverted}/${totalMd} markitdown · ${ocrConverted}/${totalOcr} ocr` +
+        (totalRenamed > 0 ? ` · ${totalRenamed} renamed` : "") +
         (totalFailed > 0 ? ` · ${totalFailed} failed` : ""),
       )
       setProcessingDone(true)
