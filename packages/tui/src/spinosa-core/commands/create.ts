@@ -15,6 +15,7 @@ export interface CreateWorkspaceOptions {
   launch?: "copy" | "run"
   workspaceName?: string
   onProgress?: (message: string) => void
+  onRecover?: (message: string) => void
   shouldAbort?: () => boolean
 }
 
@@ -91,9 +92,10 @@ function materializeWorkspaceConfig(workspacePath: string): void {
 }
 
 export async function createWorkspace(options: CreateWorkspaceOptions): Promise<CreateWorkspaceResult> {
-  const { corpusPath, frameworkRoot, extensions, preferredCli, launch, workspaceName, onProgress, shouldAbort } = options
+  const { corpusPath, frameworkRoot, extensions, preferredCli, launch, workspaceName, onProgress, onRecover, shouldAbort } = options
   throwIfSpinosaCancelled(shouldAbort)
   const progress = onProgress ?? (() => {})
+  const recover = onRecover ?? (() => {})
   spinosaLogInfo("create", `corpusPath=${corpusPath} frameworkRoot=${frameworkRoot}`)
 
   const resolvedCorpus = path.resolve(corpusPath)
@@ -148,7 +150,7 @@ export async function createWorkspace(options: CreateWorkspaceOptions): Promise<
 
     // ── Step 5: Register workspace ─────────────────────────────────────
     progress("Registering in global registry...")
-    await registerWorkspace(workspacePath, projectName)
+    await registerWorkspace(workspacePath, projectName, recover)
     throwIfSpinosaCancelled(shouldAbort)
 
     if (preferredCli) {

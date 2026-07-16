@@ -38,13 +38,16 @@ export function registryUnescape(value: string): string {
     .replace(/%25/gi, "%")
 }
 
-const REGISTRY_LOCK_TIMEOUT_MS = 10_000
+const REGISTRY_LOCK_TIMEOUT_MS = 8_000
 const REGISTRY_LOCK_STALE_MS = 5_000
 
-async function acquireRegistryFileLock(registry: string): Promise<() => Promise<void>> {
+async function acquireRegistryFileLock(
+  registry: string,
+  onRecover?: (msg: string) => void,
+): Promise<() => Promise<void>> {
   const lockDir = `${registry}.lock`
   const deadline = Date.now() + REGISTRY_LOCK_TIMEOUT_MS
-  let timedOut = false
+  let forceReclaimed = false
   while (true) {
     try {
       await mkdir(lockDir)
@@ -54,17 +57,21 @@ async function acquireRegistryFileLock(registry: string): Promise<() => Promise<
       try {
         const lockStat = await stat(lockDir)
         if (Date.now() - lockStat.mtimeMs > REGISTRY_LOCK_STALE_MS) {
+          // Orphaned lock from a crashed/killed process: reclaim it now so the
+          // user is never blocked waiting on a lock nobody holds.
           await rm(lockDir, { recursive: true, force: true })
+          onRecover?.("Cleared a stale registry lock left by a previous run.")
           continue
         }
       } catch {
         continue
       }
-      if (!timedOut && Date.now() >= deadline) {
-        // Give up waiting: force-reclaim a wedged lock rather than hang the
-        // caller forever (e.g. an orphaned lock left by a killed process).
-        timedOut = true
+      if (!forceReclaimed && Date.now() >= deadline) {
+        // Lock is held but never released (wedged). Force-reclaim rather than
+        // hang the caller forever, and tell the user what happened.
+        forceReclaimed = true
         await rm(lockDir, { recursive: true, force: true }).catch(() => {})
+        onRecover?.("Force-cleared a wedged registry lock.")
         continue
       }
       await Bun.sleep(20)
@@ -83,8 +90,12 @@ async function writeRegistryAtomically(registry: string, content: string): Promi
   }
 }
 
-async function withRegistryFileLock<T>(registry: string, fn: () => Promise<T>): Promise<T> {
-  const release = await acquireRegistryFileLock(registry)
+async function withRegistryFileLock<T>(
+  registry: string,
+  fn: () => Promise<T>,
+  onRecover?: (msg: string) => void,
+): Promise<T> {
+  const release = await acquireRegistryFileLock(registry, onRecover)
   try {
     return await fn()
   } finally {
@@ -139,7 +150,11 @@ export async function loadRegistry(
   return results
 }
 
-export async function registerWorkspace(workspacePath: string, project: string): Promise<void> {
+export async function registerWorkspace(
+  workspacePath: string,
+  project: string,
+  onRecover?: (msg: string) => void,
+): Promise<void> {
   return withRegistryLock(async () => {
     const registry = metadataPath("workspaces.txt")
     const encodedPath = registryEscape(workspacePath)
@@ -163,11 +178,14 @@ export async function registerWorkspace(workspacePath: string, project: string):
       const today = new Date().toISOString().slice(0, 10)
       filtered.push(`${encodedPath}|${encodedProject}|${today}`)
       await writeRegistryAtomically(registry, filtered.join("\n") + "\n")
-    })
+    }, onRecover)
   })
 }
 
-export async function unregisterWorkspace(workspacePath: string): Promise<void> {
+export async function unregisterWorkspace(
+  workspacePath: string,
+  onRecover?: (msg: string) => void,
+): Promise<void> {
   return withRegistryLock(async () => {
     const registry = metadataPath("workspaces.txt")
     await withRegistryFileLock(registry, async () => {
@@ -184,7 +202,7 @@ export async function unregisterWorkspace(workspacePath: string): Promise<void> 
       if (filtered.length < lines.length) {
         await writeRegistryAtomically(registry, filtered.join("\n") + (filtered.length > 0 ? "\n" : ""))
       }
-    })
+    }, onRecover)
   })
 }
 

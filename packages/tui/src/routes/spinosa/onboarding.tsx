@@ -740,6 +740,7 @@ let nameInput: TextareaRenderable | undefined
         frameworkRoot,
         workspaceName: workspaceName() || defaultWorkspaceName(),
         onProgress: setupProgress,
+        onRecover: (msg) => appendLogLine(`Note: ${msg}`),
         shouldAbort,
       })
       if (shouldAbort()) return
