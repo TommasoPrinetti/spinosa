@@ -7,6 +7,19 @@ import { injectColdFrontmatter } from "./frontmatter"
 import { pdfRenderDocumentPageToPng, withPdfDocument } from "../extension/pdf-js"
 import { writeTextAtomic, writeTextAtomicSafe } from "../utils/fs"
 
+// Bound a single OCR page so a pathological image/PDF cannot hang the whole
+// OCR phase (and the UI wave) indefinitely.
+const OCR_PAGE_TIMEOUT_MS = 60_000
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)
+    p.then(
+      (v) => { clearTimeout(t); resolve(v) },
+      (e) => { clearTimeout(t); reject(e) },
+    )
+  })
+}
+
 export interface PpuOcrFile {
   src: string
   rel: string
@@ -169,7 +182,7 @@ async function ocrImageBuffer(
   shouldAbort?: () => boolean,
 ): Promise<boolean> {
   const buffer = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer
-  const result = await service.recognize(buffer) as PaddleOcrResult
+  const result = await withTimeout(service.recognize(buffer), OCR_PAGE_TIMEOUT_MS, "OCR page") as PaddleOcrResult
   throwIfSpinosaCancelled(shouldAbort)
   writeMarkdown(destFile, title, result.text, sourceRel, result.confidence)
   return true
@@ -298,7 +311,7 @@ async function ocrPdf(
       const pngBuffer = await pdfRenderDocumentPageToPng(doc, page, 180)
       throwIfSpinosaCancelled(shouldAbort)
       const buffer = pngBuffer.buffer.slice(pngBuffer.byteOffset, pngBuffer.byteOffset + pngBuffer.byteLength) as ArrayBuffer
-      const result = await service.recognize(buffer) as PaddleOcrResult
+      const result = await withTimeout(service.recognize(buffer), OCR_PAGE_TIMEOUT_MS, `OCR page ${page}`) as PaddleOcrResult
       throwIfSpinosaCancelled(shouldAbort)
       output.set(page, result.text)
       onProgress?.(page, doc.numPages)

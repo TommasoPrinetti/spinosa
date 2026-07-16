@@ -117,7 +117,11 @@ async function addFilesFromDir(
   onProgress?.("Import complete.")
 
   return {
-    success: totalTargeted > 0 && failed === 0,
+    // A single non-fatal failure (broken symlink, chmod 000, OCR timeout) no
+    // longer flips the whole import to "failed" when the vast majority of
+    // files imported successfully. The `failed` count is surfaced separately
+    // so the UI can report partial success instead of blocking the user.
+    success: totalTargeted > 0 && failed < totalTargeted,
     totalTargeted,
     copied: result.copied,
     skipped: result.skipped,

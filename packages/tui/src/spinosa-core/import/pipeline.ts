@@ -648,7 +648,7 @@ export async function verifyAndRecoverImport(
           ok = true
         } catch (error) {
           if (isSpinosaCancellationError(error)) throw error
-          const fallbackDest = path.join(destDir, relPath)
+          const fallbackDest = destFile
           mkdirSync(path.dirname(fallbackDest), { recursive: true })
           if (await safeCopyAsync(srcFile, fallbackDest)) {
             onLog?.(`    Recovered (source copy fallback, markitdown failed): ${relPath}`)
@@ -673,7 +673,7 @@ export async function verifyAndRecoverImport(
           onLog?.(`    Recovered (ocr retry): ${relPath}`)
           ok = true
         } else {
-          const fallbackDest = path.join(destDir, relPath)
+          const fallbackDest = destFile
           mkdirSync(path.dirname(fallbackDest), { recursive: true })
           if (await safeCopyAsync(srcFile, fallbackDest)) {
             onLog?.(`    Recovered (source copy fallback, ocr retry failed): ${relPath}`)
