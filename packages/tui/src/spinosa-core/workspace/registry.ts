@@ -88,18 +88,21 @@ async function acquireRegistryFileLock(
       // acquisition atomic with respect to liveness and avoids two holders
       // both winning the rm+continue race.
       const ownerPid = await readLockOwnerPid(lockDir)
-      if (ownerPid !== null && !isProcessAlive(ownerPid)) {
+      if (ownerPid !== null && ownerPid > 0 && !isProcessAlive(ownerPid)) {
         await rm(lockDir, { recursive: true, force: true }).catch(() => {})
         onRecover?.("Cleared a stale registry lock left by a previous run.")
         continue
       }
       if (!forceReclaimed && Date.now() >= deadline) {
         // Lock is held but never released (wedged, e.g. network hang on a
-        // cloud mount). Force-reclaim rather than hang the caller forever.
-        forceReclaimed = true
-        await rm(lockDir, { recursive: true, force: true }).catch(() => {})
-        onRecover?.("Force-cleared a wedged registry lock.")
-        continue
+        // cloud mount). Only force-reclaim when we cannot confirm a live
+        // owner — never steal a lock that an alive process still holds.
+        if (ownerPid === null || ownerPid <= 0 || !isProcessAlive(ownerPid)) {
+          forceReclaimed = true
+          await rm(lockDir, { recursive: true, force: true }).catch(() => {})
+          onRecover?.("Force-cleared a wedged registry lock.")
+          continue
+        }
       }
       await Bun.sleep(20)
     }
