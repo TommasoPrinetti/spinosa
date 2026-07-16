@@ -21,12 +21,18 @@ import { isCloudStoragePath } from "./path"
 const DEFAULT_RETRIES = 3
 const CLOUD_TIMEOUT_SEC = 60
 const LOCAL_TIMEOUT_SEC = 30
+const ASYNC_COPY_ATTEMPT_TIMEOUT_SEC = 3
+const ASYNC_COPY_ATTEMPT_TIMEOUT_SEC_CLOUD = 5
 const asyncCopyQueues = new Map<string, Promise<void>>()
 
 export { isCloudStoragePath }
 
 export function safeCopyTimeoutSecFor(p: string): number {
   return isCloudStoragePath(p) ? CLOUD_TIMEOUT_SEC : LOCAL_TIMEOUT_SEC
+}
+
+function asyncCopyAttemptTimeoutMs(src: string): number {
+  return (isCloudStoragePath(src) ? ASYNC_COPY_ATTEMPT_TIMEOUT_SEC_CLOUD : ASYNC_COPY_ATTEMPT_TIMEOUT_SEC) * 1000
 }
 
 export interface SafeCopyOptions {
@@ -136,29 +142,23 @@ export async function safeCopyAsync(src: string, dest: string, options?: SafeCop
   asyncCopyQueues.set(dest, queued)
   await previous
   try {
-  const retries = options?.retries ?? DEFAULT_RETRIES
-  let delayMs = safeCopyDelaySec(dest) * 1000
-  let lastReason = ""
-  const timeoutMs = safeCopyTimeoutSecFor(src) * 1000
+  const timeoutMs = asyncCopyAttemptTimeoutMs(src)
 
   await mkdirAsync(path.dirname(dest), { recursive: true })
 
-  for (let i = 1; i <= retries; i++) {
-    const tmp = `${dest}.spinosa-part-${process.pid}-${crypto.randomUUID()}`
-    try {
-      await withTimeout(copyFileAsync(src, tmp), timeoutMs, `copy of ${src}`)
-      replaceFromTemp(tmp, dest)
-      return true
-    } catch (err) {
-      await rmAsync(tmp, { force: true }).catch(() => {})
-      lastReason = String(err)
-    }
-    if (i >= retries) break
-    options?.onRetry?.(i, lastReason)
-    await new Promise((r) => setTimeout(r, delayMs))
-    delayMs *= 2
+  // Single fast attempt: if it can't succeed quickly it goes into the
+  // caller's retry bucket (retried later with backoff) rather than blocking
+  // the whole import on one slow/hung file.
+  const tmp = `${dest}.spinosa-part-${process.pid}-${crypto.randomUUID()}`
+  try {
+    await withTimeout(copyFileAsync(src, tmp), timeoutMs, `copy of ${src}`)
+    replaceFromTemp(tmp, dest)
+    return true
+  } catch (err) {
+    await rmAsync(tmp, { force: true }).catch(() => {})
+    options?.onRetry?.(0, String(err))
+    return false
   }
-  return false
   } finally {
     gate.resolve()
     if (asyncCopyQueues.get(dest) === queued) asyncCopyQueues.delete(dest)

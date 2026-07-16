@@ -150,6 +150,10 @@ export async function scanAndClassifySource(
 
 // ── Phase runners (receive pre-classified file lists) ────────────────────
 
+const DIRECT_COPY_CONCURRENCY = 8
+const DIRECT_COPY_RETRY_DELAY_MS = 5_000
+const DIRECT_COPY_MAX_RETRIES = 3
+
 export async function processDirectCopy(
   files: ClassifiedEntry[],
   prog?: ProgressEmitter,
@@ -160,20 +164,55 @@ export async function processDirectCopy(
 ): Promise<PhaseResult> {
   let converted = 0; let skipped = 0; let failed = 0
   const recoverable: { src: string; dest: string }[] = []
+  let completed = 0
+  const total = files.length
 
-  for (const [i, entry] of files.entries()) {
-    throwIfSpinosaCancelled(shouldAbort)
+  const tryCopy = async (entry: ClassifiedEntry, attempt: number, current: number): Promise<"copied" | "skipped" | "failed"> => {
     const { src, rel, dest } = entry
-    const result = await copyDirectRawFile(src, dest, rel, prog, onLog, i + 1, files.length, overwrite, onRetry)
-    throwIfSpinosaCancelled(shouldAbort)
-    if (result === "copied") {
-      converted++
-      if (dest.endsWith(".md")) injectColdFrontmatter(dest)
-      recoverable.push({ src, dest })
-    } else if (result === "skipped") { skipped++ }
-    else { failed++ }
+    return copyDirectRawFile(src, dest, rel, prog, onLog, current, total, overwrite, (a, r) => onRetry?.(attempt || a, r))
   }
 
+  const handleResult = (entry: ClassifiedEntry, result: "copied" | "skipped" | "failed", bucket: ClassifiedEntry[]) => {
+    completed++
+    prog?.file("direct-progress", completed, total, entry.rel)
+    if (result === "copied") {
+      converted++
+      if (entry.dest.endsWith(".md")) injectColdFrontmatter(entry.dest)
+      recoverable.push({ src: entry.src, dest: entry.dest })
+    } else if (result === "skipped") { skipped++ }
+    else { bucket.push(entry) }
+  }
+
+  // First pass: bounded-concurrency parallel fast attempts.
+  const retryBucket: ClassifiedEntry[] = []
+  const runChunk = async (chunk: ClassifiedEntry[]) => {
+    await Promise.all(chunk.map(async (entry, idx) => {
+      throwIfSpinosaCancelled(shouldAbort)
+      const result = await tryCopy(entry, 0, completed + idx + 1)
+      handleResult(entry, result, retryBucket)
+    }))
+  }
+
+  for (let i = 0; i < files.length; i += DIRECT_COPY_CONCURRENCY) {
+    if (shouldAbort?.()) break
+    await runChunk(files.slice(i, i + DIRECT_COPY_CONCURRENCY))
+  }
+
+  // Retry bucket: backoff between rounds, then drop remaining as errors.
+  for (let attempt = 1; attempt <= DIRECT_COPY_MAX_RETRIES && retryBucket.length > 0; attempt++) {
+    if (shouldAbort?.()) break
+    await new Promise((r) => setTimeout(r, DIRECT_COPY_RETRY_DELAY_MS))
+    const pending = retryBucket.splice(0, retryBucket.length)
+    const stillFailing: ClassifiedEntry[] = []
+    await Promise.all(pending.map(async (entry, idx) => {
+      throwIfSpinosaCancelled(shouldAbort)
+      const result = await tryCopy(entry, attempt, completed + idx + 1)
+      handleResult(entry, result, stillFailing)
+    }))
+    retryBucket.push(...stillFailing)
+  }
+
+  failed = retryBucket.length
   return { converted, skipped, failed, recoverable }
 }
 
