@@ -10,6 +10,7 @@ import {
   markitdownOutputRelPath,
   ocrOutputRelPath,
   classifySourceFile,
+  scanClassifySourceFile,
   importRouteForFile,
 } from "../extension/classifier"
 import { safeCopyAsync, writeTextAtomic } from "../utils/fs"
@@ -99,7 +100,7 @@ export async function scanAndClassifySource(
     let rel = fp.replace(sourcePath, "").replace(/^\//, "")
     if (subfolder) rel = path.join(subfolder, rel)
     const ext = fileExt(fp)
-    entries.push({ filePath: fp, relPath: rel, ext, klass: await classifySourceFile(fp) })
+    entries.push({ filePath: fp, relPath: rel, ext, klass: await scanClassifySourceFile(fp) })
     throwIfSpinosaCancelled(shouldAbort)
   }
 

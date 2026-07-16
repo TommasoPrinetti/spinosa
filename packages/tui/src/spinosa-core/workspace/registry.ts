@@ -39,11 +39,12 @@ export function registryUnescape(value: string): string {
 }
 
 const REGISTRY_LOCK_TIMEOUT_MS = 10_000
-const REGISTRY_LOCK_STALE_MS = 30_000
+const REGISTRY_LOCK_STALE_MS = 5_000
 
 async function acquireRegistryFileLock(registry: string): Promise<() => Promise<void>> {
   const lockDir = `${registry}.lock`
   const deadline = Date.now() + REGISTRY_LOCK_TIMEOUT_MS
+  let timedOut = false
   while (true) {
     try {
       await mkdir(lockDir)
@@ -59,7 +60,13 @@ async function acquireRegistryFileLock(registry: string): Promise<() => Promise<
       } catch {
         continue
       }
-      if (Date.now() >= deadline) throw new Error(`Timed out waiting for workspace registry lock: ${lockDir}`)
+      if (!timedOut && Date.now() >= deadline) {
+        // Give up waiting: force-reclaim a wedged lock rather than hang the
+        // caller forever (e.g. an orphaned lock left by a killed process).
+        timedOut = true
+        await rm(lockDir, { recursive: true, force: true }).catch(() => {})
+        continue
+      }
       await Bun.sleep(20)
     }
   }

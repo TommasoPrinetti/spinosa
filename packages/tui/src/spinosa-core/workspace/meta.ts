@@ -92,7 +92,7 @@ export async function writeWorkspaceFrameworkVersion(workspacePath: string, vers
   writeTextAtomic(markerPath, updated)
 }
 
-export async function writeWorkspaceStatus(workspacePath: string, status: string): Promise<void> {
+export async function writeWorkspaceStatus(workspacePath: string, status: string): Promise<boolean> {
   let markerPath = path.join(workspacePath, ".spinosa", "workspace")
   if (!await Bun.file(markerPath).exists()) {
     markerPath = path.join(workspacePath, "spinosa", "workspace")
@@ -100,9 +100,14 @@ export async function writeWorkspaceStatus(workspacePath: string, status: string
       markerPath = path.join(workspacePath, "framework", "spinosa", "workspace")
     }
   }
-  const text = await Bun.file(markerPath).text()
-  const updated = text.replace(/^(setup_status:\s*).+$/m, `$1${status}`)
-  writeTextAtomic(markerPath, updated)
+  try {
+    const text = await Bun.file(markerPath).text()
+    const updated = text.replace(/^(setup_status:\s*).+$/m, `$1${status}`)
+    writeTextAtomic(markerPath, updated)
+    return true
+  } catch {
+    return false
+  }
 }
 
 export async function readOrchestratorNotes(workspacePath: string): Promise<string | undefined> {

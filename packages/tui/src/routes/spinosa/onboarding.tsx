@@ -744,7 +744,10 @@ let nameInput: TextareaRenderable | undefined
       })
       if (shouldAbort()) return
       if (!wsResult.success) { setStep("error"); return }
-      await writeWorkspaceStatus(wsResult.workspacePath, "importing")
+      // Registration / status writes are non-essential: a wedged registry lock
+      // or missing marker must not abort an otherwise-good workspace.
+      const statusOk = await writeWorkspaceStatus(wsResult.workspacePath, "importing")
+      if (!statusOk) appendLogLine("Warning: could not write workspace status marker (non-fatal).")
       const ctx: OnboardingContext = await prepareOnboarding({
         workspacePath: wsResult.workspacePath,
         frameworkRoot,
@@ -755,6 +758,7 @@ let nameInput: TextareaRenderable | undefined
       if ("success" in ctx && !ctx.success) { setStep("error"); return }
       setCreatedWorkspace(ctx.workspacePath)
 
+      setProcessingStatus("Preparing import plan...")
       const classified = await scanAndClassifySource(ctx.sourcePath, ctx.rawDir, ctx.batches, undefined, shouldAbort)
       if (!classified) { setStep("error"); return }
       let mr: PhaseResult = { converted: 0, skipped: 0, failed: 0, recoverable: [] }
