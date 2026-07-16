@@ -182,16 +182,23 @@ export async function processDirectCopy(
   }
 
   const handleResult = (entry: ClassifiedEntry, result: "copied" | "skipped" | "failed", bucket: ClassifiedEntry[]) => {
+    if (result === "failed") {
+      // A failed copy is NOT counted as processed. It stays in the retry
+      // bucket and is only tallied once (if ever) it actually succeeds, or
+      // as `failed` at the end if every retry misses. No progress tick here.
+      bucket.push(entry)
+      return
+    }
     completed++
-    // Clamp the live numerator so parallel + retry re-counting never shows
-    // more than the logical total.
-    prog?.file("direct-progress", Math.min(seqOf.get(entry) ?? completed, total) + 1, total, entry.rel)
+    // Only emit progress on a real success so the numerator reflects files
+    // actually copied, not failed attempts. The seq keeps it monotonic even
+    // when a file succeeds on a later retry round.
+    prog?.file("direct-progress", completed, total, entry.rel)
     if (result === "copied") {
       converted++
       if (entry.dest.endsWith(".md")) injectColdFrontmatter(entry.dest)
       recoverable.push({ src: entry.src, dest: entry.dest })
-    } else if (result === "skipped") { skipped++ }
-    else { bucket.push(entry) }
+    } else { skipped++ }
   }
 
   // First pass: bounded-concurrency parallel fast attempts.
@@ -546,7 +553,6 @@ async function copyDirectRawFile(
 ): Promise<CopyDirectResult> {
   const c = current ?? 0
   const t = total ?? 0
-  prog?.file("direct-copy", c, t, relPath)
   onLog?.(`  ${relPath}`)
 
   if (existsSync(destFile)) {
