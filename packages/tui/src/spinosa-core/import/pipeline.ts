@@ -183,16 +183,15 @@ export async function processDirectCopy(
 
   const handleResult = (entry: ClassifiedEntry, result: "copied" | "skipped" | "failed", bucket: ClassifiedEntry[]) => {
     if (result === "failed") {
-      // A failed copy is NOT counted as processed. It stays in the retry
-      // bucket and is only tallied once (if ever) it actually succeeds, or
-      // as `failed` at the end if every retry misses. No progress tick here.
+      // A failed copy is not counted yet — it is still retrying. It only
+      // counts as processed once it either succeeds or exhausts retries.
       bucket.push(entry)
       return
     }
     completed++
-    // Only emit progress on a real success so the numerator reflects files
-    // actually copied, not failed attempts. The seq keeps it monotonic even
-    // when a file succeeds on a later retry round.
+    // Count a file as processed only when it reaches a terminal success, so
+    // the numerator reflects the amount of work done (and the % can reach
+    // 100% once every file has been resolved one way or another).
     prog?.file("direct-progress", completed, total, entry.rel)
     if (result === "copied") {
       converted++
@@ -230,6 +229,13 @@ export async function processDirectCopy(
     retryBucket.push(...stillFailing)
   }
 
+  // Files that exhausted every retry are permanently failed. Count them as
+  // processed so the progress numerator reaches the total and the bar hits
+  // 100% (worked = successes + final failures), not stuck below it.
+  for (const entry of retryBucket) {
+    completed++
+    prog?.file("direct-progress", completed, total, entry.rel)
+  }
   failed = retryBucket.length
   return { converted, skipped, failed, renamed, recoverable }
 }
