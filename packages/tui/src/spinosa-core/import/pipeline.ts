@@ -9,7 +9,7 @@ import {
   markdownRawRelPath,
   markitdownOutputRelPath,
   ocrOutputRelPath,
-  classifySourceFile,
+  safeRelPath,
   scanClassifySourceFile,
   importRouteForFile,
 } from "../extension/classifier"
@@ -99,6 +99,7 @@ export async function scanAndClassifySource(
     if (shouldSkipSourceFile(fp)) continue
     let rel = fp.replace(sourcePath, "").replace(/^\//, "")
     if (subfolder) rel = path.join(subfolder, rel)
+    rel = safeRelPath(rel)
     const ext = fileExt(fp)
     entries.push({ filePath: fp, relPath: rel, ext, klass: await scanClassifySourceFile(fp) })
     throwIfSpinosaCancelled(shouldAbort)

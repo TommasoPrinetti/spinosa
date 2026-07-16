@@ -35,6 +35,34 @@ function asyncCopyAttemptTimeoutMs(src: string): number {
   return (isCloudStoragePath(src) ? ASYNC_COPY_ATTEMPT_TIMEOUT_SEC_CLOUD : ASYNC_COPY_ATTEMPT_TIMEOUT_SEC) * 1000
 }
 
+const MAX_NAME_BYTES = 250
+const MAX_PATH_BYTES = 1000
+
+// Truncate the longest path component(s) so the destination fits filesystem
+// limits (macOS: 255 bytes/component, ~1024 for the full path). Used when a
+// copy fails with ENAMETOOLONG so we reprocess under a safe name instead of
+// dropping the file.
+function truncateDestPath(dest: string): string {
+  const dir = path.dirname(dest)
+  const base = path.basename(dest)
+  const ext = base.includes(".") ? base.slice(base.lastIndexOf(".")) : ""
+  const stem = ext ? base.slice(0, base.length - ext.length) : base
+  const budget = MAX_NAME_BYTES - ext.length
+  const safeStem = Buffer.byteLength(stem, "utf8") > budget ? stem.slice(0, Math.max(1, budget)) : stem
+  const safeBase = safeStem + ext
+  let safeDir = dir
+  if (Buffer.byteLength(path.join(safeDir, safeBase), "utf8") > MAX_PATH_BYTES) {
+    // Walk up trimming parent component names until the full path fits.
+    const parts = safeDir.split(path.sep).filter(Boolean)
+    while (parts.length > 0 && Buffer.byteLength(path.join(parts.join(path.sep), safeBase), "utf8") > MAX_PATH_BYTES) {
+      const i = parts.reduce((mi, p, idx) => (Buffer.byteLength(p, "utf8") > Buffer.byteLength(parts[mi], "utf8") ? idx : mi), 0)
+      parts[i] = parts[i].slice(0, Math.max(1, MAX_NAME_BYTES - 10))
+    }
+    safeDir = parts.join(path.sep)
+  }
+  return path.join(safeDir, safeBase)
+}
+
 export interface SafeCopyOptions {
   retries?: number
   onRetry?: (attempt: number, reason: string) => void
@@ -149,14 +177,32 @@ export async function safeCopyAsync(src: string, dest: string, options?: SafeCop
   // Single fast attempt: if it can't succeed quickly it goes into the
   // caller's retry bucket (retried later with backoff) rather than blocking
   // the whole import on one slow/hung file.
-  const tmp = `${dest}.spinosa-part-${process.pid}-${crypto.randomUUID()}`
+  let target = dest
+  let tmp = `${target}.spinosa-part-${process.pid}-${crypto.randomUUID()}`
   try {
     await withTimeout(copyFileAsync(src, tmp), timeoutMs, `copy of ${src}`)
-    replaceFromTemp(tmp, dest)
+    replaceFromTemp(tmp, target)
     return true
   } catch (err) {
     await rmAsync(tmp, { force: true }).catch(() => {})
-    options?.onRetry?.(0, String(err))
+    const reason = String(err)
+    // Name too long: truncate the destination and reprocess under a safe name
+    // instead of failing/retrying the doomed path.
+    if (reason.includes("ENAMETOOLONG") && target === dest) {
+      target = truncateDestPath(dest)
+      tmp = `${target}.spinosa-part-${process.pid}-${crypto.randomUUID()}`
+      try {
+        await mkdirAsync(path.dirname(target), { recursive: true })
+        await withTimeout(copyFileAsync(src, tmp), timeoutMs, `copy of ${src}`)
+        replaceFromTemp(tmp, target)
+        return true
+      } catch (err2) {
+        await rmAsync(tmp, { force: true }).catch(() => {})
+        options?.onRetry?.(0, String(err2))
+        return false
+      }
+    }
+    options?.onRetry?.(0, reason)
     return false
   }
   } finally {

@@ -217,3 +217,20 @@ export function ocrOutputRelPath(relPath: string): string {
   if (dir === ".") return outName
   return `${dir}/${outName}`
 }
+
+const MAX_NAME_BYTES = 250
+
+// Preprocess a relative path so every component fits filesystem name limits
+// (macOS: 255 bytes/component). Applied at scan time so the same safe name is
+// reused by every import phase and a too-long name never reaches a copy/write.
+export function safeRelPath(relPath: string): string {
+  const parts = relPath.split("/")
+  const safe = parts.map((p) => {
+    if (Buffer.byteLength(p, "utf8") <= MAX_NAME_BYTES) return p
+    const dot = p.lastIndexOf(".")
+    const ext = dot > 0 ? p.slice(dot) : ""
+    const stem = ext ? p.slice(0, p.length - ext.length) : p
+    return stem.slice(0, Math.max(1, MAX_NAME_BYTES - ext.length)) + ext
+  })
+  return safe.join("/")
+}
