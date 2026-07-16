@@ -29,7 +29,7 @@ import { useExit } from "../../context/exit"
 import type { CliRunResult } from "../../spinosa/types"
 import { readBundledFrameworkVersion, isPrereleaseFrameworkVersion, readStartupPrompt, writePreferredCli } from "../../spinosa/service"
 import { writeWorkspaceStatus } from "../../spinosa-core/workspace/meta"
-import { normalizePathInput, resolveExistingUserPaths } from "../../spinosa-core/utils/path"
+import { normalizePathInput, resolveExistingUserPaths, isCloudStoragePath } from "../../spinosa-core/utils/path"
 import { CenteredColumn } from "../../component/centered-column"
 import { OPENCODE_BASE_MODE, useOpencodeKeymap, useOpencodeModeStack } from "../../keymap"
 import { buttonBackground, buttonBorder, buttonText } from "../../util/button"
@@ -241,6 +241,7 @@ export function Onboarding() {
     return `${b} B`
   }
   const [processingStatus, setProcessingStatus] = createSignal("")
+  const [sourceIsCloud, setSourceIsCloud] = createSignal(false)
   const [importSummary, setImportSummary] = createSignal("")
   const [workspaceName, setWorkspaceName] = createSignal("")
   const [startupMessage, setStartupMessage] = createSignal("")
@@ -557,6 +558,7 @@ let nameInput: TextareaRenderable | undefined
   const startScan = async () => {
     const resolved = pendingPaths
     if (!resolved || resolved.length === 0) { logError("startScan", "No pending paths"); setStep("error"); return }
+    setSourceIsCloud(resolved.some((p) => isCloudStoragePath(p)))
     logStep("scan", "Scanning source folder")
     clearLog()
     setScanDone(false)
@@ -1195,6 +1197,9 @@ let nameInput: TextareaRenderable | undefined
             {step() === "done" ? " — your workspace is ready" : ""}
             {step() === "error" ? " — fixing the issue and retrying" : ""}
           </text>
+          <Show when={sourceIsCloud() && (step() === "scan" || step() === "setup" || step() === "direct" || step() === "markitdown" || step() === "ocr" || step() === "verification")}>
+            <text fg={theme.error}>  ⚠ cloud folder — scans & copies can be slow due to sync latency</text>
+          </Show>
 
           <Show when={step() === "path"}>
             <WizardPanel theme={theme} accent>

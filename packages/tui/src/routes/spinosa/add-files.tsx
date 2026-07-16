@@ -27,7 +27,7 @@ import {
 import type { CliRunResult } from "../../spinosa/types"
 import { readBundledFrameworkVersion, isPrereleaseFrameworkVersion } from "../../spinosa/service"
 import { resolveFrameworkRoot } from "../../spinosa-core/framework/discovery"
-import { normalizePathInput, resolveExistingUserPaths } from "../../spinosa-core/utils/path"
+import { normalizePathInput, resolveExistingUserPaths, isCloudStoragePath } from "../../spinosa-core/utils/path"
 import {
   blurIfFocused,
   createWorkflowGuard,
@@ -175,6 +175,7 @@ export function AddFiles() {
   const [progCurrent, setProgCurrent] = createSignal(0)
   const [progTotal, setProgTotal] = createSignal(1)
   const [processingStatus, setProcessingStatus] = createSignal("")
+  const [sourceIsCloud, setSourceIsCloud] = createSignal(false)
   const [processingFile, setProcessingFile] = createSignal("")
   const [failedCount, setFailedCount] = createSignal(0)
   const [importSummary, setImportSummary] = createSignal("")
@@ -490,6 +491,7 @@ export function AddFiles() {
   const startScan = async () => {
     const resolved = pendingPaths
     if (!resolved || resolved.length === 0) { logError("startScan", "No pending paths"); setStep("error"); return }
+    setSourceIsCloud(resolved.some((p) => isCloudStoragePath(p)))
     setScanDone(false)
     setScanningFile("")
     setScanCount(0)
@@ -929,6 +931,9 @@ export function AddFiles() {
             {step() === "done" ? " — import complete" : ""}
             {step() === "error" ? " — fixing the issue and retrying" : ""}
           </text>
+          <Show when={sourceIsCloud() && (step() === "scan" || step() === "direct" || step() === "markitdown" || step() === "ocr")}>
+            <text fg={theme.error}>  ⚠ cloud folder — scans & copies can be slow due to sync latency</text>
+          </Show>
 
           <Show when={step() === "path"}>
             <WizardPanel theme={theme} accent>
