@@ -124,7 +124,7 @@ test("scans and imports files from the dedicated add-files screen", async () => 
     await app.renderOnce()
     const frame = app.captureCharFrame()
     expect(frame).toContain("Import files into workspace")
-    expect(frame).toContain("choose source folders")
+    expect(frame).toContain("choosing source folders")
     expect(frame).not.toContain("Create Spinosa workspace")
     expect(frame).not.toContain("checking document tools")
 
