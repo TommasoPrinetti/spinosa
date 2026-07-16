@@ -199,7 +199,8 @@ export function Visualizer() {
           ? roots.find((item) => item.id === requested) ?? { id: requested, title: requested }
           : roots[0]
         if (!picked || workspace()?.path !== workspacePath) return
-        const selectedRoot = { id: picked.id, title: picked.title, parentID: picked.parentID }
+        const selectedRoot: VisualizerSession = { id: picked.id, title: picked.title }
+        if ("parentID" in picked) selectedRoot.parentID = picked.parentID
         setSession(selectedRoot)
         await loadSession(selectedRoot, target)
       } catch (error) {
