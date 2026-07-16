@@ -88,7 +88,7 @@ export async function scanAndClassifySource(
 } | null> {
   const allFiles: string[] = []
   try {
-    allFiles.push(...findSourceFiles(sourcePath))
+    allFiles.push(...findSourceFiles(sourcePath, shouldAbort))
   } catch {
     return null
   }

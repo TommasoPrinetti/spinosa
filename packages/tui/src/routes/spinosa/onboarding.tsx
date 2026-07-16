@@ -559,6 +559,7 @@ let nameInput: TextareaRenderable | undefined
     const resolved = pendingPaths
     if (!resolved || resolved.length === 0) { logError("startScan", "No pending paths"); setStep("error"); return }
     setSourceIsCloud(resolved.some((p) => isCloudStoragePath(p)))
+    const shouldAbort = () => abortProcessing
     logStep("scan", "Scanning source folder")
     clearLog()
     setScanDone(false)
@@ -579,7 +580,7 @@ let nameInput: TextareaRenderable | undefined
           setScanningFile(rel)
           setScanTotal(discovered)
           if (isFile) { scanned++; setScanCount((c) => c + 1) }
-        })
+        }, shouldAbort)
         console.error("[scan] buildNewWorkspacePreview done ->", src, "options:", scanPreview.importOptions.length)
         setPreview(scanPreview)
         for (const opt of scanPreview.importOptions) {

@@ -492,6 +492,7 @@ export function AddFiles() {
     const resolved = pendingPaths
     if (!resolved || resolved.length === 0) { logError("startScan", "No pending paths"); setStep("error"); return }
     setSourceIsCloud(resolved.some((p) => isCloudStoragePath(p)))
+    const shouldAbort = () => abortProcessing
     setScanDone(false)
     setScanningFile("")
     setScanCount(0)
@@ -505,6 +506,7 @@ export function AddFiles() {
         appendLogLine(`Scanning: ${src}`)
         const scanPreview = await buildImportScanPreview(src, {
           onFile: (rel, isFile, discovered) => { setScanningFile(rel); setScanTotal(discovered); if (isFile) setScanCount((c) => c + 1) },
+          shouldAbort,
         })
         for (const opt of scanPreview.importOptions) {
           const existing = mergedOptions.find((m) => m.ext === opt.ext)

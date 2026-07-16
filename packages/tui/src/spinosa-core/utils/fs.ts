@@ -45,7 +45,7 @@ const MAX_PATH_BYTES = 1000
 export function truncateDestPath(dest: string): string {
   const dir = path.dirname(dest)
   const base = path.basename(dest)
-  const ext = base.includes(".") ? base.slice(base.lastIndexOf(".")) : ""
+  const ext = path.extname(base)
   const stem = ext ? base.slice(0, base.length - ext.length) : base
   const budget = MAX_NAME_BYTES - ext.length
   const safeStem = Buffer.byteLength(stem, "utf8") > budget ? stem.slice(0, Math.max(1, budget)) : stem

@@ -60,11 +60,12 @@ export function shouldSkipSourceFile(filePath: string): boolean {
   return false
 }
 
-export function findSourceFiles(sourcePath: string): string[] {
+export function findSourceFiles(sourcePath: string, shouldAbort?: () => boolean): string[] {
   const results: string[] = []
   const visited = new Set<string>()
 
   function walk(dir: string) {
+    if (shouldAbort?.()) return
     let entries
     try {
       entries = readdirSync(dir, { withFileTypes: true })
@@ -72,6 +73,7 @@ export function findSourceFiles(sourcePath: string): string[] {
       return
     }
     for (const entry of entries) {
+      if (shouldAbort?.()) return
       const fullPath = path.join(dir, entry.name)
       if (isTccSensitiveSourcePath(fullPath)) continue
       if (entry.isDirectory()) {
@@ -201,7 +203,7 @@ export function markdownRawRelPath(relPath: string): string {
 export function markitdownOutputRelPath(relPath: string): string {
   const dir = path.dirname(relPath)
   const name = path.basename(relPath)
-  const stem = name.slice(0, name.lastIndexOf("."))
+  const stem = name.slice(0, name.length - path.extname(name).length)
   const ext = fileExt(relPath)
   const mdOut = ext === "md" || !ext ? `${stem}.md` : `${stem}__${ext}.md`
   if (dir === ".") return mdOut
@@ -211,7 +213,7 @@ export function markitdownOutputRelPath(relPath: string): string {
 export function ocrOutputRelPath(relPath: string): string {
   const dir = path.dirname(relPath)
   const name = path.basename(relPath)
-  const stem = name.slice(0, name.lastIndexOf("."))
+  const stem = name.slice(0, name.length - path.extname(name).length)
   const ext = fileExt(relPath)
   const outName = ext === "md" || !ext ? `${stem}.md` : `${stem}__${ext}.md`
   if (dir === ".") return outName
@@ -220,17 +222,44 @@ export function ocrOutputRelPath(relPath: string): string {
 
 const MAX_NAME_BYTES = 250
 
+// Split off the trailing extension (multi-part aware: ".tar.gz" -> ext ".gz")
+// so truncation keeps the real suffix.
+function splitExt(name: string): { stem: string; ext: string } {
+  const ext = path.extname(name)
+  const stem = ext ? name.slice(0, name.length - ext.length) : name
+  return { stem, ext }
+}
+
 // Preprocess a relative path so every component fits filesystem name limits
 // (macOS: 255 bytes/component). Applied at scan time so the same safe name is
 // reused by every import phase and a too-long name never reaches a copy/write.
+// Collision-safe: if two distinct names truncate to the same component, a short
+// disambiguator is appended so one source file never silently overwrites another.
 export function safeRelPath(relPath: string): string {
   const parts = relPath.split("/")
+  const seen = new Set<string>()
   const safe = parts.map((p) => {
-    if (Buffer.byteLength(p, "utf8") <= MAX_NAME_BYTES) return p
-    const dot = p.lastIndexOf(".")
-    const ext = dot > 0 ? p.slice(dot) : ""
-    const stem = ext ? p.slice(0, p.length - ext.length) : p
-    return stem.slice(0, Math.max(1, MAX_NAME_BYTES - ext.length)) + ext
+    let out = p
+    if (Buffer.byteLength(p, "utf8") > MAX_NAME_BYTES) {
+      const { stem, ext } = splitExt(p)
+      const budget = MAX_NAME_BYTES - ext.length
+      out = stem.slice(0, Math.max(1, budget)) + ext
+    }
+    // Disambiguate collisions within the same directory level.
+    if (seen.has(out)) {
+      let i = 1
+      let candidate = out
+      const { stem, ext } = splitExt(out)
+      const budget = MAX_NAME_BYTES - ext.length
+      while (seen.has(candidate) && i < 9999) {
+        const suffix = `_${i}`
+        candidate = stem.slice(0, Math.max(1, budget - suffix.length)) + suffix + ext
+        i++
+      }
+      out = candidate
+    }
+    seen.add(out)
+    return out
   })
   return safe.join("/")
 }

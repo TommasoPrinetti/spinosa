@@ -52,10 +52,23 @@ function shouldSkipScanDir(name: string) {
   return name === ".git" || name === ".spinosa" || name === "node_modules" || name === "__MACOSX" || name === ".trash" || name.endsWith(".app") || name.endsWith(".photoslibrary")
 }
 
+// Bound a filesystem op so a stuck/unresponsive mount (e.g. cloud FUSE) cannot
+// hang the scan forever.
+function withFsTimeout<T>(p: Promise<T>, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(`${label} timed out`)), 10_000)
+    p.then(
+      (v) => { clearTimeout(t); resolve(v) },
+      (e) => { clearTimeout(t); reject(e) },
+    )
+  })
+}
+
 async function scanByExtension(
   sourcePath: string,
   classify: (filePath: string) => Promise<FileClass> = scanClassifySourceFile,
   onFile?: (relativePath: string, isFile: boolean, discovered: number) => void,
+  shouldAbort?: () => boolean,
 ): Promise<{
   extMap: Map<string, ExtEntry>
   totals: { markdown: number; markitdown: number; native: number; ocr: number; video: number; audio: number; unknown: number; ignored: number; total: number }
@@ -66,16 +79,18 @@ async function scanByExtension(
 
   const stack = [sourcePath]
   while (stack.length > 0) {
+    if (shouldAbort?.()) break
     const dir = stack.pop()
     if (!dir) continue
     let entries: string[]
-    try { entries = await readdir(dir) } catch { continue }
+    try { entries = await withFsTimeout(readdir(dir), `readdir ${dir}`) } catch { continue }
     for (const entry of entries) {
+      if (shouldAbort?.()) break
       if (entry.startsWith(".") && entry !== "." && entry !== "..") continue
       const fullPath = path.join(dir, entry)
       if (onFile) onFile(path.relative(sourcePath, fullPath) || entry, false, discovered)
       let st
-      try { st = await lstat(fullPath) } catch { continue }
+      try { st = await withFsTimeout(lstat(fullPath), `lstat ${fullPath}`) } catch { continue }
       if (st.isSymbolicLink()) continue
       if (st.isDirectory()) {
         if (shouldSkipScanDir(entry)) continue
@@ -174,11 +189,11 @@ function resolveWorkspacePath(sourcePath: string, workspaceName?: string): strin
   return resolveCoreWorkspacePath(resolved, workspaceName)
 }
 
-export async function buildNewWorkspacePreview(sourcePath: string, workspaceName?: string, onFile?: (relativePath: string, isFile: boolean, discovered: number) => void): Promise<NewWorkspacePreview> {
+export async function buildNewWorkspacePreview(sourcePath: string, workspaceName?: string, onFile?: (relativePath: string, isFile: boolean, discovered: number) => void, shouldAbort?: () => boolean): Promise<NewWorkspacePreview> {
   const projectName = workspaceName?.trim() || path.basename(sourcePath)
   const workspacePath = resolveWorkspacePath(sourcePath, workspaceName)
   const toolStatus = await detectDocumentTools()
-  const { extMap, totals } = await scanByExtension(sourcePath, scanClassifySourceFile, onFile)
+  const { extMap, totals } = await scanByExtension(sourcePath, scanClassifySourceFile, onFile, shouldAbort)
 
   return {
     projectName,
@@ -192,10 +207,10 @@ export async function buildNewWorkspacePreview(sourcePath: string, workspaceName
 
 export async function buildImportScanPreview(
   sourcePath: string,
-  options?: { classify?: (filePath: string) => Promise<FileClass>; onFile?: (relativePath: string, isFile: boolean, discovered: number) => void },
+  options?: { classify?: (filePath: string) => Promise<FileClass>; onFile?: (relativePath: string, isFile: boolean, discovered: number) => void; shouldAbort?: () => boolean },
 ): Promise<ImportScanPreview> {
   const projectName = path.basename(sourcePath)
-  const { extMap, totals } = await scanByExtension(sourcePath, options?.classify, options?.onFile)
+  const { extMap, totals } = await scanByExtension(sourcePath, options?.classify, options?.onFile, options?.shouldAbort)
 
   return {
     projectName,
