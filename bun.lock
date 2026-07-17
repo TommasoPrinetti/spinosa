@@ -6,6 +6,8 @@
       "name": "spinosa-main",
       "devDependencies": {
         "@types/mime-types": "3.0.1",
+        "@typescript/native-preview": "catalog:",
+        "typescript": "catalog:",
       },
     },
     "packages/core": {
@@ -463,6 +465,7 @@
         "strip-ansi": "7.1.2",
       },
       "devDependencies": {
+        "@opencode-ai/script": "workspace:*",
         "@solidjs/meta": "catalog:",
         "@tailwindcss/vite": "catalog:",
         "@tsconfig/node22": "catalog:",

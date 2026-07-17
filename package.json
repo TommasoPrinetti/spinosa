@@ -125,6 +125,8 @@
     "effect@4.0.0-beta.83": "patches/effect@4.0.0-beta.83.patch"
   },
   "devDependencies": {
-    "@types/mime-types": "3.0.1"
+    "@typescript/native-preview": "catalog:",
+    "@types/mime-types": "3.0.1",
+    "typescript": "catalog:"
   }
 }
