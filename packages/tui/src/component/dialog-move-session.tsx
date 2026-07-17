@@ -20,6 +20,7 @@ import type { ProjectDirectories } from "@opencode-ai/sdk/v2"
 import { useRoute } from "../context/route"
 
 export type MoveSessionSelection = { type: "directory"; directory: string; subdirectory: boolean } | { type: "new" }
+/** Selection result for a move-session target */
 type ProjectDirectory = ProjectDirectories[number]
 
 type DialogMoveSessionProps = {
@@ -32,6 +33,7 @@ type DialogMoveSessionProps = {
 }
 
 export function DialogMoveSession(props: DialogMoveSessionProps) {
+  /** Dialog to move a session to a different directory/project */
   const dialog = useDialog()
   const sdk = useSDK()
   const dimensions = useTerminalDimensions()
@@ -70,9 +72,10 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
     return loadedProject()
   })
 
-  const [directories, { refetch }] = createResource(
+  const [directories, { refetch }] = createResource<ProjectDirectory[] | undefined, string | undefined>(
     () => (props.initialRemoving ? undefined : props.projectID),
-    async (projectID, info): Promise<ProjectDirectory[] | undefined> => {
+    async (projectID, info) => {
+      if (!projectID) return
       try {
         await sdk.client.v2.projectCopy.refresh(
           { projectID, location: { directory: sdk.directory } },
@@ -83,14 +86,12 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
         return directories.data ?? []
       } catch (error) {
         setLoadError(error)
-        // An initial load with no data surfaces the inline error view below. A
-        // failed refresh intentionally stays quiet and keeps the already-shown
-        // list interactive; reopening the dialog retries the load.
-        return info.value
+        // info.value is shared across resource runs — cast to our expected type
+        return info.value as ProjectDirectory[] | undefined
       }
     },
   )
-  const directoryData = createMemo(() => directories() ?? props.initialDirectories)
+  const directoryData = createMemo<ProjectDirectory[] | undefined>(() => directories() ?? props.initialDirectories)
   // Show the locked error view only when we have nothing to display. A refresh
   // that fails after the list rendered keeps the list and its actions.
   const showError = createMemo(() => Boolean(loadError()) && !directoryData())

@@ -18,7 +18,7 @@ import type { SpinosaWorkspaceMeta } from "../spinosa/types"
 import { setActiveWorkspacePath, tuiLog } from "../spinosa/log"
 import { parseWorkspaceID } from "../spinosa-core/workspace/identity"
 import { recoverWorkspacePathByID } from "../spinosa-core/workspace/registry"
-import { inspectRegisteredWorkspacePresence, isUsableWorkspacePresence } from "../spinosa-core/workspace/presence"
+import { inspectRegisteredWorkspacePresence, inspectWorkspacePresence, isUsableWorkspacePresence } from "../spinosa-core/workspace/presence"
 import { runSpinosaBootHealth, SPINOSA_BOOT_OPERATIONS, type SpinosaBootOperation } from "../spinosa-core/system/boot"
 import type { RouteNavigateInput } from "./route"
 export const { use: useSpinosaWorkspace, provider: SpinosaWorkspaceProvider } = createSimpleContext({
