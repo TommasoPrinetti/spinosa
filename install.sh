@@ -2,7 +2,7 @@
 # shellcheck shell=bash
 # ── install.sh — Spinosa Framework Installer (auto-re-execs with bash) ──────
 
-PINNED_VERSION="0.9.0-beta.18"
+PINNED_VERSION="0.9.0-beta.19"
 PINNED_TAG="beta"
 BUNDLED_BUN_VERSION="1.3.14"
 DEFAULT_DEPS_TIMEOUT_SECONDS="600"
@@ -136,10 +136,10 @@ REPO="TommasoPrinetti/spinosa"
 # ══════════════════════════════════════════════════════════════════════════════
 
 if [ -t 2 ] && [ "${NO_COLOR:-}" != "1" ]; then
-  G=$'\033[32m' Y=$'\033[33m' R=$'\033[31m'
+  G=$'\033[32m' Y=$'\033[33m' R=$'\033[31m' C=$'\033[36m'
   DIM=$'\033[2m' BOLD=$'\033[1m' RESET=$'\033[0m'
 else
-  G='' Y='' R='' DIM='' BOLD='' RESET=''
+  G='' Y='' R='' C='' DIM='' BOLD='' RESET=''
 fi
 
 info()  { spinosa_log INFO "$1"; printf '  %s %s\n' "${DIM}→${RESET}" "$1"; }
@@ -148,6 +148,21 @@ warn()  { spinosa_log WARN "$1"; printf '  %s %s\n' "${Y}⚠${RESET}" "$1" >&2; 
 note()  { spinosa_log INFO "$1"; printf '  %s↳%s %s\n' "${DIM}" "${RESET}" "$1"; }
 die()   { spinosa_log ERROR "$1"; printf '\n  %s %s\n\n' "${R}✗${RESET}" "$1" >&2; exit 1; }
 divider() { printf '%s\n' "${DIM}$(printf '%.0s─' {1..78})${RESET}"; }
+
+# Section header — groups the install into clear phases so the user can
+# follow progress at a glance. Prints a divider, a numbered/labeled title,
+# then another divider.
+section() {
+  local title="$1" bar
+  spinosa_log INFO "section=${title}"
+  bar="$(printf '%.0s─' $(seq 1 $((${#title} + 4))))"
+  if [ -t 2 ]; then
+    printf '\n  %s%s%s\n' "${BOLD}${C}" "$title" "${RESET}"
+    printf '  %s%s%s\n' "${DIM}" "$bar" "${RESET}"
+  else
+    printf '\n  %s\n' "$title"
+  fi
+}
 
 read_from_tty() {
   if [ -t 0 ]; then
@@ -986,12 +1001,12 @@ prompt_upgrade() {
       info "Already on v${target}. No upgrade needed."
       return 1
     fi
-    printf '  %sSpinosa v%s is already installed.%s\n' "${Y}" "$installed" "${RESET}"
+    printf '  %s %sSpinosa v%s is already installed.%s\n' "${Y}⚠${RESET}" "${Y}" "$installed" "${RESET}"
     if [ "$YES" -eq 1 ]; then
       info "Skipping reinstall prompt (--yes)."
       return 1
     fi
-    printf '  %sReinstall?%s [y/N]: ' "${BOLD}" "${RESET}"
+    printf '  %s Reinstall?%s [y/N]: ' "${BOLD}?${RESET}" "${RESET}"
     local reply
     read_tty_or_die reply
     case "$reply" in
@@ -1011,12 +1026,12 @@ prompt_upgrade() {
       info "Installing v${target} (over v${installed})..."
       return 0
     fi
-    printf '  %sSpinosa v%s is installed. v%s is available.%s\n' "${G}" "$installed" "$target" "${RESET}"
+    printf '  %s %sSpinosa v%s is installed. v%s is available.%s\n' "${G}✦${RESET}" "${G}" "$installed" "$target" "${RESET}"
     if [ "$YES" -eq 1 ]; then
       info "Auto-upgrading (--yes)."
       return 0
     fi
-    printf '  %sUpgrade?%s [Y/n]: ' "${BOLD}" "${RESET}"
+    printf '  %s Upgrade?%s [Y/n]: ' "${BOLD}?${RESET}" "${RESET}"
     local reply
     read_tty_or_die reply
     reply="${reply:-Y}"
@@ -1037,12 +1052,12 @@ prompt_upgrade() {
       fi
       return 0
     fi
-    printf '  %sInstalled v%s is newer than target v%s.%s\n' "${Y}" "$installed" "$target" "${RESET}"
+    printf '  %s %sInstalled v%s is newer than target v%s.%s\n' "${Y}⚠${RESET}" "${Y}" "$installed" "$target" "${RESET}"
     if [ "$YES" -eq 1 ]; then
       info "Skipping downgrade (--yes)."
       return 1
     fi
-    printf '  %sDowngrade?%s [y/N]: ' "${BOLD}" "${RESET}"
+    printf '  %s Downgrade?%s [y/N]: ' "${BOLD}?${RESET}" "${RESET}"
     local reply
     read_tty_or_die reply
     case "$reply" in
@@ -1057,7 +1072,7 @@ confirm_install() {
   if [ "$YES" -eq 1 ]; then
     return 0
   fi
-  printf '  %sInstall Spinosa v%s?%s [Y/n]: ' "${BOLD}" "$version" "${RESET}"
+  printf '  %s Install Spinosa v%s?%s [Y/n]: ' "${BOLD}?${RESET}" "$version" "${RESET}"
   local reply
   read_tty_or_die reply
   reply="${reply:-Y}"
@@ -1390,14 +1405,15 @@ maybe_launch_dashboard() {
   if [[ "$LAUNCH_DASHBOARD" == "1" ]] || { [[ "$LAUNCH_DASHBOARD" == "auto" ]] && [[ -t 0 && -r /dev/tty ]]; }; then
     local spinosa_cmd="${SPINOSA_BIN_DIR}/spinosa"
     [[ -x "$spinosa_cmd" ]] || { warn "Dashboard launch skipped — missing ${spinosa_cmd}"; return 0; }
-    info "Launching Spinosa dashboard..."
+    info "Launching Spinosa dashboard in the background..."
     flush_pending_input
     sleep 1
-    SPINOSA_NO_UPGRADE_CHECK=1 "$spinosa_cmd" </dev/tty
-    local rc=$?
-    if [[ "$rc" -ne 0 ]]; then
-      warn "Dashboard launch returned non-zero (exit ${rc}) — run 'spinosa' to start it manually"
-    fi
+    # Launch detached so the installer can exit cleanly. The dashboard keeps
+    # running in its own process; stdout/stderr go to the terminal.
+    SPINOSA_NO_UPGRADE_CHECK=1 nohup "$spinosa_cmd" </dev/tty >/dev/tty 2>&1 &
+    disown 2>/dev/null || true
+    local pid=$!
+    ok "Spinosa dashboard launched (pid ${pid}) — installer finished"
   fi
 }
 
@@ -1421,6 +1437,7 @@ main() {
     note "Development mode selected (source-tree install)"
   fi
 
+  section "System check"
   INSTALL_LOCKDIR="${SPINOSA_HOME}/versions/.install.lock"
   local lockdir="$INSTALL_LOCKDIR"
 
@@ -1470,6 +1487,8 @@ main() {
   mkdir -p "${SPINOSA_BIN_DIR}"
   check_download_disk_space
 
+  section "Download & extract"
+
   local tmpdir
   tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/spinosa-install.XXXXXX")"
   cleanup() {
@@ -1512,6 +1531,7 @@ main() {
   ok "Extracted Spinosa v${VERSION}"
   clean_macos_metadata "$INSTALL_STAGE_DIR"
   local fw_root="$INSTALL_STAGE_DIR"
+  section "Dependencies"
   install_bundled_bun "$tmpdir"
   install_bun_dependencies "$fw_root"
   local spinosa_bin="${fw_root}/workspace-template/.bin/spinosa"
@@ -1538,6 +1558,7 @@ main() {
 
   # Vendor bundles — no-op (Python vendor removed)
 
+  section "Install & configure"
   install_shims
 
   mark_version_install_complete "$VERSION"
@@ -1549,6 +1570,7 @@ main() {
   trap - EXIT INT TERM HUP
 
   echo ""
+  section "Verify"
   write_spinosa_env_file
   if [ "$PREFIX_MODE" -eq 0 ]; then
     setup_shell_path

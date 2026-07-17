@@ -6,6 +6,16 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 **Release policy:** versions are published only with explicit maintainer approval.
 
+## [0.9.0-beta.19] — 2026-07-17
+
+### Fixed
+
+- Installer now terminates after a successful install instead of hanging: the Spinosa dashboard is launched detached in the background (`nohup ... &`), so the installer process exits cleanly while the dashboard keeps running.
+
+### Changed
+
+- Installer output is now grouped into labelled sections (System check, Download & extract, Dependencies, Install & configure, Verify) and every user-visible line carries a consistent status glyph (`→` step, `✦` success, `⚠` warning, `↳` note, `✗` error, `?` prompt), making progress easier to follow at a glance.
+
 ## [0.9.0-beta.18] — 2026-07-17
 
 ### Fixed
