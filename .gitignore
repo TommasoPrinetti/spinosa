@@ -58,3 +58,9 @@ framework/agent_reports/*.md
 
 # Bundled vendor binaries (populated by package-release.sh)
 framework/bin/lib/vendor/
+
+# Runtime debris generated in the repo root when running Spinosa locally
+# (the shipped copies live under workspace-template/ and are tracked)
+/.spinosa/
+/.trash/
+/agent_reports/
