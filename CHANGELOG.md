@@ -6,6 +6,20 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 **Release policy:** versions are published only with explicit maintainer approval.
 
+## [0.9.0-beta.17] — 2026-07-17
+
+### Fixed
+
+- Installer now shows progress spinners and status messages for every long-running step (download, extraction, bundled Bun fetch/extract, staging, promotion) so the user is never left staring at a silent terminal.
+- Installer no longer appends a duplicate PATH block to shell config files on re-run; it detects the existing Spinosa marker correctly.
+- Archive safety check no longer mis-computes symlink traversal depth, so legitimate nested symlinks are accepted while escaping symlinks are still rejected.
+- Repair of a broken global `~/.spinosa` home is guarded so a missing/empty `SPINOSA_HOME` can never resolve a destructive `rm -rf` to `/bin` or `/lib`.
+- Dashboard launch failure is reported with a hint to run `spinosa` manually instead of silently exiting.
+
+### Changed
+
+- Version comparison during upgrade detection uses an explicit exit-status capture, avoiding a stale comparison result on equal versions.
+
 ## [0.9.0-beta.16] — 2026-07-17
 
 ### Added
@@ -23,6 +37,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- WASM-only shell parser dependencies no longer invoke native `node-gyp`/Python builds during installation; dependency attempts now stream output and time out cleanly before repair.
 - Linux terminals no longer retain stale bold styling when reactive text attributes change.
 - TypeScript CLI commands such as uninstall preserve interactive terminal input.
 - Global-home workspace actions render after leaving an incomplete import.

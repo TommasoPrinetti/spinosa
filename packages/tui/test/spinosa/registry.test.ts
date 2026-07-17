@@ -8,6 +8,8 @@ import {
   registerWorkspace,
   registryEscape,
   registryUnescape,
+  listRegisteredWorkspaces,
+  setWorkspacePresence,
   setWorkspaceTags,
 } from "../../src/spinosa-core/workspace/registry"
 import { createWorkspaceID } from "../../src/spinosa-core/workspace/identity"
@@ -172,6 +174,33 @@ describe("workspace registry", () => {
       writeFileSync(path.join(duplicate, ".spinosa", "workspace"), `workspace_id: ${id}\n`)
       expect(findWorkspaceMatchesByID(id, [tmp.path]).sort()).toEqual([duplicate, movedPath].sort())
       expect(await recoverWorkspacePathByID(id, [tmp.path])).toBeUndefined()
+    } finally {
+      if (originalHome === undefined) delete process.env.SPINOSA_HOME
+      else process.env.SPINOSA_HOME = originalHome
+    }
+  })
+
+  test("lists an identity-mismatch workspace so the UI can offer recovery", async () => {
+    await using tmp = await tmpdir()
+    const originalHome = process.env.SPINOSA_HOME
+    process.env.SPINOSA_HOME = path.join(tmp.path, "home")
+    try {
+      const workspace = path.join(tmp.path, "workspace")
+      const registeredID = createWorkspaceID()
+      const replacementID = createWorkspaceID()
+      mkdirSync(path.join(workspace, ".spinosa"), { recursive: true })
+      writeFileSync(path.join(workspace, ".spinosa", "workspace"), `workspace_id: ${registeredID}\n`)
+      await registerWorkspace(workspace, "research", undefined, registeredID)
+      writeFileSync(path.join(workspace, ".spinosa", "workspace"), `workspace_id: ${replacementID}\n`)
+      await setWorkspacePresence({ workspacePath: workspace, workspaceID: registeredID, presence: "identity_mismatch" })
+
+      expect(await listRegisteredWorkspaces()).toEqual([
+        expect.objectContaining({
+          path: workspace,
+          workspaceID: registeredID,
+          presence: "identity_mismatch",
+        }),
+      ])
     } finally {
       if (originalHome === undefined) delete process.env.SPINOSA_HOME
       else process.env.SPINOSA_HOME = originalHome

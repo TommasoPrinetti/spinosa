@@ -149,14 +149,17 @@ export function DialogSpinosaWorkspacePicker(props: { onClose?: () => void } = {
   async function openWorkspace(path: string) {
     const launch = await getWorkspaceLaunchDecision(path)
     if (launch.type === "startup-choice") {
+      const returnToPicker = () => dialog.replace(
+        () => <DialogSpinosaWorkspacePicker onClose={props.onClose} />,
+      )
       dialog.replace(() => (
         <DialogSpinosaStartupChoice
           workspacePath={launch.workspacePath}
           workspaceName={launch.workspaceName}
           prompt={launch.prompt}
-          onBack={() => dialog.replace(() => <DialogSpinosaWorkspacePicker />)}
+          onBack={returnToPicker}
         />
-      ))
+      ), undefined, returnToPicker)
       return
     }
     dialog.clear()

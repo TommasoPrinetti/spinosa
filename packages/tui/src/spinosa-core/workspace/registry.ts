@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readdirSync, openSync, closeSync, fsyncSync } fr
 import { mkdir, rename, rm, stat, readFile, writeFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import path from "node:path"
+import { spinosaLogWarn } from "../utils/log"
 import { resolveWorkspaceDisplayName } from "../workspace-name"
 import type { SpinosaRegisteredWorkspace, SpinosaSetupStatus, SpinosaWorkspacePresence } from "../types"
 import { ensureWorkspaceID, parseWorkspaceID, readWorkspaceID, type SpinosaWorkspaceID } from "./identity"
@@ -448,7 +449,8 @@ export async function registerWorkspace(
   await readRegistryDocument(registry, metadataPath(LEGACY_WORKSPACE_REGISTRY_FILENAME))
   const markerID = workspaceIDFromMarker(workspacePath)
   if (workspaceID && markerID !== workspaceID) {
-    throw new Error(`Workspace ID does not match the workspace marker at ${workspacePath}`)
+    spinosaLogWarn("registry", `ID mismatch at ${workspacePath}: expected ${workspaceID}, marker has ${markerID} — skipping`)
+    return
   }
   const canonicalID = workspaceID ?? (validateWorkspace(workspacePath) ? ensureWorkspaceID(workspacePath) : undefined)
   const meta = await readWorkspaceMeta(workspacePath).catch(() => undefined)
@@ -588,7 +590,10 @@ export async function setWorkspaceTags(input: {
 
 export async function listRegisteredWorkspaces(): Promise<SpinosaRegisteredWorkspace[]> {
   const entries = await loadRegistry(undefined, { allowMissingMarker: true })
-  await Promise.all(entries.filter((entry) => validateWorkspace(entry.path)).map((entry) =>
+  await Promise.all(entries.filter((entry) =>
+    validateWorkspace(entry.path)
+    && (entry.presence === "present" || entry.presence === "legacy" || entry.presence === "unknown")
+  ).map((entry) =>
     registerWorkspace(
       entry.path,
       resolveWorkspaceDisplayName(entry.path, entry.name),

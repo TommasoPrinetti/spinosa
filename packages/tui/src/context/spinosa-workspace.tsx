@@ -18,6 +18,7 @@ import type { SpinosaWorkspaceMeta } from "../spinosa/types"
 import { setActiveWorkspacePath, tuiLog } from "../spinosa/log"
 import { parseWorkspaceID } from "../spinosa-core/workspace/identity"
 import { recoverWorkspacePathByID } from "../spinosa-core/workspace/registry"
+import { inspectRegisteredWorkspacePresence, isUsableWorkspacePresence } from "../spinosa-core/workspace/presence"
 import { runSpinosaBootHealth, SPINOSA_BOOT_OPERATIONS, type SpinosaBootOperation } from "../spinosa-core/system/boot"
 import type { RouteNavigateInput } from "./route"
 export const { use: useSpinosaWorkspace, provider: SpinosaWorkspaceProvider } = createSimpleContext({
@@ -28,13 +29,13 @@ export const { use: useSpinosaWorkspace, provider: SpinosaWorkspaceProvider } = 
     const paths = useTuiPaths()
     const startup = useTuiStartup()
     const cwdWorkspace = isSpinosaWorkspace(paths.cwd) ? paths.cwd : undefined
-    const [activePath, setActivePath] = createSignal<string | undefined>(cwdWorkspace)
+    const [activePath, setActivePath] = createSignal<string | undefined>()
     const [genericMode, setGenericMode] = createSignal(false)
     const [pickerRequested, setPickerRequested] = createSignal(false)
     const [pickerReturnSessionId, setPickerReturnSessionId] = createSignal<string | undefined>()
     const [pendingPrompt, setPendingPrompt] = createSignal<{ workspacePath: string; prompt: PromptInfo } | undefined>()
     const [bootOperations, setBootOperations] = createSignal<SpinosaBootOperation[]>(SPINOSA_BOOT_OPERATIONS.map((operation) => ({ ...operation })))
-    let attemptedSavedWorkspaceRecovery = false
+    let attemptedInitialWorkspaceHydration = false
 
     const [bootHealth] = createResource(async () => runSpinosaBootHealth({
       minimumOperationDurationMs: startup.skipInitialLoading ? 0 : 1_000,
@@ -47,13 +48,12 @@ export const { use: useSpinosaWorkspace, provider: SpinosaWorkspaceProvider } = 
       if (!workspacePath || !isSpinosaWorkspace(workspacePath)) return undefined
       return readWorkspaceMeta(workspacePath).catch(() => undefined)
     })
-    const cwdDiscoveryTimer = setInterval(() => {
-      if (activePath() || genericMode() || !isSpinosaWorkspace(paths.cwd)) return
-      setActivePath(paths.cwd)
-    }, 3000)
-    onCleanup(() => clearInterval(cwdDiscoveryTimer))
-
     const openWorkspace = async (workspacePath: string, options?: { route?: RouteNavigateInput }) => {
+      const presence = await inspectRegisteredWorkspacePresence(workspacePath).catch(() => undefined)
+      if (presence && !isUsableWorkspacePresence(presence)) {
+        showPicker()
+        return
+      }
       setActiveWorkspacePath(workspacePath)
       tuiLog(`openWorkspace path=${workspacePath}`)
       kv.set(SPINOSA_ACTIVE_WORKSPACE_KV, workspacePath)
@@ -79,6 +79,12 @@ export const { use: useSpinosaWorkspace, provider: SpinosaWorkspaceProvider } = 
       route.navigate(nextRoute)
     }
 
+    const cwdDiscoveryTimer = setInterval(() => {
+      if (activePath() || genericMode() || !isSpinosaWorkspace(paths.cwd)) return
+      void openWorkspace(paths.cwd)
+    }, 3000)
+    onCleanup(() => clearInterval(cwdDiscoveryTimer))
+
     const useGenericMode = () => {
       kv.set(SPINOSA_GENERIC_MODE_KV, true)
       kv.set(SPINOSA_ACTIVE_WORKSPACE_KV, undefined)
@@ -103,13 +109,34 @@ export const { use: useSpinosaWorkspace, provider: SpinosaWorkspaceProvider } = 
     }
 
     createEffect(() => {
-      if (!kv.ready || bootHealth.loading || attemptedSavedWorkspaceRecovery || activePath() || genericMode()) return
+      if (!kv.ready || bootHealth.loading || attemptedInitialWorkspaceHydration || activePath() || genericMode()) return
+      if (startup.initialRoute || route.data.type !== "global" || route.data.prompt) {
+        attemptedInitialWorkspaceHydration = true
+        return
+      }
+      attemptedInitialWorkspaceHydration = true
+      if (kv.get(SPINOSA_GENERIC_MODE_KV) === true) {
+        setGenericMode(true)
+        return
+      }
+
+      if (cwdWorkspace) {
+        void openWorkspace(cwdWorkspace)
+        return
+      }
+
       const savedPath = kv.get(SPINOSA_ACTIVE_WORKSPACE_KV) as string | undefined
-      if (!savedPath || isSpinosaWorkspace(savedPath)) return
-      attemptedSavedWorkspaceRecovery = true
       const workspaceID = parseWorkspaceID(kv.get(SPINOSA_ACTIVE_WORKSPACE_ID_KV) as string | undefined)
+      if (savedPath && isSpinosaWorkspace(savedPath)) {
+        const savedPresence = inspectWorkspacePresence({ workspacePath: savedPath, workspaceID })
+        if (isUsableWorkspacePresence(savedPresence)) {
+          void openWorkspace(savedPath)
+          return
+        }
+      }
       if (!workspaceID) return
-      void recoverWorkspacePathByID(workspaceID, [path.dirname(savedPath), paths.cwd]).then((recovered) => {
+      const recoveryRoots = [paths.cwd, ...(savedPath ? [path.dirname(savedPath)] : [])]
+      void recoverWorkspacePathByID(workspaceID, recoveryRoots).then((recovered) => {
         if (recovered) return openWorkspace(recovered)
       }).catch(() => {})
     })

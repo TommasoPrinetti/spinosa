@@ -490,10 +490,7 @@
   },
   "trustedDependencies": [
     "esbuild",
-    "tree-sitter-powershell",
     "protobufjs",
-    "web-tree-sitter",
-    "tree-sitter-bash",
   ],
   "patchedDependencies": {
     "@modelcontextprotocol/sdk@1.29.0": "patches/@modelcontextprotocol%2Fsdk@1.29.0.patch",

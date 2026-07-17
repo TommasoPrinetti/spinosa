@@ -1,4 +1,4 @@
-import { existsSync, rmSync } from "node:fs"
+import { existsSync, readFileSync, rmSync } from "node:fs"
 import { homedir } from "node:os"
 import type { SpinosaCliIo } from "../io"
 import { emitResult } from "../io"
@@ -15,7 +15,7 @@ function validateHome(home: string): string | undefined {
   if (!home.startsWith("/")) {
     return "SPINOSA_HOME must be an absolute path"
   }
-  if (!existsSync(`${home}/metadata`) && !existsSync(`${home}/versions`)) {
+  if (!existsSync(`${home}/metadata/config.yaml`)) {
     return "does not look like a Spinosa installation"
   }
   return
@@ -53,6 +53,18 @@ export async function runUninstall(
       io.out("Canceled.")
       return 0
     }
+  }
+
+  const markerPath = `${home}/metadata/config.yaml`
+  try {
+    const marker = readFileSync(markerPath, "utf-8")
+    if (!marker.includes("spinosa") && !marker.includes("SPINOSA")) {
+      io.error(`Error: ${home} is not a valid Spinosa installation (marker missing)`)
+      return 1
+    }
+  } catch {
+    io.error(`Error: Cannot verify Spinosa installation marker at ${markerPath}`)
+    return 1
   }
 
   const targets = ["versions", "bin", "lib", "logs", "env.sh"]

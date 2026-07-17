@@ -13,6 +13,7 @@ import { generateStartupPrompt } from "./startup"
 import { preferredCliName, buildLaunchCommand } from "../handoff/builder"
 import { copyToClipboard, runCliWithPrompt } from "../handoff/runner"
 import { spinosaLogInfo } from "../utils/log"
+import { throwIfSpinosaCancelled } from "../import/cancellation"
 
 export type OnboardingPhase =
   | "scan"
@@ -158,10 +159,12 @@ export async function completeOnboarding(
     return { success: false, blockedPhase: "verification", blockerReason: "No files were delivered to raw/" }
   }
 
+  throwIfSpinosaCancelled(options.shouldAbort)
   phase("cli_selection", "Setting preferred CLI...")
   const cli = flagCli ?? "opencode"
   const cliLabel = preferredCliName(cli)
 
+  throwIfSpinosaCancelled(options.shouldAbort)
   phase("cli_selection", `Writing setup files (CLI: ${cliLabel})...`)
   await writeSetupFiles(ctx.workspacePath, ctx.projectTitle, ctx.sourcePath, cliLabel)
   await writeWorkspaceStatus(ctx.workspacePath, "cli_started")

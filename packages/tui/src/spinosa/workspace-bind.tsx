@@ -19,7 +19,10 @@ export function SpinosaWorkspaceBinder() {
       () => [spinosa.activePath, spinosa.meta?.setupStatus] as const,
       (current, prev) => {
         if (spinosa.genericMode) return
-        const nextRoute = routeForWorkspaceStatusTransition(current, prev)
+        const nextRoute = routeForWorkspaceStatusTransition(current, prev, {
+          sourceLocation: spinosa.meta?.sourceLocation,
+          workspaceName: spinosa.meta?.projectName,
+        })
         if (nextRoute) route.navigate(nextRoute)
       },
     ),

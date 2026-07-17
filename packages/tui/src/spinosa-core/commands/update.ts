@@ -500,12 +500,14 @@ function restoreUpdateSnapshot(workspacePath: string, snapshot: UpdateSnapshot):
 export async function updateWorkspace(options: UpdateOptions): Promise<UpdateResult> {
   const registered = (await loadRegistry(undefined, { allowMissingMarker: true }))
     .find((entry) => entry.path === options.workspacePath)
-  const presence = registered || !existsSync(options.workspacePath)
+  const presence = registered || existsSync(options.workspacePath)
     ? inspectWorkspacePresence({ workspacePath: options.workspacePath, workspaceID: registered?.workspaceID })
     : undefined
   if (presence && !isUsableWorkspacePresence(presence)) {
-    spinosaLogWarn("update", `Skipping ${options.workspacePath}: workspace is ${presence.status}`)
-    return { success: true, added: 0, updated: 0, removed: 0, skipped: 1, changes: false, presence: presence.status }
+    if (registered || presence.status !== "invalid") {
+      spinosaLogWarn("update", `Skipping ${options.workspacePath}: workspace is ${presence.status}`)
+      return { success: true, added: 0, updated: 0, removed: 0, skipped: 1, changes: false, presence: presence.status }
+    }
   }
 
   const lockPath = path.join(options.workspacePath, ".spinosa", "update.lock")
@@ -518,7 +520,13 @@ export async function updateWorkspace(options: UpdateOptions): Promise<UpdateRes
       if (error && typeof error === "object" && "code" in error && error.code === "EEXIST") {
         try {
           const lockStat = statSync(lockPath)
-          if (Date.now() - lockStat.mtimeMs > 30_000) {
+          let ownerAlive = false
+          try {
+            const pidText = readFileSync(path.join(lockPath, "pid"), "utf-8").trim()
+            const pid = Number(pidText)
+            if (pid > 0) { process.kill(pid, 0); ownerAlive = true }
+          } catch {}
+          if (!ownerAlive && Date.now() - lockStat.mtimeMs > 30_000) {
             rmSync(lockPath, { recursive: true, force: true })
             continue
           }

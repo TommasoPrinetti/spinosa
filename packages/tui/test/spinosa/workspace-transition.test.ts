@@ -9,3 +9,16 @@ test("a real status change in the same workspace still navigates", () => {
   expect(routeForWorkspaceStatusTransition(["/workspace", "workspace_started"], ["/workspace", "cli_started"]))
     .toEqual({ type: "global" })
 })
+
+test("a transition back to importing preserves resume context", () => {
+  expect(routeForWorkspaceStatusTransition(
+    ["/workspace", "importing"],
+    ["/workspace", "workspace_started"],
+    { sourceLocation: "/source", workspaceName: "research" },
+  )).toEqual({
+    type: "onboarding",
+    workspacePath: "/workspace",
+    sourceLocation: "/source",
+    workspaceName: "research",
+  })
+})

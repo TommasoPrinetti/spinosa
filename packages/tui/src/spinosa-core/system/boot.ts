@@ -91,14 +91,14 @@ export async function runSpinosaBootHealth(input: {
   }
   const workspaces: Array<WorkspacePresence & { name: string }> = []
   for (const entry of entries) {
-    const presence = inspectWorkspacePresence({
-      workspacePath: entry.path,
-      workspaceID: entry.workspaceID,
-      searchRoots: [path.dirname(entry.path), ...(input.searchRoots ?? [])],
-    })
-    workspaces.push({ ...presence, name: entry.name })
-
     try {
+      const presence = inspectWorkspacePresence({
+        workspacePath: entry.path,
+        workspaceID: entry.workspaceID,
+        searchRoots: [path.dirname(entry.path), ...(input.searchRoots ?? [])],
+      })
+      workspaces.push({ ...presence, name: entry.name })
+
       if (presence.status === "moved" && presence.resolvedPath && presence.currentWorkspaceID) {
         await registerWorkspace(presence.resolvedPath, entry.name, undefined, presence.currentWorkspaceID, {
           presence: "present",

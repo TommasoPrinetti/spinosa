@@ -18,6 +18,8 @@ async function renderRouteFrame(
   options: {
     home?: string
     initialRoute?: Record<string, unknown>
+    useDefaultRoute?: boolean
+    cwd?: string
     height?: number
     act?: (setup: TestRenderer) => Promise<void> | void
   } = {},
@@ -30,8 +32,11 @@ async function renderRouteFrame(
   const previousHome = process.env.HOME
   const previousTestHome = process.env.OPENCODE_TEST_HOME
   const previousSpinosaHome = process.env.SPINOSA_HOME
-  process.env.OPENCODE_ROUTE = JSON.stringify(options.initialRoute ?? { type: route })
+  const previousCwd = process.cwd()
+  if (options.useDefaultRoute) delete process.env.OPENCODE_ROUTE
+  else process.env.OPENCODE_ROUTE = JSON.stringify(options.initialRoute ?? { type: route })
   process.env.OPENCODE_FAST_BOOT = "1"
+  if (options.cwd) process.chdir(options.cwd)
   if (options.home) {
     process.env.HOME = options.home
     process.env.OPENCODE_TEST_HOME = options.home
@@ -97,6 +102,7 @@ async function renderRouteFrame(
     else process.env.OPENCODE_TEST_HOME = previousTestHome
     if (previousSpinosaHome === undefined) delete process.env.SPINOSA_HOME
     else process.env.SPINOSA_HOME = previousSpinosaHome
+    if (process.cwd() !== previousCwd) process.chdir(previousCwd)
     if (!setup.renderer.isDestroyed) setup.renderer.destroy()
     mock.restore()
   }
@@ -205,18 +211,27 @@ test("Spinosa app route E2E boots and navigates key workspace flows", async () =
       setupStatus: "cli_started",
     })
 
+    let startupChoiceFrame = ""
     const cliStartedFrame = await renderRouteFrame("global", {
       home: cliHome,
       act: async (setup) => {
         setup.mockInput.pressKey("w")
         await waitForText(setup, "cli-started-demo")
         setup.mockInput.pressEnter()
-        await waitForText(setup, "Startup the workspace with prompt")
+        startupChoiceFrame = await waitForText(setup, "Startup the workspace with prompt")
+        const startupLines = startupChoiceFrame.split("\n")
+        const startupTitleY = startupLines.findIndex((line) => line.includes("cli-started-demo"))
+        const escapeX = startupLines[startupTitleY]!.lastIndexOf("esc") + 1
+        await setup.mockMouse.moveTo(escapeX, startupTitleY)
+        await setup.mockMouse.click(escapeX, startupTitleY)
+        await waitForText(setup, "Choose a workspace")
       },
     })
 
+    expect(startupChoiceFrame).toContain("cli-started-demo")
+    expect(startupChoiceFrame).toContain("Startup the workspace with prompt")
+    expect(cliStartedFrame).toContain("Choose a workspace")
     expect(cliStartedFrame).toContain("cli-started-demo")
-    expect(cliStartedFrame).toContain("Startup the workspace with prompt")
   } finally {
     rmSync(cliRoot, { recursive: true, force: true })
   }
@@ -497,6 +512,36 @@ test("an incomplete workspace with an invalid saved source resumes at Step 1", a
     expect(frame).toContain("Source folders")
     expect(frame).toContain(path.basename(missingSource))
     expect(frame).not.toContain("Workspace name")
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+}, 30_000)
+
+test("launching from an incomplete workspace resumes onboarding without an injected route", async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "spinosa-cwd-importing-"))
+  const home = path.join(root, "home")
+  const source = path.join(root, "source")
+  mkdirSync(home, { recursive: true })
+  mkdirSync(source, { recursive: true })
+  await Bun.write(path.join(source, "paper.md"), "resume me\n")
+  try {
+    const workspace = await createRegisteredWorkspace({
+      root,
+      home,
+      projectName: "cwd-importing-demo",
+      setupStatus: "importing",
+      sourceLocation: source,
+    })
+    const frame = await renderRouteFrame("global", {
+      home,
+      cwd: workspace,
+      useDefaultRoute: true,
+      act: async (setup) => { await waitForText(setup, "Workspace name") },
+    })
+
+    expect(frame).toContain("Resume Spinosa workspace")
+    expect(frame).toContain("Workspace name")
+    expect(frame).not.toContain("Source folders")
   } finally {
     rmSync(root, { recursive: true, force: true })
   }

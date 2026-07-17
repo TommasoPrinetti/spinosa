@@ -70,6 +70,7 @@ function init() {
     stack: [] as {
       element: JSX.Element
       onClose?: () => void
+      onEscape?: () => void
     }[],
     size: "medium" as "medium" | "large" | "xlarge",
   })
@@ -114,6 +115,11 @@ function init() {
             renderer.clearSelection()
           }
           const current = store.stack.at(-1)
+          if (current?.onEscape) {
+            current.onEscape()
+            refocus()
+            return
+          }
           current?.onClose?.()
           setStore("stack", store.stack.slice(0, -1))
           refocus()
@@ -141,7 +147,7 @@ function init() {
       })
       refocus()
     },
-    replace(input: any, onClose?: () => void) {
+    replace(input: any, onClose?: () => void, onEscape?: () => void) {
       if (store.stack.length === 0) {
         focus = renderer.currentFocusedRenderable
         focus?.blur()
@@ -154,6 +160,7 @@ function init() {
         {
           element: input,
           onClose,
+          onEscape,
         },
       ])
     },

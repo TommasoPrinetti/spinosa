@@ -87,4 +87,43 @@ describe("resolveSpinosaEntryRoute", () => {
     })
     expect(route.type).toBe("global")
   })
+
+  test("does not trust a live saved path whose marker belongs to another workspace ID", async () => {
+    await using tmp = await tmpdir()
+    const originalHome = process.env.SPINOSA_HOME
+    process.env.SPINOSA_HOME = path.join(tmp.path, "home")
+    try {
+      const wrongWorkspace = path.join(tmp.path, "wrong-workspace")
+      const expectedWorkspace = path.join(tmp.path, "expected-workspace")
+      const wrongID = createWorkspaceID()
+      const expectedID = createWorkspaceID()
+      for (const [workspace, id, status] of [
+        [wrongWorkspace, wrongID, "workspace_started"],
+        [expectedWorkspace, expectedID, "importing"],
+      ] as const) {
+        mkdirSync(path.join(workspace, ".spinosa"), { recursive: true })
+        writeFileSync(
+          path.join(workspace, ".spinosa", "workspace"),
+          `workspace_id: ${id}\nproject_name: ${path.basename(workspace)}\nsetup_status: ${status}\n`,
+        )
+      }
+
+      const route = await resolveSpinosaEntryRoute({
+        cwd: tmp.path,
+        kvActivePath: wrongWorkspace,
+        kvActiveID: expectedID,
+        workspaceSearchRoots: [tmp.path],
+      })
+
+      expect(route).toEqual({
+        type: "onboarding",
+        workspacePath: expectedWorkspace,
+        sourceLocation: undefined,
+        workspaceName: "expected-workspace",
+      })
+    } finally {
+      if (originalHome === undefined) delete process.env.SPINOSA_HOME
+      else process.env.SPINOSA_HOME = originalHome
+    }
+  })
 })

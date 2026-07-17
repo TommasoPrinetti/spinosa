@@ -122,6 +122,7 @@ describe("Spinosa CLI", () => {
     await mkdir(path.join(tmp.path, "versions", "broken"), { recursive: true })
     await mkdir(path.join(tmp.path, "bin"), { recursive: true })
     await Bun.write(path.join(metadata, "workspaces.json"), '{"schemaVersion":1,"workspaces":[]}\n')
+    await Bun.write(path.join(metadata, "config.yaml"), "spinosa: true\n")
     process.env.SPINOSA_HOME = tmp.path
     try {
       const result = capture()
@@ -140,6 +141,7 @@ describe("Spinosa CLI", () => {
     const originalHome = process.env.SPINOSA_HOME
     await mkdir(path.join(tmp.path, "metadata"), { recursive: true })
     await mkdir(path.join(tmp.path, "versions", "keep"), { recursive: true })
+    await Bun.write(path.join(tmp.path, "metadata", "config.yaml"), "spinosa: true\n")
     process.env.SPINOSA_HOME = tmp.path
     try {
       const result = capture()

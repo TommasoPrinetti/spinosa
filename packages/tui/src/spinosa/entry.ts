@@ -1,10 +1,10 @@
 import type { RouteNavigateInput } from "../context/route"
 import { isSpinosaWorkspace, readWorkspaceMeta } from "../spinosa-core/workspace/meta"
 import { recoverWorkspacePathByID, registerWorkspace } from "../spinosa-core/workspace/registry"
-import { parseWorkspaceID } from "../spinosa-core/workspace/identity"
+import { parseWorkspaceID, readWorkspaceID } from "../spinosa-core/workspace/identity"
 import type { SpinosaSetupStatus } from "../spinosa-core/types"
 
-type WorkspaceOpenContext = {
+export type WorkspaceOpenContext = {
   workspacePath: string
   sourceLocation?: string
   workspaceName?: string
@@ -65,9 +65,14 @@ export async function resolveSpinosaEntryRoute(input: {
   if (input.forceGeneric) return { type: "global" }
 
   let activePath = input.kvActivePath
-  if ((!activePath || !isSpinosaWorkspace(activePath)) && input.kvActiveID) {
-    const workspaceID = parseWorkspaceID(input.kvActiveID)
-    if (workspaceID) activePath = await recoverWorkspacePathByID(workspaceID, input.workspaceSearchRoots)
+  const workspaceID = parseWorkspaceID(input.kvActiveID)
+  const activePathMatchesIdentity = activePath
+    && isSpinosaWorkspace(activePath)
+    && (!workspaceID || readWorkspaceID(activePath) === workspaceID)
+  if (!activePathMatchesIdentity && workspaceID) {
+    activePath = await recoverWorkspacePathByID(workspaceID, input.workspaceSearchRoots)
+  } else if (!activePathMatchesIdentity) {
+    activePath = undefined
   }
 
   if (input.skipPicker) {

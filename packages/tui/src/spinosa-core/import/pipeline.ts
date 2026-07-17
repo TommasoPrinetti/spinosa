@@ -178,7 +178,7 @@ export async function processDirectCopy(
 
   const tryCopy = async (entry: ClassifiedEntry, attempt: number, current: number): Promise<"copied" | "skipped" | "failed"> => {
     const { src, rel, dest } = entry
-    return copyDirectRawFile(src, dest, rel, prog, onLog, current, total, overwrite, (a, r) => onRetry?.(attempt || a, r), (o, rn) => { renamed++; onRename?.(o, rn) })
+    return copyDirectRawFile(src, dest, rel, prog, onLog, current, total, overwrite, shouldAbort, (a, r) => onRetry?.(attempt || a, r), (o, rn) => { renamed++; onRename?.(o, rn) })
   }
 
   const handleResult = (entry: ClassifiedEntry, result: "copied" | "skipped" | "failed", bucket: ClassifiedEntry[]) => {
@@ -571,6 +571,7 @@ async function copyDirectRawFile(
   current?: number,
   total?: number,
   overwrite?: boolean,
+  shouldAbort?: () => boolean,
   onRetry?: (attempt: number, reason: string) => void,
   onRename?: (original: string, renamed: string) => void,
 ): Promise<CopyDirectResult> {
@@ -588,6 +589,7 @@ async function copyDirectRawFile(
 
   // Yield before copy so the "starting" progress event renders
   await yieldToEL()
+  throwIfSpinosaCancelled(shouldAbort)
 
   if (await safeCopyAsync(srcFile, destFile, {
     onRetry: (attempt, reason) => {

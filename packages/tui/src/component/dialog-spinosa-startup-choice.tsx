@@ -59,6 +59,8 @@ export function DialogSpinosaStartupChoice(props: {
     option.run()
   }
 
+  const back = () => props.onBack ? props.onBack() : dialog.clear()
+
   useBindings(() => ({
     bindings: [
       { key: "up", desc: "Previous startup option", group: "Dialog", cmd: () => move(-1) },
@@ -77,7 +79,7 @@ export function DialogSpinosaStartupChoice(props: {
         <text fg={theme.text} attributes={TextAttributes.BOLD}>
           {props.workspaceName}
         </text>
-        <text fg={theme.textMuted} onMouseUp={() => dialog.clear()}>
+        <text fg={theme.textMuted} onMouseUp={back}>
           esc
         </text>
       </box>

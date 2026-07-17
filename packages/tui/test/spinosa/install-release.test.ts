@@ -45,6 +45,36 @@ describe("install and release flow", () => {
     expect(installer).toContain(`PINNED_VERSION="${pkg.version}"`)
   })
 
+  test("does not run native Tree-sitter install hooks for the WASM shell parser", async () => {
+    const pkg = await Bun.file(path.join(repoRoot, "package.json")).json() as {
+      trustedDependencies?: string[]
+    }
+    const lockfile = await Bun.file(path.join(repoRoot, "bun.lock")).text()
+    const installer = await Bun.file(path.join(repoRoot, "install.sh")).text()
+
+    expect(pkg.trustedDependencies ?? []).not.toContain("tree-sitter")
+    expect(pkg.trustedDependencies ?? []).not.toContain("tree-sitter-bash")
+    expect(pkg.trustedDependencies ?? []).not.toContain("tree-sitter-powershell")
+    expect(pkg.trustedDependencies ?? []).not.toContain("web-tree-sitter")
+    const lockTrustedDependencies = lockfile.match(/\n  "trustedDependencies": \[([\s\S]*?)\n  \],/)?.[1] ?? ""
+    expect(lockTrustedDependencies).not.toContain("tree-sitter")
+    expect(installer).toContain('2>&1 | tee -a "$bun_out"')
+    expect(installer).toContain("script/run-with-timeout.ts")
+  })
+
+  test("dependency watchdog terminates a hung process group", () => {
+    const runner = path.join(repoRoot, "script", "run-with-timeout.ts")
+    const result = Bun.spawnSync({
+      cmd: [process.execPath, "run", runner, "1", "/bin/sh", "-c", "sleep 2"],
+      cwd: repoRoot,
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+
+    expect(result.exitCode).toBe(124)
+    expect(result.stderr.toString()).toContain("command timed out after 1s")
+  })
+
   test("local release script publishes versioned and rolling channel assets", async () => {
     const releaseScript = await Bun.file(path.join(repoRoot, "script", "release.sh")).text()
     expect(releaseScript).toContain("CHANNEL_DIST=\"dist/${CHANNEL}\"")

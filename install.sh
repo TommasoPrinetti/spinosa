@@ -2,9 +2,10 @@
 # shellcheck shell=bash
 # ── install.sh — Spinosa Framework Installer (auto-re-execs with bash) ──────
 
-PINNED_VERSION="0.9.0-beta.16"
+PINNED_VERSION="0.9.0-beta.17"
 PINNED_TAG="beta"
 BUNDLED_BUN_VERSION="1.3.14"
+DEFAULT_DEPS_TIMEOUT_SECONDS="600"
 
 if [ -z "${BASH_VERSION-}" ]; then
   if command -v bash >/dev/null 2>&1; then
@@ -341,11 +342,16 @@ install_bundled_bun() {
   fi
 
   command -v unzip >/dev/null 2>&1 || die "unzip is required to install bundled Bun"
+  spinner_start "Downloading bundled Bun ${BUNDLED_BUN_VERSION}"
   download "https://github.com/oven-sh/bun/releases/download/bun-v${BUNDLED_BUN_VERSION}/${asset}.zip" "$bun_zip" \
-    || die "Failed to download Bun ${BUNDLED_BUN_VERSION}"
+    || { spinner_stop; die "Failed to download Bun ${BUNDLED_BUN_VERSION}"; }
+  spinner_stop
+  ok "Downloaded bundled Bun ${BUNDLED_BUN_VERSION}"
   rm -rf "$bun_extract"
   mkdir -p "$bun_extract"
-  unzip -q "$bun_zip" -d "$bun_extract" || die "Failed to extract Bun — download may be corrupted. Try again."
+  spinner_start "Extracting bundled Bun"
+  unzip -q "$bun_zip" -d "$bun_extract" || { spinner_stop; die "Failed to extract Bun — download may be corrupted. Try again."; }
+  spinner_stop
   bun_src="$(find "$bun_extract" -type f -name bun -perm -111 | head -1)"
   [[ -n "$bun_src" ]] || die "Downloaded Bun archive did not contain executable bun"
   mkdir -p "${SPINOSA_HOME}/bin"
@@ -373,10 +379,15 @@ ensure_workspace_links() {
 install_bun_dependencies() {
   local fw_root="$1"
   local bun_bin="${SPINOSA_HOME}/bin/bun"
+  local timeout_seconds="${SPINOSA_DEPS_TIMEOUT_SECONDS:-$DEFAULT_DEPS_TIMEOUT_SECONDS}"
+  local timeout_runner="${fw_root}/script/run-with-timeout.ts"
   if [[ ! -x "$bun_bin" ]]; then
     bun_bin="$(command -v bun 2>/dev/null || true)"
   fi
   [[ -n "$bun_bin" && -x "$bun_bin" ]] || die "Bun runtime not found"
+  [[ "$timeout_seconds" =~ ^[1-9][0-9]*$ ]] \
+    || die "SPINOSA_DEPS_TIMEOUT_SECONDS must be a positive integer"
+  [[ -f "$timeout_runner" ]] || die "Dependency timeout runner not found: ${timeout_runner}"
 
   # Allow skipping npm dependency install entirely (CI / air-gapped)
   if [ "${SPINOSA_SKIP_DEPS:-}" = "1" ]; then
@@ -389,18 +400,21 @@ install_bun_dependencies() {
   if [ ! -d "${fw_root}/node_modules" ]; then
     note "Downloading npm packages — this may take 2-3 minutes on first install"
   fi
-  spinner_start "Installing dependencies"
   local bun_out
   bun_out="$(mktemp "${TMPDIR:-/tmp}/spinosa-bun-install.XXXXXX")"
   local bun_ok=0
+  : > "$bun_out"
   for attempt in 1 2; do
     local install_args=(install)
     if [[ $attempt -eq 2 ]]; then
-      info "Repairing dependency tree after failed validation"
+      info "Repairing dependency tree after failed validation (attempt 2/2, timeout ${timeout_seconds}s)"
       rm -rf "${fw_root}/node_modules"
       install_args+=(--force)
+    else
+      info "Installing dependencies (attempt 1/2, timeout ${timeout_seconds}s)"
     fi
-    if (cd "$fw_root" && PATH="$(dirname "$bun_bin"):$PATH" "$bun_bin" "${install_args[@]}" > "$bun_out" 2>&1); then
+    if (cd "$fw_root" && PATH="$(dirname "$bun_bin"):$PATH" \
+      "$bun_bin" run "$timeout_runner" "$timeout_seconds" "$bun_bin" "${install_args[@]}" 2>&1 | tee -a "$bun_out"); then
       ensure_workspace_links "$fw_root"
       if SPINOSA_HOME="$SPINOSA_HOME" SPINOSA_TEMPLATE_ROOT="$fw_root" \
         "$bun_bin" run "${fw_root}/packages/tui/src/spinosa-cli.ts" version >> "$bun_out" 2>&1; then
@@ -414,14 +428,13 @@ install_bun_dependencies() {
     fi
   done
   if [[ $bun_ok -eq 0 ]]; then
-    spinner_stop
     spinosa_log ERROR "bun install failed after 2 attempts. Output:"
     while IFS= read -r line; do spinosa_log ERROR "$line"; done < "$bun_out"
     rm -f "$bun_out"
     die "Dependency repair failed. Metadata was preserved; check ${SPINOSA_HOME}/logs/spinosa.log and re-run the installer."
   fi
   rm -f "$bun_out"
-  spinner_stop "Dependencies installed"
+  ok "Dependencies installed"
   [ -d "${fw_root}/node_modules" ] \
     || die "Dependencies missing after repair. Metadata was preserved; check ${SPINOSA_HOME}/logs/spinosa.log"
 }
@@ -501,14 +514,20 @@ safe_untar() {
       if [[ "$_target" == /* ]]; then
         die "Archive contains unsafe symlinks — aborting for safety"
       fi
-      # Count path components in symlink directory (depth from archive root)
+      # Extract symlink path: the token immediately before " -> ".
+      # tar verbose entries look like: lrwxrwxrwx ... linkname -> target
+      # so the path is everything before " -> " (NOT the last awk field,
+      # which would be the target).
       _file_path="${_entry%% -> *}"
-      _file_path="$(echo "$_file_path" | awk '{print $NF}')"
+      _file_path="${_file_path##* }"
       local _dir="${_file_path%/*}"
+      [[ "$_dir" == "$_file_path" ]] && _dir=""
       # Strip archive root from dir to get relative depth
       _dir="${_dir#"$archive_root"/}"
       local _depth=0 _i
-      for _i in $(echo "$_dir" | tr '/' ' '); do _depth=$((_depth + 1)); done
+      if [[ -n "$_dir" ]]; then
+        for _i in $(echo "$_dir" | tr '/' ' '); do _depth=$((_depth + 1)); done
+      fi
       # Count ../ traversals in target
       local _traversals=0
       local _part
@@ -784,7 +803,8 @@ repair_spinosa_home() {
     if [ -d "${SPINOSA_HOME}/bin" ] || [ -f "${SPINOSA_HOME}/env.sh" ] || [ -d "${SPINOSA_HOME}/lib" ] \
       || { [ -d "${SPINOSA_HOME}/versions" ] && [ "$has_versions" -eq 0 ]; }; then
       info "Detected partial Spinosa home (no complete version) — cleaning runtime debris for repair"
-      rm -rf "${SPINOSA_HOME}/bin" "${SPINOSA_HOME}/lib" 2>/dev/null || true
+      [ -n "${SPINOSA_HOME:-}" ] || die "SPINOSA_HOME is unset — refusing to clean"
+      rm -rf "${SPINOSA_HOME:?}/bin" "${SPINOSA_HOME:?}/lib" 2>/dev/null || true
       rm -f "${SPINOSA_HOME}/env.sh" 2>/dev/null || true
       # Drop empty versions shell so install recreates a clean tree
       if [ -d "${SPINOSA_HOME}/versions" ] && [ "$has_versions" -eq 0 ]; then
@@ -829,6 +849,7 @@ mark_version_install_complete() {
   fi
   printf '%s %s\n' "$version" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$stamp"
   write_install_metadata
+  ok "Marked v${version} as installed"
 }
 
 
@@ -877,7 +898,8 @@ get_installed_version() {
     if [ -z "$latest" ]; then
       latest="$version"
     else
-      compare_versions "$version" "$latest" || cmp=$?
+      compare_versions "$version" "$latest"
+      cmp=$?
       [ "$cmp" -eq 1 ] && latest="$version"
     fi
   done
@@ -1150,8 +1172,9 @@ shell_path_default_config() {
 spinosa_path_block_present() {
   local config_file="$1"
   [[ -f "$config_file" ]] || return 1
+  # Match the marker comment header we write, plus the source lines we emit.
   grep -q '# Spinosa' "$config_file" 2>/dev/null || return 1
-  grep -Eq '\framework/spinosa/env\.sh|fish_add_path|SPINOSA_BIN_DIR' "$config_file" 2>/dev/null
+  grep -Eq 'env\.sh|fish_add_path|SPINOSA_BIN_DIR|SPINOSA_HOME' "$config_file" 2>/dev/null
 }
 
 spinosa_path_source_line() {
@@ -1370,7 +1393,11 @@ maybe_launch_dashboard() {
     info "Launching Spinosa dashboard..."
     flush_pending_input
     sleep 1
-    SPINOSA_NO_UPGRADE_CHECK=1 exec "$spinosa_cmd" </dev/tty || warn "Dashboard launch skipped — run 'spinosa' to start it manually"
+    SPINOSA_NO_UPGRADE_CHECK=1 "$spinosa_cmd" </dev/tty
+    local rc=$?
+    if [[ "$rc" -ne 0 ]]; then
+      warn "Dashboard launch returned non-zero (exit ${rc}) — run 'spinosa' to start it manually"
+    fi
   fi
 }
 
@@ -1469,16 +1496,20 @@ main() {
 
   # Extract — GitHub's tarball has a top-level dir (spinosa-<tag>/)
   local extract_tmp="${tmpdir}/framework-extract"
+  spinner_start "Extracting Spinosa v${VERSION}"
   safe_untar "$framework_dest" "$extract_tmp"
   local top_dir
   top_dir="$(find "$extract_tmp" -mindepth 1 -maxdepth 1 -type d | head -1)"
-  [[ -n "$top_dir" ]] || die "Archive has unexpected structure"
+  [[ -n "$top_dir" ]] || { spinner_stop; die "Archive has unexpected structure"; }
   local version_dir="${SPINOSA_HOME}/versions/${VERSION}"
   INSTALL_STAGE_DIR="${SPINOSA_HOME}/versions/.${VERSION}.staging.$$"
   INSTALL_BACKUP_DIR="${SPINOSA_HOME}/versions/.${VERSION}.backup.$$"
   rm -rf "$INSTALL_STAGE_DIR" "$INSTALL_BACKUP_DIR"
   mkdir -p "$INSTALL_STAGE_DIR"
-  cp -R "$top_dir"/. "$INSTALL_STAGE_DIR"/
+  cp -R "$top_dir"/. "$INSTALL_STAGE_DIR"/ \
+    || { spinner_stop; die "Failed to stage extracted files from archive (disk full or permissions?)"; }
+  spinner_stop
+  ok "Extracted Spinosa v${VERSION}"
   clean_macos_metadata "$INSTALL_STAGE_DIR"
   local fw_root="$INSTALL_STAGE_DIR"
   install_bundled_bun "$tmpdir"
@@ -1498,6 +1529,7 @@ main() {
   INSTALL_STAGE_DIR=""
   fw_root="$version_dir"
   spinosa_bin="${fw_root}/workspace-template/.bin/spinosa"
+  ok "Promoted Spinosa v${VERSION} to ${version_dir}"
 
   cp "$spinosa_bin" "${SPINOSA_HOME}/bin/.spinosa.tmp"
   chmod +x "${SPINOSA_HOME}/bin/.spinosa.tmp"
