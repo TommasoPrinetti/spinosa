@@ -6,6 +6,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 **Release policy:** versions are published only with explicit maintainer approval.
 
+## [0.9.0-beta.20] — 2026-07-17
+
+### Fixed
+
+- Installer no longer auto-launches the Spinosa dashboard. Auto-launching an interactive TUI from a `curl | bash` pipe is unreliable (no controlling TTY, orphaned background jobs killed with SIGKILL), which caused the installer to report a spurious `Killed: 9` and left `spinosa` dead on subsequent runs. The installer now only installs and prints `→ Run Spinosa with: spinosa`; the user launches the dashboard themselves in a fresh terminal. The runnability probe now uses the non-TUI `spinosa version` instead of `help`.
+
 ## [0.9.0-beta.19] — 2026-07-17
 
 ### Fixed

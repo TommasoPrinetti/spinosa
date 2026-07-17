@@ -2,7 +2,7 @@
 # shellcheck shell=bash
 # ── install.sh — Spinosa Framework Installer (auto-re-execs with bash) ──────
 
-PINNED_VERSION="0.9.0-beta.19"
+PINNED_VERSION="0.9.0-beta.20"
 PINNED_TAG="beta"
 BUNDLED_BUN_VERSION="1.3.14"
 DEFAULT_DEPS_TIMEOUT_SECONDS="600"
@@ -1320,7 +1320,7 @@ print_path_instructions() {
 
   info "Run Spinosa with: spinosa"
 
-  if "${SPINOSA_BIN_DIR}/spinosa" help >/dev/null 2>&1; then
+  if "${SPINOSA_BIN_DIR}/spinosa" version >/dev/null 2>&1; then
     ok "Command 'spinosa' is ready in this install session"
   elif command -v spinosa >/dev/null 2>&1; then
     warn "Command 'spinosa' is on PATH but not runnable — run: ${reload_hint}"
@@ -1402,19 +1402,11 @@ run_basic_test() {
   fi
 }
 maybe_launch_dashboard() {
-  if [[ "$LAUNCH_DASHBOARD" == "1" ]] || { [[ "$LAUNCH_DASHBOARD" == "auto" ]] && [[ -t 0 && -r /dev/tty ]]; }; then
-    local spinosa_cmd="${SPINOSA_BIN_DIR}/spinosa"
-    [[ -x "$spinosa_cmd" ]] || { warn "Dashboard launch skipped — missing ${spinosa_cmd}"; return 0; }
-    info "Launching Spinosa dashboard in the background..."
-    flush_pending_input
-    sleep 1
-    # Launch detached so the installer can exit cleanly. The dashboard keeps
-    # running in its own process; stdout/stderr go to the terminal.
-    SPINOSA_NO_UPGRADE_CHECK=1 nohup "$spinosa_cmd" </dev/tty >/dev/tty 2>&1 &
-    disown 2>/dev/null || true
-    local pid=$!
-    ok "Spinosa dashboard launched (pid ${pid}) — installer finished"
-  fi
+  # The installer only installs Spinosa; the user launches the dashboard
+  # themselves in a fresh terminal. Auto-launching an interactive TUI from a
+  # `curl | bash` pipe is unreliable (no controlling TTY, orphaned/killed
+  # background jobs under SIGKILL), so we intentionally do not launch here.
+  return 0
 }
 
 # ══════════════════════════════════════════════════════════════════════════════
