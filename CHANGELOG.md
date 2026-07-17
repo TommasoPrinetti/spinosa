@@ -6,6 +6,28 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 **Release policy:** versions are published only with explicit maintainer approval.
 
+## [0.9.0-beta.16] — 2026-07-17
+
+### Added
+
+- Workspaces now have persistent unique IDs and richer global registry metadata for presence, setup state, recovery, and moved-folder detection.
+- Startup now performs visible cleanup, identity, and workspace-presence checks before opening the TUI.
+- Missing workspaces can be relocated manually, found by scanning for their ID, or removed from the registry directly from the picker.
+- Interrupted workspace imports can resume from their saved source and workspace metadata.
+
+### Changed
+
+- Recent workspaces exclude missing entries, label incomplete imports, and route incomplete workspaces back into onboarding at the appropriate step.
+- Back navigation during copy, OCR, MarkItDown, and other active import work now confirms cancellation and stops the process before navigating.
+- Installer maintenance repairs damaged runtime dependencies while preserving central Spinosa metadata.
+
+### Fixed
+
+- Linux terminals no longer retain stale bold styling when reactive text attributes change.
+- TypeScript CLI commands such as uninstall preserve interactive terminal input.
+- Global-home workspace actions render after leaving an incomplete import.
+- Removing a missing workspace now refreshes the open picker before returning to its workspace list.
+
 ## [0.9.0-beta.13] — 2026-07-14
 
 ### Added
