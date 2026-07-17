@@ -96,13 +96,14 @@ export function resolveFrameworkRoot(): string | undefined {
   const env = process.env.SPINOSA_TEMPLATE_ROOT ?? process.env.SPINOSA_FRAMEWORK_ROOT
   if (env && hasFrameworkMarker(env)) return normalizeExistingRoot(env)
 
-  const candidates = [
-    process.cwd(),
-    path.join(homedir(), "Documents", "spinosa-main"),
-  ]
-
+  // Prefer the installed release over the dev repo or cwd so workspace
+  // creation/lookup stamps with the actual installed version (not whatever
+  // `package.json` says in the spinosa-main checkout).
+  const candidates: string[] = []
   const installed = discoverInstalledFramework()
   if (installed) candidates.push(installed)
+  candidates.push(process.cwd())
+  candidates.push(path.join(homedir(), "Documents", "spinosa-main"))
 
   for (const candidate of candidates) {
     if (hasFrameworkMarker(candidate)) return normalizeExistingRoot(candidate)
