@@ -59,11 +59,11 @@ describe("install and release flow", () => {
     const lockTrustedDependencies = lockfile.match(/\n  "trustedDependencies": \[([\s\S]*?)\n  \],/)?.[1] ?? ""
     expect(lockTrustedDependencies).not.toContain("tree-sitter")
     expect(installer).toContain('2>&1 | tee -a "$bun_out"')
-    expect(installer).toContain("script/run-with-timeout.ts")
+    expect(installer).toContain("workspace-template/.bin/run-with-timeout.ts")
   })
 
   test("dependency watchdog terminates a hung process group", () => {
-    const runner = path.join(repoRoot, "script", "run-with-timeout.ts")
+    const runner = path.join(repoRoot, "workspace-template", ".bin", "run-with-timeout.ts")
     const result = Bun.spawnSync({
       cmd: [process.execPath, "run", runner, "1", "/bin/sh", "-c", "sleep 2"],
       cwd: repoRoot,

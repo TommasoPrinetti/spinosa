@@ -2,7 +2,7 @@
 # shellcheck shell=bash
 # ── install.sh — Spinosa Framework Installer (auto-re-execs with bash) ──────
 
-PINNED_VERSION="0.9.0-beta.17"
+PINNED_VERSION="0.9.0-beta.18"
 PINNED_TAG="beta"
 BUNDLED_BUN_VERSION="1.3.14"
 DEFAULT_DEPS_TIMEOUT_SECONDS="600"
@@ -380,7 +380,7 @@ install_bun_dependencies() {
   local fw_root="$1"
   local bun_bin="${SPINOSA_HOME}/bin/bun"
   local timeout_seconds="${SPINOSA_DEPS_TIMEOUT_SECONDS:-$DEFAULT_DEPS_TIMEOUT_SECONDS}"
-  local timeout_runner="${fw_root}/script/run-with-timeout.ts"
+  local timeout_runner="${fw_root}/workspace-template/.bin/run-with-timeout.ts"
   if [[ ! -x "$bun_bin" ]]; then
     bun_bin="$(command -v bun 2>/dev/null || true)"
   fi

@@ -6,6 +6,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 **Release policy:** versions are published only with explicit maintainer approval.
 
+## [0.9.0-beta.18] — 2026-07-17
+
+### Fixed
+
+- Installer no longer fails with "Dependency timeout runner not found" during `bun install`. The dependency watchdog (`run-with-timeout.ts`) was previously excluded from the GitHub source tarball by a `.gitattributes` `export-ignore` rule on `script/`. It now ships under `workspace-template/.bin/` so fresh installs and upgrades can run `bun i` correctly.
+
 ## [0.9.0-beta.17] — 2026-07-17
 
 ### Fixed
