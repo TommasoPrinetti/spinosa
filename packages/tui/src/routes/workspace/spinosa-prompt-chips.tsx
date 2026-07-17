@@ -1,4 +1,4 @@
-import { createMemo, createResource, createSignal, For, Show } from "solid-js"
+import { createMemo, createResource, createSignal, For } from "solid-js"
 import { useTheme } from "../../context/theme"
 import { useToast } from "../../ui/toast"
 import { useRoute } from "../../context/route"
@@ -201,7 +201,7 @@ export function SpinosaPromptChips() {
 
   useBindings(() => ({
     mode: OPENCODE_BASE_MODE,
-    enabled: () => !spinosa.genericMode && !promptRef.current?.focused,
+    enabled: () => !promptRef.current?.focused,
     bindings: [
       { key: "Left", desc: "Previous action", group: "Home", cmd: () => moveSelection(-1) },
       { key: "Right", desc: "Next action", group: "Home", cmd: () => moveSelection(1) },
@@ -220,9 +220,5 @@ export function SpinosaPromptChips() {
     ],
   }))
 
-  return (
-    <Show when={!spinosa.genericMode}>
-      <box width="100%" flexDirection="column">{renderRow(primaryActions())}</box>
-    </Show>
-  )
+  return <box width="100%" flexDirection="column">{renderRow(primaryActions())}</box>
 }

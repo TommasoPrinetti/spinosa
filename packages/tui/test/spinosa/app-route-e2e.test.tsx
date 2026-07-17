@@ -392,10 +392,13 @@ test("a present incomplete Recent workspace resumes at Step 2 and bottom Back re
         await setup.mockMouse.moveTo(backX, backY)
         await setup.mockMouse.click(backX, backY)
         await waitForText(setup, "Recent workspaces")
+        await waitForText(setup, "New workspace")
       },
     })
 
     expect(frame).toContain("Recent workspaces")
+    expect(frame).toContain("New workspace")
+    expect(frame).toContain("Choose a workspace")
     expect(frame).not.toContain("Switch workspace")
     expect(frame).not.toContain("Workspace not found")
   } finally {
