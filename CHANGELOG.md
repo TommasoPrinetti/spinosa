@@ -6,6 +6,16 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 **Release policy:** versions are published only with explicit maintainer approval.
 
+## [0.9.0-beta.21] — 2026-07-17
+
+### Fixed
+
+- macOS 26.5 security scanning (XProtect/Gatekeeper) would SIGKILL the bun process on first `spinosa` invocation after install because native `.node`/`.dylib` addons carry a kernel-protected `com.apple.provenance` xattr. The installer now runs a warm-up `bun run ... version` (with retries) after dependency install to let the scanner complete before the verify step, and the verify step itself retries up to 3 times with a 2-second pause. Spurious `Killed: 9` should no longer appear.
+
+- The `spinosa: true` marker is now written to `metadata/config.yaml`, fixing the uninstall command's "marker missing" error.
+
+- Cleaned up duplicate Spinosa PATH entries in `.zshrc` and removed a stale `/tmp/spinosa-test-*` reference.
+
 ## [0.9.0-beta.20] — 2026-07-17
 
 ### Fixed

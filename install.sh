@@ -2,7 +2,7 @@
 # shellcheck shell=bash
 # ── install.sh — Spinosa Framework Installer (auto-re-execs with bash) ──────
 
-PINNED_VERSION="0.9.0-beta.20"
+PINNED_VERSION="0.9.0-beta.21"
 PINNED_TAG="beta"
 BUNDLED_BUN_VERSION="1.3.14"
 DEFAULT_DEPS_TIMEOUT_SECONDS="600"
@@ -452,6 +452,9 @@ install_bun_dependencies() {
   ok "Dependencies installed"
   [ -d "${fw_root}/node_modules" ] \
     || die "Dependencies missing after repair. Metadata was preserved; check ${SPINOSA_HOME}/logs/spinosa.log"
+  # Warm up macOS security scanning on native addons before the verify step
+  # so a transient SIGKILL doesn't make the install look broken.
+  warmup_macos_security "$bun_bin" "$fw_root"
 }
 
 available_disk_bytes() {
@@ -605,6 +608,27 @@ clean_macos_metadata() {
   find "$dir" -name "._*" -delete 2>/dev/null || true
 }
 
+# macOS 15+ tags files created by pipe-installed processes with
+# `com.apple.provenance`.  On macOS 26+ this attribute is kernel-protected
+# (APFS `protect` mount) and cannot be removed from userspace.  Loading
+# provenance-tagged native `.node` / `.dylib` addons through a JIT-entitled
+# runtime (bun) can trigger a transient SIGKILL from the security scanner.
+# The workaround is a warm-up run that lets the scanner complete before the
+# user invokes `spinosa`.
+warmup_macos_security() {
+  local bun_bin="$1" fw_root="$2"
+  local i
+  for i in 1 2 3; do
+    if SPINOSA_TEMPLATE_ROOT="$fw_root" \
+      "$bun_bin" run "${fw_root}/packages/tui/src/spinosa-cli.ts" version >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 2
+  done
+  # Non-fatal; the verify step also retries.
+  return 0
+}
+
 init_global_metadata() {
   mkdir -p "$SPINOSA_METADATA_DIR"
   local name legacy current
@@ -701,11 +725,14 @@ EOF
   local config="${SPINOSA_METADATA_DIR}/config.yaml"
   if [ ! -f "$config" ]; then
     cat > "$config" << CONFIG_EOF
+# Spinosa installation marker — do not remove
+spinosa: true
 beta: $(installer_beta_toggle)
 auto_upgrade: true
 last_installed_version: "${VERSION}"
 CONFIG_EOF
   else
+    config_set_key "$config" "spinosa" "true"
     config_set_key "$config" "beta" "$(installer_beta_toggle)"
     config_delete_key "$config" "release_channel"
     config_set_key "$config" "last_installed_version" "\"${VERSION}\""
@@ -1320,7 +1347,20 @@ print_path_instructions() {
 
   info "Run Spinosa with: spinosa"
 
-  if "${SPINOSA_BIN_DIR}/spinosa" version >/dev/null 2>&1; then
+  # The first `spinosa` invocation after install can be SIGKILLed by macOS
+  # security scanning a freshly loaded native addon. Retry a few times so a
+  # transient kill doesn't make the install look broken.
+  local spinosa_ready=0
+  local attempt
+  for attempt in 1 2 3; do
+    if "${SPINOSA_BIN_DIR}/spinosa" version >/dev/null 2>&1; then
+      spinosa_ready=1
+      break
+    fi
+    sleep 2
+  done
+
+  if [ "$spinosa_ready" -eq 1 ]; then
     ok "Command 'spinosa' is ready in this install session"
   elif command -v spinosa >/dev/null 2>&1; then
     warn "Command 'spinosa' is on PATH but not runnable — run: ${reload_hint}"
