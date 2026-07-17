@@ -103,6 +103,7 @@
         "@types/turndown": "5.0.5",
         "@types/which": "3.0.4",
         "drizzle-kit": "catalog:",
+        "prettier": "3.6.2",
       },
     },
     "packages/effect-drizzle-sqlite": {
