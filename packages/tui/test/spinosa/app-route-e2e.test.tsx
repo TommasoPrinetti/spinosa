@@ -168,6 +168,17 @@ async function waitForText(setup: TestRenderer, text: string) {
   throw new Error(`Timed out waiting for "${text}"\nlastFrame:\n${frame}`)
 }
 
+async function waitForTextToDisappear(setup: TestRenderer, text: string) {
+  let frame = ""
+  for (let attempt = 0; attempt < 30; attempt++) {
+    await setup.renderOnce()
+    frame = setup.captureCharFrame()
+    if (!frame.includes(text)) return frame
+    await new Promise((resolve) => setTimeout(resolve, 25))
+  }
+  throw new Error(`Timed out waiting for "${text}" to disappear\nlastFrame:\n${frame}`)
+}
+
 test("Spinosa app route E2E boots and navigates key workspace flows", async () => {
   const frame = await renderRouteFrame("global")
   expect(frame).toContain("Spinosa")
@@ -258,13 +269,18 @@ test("Spinosa app route E2E boots and navigates key workspace flows", async () =
     let recentFrame = ""
     let pickerFrame = ""
     let missingDialogFrame = ""
+    let refreshedPickerFrame = ""
     const filteredFrame = await renderRouteFrame("global", {
       home: filteredHome,
       act: async (setup) => {
         recentFrame = await waitForText(setup, "Recent workspaces")
         setup.mockInput.pressKey("w")
         pickerFrame = await waitForText(setup, "visible-demo")
-        setup.mockInput.pressEnter()
+        const pickerLines = pickerFrame.split("\n")
+        const staleY = pickerLines.findIndex((line) => line.includes("stale-demo"))
+        const staleX = pickerLines[staleY]!.indexOf("stale-demo") + 1
+        await setup.mockMouse.moveTo(staleX, staleY)
+        await setup.mockMouse.click(staleX, staleY)
         missingDialogFrame = await waitForText(setup, "Workspace not found")
         const removeLines = missingDialogFrame.split("\n")
         const removeY = removeLines.findIndex((line) => line.includes("Remove from index"))
@@ -277,7 +293,7 @@ test("Spinosa app route E2E boots and navigates key workspace flows", async () =
         const confirmX = confirmLines[confirmY]!.indexOf("Confirm remove") + 1
         await setup.mockMouse.moveTo(confirmX, confirmY)
         await setup.mockMouse.click(confirmX, confirmY)
-        await waitForText(setup, "Choose a workspace")
+        refreshedPickerFrame = await waitForTextToDisappear(setup, "stale-demo")
       },
     })
 
@@ -290,6 +306,9 @@ test("Spinosa app route E2E boots and navigates key workspace flows", async () =
     expect(missingDialogFrame).toContain("Use new path")
     expect(missingDialogFrame).toContain("Scan computer")
     expect(missingDialogFrame).toContain("Remove from index")
+    expect(refreshedPickerFrame).toContain("Choose a workspace")
+    expect(refreshedPickerFrame).toContain("visible-demo")
+    expect(refreshedPickerFrame).not.toContain("stale-demo")
     expect(filteredFrame).toContain("visible-demo")
     expect(filteredFrame).not.toContain("stale-demo")
     expect(await Bun.file(path.join(filteredHome, ".spinosa", "metadata", "workspaces.json")).text()).not.toContain("stale-demo")

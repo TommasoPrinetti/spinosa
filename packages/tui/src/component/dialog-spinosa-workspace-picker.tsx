@@ -82,6 +82,7 @@ export function DialogSpinosaWorkspacePicker(props: { onClose?: () => void } = {
   const [sortColumn, setSortColumn] = createSignal<SortColumn>("name")
   const [sortDir, setSortDir] = createSignal<SortDir>("asc")
   const [selected, setSelected] = createSignal(0)
+  const [missingWorkspace, setMissingWorkspace] = createSignal<SelectWorkspaceRow>()
 
   const toggleSort = (column: SortColumn) => {
     if (sortColumn() === column) {
@@ -92,7 +93,7 @@ export function DialogSpinosaWorkspacePicker(props: { onClose?: () => void } = {
     }
   }
 
-  const [workspaces] = createResource(() => spinosa.bootReady, async (bootReady) => {
+  const [workspaces, { refetch: refetchWorkspaces }] = createResource(() => spinosa.bootReady, async (bootReady) => {
     if (!bootReady) return []
     const list = await listRegisteredWorkspaces()
     const bundled = await readBundledFrameworkVersion()
@@ -164,16 +165,7 @@ export function DialogSpinosaWorkspacePicker(props: { onClose?: () => void } = {
 
   async function chooseWorkspace(row: SelectWorkspaceRow) {
     if (!row.available) {
-      dialog.replace(() => (
-        <DialogSpinosaMissingWorkspace
-          workspacePath={row.path}
-          workspaceName={row.projectName || row.name}
-          workspaceID={row.workspaceID}
-          onBack={() => dialog.replace(() => <DialogSpinosaWorkspacePicker />)}
-          onRemoved={() => dialog.replace(() => <DialogSpinosaWorkspacePicker />)}
-          onRecovered={(workspacePath) => openWorkspace(workspacePath)}
-        />
-      ))
+      setMissingWorkspace(row)
       return
     }
     await openWorkspace(row.path)
@@ -183,6 +175,7 @@ export function DialogSpinosaWorkspacePicker(props: { onClose?: () => void } = {
     dialog.setSize("xlarge")
 
     const off = keymap.intercept("key", ({ event, consume }) => {
+      if (missingWorkspace()) return
       if (event.name === "up" || event.name === "k") {
         setSelected((v) => Math.max(0, v - 1))
         consume(); return
@@ -208,7 +201,29 @@ export function DialogSpinosaWorkspacePicker(props: { onClose?: () => void } = {
   })
 
   return (
-    <box flexDirection="column" paddingLeft={1} paddingRight={1} paddingBottom={1}>
+    <>
+      <Show when={missingWorkspace()}>
+        {(row) => (
+          <DialogSpinosaMissingWorkspace
+            workspacePath={row().path}
+            workspaceName={row().projectName || row().name}
+            workspaceID={row().workspaceID}
+            onBack={() => {
+              setMissingWorkspace(undefined)
+              dialog.setSize("xlarge")
+            }}
+            onRemoved={async () => {
+              const refreshed = await refetchWorkspaces()
+              setSelected((current) => Math.min(current, refreshed?.length ?? 0))
+              setMissingWorkspace(undefined)
+              dialog.setSize("xlarge")
+            }}
+            onRecovered={(workspacePath) => openWorkspace(workspacePath)}
+          />
+        )}
+      </Show>
+      <Show when={!missingWorkspace()}>
+        <box flexDirection="column" paddingLeft={1} paddingRight={1} paddingBottom={1}>
       {/* ── back button ── */}
       <box flexDirection="row" alignItems="center" gap={1}>
         <box
@@ -358,6 +373,8 @@ export function DialogSpinosaWorkspacePicker(props: { onClose?: () => void } = {
           Import source folders into a new workspace
         </text>
       </box>
-    </box>
+        </box>
+      </Show>
+    </>
   )
 }
