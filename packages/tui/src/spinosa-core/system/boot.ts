@@ -17,7 +17,7 @@ export type SpinosaBootOperation = {
 }
 
 export type SpinosaBootHealth = {
-  workspaces: Array<WorkspacePresence & { project: string }>
+  workspaces: Array<WorkspacePresence & { name: string }>
   cleanup: SpinosaCleanupResult
   error?: string
 }
@@ -89,22 +89,20 @@ export async function runSpinosaBootHealth(input: {
     entries = []
     progress("workspace-index", "error", indexError)
   }
-  const workspaces: Array<WorkspacePresence & { project: string }> = []
+  const workspaces: Array<WorkspacePresence & { name: string }> = []
   for (const entry of entries) {
     const presence = inspectWorkspacePresence({
       workspacePath: entry.path,
       workspaceID: entry.workspaceID,
       searchRoots: [path.dirname(entry.path), ...(input.searchRoots ?? [])],
     })
-    workspaces.push({ ...presence, project: entry.project })
+    workspaces.push({ ...presence, name: entry.name })
 
     try {
       if (presence.status === "moved" && presence.resolvedPath && presence.currentWorkspaceID) {
-        await registerWorkspace(presence.resolvedPath, entry.project, undefined, presence.currentWorkspaceID)
-        await setWorkspacePresence({
-          workspacePath: presence.resolvedPath,
-          workspaceID: presence.currentWorkspaceID,
+        await registerWorkspace(presence.resolvedPath, entry.name, undefined, presence.currentWorkspaceID, {
           presence: "present",
+          replacePath: entry.path,
         })
         continue
       }
@@ -116,7 +114,7 @@ export async function runSpinosaBootHealth(input: {
       })
     } catch (error) {
       indexError ??= error instanceof Error ? error.message : String(error)
-      progress("workspace-index", "warning", `Could not persist ${entry.project || entry.path}: ${indexError}`)
+      progress("workspace-index", "warning", `Could not persist ${entry.name || entry.path}: ${indexError}`)
     }
   }
 

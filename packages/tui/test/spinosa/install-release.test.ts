@@ -72,7 +72,7 @@ describe("install and release flow", () => {
     await mkdir(path.join(home, "versions", ".install.lock"), { recursive: true })
     await mkdir(path.join(home, "bin"), { recursive: true })
     await mkdir(path.join(home, "lib"), { recursive: true })
-    await Bun.write(path.join(metadata, "workspaces.txt"), "workspace-id\t/path\n")
+    await Bun.write(path.join(metadata, "workspaces.json"), '{"schemaVersion":1,"workspaces":[]}\n')
     await Bun.write(path.join(home, "env.sh"), "keep=no\n")
 
     const result = Bun.spawnSync({
@@ -90,7 +90,7 @@ describe("install and release flow", () => {
     })
 
     expect(result.exitCode).toBe(0)
-    expect(await Bun.file(path.join(metadata, "workspaces.txt")).text()).toBe("workspace-id\t/path\n")
+    expect(await Bun.file(path.join(metadata, "workspaces.json")).text()).toBe('{"schemaVersion":1,"workspaces":[]}\n')
     expect(existsSync(path.join(home, "versions", "broken"))).toBe(false)
     expect(existsSync(path.join(home, "versions", ".install.lock"))).toBe(true)
     expect(existsSync(path.join(home, "env.sh"))).toBe(false)
@@ -105,7 +105,7 @@ describe("install and release flow", () => {
     await mkdir(path.join(home, "bin"), { recursive: true })
     await mkdir(path.join(root, "workspace-template", ".spinosa"), { recursive: true })
     await mkdir(path.join(root, "metadata"), { recursive: true })
-    await Bun.write(path.join(home, "metadata", "workspaces.txt"), "workspace-id\t/path\n")
+    await Bun.write(path.join(home, "metadata", "workspaces.json"), '{"schemaVersion":1,"workspaces":[]}\n')
     await Bun.write(path.join(root, "workspace-template", ".spinosa", "workspace-files.tsv"), "fixture\n")
     await Bun.write(path.join(root, "metadata", "version"), "1.2.3\n")
     await Bun.write(path.join(home, "bin", "spinosa"), launcher)
@@ -135,7 +135,7 @@ describe("install and release flow", () => {
     expect(result.exitCode).toBe(0)
     expect(result.stderr.toString()).toContain("runtime corruption detected")
     expect(result.stdout.toString()).toContain("repaired runtime")
-    expect(await Bun.file(path.join(home, "metadata", "workspaces.txt")).text()).toBe("workspace-id\t/path\n")
+    expect(await Bun.file(path.join(home, "metadata", "workspaces.json")).text()).toBe('{"schemaVersion":1,"workspaces":[]}\n')
   })
 
   test("uninstaller rejects a non-Spinosa home", async () => {

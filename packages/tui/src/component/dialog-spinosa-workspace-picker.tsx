@@ -18,10 +18,12 @@ import { useSpinosaWorkspace } from "../context/spinosa-workspace"
 import { getWorkspaceLaunchDecision } from "../spinosa/workspace-launch"
 import { resolveWorkspaceDisplayName } from "../spinosa/workspace-name"
 import { DialogSpinosaStartupChoice } from "./dialog-spinosa-startup-choice"
+import { DialogSpinosaMissingWorkspace } from "./dialog-spinosa-missing-workspace"
 import { buttonBackground, buttonBorder, buttonText } from "../util/button"
 import type { SpinosaSetupStatus } from "../spinosa/types"
 import type { SpinosaWorkspacePresence } from "../spinosa-core/types"
-import { workspacePresenceLabel } from "../spinosa-core/workspace/presence"
+import { isUsableWorkspaceStatus, workspacePresenceLabel } from "../spinosa-core/workspace/presence"
+import type { SpinosaWorkspaceID } from "../spinosa-core/workspace/identity"
 
 type SortColumn = "name" | "folder" | "status" | "version" | "accessed"
 type SortDir = "asc" | "desc"
@@ -29,6 +31,8 @@ type SortDir = "asc" | "desc"
 type SelectWorkspaceRow = {
   path: string
   name: string
+  projectName: string
+  workspaceID?: SpinosaWorkspaceID
   parentFolder: string
   status: SpinosaSetupStatus
   version: string
@@ -98,13 +102,15 @@ export function DialogSpinosaWorkspacePicker(props: { onClose?: () => void } = {
     return pairs.map(({ ws, meta }) => ({
       path: ws.path,
       name: resolveWorkspaceDisplayName(ws.path, meta?.projectName ?? ws.projectName),
+      projectName: meta?.projectName ?? ws.projectName,
+      workspaceID: ws.workspaceID,
       parentFolder: getParentFolder(ws.path),
       status: meta?.setupStatus || "unknown",
       version: meta?.frameworkVersion || "unknown",
       needsUpdate: workspaceNeedsFrameworkUpdate(meta?.frameworkVersion, bundled),
       lastAccessed: getLastAccessed(ws.path),
       presence: ws.presence,
-      available: !!meta,
+      available: !!meta && isUsableWorkspaceStatus(ws.presence),
     } satisfies SelectWorkspaceRow))
   })
 
@@ -139,7 +145,7 @@ export function DialogSpinosaWorkspacePicker(props: { onClose?: () => void } = {
     props.onClose?.()
   }
 
-  async function chooseWorkspace(path: string) {
+  async function openWorkspace(path: string) {
     const launch = await getWorkspaceLaunchDecision(path)
     if (launch.type === "startup-choice") {
       dialog.replace(() => (
@@ -154,6 +160,23 @@ export function DialogSpinosaWorkspacePicker(props: { onClose?: () => void } = {
     }
     dialog.clear()
     await spinosa.openWorkspace(path)
+  }
+
+  async function chooseWorkspace(row: SelectWorkspaceRow) {
+    if (!row.available) {
+      dialog.replace(() => (
+        <DialogSpinosaMissingWorkspace
+          workspacePath={row.path}
+          workspaceName={row.projectName || row.name}
+          workspaceID={row.workspaceID}
+          onBack={() => dialog.replace(() => <DialogSpinosaWorkspacePicker />)}
+          onRemoved={() => dialog.replace(() => <DialogSpinosaWorkspacePicker />)}
+          onRecovered={(workspacePath) => openWorkspace(workspacePath)}
+        />
+      ))
+      return
+    }
+    await openWorkspace(row.path)
   }
 
   onMount(() => {
@@ -172,7 +195,8 @@ export function DialogSpinosaWorkspacePicker(props: { onClose?: () => void } = {
         const idx = selected()
         const rows = sorted()
         if (idx < rows.length) {
-          if (rows[idx]?.available) void chooseWorkspace(rows[idx].path)
+          const row = rows[idx]
+          if (row) void chooseWorkspace(row)
         } else if (idx === rows.length) {
           dialog.clear()
           route.navigate({ type: "onboarding" })
@@ -270,11 +294,11 @@ export function DialogSpinosaWorkspacePicker(props: { onClose?: () => void } = {
                   flexDirection="row"
                   gap={1}
                   onMouseOver={() => setSelected(i())}
-                  onMouseDown={() => { setSelected(i()); if (row.available) void chooseWorkspace(row.path) }}
+                  onMouseDown={() => { setSelected(i()); void chooseWorkspace(row) }}
                 >
                   <box width={30}>
-                    <text fg={theme.text} overflow="hidden" wrapMode="none">
-                      <span style={{ bold: active() }}>{row.name}</span>
+                    <text fg={row.available ? theme.text : theme.error} overflow="hidden" wrapMode="none">
+                      <span style={{ bold: active() }}>{row.available ? "" : "✕ "}{row.name}</span>
                     </text>
                   </box>
                   <box width={30}>
@@ -283,9 +307,9 @@ export function DialogSpinosaWorkspacePicker(props: { onClose?: () => void } = {
                     </text>
                   </box>
                   <box width={14} flexShrink={0}>
-                    <text fg={row.available ? theme.textMuted : theme.warning} overflow="hidden" wrapMode="none">
+                    <text fg={row.available ? theme.textMuted : theme.error} overflow="hidden" wrapMode="none">
                       {row.presence && row.presence !== "present" && row.presence !== "legacy"
-                        ? workspacePresenceLabel(row.presence)
+                        ? `✕ ${workspacePresenceLabel(row.presence) === "NON EXISTENT" ? "NOT FOUND" : workspacePresenceLabel(row.presence)}`
                         : row.presence === "legacy" ? "Legacy" : setupStatusLabel(row.status)}
                     </text>
                   </box>

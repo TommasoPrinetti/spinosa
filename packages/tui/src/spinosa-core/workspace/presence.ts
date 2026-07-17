@@ -62,11 +62,16 @@ export async function inspectRegisteredWorkspacePresence(
 }
 
 export function isUsableWorkspacePresence(presence: WorkspacePresence): boolean {
-  return presence.status === "present" || presence.status === "legacy"
+  return isUsableWorkspaceStatus(presence.status)
+}
+
+export function isUsableWorkspaceStatus(status: SpinosaWorkspacePresence | undefined): boolean {
+  return status === undefined || status === "unknown" || status === "present" || status === "legacy"
 }
 
 export function workspacePresenceLabel(status: SpinosaWorkspacePresence | undefined): string | undefined {
   switch (status) {
+    case "unknown": return "UNKNOWN"
     case "non_existent": return "NON EXISTENT"
     case "moved": return "MOVED"
     case "invalid": return "INVALID"

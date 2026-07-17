@@ -15,9 +15,19 @@ describe("workspace update flow", () => {
     process.env.SPINOSA_HOME = path.join(tmp.path, "home")
     try {
       const missing = path.join(tmp.path, "deleted-workspace")
-      const registry = path.join(process.env.SPINOSA_HOME, "metadata", "workspaces.txt")
+      const registry = path.join(process.env.SPINOSA_HOME, "metadata", "workspaces.json")
       await mkdir(path.dirname(registry), { recursive: true })
-      await Bun.write(registry, `${missing}|deleted|2026-07-17|${createWorkspaceID()}\n`)
+      await Bun.write(registry, `${JSON.stringify({
+        schemaVersion: 1,
+        workspaces: [{
+          id: createWorkspaceID(),
+          path: missing,
+          name: "deleted",
+          tags: [],
+          state: { presence: "non_existent", setupStatus: "unknown" },
+          registration: { registeredAt: "2026-07-17" },
+        }],
+      }, null, 2)}\n`)
 
       const result = await updateWorkspace({ workspacePath: missing, frameworkRoot: tmp.path })
 

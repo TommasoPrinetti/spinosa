@@ -62,6 +62,12 @@ Run the Janitor agent. It scans for stale files, broken links, and outdated repo
 
 If an installed release cannot load because Bun, `node_modules`, or its launcher is damaged, Spinosa runs one clean reinstall of that release and restarts the original command. Global metadata and workspace folders are not removed during this repair.
 
+**What if a workspace folder was moved or deleted?**
+
+Startup marks the indexed entry as not found and removes it from Recent workspaces without forgetting its ID. The workspace picker keeps the entry with a red `✕ NOT FOUND` marker. Open it there to enter its new folder path, scan standard system locations by workspace ID, or remove only the stale index entry.
+
+Workspace registrations live in the versioned `~/.spinosa/metadata/workspaces.json` index. It keeps each workspace's ID, name, path, tags, last-known presence and setup state, and registration timestamps. Older `workspaces.txt` indexes are migrated automatically and retained as a `.migrated` backup.
+
 ## Troubleshooting
 
 **Command not found: spinosa**

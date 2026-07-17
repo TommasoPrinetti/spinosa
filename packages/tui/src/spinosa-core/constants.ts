@@ -29,7 +29,7 @@ export const AUDIO_VIDEO_EXTENSIONS = [
 
 export const SPINOSA_HOME = "~/.spinosa"
 export const SPINOSA_METADATA_DIR = "~/.spinosa/metadata"
-export const SPINOSA_REGISTRY = "workspaces.txt"
+export const SPINOSA_REGISTRY = "workspaces.json"
 export const SPINOSA_CONFIG = "config.yaml"
 export const WORKSPACE_MARKER = ".spinosa/workspace"
 

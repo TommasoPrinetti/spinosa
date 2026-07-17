@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { mkdtempSync, mkdirSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
-import { homedir } from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import {
@@ -117,9 +116,10 @@ describe("service fixture workspace", () => {
   })
 
   test("dedupes repeated registry entries by workspace path", async () => {
-    const workspace = mkdtempSync(path.join(tmpdir(), "spinosa-tui-registry-"))
-    const registry = path.join(homedir(), ".spinosa", "metadata", "workspaces.txt")
-    const original = await Bun.file(registry).text().catch(() => "")
+    const root = mkdtempSync(path.join(tmpdir(), "spinosa-tui-registry-"))
+    const workspace = path.join(root, "workspace")
+    const originalHome = process.env.SPINOSA_HOME
+    process.env.SPINOSA_HOME = path.join(root, "home")
     mkdirSync(path.join(workspace, ".spinosa"), { recursive: true })
 
     try {
@@ -127,19 +127,23 @@ describe("service fixture workspace", () => {
         path.join(workspace, ".spinosa", "workspace"),
         ["project_name: demo", "setup_status: workspace_started", "framework_version: 0.1.0"].join("\n"),
       )
-      await Bun.write(
-        registry,
-        [
-          `${workspace}|demo`,
-          `${workspace}|demo`,
-        ].join("\n") + "\n",
-      )
+      const metadata = path.join(process.env.SPINOSA_HOME, "metadata")
+      mkdirSync(metadata, { recursive: true })
+      const entry = {
+        path: workspace,
+        name: "demo",
+        tags: [],
+        state: { presence: "present", setupStatus: "workspace_started" },
+        registration: { registeredAt: "2026-07-17" },
+      }
+      await Bun.write(path.join(metadata, "workspaces.json"), `${JSON.stringify({ schemaVersion: 1, workspaces: [entry, entry] }, null, 2)}\n`)
 
       const workspaces = await listRegisteredWorkspaces()
       expect(workspaces.filter((entry) => entry.path === workspace)).toHaveLength(1)
     } finally {
-      await Bun.write(registry, original)
-      rmSync(workspace, { recursive: true, force: true })
+      if (originalHome === undefined) delete process.env.SPINOSA_HOME
+      else process.env.SPINOSA_HOME = originalHome
+      rmSync(root, { recursive: true, force: true })
     }
   })
 })

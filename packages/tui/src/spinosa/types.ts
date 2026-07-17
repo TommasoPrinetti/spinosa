@@ -12,7 +12,12 @@ export type SpinosaWorkspaceMeta = {
 
 export type SpinosaRegisteredWorkspace = {
   path: string
+  workspaceID?: import("../spinosa-core/workspace/identity").SpinosaWorkspaceID
   projectName: string
+  presence: import("../spinosa-core/types").SpinosaWorkspacePresence
+  setupStatus: SpinosaSetupStatus
+  registeredAt: string
+  tags: string[]
 }
 
 export type ExtractionProgress = {

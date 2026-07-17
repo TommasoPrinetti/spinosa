@@ -3,6 +3,7 @@ export type FrameworkReleaseStream = "beta" | "stable"
 export type SpinosaSetupStatus = "not_started" | "importing" | "cli_started" | "workspace_started" | "unknown"
 
 export type SpinosaWorkspacePresence =
+  | "unknown"
   | "present"
   | "legacy"
   | "moved"
@@ -25,7 +26,10 @@ export type SpinosaRegisteredWorkspace = {
   path: string
   workspaceID?: import("./workspace/identity").SpinosaWorkspaceID
   projectName: string
-  presence?: SpinosaWorkspacePresence
+  presence: SpinosaWorkspacePresence
+  setupStatus: SpinosaSetupStatus
+  registeredAt: string
+  tags: string[]
 }
 
 export type ExtractionProgress = {

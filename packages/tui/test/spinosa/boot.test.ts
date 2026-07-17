@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { mkdirSync, renameSync } from "node:fs"
+import { mkdirSync, renameSync, rmSync } from "node:fs"
 import path from "node:path"
 import { createWorkspaceID } from "../../src/spinosa-core/workspace/identity"
 import { runSpinosaBootHealth } from "../../src/spinosa-core/system/boot"
@@ -29,8 +29,10 @@ describe("Spinosa boot health", () => {
 
       const missingPath = path.join(tmp.path, "deleted")
       const missingID = createWorkspaceID()
-      const registryPath = path.join(process.env.SPINOSA_HOME, "metadata", "workspaces.txt")
-      await Bun.write(registryPath, `${await Bun.file(registryPath).text()}${missingPath}|deleted|2026-07-17|${missingID}\n`)
+      mkdirSync(path.join(missingPath, ".spinosa"), { recursive: true })
+      await Bun.write(path.join(missingPath, ".spinosa", "workspace"), `workspace_id: ${missingID}\n`)
+      await registerWorkspace(missingPath, "deleted", undefined, missingID)
+      rmSync(missingPath, { recursive: true, force: true })
 
       const progress: string[] = []
       const result = await runSpinosaBootHealth({

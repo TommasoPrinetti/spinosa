@@ -121,14 +121,14 @@ describe("Spinosa CLI", () => {
     await mkdir(metadata, { recursive: true })
     await mkdir(path.join(tmp.path, "versions", "broken"), { recursive: true })
     await mkdir(path.join(tmp.path, "bin"), { recursive: true })
-    await Bun.write(path.join(metadata, "workspaces.txt"), "workspace-id\t/path\n")
+    await Bun.write(path.join(metadata, "workspaces.json"), '{"schemaVersion":1,"workspaces":[]}\n')
     process.env.SPINOSA_HOME = tmp.path
     try {
       const result = capture()
       expect(await runUninstall(result.io, false, async () => true)).toBe(0)
       expect(existsSync(path.join(tmp.path, "versions"))).toBe(false)
       expect(existsSync(path.join(tmp.path, "bin"))).toBe(false)
-      expect(await Bun.file(path.join(metadata, "workspaces.txt")).text()).toBe("workspace-id\t/path\n")
+      expect(await Bun.file(path.join(metadata, "workspaces.json")).text()).toBe('{"schemaVersion":1,"workspaces":[]}\n')
     } finally {
       if (originalHome === undefined) delete process.env.SPINOSA_HOME
       else process.env.SPINOSA_HOME = originalHome

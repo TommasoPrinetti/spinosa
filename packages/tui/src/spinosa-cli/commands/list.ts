@@ -1,48 +1,38 @@
-import { existsSync, readFileSync } from "node:fs"
-import { homedir } from "node:os"
-import path from "node:path"
 import type { SpinosaCliIo } from "../io"
 import { emitResult } from "../io"
-import { inspectWorkspacePresence, parseWorkspaceID, registryUnescape, readWorkspaceMeta, workspacePresenceLabel } from "../../spinosa-core"
+import { inspectWorkspacePresence, loadRegistry, readWorkspaceMeta, workspacePresenceLabel } from "../../spinosa-core"
 
 interface WorkspaceEntry {
   path: string
   name: string
   registered: string
   status: string
-}
-
-function registryPath(): string {
-  const home = process.env.SPINOSA_HOME ?? path.join(homedir(), ".spinosa")
-  return path.join(home, "metadata", "workspaces.txt")
+  id?: string
+  tags: string[]
 }
 
 async function loadWorkspaces(): Promise<WorkspaceEntry[]> {
-  const reg = registryPath()
-  if (!existsSync(reg)) return []
-
-  const text = readFileSync(reg, "utf-8")
   const entries: WorkspaceEntry[] = []
-
-  for (const line of text.split(/\r?\n/).filter(Boolean)) {
-    const parts = line.split("|")
-    if (parts.length < 2) continue
-    const wsPath = registryUnescape(parts[0]!)
-    const wsName = registryUnescape(parts[1]!)
-    const registered = parts[2] ?? ""
-    const workspaceID = parseWorkspaceID(parts[3])
-    let status = "unknown"
-    const presence = inspectWorkspacePresence({ workspacePath: wsPath, workspaceID })
+  for (const workspace of await loadRegistry(undefined, { allowMissingMarker: true })) {
+    let status = workspacePresenceLabel(workspace.presence) ?? workspace.setupStatus
+    const presence = inspectWorkspacePresence({ workspacePath: workspace.path, workspaceID: workspace.workspaceID })
     status = workspacePresenceLabel(presence.status) ?? status
     try {
-      const meta = await readWorkspaceMeta(wsPath)
+      const meta = await readWorkspaceMeta(workspace.path)
       if (meta && presence.status !== "non_existent" && presence.status !== "invalid" && presence.status !== "identity_mismatch") {
         status = meta.setupStatus
       }
     } catch {
       // workspace may have been deleted
     }
-    entries.push({ path: wsPath, name: wsName, registered, status })
+    entries.push({
+      path: workspace.path,
+      name: workspace.name,
+      registered: workspace.registeredAt,
+      status,
+      ...(workspace.workspaceID ? { id: workspace.workspaceID } : {}),
+      tags: workspace.tags,
+    })
   }
 
   return entries
@@ -70,6 +60,8 @@ export async function runList(io: SpinosaCliIo): Promise<number> {
       path: w.path,
       status: w.status,
       registered: w.registered,
+      id: w.id,
+      tags: w.tags,
     })),
   }, `${workspaces.length} workspace(s)`)
 

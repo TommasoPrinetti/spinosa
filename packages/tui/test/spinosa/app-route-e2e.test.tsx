@@ -8,6 +8,7 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Global } from "@opencode-ai/core/global"
 import { createTuiResolvedConfig } from "../fixture/tui-runtime"
 import { createEventSource, createFetch, directory, json } from "../fixture/tui-sdk"
+import { createWorkspaceID, type SpinosaWorkspaceID } from "../../src/spinosa-core/workspace/identity"
 
 type SpinosaRoute = "workspace" | "global" | "onboarding" | "add-files" | "visualizer"
 type TestRenderer = Awaited<ReturnType<typeof createTestRenderer>>
@@ -108,6 +109,7 @@ async function createRegisteredWorkspace(input: {
   setupStatus: "cli_started" | "workspace_started"
 }) {
   const workspacePath = path.join(input.root, `${input.projectName}-spinosa`)
+  const workspaceID = createWorkspaceID()
   mkdirSync(path.join(workspacePath, ".spinosa"), { recursive: true })
   mkdirSync(path.join(workspacePath, "raw"), { recursive: true })
   mkdirSync(path.join(workspacePath, "maps"), { recursive: true })
@@ -117,6 +119,7 @@ async function createRegisteredWorkspace(input: {
   await Bun.write(
     path.join(workspacePath, ".spinosa", "workspace"),
     [
+      `workspace_id: ${workspaceID}`,
       `project_name: ${input.projectName}`,
       `setup_status: ${input.setupStatus}`,
       "framework_version: 0.1.0",
@@ -126,19 +129,30 @@ async function createRegisteredWorkspace(input: {
 
   const metadataDir = path.join(input.home, ".spinosa", "metadata")
   mkdirSync(metadataDir, { recursive: true })
-  await Bun.write(path.join(metadataDir, "workspaces.txt"), `${workspacePath}|${input.projectName}|2026-07-09\n`)
+  await appendRegistryEntry(input.home, workspacePath, input.projectName, workspaceID, input.setupStatus)
   return workspacePath
 }
 
-async function appendRegistryEntry(home: string, workspacePath: string, projectName: string) {
+async function appendRegistryEntry(
+  home: string,
+  workspacePath: string,
+  projectName: string,
+  workspaceID?: SpinosaWorkspaceID,
+  setupStatus: "cli_started" | "workspace_started" | "unknown" = "unknown",
+) {
   const metadataDir = path.join(home, ".spinosa", "metadata")
   mkdirSync(metadataDir, { recursive: true })
-  const registryPath = path.join(metadataDir, "workspaces.txt")
-  const existing = await Bun.file(registryPath).text().catch(() => "")
-  await Bun.write(
-    registryPath,
-    `${existing}${workspacePath}|${projectName}|2026-07-09\n`,
-  )
+  const registryPath = path.join(metadataDir, "workspaces.json")
+  const document = await Bun.file(registryPath).json().catch(() => ({ schemaVersion: 1, workspaces: [] as unknown[] }))
+  document.workspaces.push({
+    ...(workspaceID ? { id: workspaceID } : {}),
+    path: workspacePath,
+    name: projectName,
+    tags: [],
+    state: { presence: existsSync(workspacePath) ? "present" : "non_existent", setupStatus },
+    registration: { registeredAt: "2026-07-09" },
+  })
+  await Bun.write(registryPath, `${JSON.stringify(document, null, 2)}\n`)
 }
 
 async function waitForText(setup: TestRenderer, text: string) {
@@ -232,19 +246,51 @@ test("Spinosa app route E2E boots and navigates key workspace flows", async () =
       projectName: "visible-demo",
       setupStatus: "workspace_started",
     })
-    await appendRegistryEntry(filteredHome, path.join(filteredRoot, "stale-demo-spinosa"), "stale-demo")
+    await appendRegistryEntry(
+      filteredHome,
+      path.join(filteredRoot, "stale-demo-spinosa"),
+      "stale-demo",
+      createWorkspaceID(),
+    )
 
+    let recentFrame = ""
+    let pickerFrame = ""
+    let missingDialogFrame = ""
     const filteredFrame = await renderRouteFrame("global", {
       home: filteredHome,
       act: async (setup) => {
+        recentFrame = await waitForText(setup, "Recent workspaces")
         setup.mockInput.pressKey("w")
-        await waitForText(setup, "visible-demo")
+        pickerFrame = await waitForText(setup, "visible-demo")
+        setup.mockInput.pressEnter()
+        missingDialogFrame = await waitForText(setup, "Workspace not found")
+        const removeLines = missingDialogFrame.split("\n")
+        const removeY = removeLines.findIndex((line) => line.includes("Remove from index"))
+        const removeX = removeLines[removeY]!.indexOf("Remove from index") + 1
+        await setup.mockMouse.moveTo(removeX, removeY)
+        await setup.mockMouse.click(removeX, removeY)
+        const confirmFrame = await waitForText(setup, "Confirm remove")
+        const confirmLines = confirmFrame.split("\n")
+        const confirmY = confirmLines.findIndex((line) => line.includes("│  Confirm remove"))
+        const confirmX = confirmLines[confirmY]!.indexOf("Confirm remove") + 1
+        await setup.mockMouse.moveTo(confirmX, confirmY)
+        await setup.mockMouse.click(confirmX, confirmY)
+        await waitForText(setup, "Choose a workspace")
       },
     })
 
+    expect(recentFrame).toContain("visible-demo")
+    expect(recentFrame).not.toContain("stale-demo")
+    expect(pickerFrame).toContain("✕ stale-demo")
+    expect(pickerFrame).toContain("✕ NOT FOUND")
+    expect(missingDialogFrame).toContain("stale-demo")
+    expect(missingDialogFrame).toContain("Workspace not found")
+    expect(missingDialogFrame).toContain("Use new path")
+    expect(missingDialogFrame).toContain("Scan computer")
+    expect(missingDialogFrame).toContain("Remove from index")
     expect(filteredFrame).toContain("visible-demo")
-    expect(filteredFrame).toContain("stale-demo")
-    expect(filteredFrame).toContain("NON EXISTENT")
+    expect(filteredFrame).not.toContain("stale-demo")
+    expect(await Bun.file(path.join(filteredHome, ".spinosa", "metadata", "workspaces.json")).text()).not.toContain("stale-demo")
   } finally {
     rmSync(filteredRoot, { recursive: true, force: true })
   }
@@ -270,6 +316,41 @@ test("boot cleanup removes stale installer files before the homepage renders", a
     })
     expect(frame).not.toContain("leftover install file")
     expect(existsSync(stale)).toBe(false)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+}, 30_000)
+
+test("a Recent workspace that disappears before click opens recovery instead of onboarding", async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "spinosa-recent-missing-"))
+  const home = path.join(root, "home")
+  mkdirSync(home, { recursive: true })
+  try {
+    const workspace = await createRegisteredWorkspace({
+      root,
+      home,
+      projectName: "disappearing-demo",
+      setupStatus: "workspace_started",
+    })
+    const frame = await renderRouteFrame("global", {
+      home,
+      act: async (setup) => {
+        const recentFrame = await waitForText(setup, "disappearing-demo")
+        rmSync(workspace, { recursive: true, force: true })
+        const lines = recentFrame.split("\n")
+        const y = lines.findIndex((line) => line.includes("disappearing-demo"))
+        const x = lines[y]!.indexOf("disappearing-demo") + 1
+        await setup.mockMouse.moveTo(x, y)
+        await setup.mockMouse.click(x, y)
+        await waitForText(setup, "Workspace not found")
+      },
+    })
+
+    expect(frame).toContain("Workspace not found")
+    expect(frame).toContain("Use new path")
+    expect(frame).toContain("Scan computer")
+    expect(frame).toContain("Remove from index")
+    expect(frame).not.toContain("Create your research workspace")
   } finally {
     rmSync(root, { recursive: true, force: true })
   }

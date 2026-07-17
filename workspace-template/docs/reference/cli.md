@@ -31,7 +31,7 @@ During scanning, you'll see a summary of what was found:
 Add one file or a directory of files to an existing workspace.
 
 - Uses the same classifier and conversion engines as `spinosa new`
-- Reads and validates the workspace registry in `~/.spinosa/metadata/workspaces.txt` before asking for a path
+- Reads and validates the versioned workspace registry in `~/.spinosa/metadata/workspaces.json` before asking for a path
 - Scans configured folders only when you explicitly choose **Find other workspaces**
 - Writes `.spinosa/add-summary.md`
 - Prints a mapper prompt for updating dictionary, maps, workspace index, and verification

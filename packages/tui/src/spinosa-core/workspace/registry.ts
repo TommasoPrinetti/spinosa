@@ -3,8 +3,29 @@ import { mkdir, rename, rm, stat, readFile, writeFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import path from "node:path"
 import { resolveWorkspaceDisplayName } from "../workspace-name"
-import type { SpinosaRegisteredWorkspace, SpinosaWorkspacePresence } from "../types"
+import type { SpinosaRegisteredWorkspace, SpinosaSetupStatus, SpinosaWorkspacePresence } from "../types"
 import { ensureWorkspaceID, parseWorkspaceID, readWorkspaceID, type SpinosaWorkspaceID } from "./identity"
+import { readWorkspaceMeta } from "./meta"
+
+export const WORKSPACE_REGISTRY_SCHEMA_VERSION = 1
+export const WORKSPACE_REGISTRY_FILENAME = "workspaces.json"
+export const LEGACY_WORKSPACE_REGISTRY_FILENAME = "workspaces.txt"
+
+export type WorkspaceRegistryEntry = {
+  path: string
+  name: string
+  workspaceID?: SpinosaWorkspaceID
+  presence: SpinosaWorkspacePresence
+  setupStatus: SpinosaSetupStatus
+  registeredAt: string
+  lastSeenAt?: string
+  tags: string[]
+}
+
+type WorkspaceRegistryDocument = {
+  schemaVersion: typeof WORKSPACE_REGISTRY_SCHEMA_VERSION
+  workspaces: WorkspaceRegistryEntry[]
+}
 // In-process mutex serializing registry file read-modify-write cycles
 let registryLock: Promise<void> = Promise.resolve()
 
@@ -85,23 +106,16 @@ async function acquireRegistryFileLock(
       return async () => { await rm(lockDir, { recursive: true, force: true }) }
     } catch (error) {
       if (!error || typeof error !== "object" || !("code" in error) || error.code !== "EEXIST") throw error
-      // Only reclaim a lock whose owner process is confirmed dead. This makes
-      // acquisition atomic with respect to liveness and avoids two holders
-      // both winning the rm+continue race.
-      const ownerPid = await readLockOwnerPid(lockDir)
-      if (ownerPid !== null && ownerPid > 0 && !isProcessAlive(ownerPid)) {
-        await rm(lockDir, { recursive: true, force: true }).catch(() => {})
-        onRecover?.("Cleared a stale registry lock left by a previous run.")
-        continue
-      }
       if (!forceReclaimed && Date.now() >= deadline) {
-        // Lock is held but never released (wedged, e.g. network hang on a
-        // cloud mount). Only force-reclaim when we cannot confirm a live
-        // owner — never steal a lock that an alive process still holds.
-        if (ownerPid === null || ownerPid <= 0 || !isProcessAlive(ownerPid)) {
+        // Delay stale-lock reclamation until the deadline. A process can exit
+        // after releasing its lock while another process immediately reuses
+        // the same directory; eager PID-based removal can then steal the new
+        // owner's lock (an ABA race).
+        const currentOwnerPid = await readLockOwnerPid(lockDir)
+        if (currentOwnerPid === null || currentOwnerPid <= 0 || !isProcessAlive(currentOwnerPid)) {
           forceReclaimed = true
           await rm(lockDir, { recursive: true, force: true }).catch(() => {})
-          onRecover?.("Force-cleared a wedged registry lock.")
+          onRecover?.("Cleared a stale registry lock left by a previous run.")
           continue
         }
       }
@@ -110,7 +124,7 @@ async function acquireRegistryFileLock(
   }
 }
 
-async function writeRegistryAtomically(registry: string, content: string): Promise<void> {
+async function writeRegistryAtomically(registry: string, content: string, updateBackup = true): Promise<void> {
   const tmp = `${registry}.tmp-${process.pid}-${crypto.randomUUID()}`
   await Bun.write(tmp, content)
   // fsync the temp file before renaming so a crash mid-rename cannot leave a
@@ -130,6 +144,13 @@ async function writeRegistryAtomically(registry: string, content: string): Promi
   } catch (error) {
     await rm(tmp, { force: true }).catch(() => {})
     throw error
+  }
+  if (updateBackup) {
+    try {
+      await writeRegistryAtomically(`${registry}.bak`, content, false)
+    } catch {
+      // The primary rename already committed atomically; backup refresh is repair-only.
+    }
   }
 }
 
@@ -168,6 +189,7 @@ function decodeRegistryLine(line: string): DecodedRegistryLine | undefined {
 
 function parseWorkspacePresence(value: string | undefined): SpinosaWorkspacePresence | undefined {
   switch (value) {
+    case "unknown":
     case "present":
     case "legacy":
     case "moved":
@@ -180,13 +202,179 @@ function parseWorkspacePresence(value: string | undefined): SpinosaWorkspacePres
   }
 }
 
-function encodeRegistryLine(input: DecodedRegistryLine, workspaceID?: SpinosaWorkspaceID, presence?: SpinosaWorkspacePresence): string {
-  const identityField = workspaceID ? `|${workspaceID}` : presence ? "|" : ""
-  return `${registryEscape(input.workspacePath)}|${registryEscape(input.project)}|${input.registered}${identityField}${presence ? `|${presence}` : ""}`
+function parseSetupStatus(value: unknown): SpinosaSetupStatus {
+  switch (value) {
+    case "not_started":
+    case "importing":
+    case "cli_started":
+    case "workspace_started":
+    case "unknown":
+      return value
+    default:
+      return "unknown"
+  }
 }
 
 function workspaceIDFromMarker(workspacePath: string): SpinosaWorkspaceID | undefined {
   return readWorkspaceID(workspacePath)
+}
+
+function emptyRegistryDocument(): WorkspaceRegistryDocument {
+  return { schemaVersion: WORKSPACE_REGISTRY_SCHEMA_VERSION, workspaces: [] }
+}
+
+function parseRegistryDocument(text: string, registry: string): WorkspaceRegistryDocument {
+  let raw: unknown
+  try {
+    raw = JSON.parse(text)
+  } catch (error) {
+    throw new Error(`Workspace registry is not valid JSON at ${registry}`, { cause: error })
+  }
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new Error(`Workspace registry must be an object at ${registry}`)
+  }
+  const input = raw as Record<string, unknown>
+  if (input.schemaVersion !== WORKSPACE_REGISTRY_SCHEMA_VERSION) {
+    throw new Error(`Unsupported workspace registry schema version at ${registry}`)
+  }
+  if (!Array.isArray(input.workspaces)) {
+    throw new Error(`Workspace registry must contain a workspaces array at ${registry}`)
+  }
+
+  const workspaces = input.workspaces.map((value, index): WorkspaceRegistryEntry => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      throw new Error(`Invalid workspace registry record ${index + 1} at ${registry}`)
+    }
+    const record = value as Record<string, unknown>
+    const state = record.state
+    const registration = record.registration
+    if (typeof record.path !== "string" || !record.path || typeof record.name !== "string") {
+      throw new Error(`Invalid workspace path or name in registry record ${index + 1} at ${registry}`)
+    }
+    if (!state || typeof state !== "object" || Array.isArray(state)) {
+      throw new Error(`Invalid workspace state in registry record ${index + 1} at ${registry}`)
+    }
+    if (!registration || typeof registration !== "object" || Array.isArray(registration)) {
+      throw new Error(`Invalid workspace registration in record ${index + 1} at ${registry}`)
+    }
+    const rawID = record.id
+    const workspaceID = typeof rawID === "string" ? parseWorkspaceID(rawID) : undefined
+    if (rawID !== undefined && !workspaceID) {
+      throw new Error(`Invalid workspace ID in registry record ${index + 1} at ${registry}`)
+    }
+    const rawState = state as Record<string, unknown>
+    const presence = parseWorkspacePresence(typeof rawState.presence === "string" ? rawState.presence : undefined)
+    if (!presence) {
+      throw new Error(`Invalid workspace presence in registry record ${index + 1} at ${registry}`)
+    }
+    const rawRegistration = registration as Record<string, unknown>
+    if (typeof rawRegistration.registeredAt !== "string" || !rawRegistration.registeredAt) {
+      throw new Error(`Invalid registration date in registry record ${index + 1} at ${registry}`)
+    }
+    if (record.tags !== undefined && (!Array.isArray(record.tags) || record.tags.some((tag) => typeof tag !== "string"))) {
+      throw new Error(`Invalid tags in registry record ${index + 1} at ${registry}`)
+    }
+    if (rawRegistration.lastSeenAt !== undefined && typeof rawRegistration.lastSeenAt !== "string") {
+      throw new Error(`Invalid last-seen date in registry record ${index + 1} at ${registry}`)
+    }
+    return {
+      path: record.path,
+      name: record.name,
+      ...(workspaceID ? { workspaceID } : {}),
+      presence,
+      setupStatus: parseSetupStatus(rawState.setupStatus),
+      registeredAt: rawRegistration.registeredAt,
+      ...(typeof rawRegistration.lastSeenAt === "string" ? { lastSeenAt: rawRegistration.lastSeenAt } : {}),
+      tags: [...new Set((record.tags as string[] | undefined) ?? [])],
+    }
+  })
+  return { schemaVersion: WORKSPACE_REGISTRY_SCHEMA_VERSION, workspaces }
+}
+
+async function readParsedRegistry(registry: string): Promise<WorkspaceRegistryDocument> {
+  return parseRegistryDocument(await readFile(registry, "utf8"), registry)
+}
+
+function persistedRegistryDocument(entries: WorkspaceRegistryEntry[]): Record<string, unknown> {
+  return {
+    schemaVersion: WORKSPACE_REGISTRY_SCHEMA_VERSION,
+    workspaces: entries.map((entry) => ({
+      ...(entry.workspaceID ? { id: entry.workspaceID } : {}),
+      path: entry.path,
+      name: entry.name,
+      tags: entry.tags,
+      state: {
+        presence: entry.presence,
+        setupStatus: entry.setupStatus,
+      },
+      registration: {
+        registeredAt: entry.registeredAt,
+        ...(entry.lastSeenAt ? { lastSeenAt: entry.lastSeenAt } : {}),
+      },
+    })),
+  }
+}
+
+function serializeRegistryEntries(entries: WorkspaceRegistryEntry[]): string {
+  return `${JSON.stringify(persistedRegistryDocument(entries), null, 2)}\n`
+}
+
+async function migrateLegacyRegistry(legacyRegistry: string): Promise<WorkspaceRegistryDocument> {
+  const file = Bun.file(legacyRegistry)
+  if (!(await file.exists())) return emptyRegistryDocument()
+  const lines = (await file.text()).split(/\r?\n/).filter(Boolean)
+  const workspaces: WorkspaceRegistryEntry[] = []
+  for (const line of lines) {
+    const decoded = decodeRegistryLine(line)
+    if (!decoded) continue
+    const meta = await readWorkspaceMeta(decoded.workspacePath).catch(() => undefined)
+    const workspaceID = decoded.workspaceID ?? meta?.workspaceID ?? workspaceIDFromMarker(decoded.workspacePath)
+    const presence = decoded.presence
+      ?? (meta ? (workspaceID ? "present" : "legacy") : existsSync(decoded.workspacePath) ? "invalid" : "non_existent")
+    workspaces.push({
+      path: decoded.workspacePath,
+      name: resolveWorkspaceDisplayName(decoded.workspacePath, decoded.project || meta?.projectName),
+      ...(workspaceID ? { workspaceID } : {}),
+      presence,
+      setupStatus: meta?.setupStatus ?? "unknown",
+      registeredAt: decoded.registered || new Date().toISOString().slice(0, 10),
+      ...(presence === "present" || presence === "legacy" ? { lastSeenAt: new Date().toISOString() } : {}),
+      tags: [],
+    })
+  }
+  return { schemaVersion: WORKSPACE_REGISTRY_SCHEMA_VERSION, workspaces }
+}
+
+async function readRegistryDocument(registry: string, legacyRegistry?: string): Promise<WorkspaceRegistryDocument> {
+  const file = Bun.file(registry)
+  if (await file.exists()) {
+    try {
+      return await readParsedRegistry(registry)
+    } catch (primaryError) {
+      const backup = `${registry}.bak`
+      const backupFile = Bun.file(backup)
+      if (!(await backupFile.exists())) throw primaryError
+      const recovered = await readParsedRegistry(backup)
+      return withRegistryLock(async () => withRegistryFileLock(registry, async () => {
+        try {
+          return await readParsedRegistry(registry)
+        } catch {
+          await writeRegistryAtomically(registry, serializeRegistryEntries(recovered.workspaces), false)
+          return recovered
+        }
+      }))
+    }
+  }
+  if (!legacyRegistry || !(await Bun.file(legacyRegistry).exists())) return emptyRegistryDocument()
+
+  return withRegistryLock(async () => withRegistryFileLock(registry, async () => {
+    if (await Bun.file(registry).exists()) return readParsedRegistry(registry)
+    const migrated = await migrateLegacyRegistry(legacyRegistry)
+    await writeRegistryAtomically(registry, serializeRegistryEntries(migrated.workspaces))
+    const backup = `${legacyRegistry}.migrated`
+    if (!(await Bun.file(backup).exists())) await rename(legacyRegistry, backup).catch(() => {})
+    return migrated
+  }))
 }
 
 export async function ensureGlobalMetadata(): Promise<void> {
@@ -202,25 +390,23 @@ export async function ensureGlobalMetadata(): Promise<void> {
 export async function loadRegistry(
   configPath?: string,
   options?: { allowMissingMarker?: boolean },
-): Promise<{ path: string; project: string; workspaceID?: SpinosaWorkspaceID; presence?: SpinosaWorkspacePresence }[]> {
-  const registry = configPath ?? metadataPath("workspaces.txt")
-  const file = Bun.file(registry)
-  if (!(await file.exists())) return []
-
-  const lines = (await file.text()).split(/\r?\n/).filter(Boolean)
-  const results: { path: string; project: string; workspaceID?: SpinosaWorkspaceID; presence?: SpinosaWorkspacePresence }[] = []
+): Promise<WorkspaceRegistryEntry[]> {
+  const registry = configPath ?? metadataPath(WORKSPACE_REGISTRY_FILENAME)
+  const isLegacyPath = path.extname(registry) === ".txt"
+  const document = isLegacyPath
+    ? await migrateLegacyRegistry(registry)
+    : await readRegistryDocument(registry, configPath ? undefined : metadataPath(LEGACY_WORKSPACE_REGISTRY_FILENAME))
+  const results: WorkspaceRegistryEntry[] = []
   const seen = new Set<string>()
   const pathsByID = new Map<SpinosaWorkspaceID, string>()
   const resultIndexByID = new Map<SpinosaWorkspaceID, number>()
 
-  for (const line of lines) {
-    const decoded = decodeRegistryLine(line)
-    if (!decoded) continue
-    const { workspacePath, project } = decoded
+  for (const entry of document.workspaces) {
+    const workspacePath = entry.path
     if (!options?.allowMissingMarker && !validateWorkspace(workspacePath)) continue
     if (seen.has(workspacePath)) continue
     seen.add(workspacePath)
-    const workspaceID = decoded.workspaceID ?? workspaceIDFromMarker(workspacePath)
+    const workspaceID = entry.workspaceID ?? workspaceIDFromMarker(workspacePath)
     const existingPath = workspaceID ? pathsByID.get(workspaceID) : undefined
     if (workspaceID && existingPath && existingPath !== workspacePath) {
       const existingLive = validateWorkspace(existingPath)
@@ -231,17 +417,12 @@ export async function loadRegistry(
       if (!currentLive || existingLive) continue
       const index = resultIndexByID.get(workspaceID)
       if (index !== undefined) {
-        results[index] = { path: workspacePath, project, workspaceID }
+        results[index] = { ...entry, path: workspacePath, workspaceID }
         pathsByID.set(workspaceID, workspacePath)
         continue
       }
     }
-    const result = {
-      path: workspacePath,
-      project,
-      ...(workspaceID ? { workspaceID } : {}),
-      ...(decoded.presence ? { presence: decoded.presence } : {}),
-    }
+    const result = { ...entry, ...(workspaceID ? { workspaceID } : {}) }
     if (workspaceID) {
       pathsByID.set(workspaceID, workspacePath)
       resultIndexByID.set(workspaceID, results.length)
@@ -257,44 +438,65 @@ export async function registerWorkspace(
   project: string,
   onRecover?: (msg: string) => void,
   workspaceID?: SpinosaWorkspaceID,
+  options?: {
+    presence?: SpinosaWorkspacePresence
+    replacePath?: string
+  },
 ): Promise<void> {
+  await ensureGlobalMetadata()
+  const registry = metadataPath(WORKSPACE_REGISTRY_FILENAME)
+  await readRegistryDocument(registry, metadataPath(LEGACY_WORKSPACE_REGISTRY_FILENAME))
+  const markerID = workspaceIDFromMarker(workspacePath)
+  if (workspaceID && markerID !== workspaceID) {
+    throw new Error(`Workspace ID does not match the workspace marker at ${workspacePath}`)
+  }
+  const canonicalID = workspaceID ?? (validateWorkspace(workspacePath) ? ensureWorkspaceID(workspacePath) : undefined)
+  const meta = await readWorkspaceMeta(workspacePath).catch(() => undefined)
+
   return withRegistryLock(async () => {
-    const registry = metadataPath("workspaces.txt")
-    const markerID = workspaceIDFromMarker(workspacePath)
-    if (workspaceID && markerID !== workspaceID) {
-      throw new Error(`Workspace ID does not match the workspace marker at ${workspacePath}`)
-    }
-    const canonicalID = workspaceID ?? (validateWorkspace(workspacePath) ? ensureWorkspaceID(workspacePath) : undefined)
-    const encodedPath = registryEscape(workspacePath)
-    const encodedProject = registryEscape(project)
-
-    await ensureGlobalMetadata()
-
     await withRegistryFileLock(registry, async () => {
       const file = Bun.file(registry)
-      let lines: string[] = []
-      if (await file.exists()) {
-        const text = await file.text()
-        lines = text.split(/\r?\n/).filter(Boolean)
-      }
-
-      const filtered = lines.filter((line) => {
-        const decoded = decodeRegistryLine(line)
-        if (!decoded) return true
-        if (decoded.workspacePath === workspacePath) return false
-        const existingID = decoded.workspaceID ?? workspaceIDFromMarker(decoded.workspacePath)
+      const document = await file.exists() ? await readParsedRegistry(registry) : emptyRegistryDocument()
+      let inherited: WorkspaceRegistryEntry | undefined
+      const filtered = document.workspaces.filter((entry) => {
+        if (entry.path === workspacePath) {
+          inherited ??= entry
+          return false
+        }
+        const existingID = entry.workspaceID ?? workspaceIDFromMarker(entry.path)
         if (canonicalID && existingID === canonicalID) {
-          if (validateWorkspace(decoded.workspacePath)) {
-            throw new Error(`Workspace ID ${canonicalID} is already registered at ${decoded.workspacePath}`)
+          if (validateWorkspace(entry.path)) {
+            throw new Error(`Workspace ID ${canonicalID} is already registered at ${entry.path}`)
           }
+          inherited ??= entry
+          return false
+        }
+        if (options?.replacePath && entry.path === options.replacePath) {
+          if (validateWorkspace(entry.path)) {
+            throw new Error(`Cannot replace a live workspace registration at ${entry.path}`)
+          }
+          inherited ??= entry
           return false
         }
         return true
       })
 
-      const today = new Date().toISOString().slice(0, 10)
-      filtered.push(`${encodedPath}|${encodedProject}|${today}${canonicalID ? `|${canonicalID}` : ""}`)
-      await writeRegistryAtomically(registry, filtered.join("\n") + "\n")
+      const presence = options?.presence
+        ?? (meta ? (canonicalID ? "present" : "legacy") : inherited?.presence ?? "unknown")
+      const now = new Date().toISOString()
+      filtered.push({
+        path: workspacePath,
+        name: resolveWorkspaceDisplayName(workspacePath, project || meta?.projectName || inherited?.name),
+        ...(canonicalID ? { workspaceID: canonicalID } : {}),
+        presence,
+        setupStatus: meta?.setupStatus ?? inherited?.setupStatus ?? "unknown",
+        registeredAt: inherited?.registeredAt ?? now.slice(0, 10),
+        ...(presence === "present" || presence === "legacy"
+          ? { lastSeenAt: now }
+          : inherited?.lastSeenAt ? { lastSeenAt: inherited.lastSeenAt } : {}),
+        tags: inherited?.tags ?? [],
+      })
+      await writeRegistryAtomically(registry, serializeRegistryEntries(filtered))
     }, onRecover)
   })
 }
@@ -303,21 +505,19 @@ export async function unregisterWorkspace(
   workspacePath: string,
   onRecover?: (msg: string) => void,
 ): Promise<void> {
+  await ensureGlobalMetadata()
+  const registry = metadataPath(WORKSPACE_REGISTRY_FILENAME)
+  await readRegistryDocument(registry, metadataPath(LEGACY_WORKSPACE_REGISTRY_FILENAME))
   return withRegistryLock(async () => {
-    const registry = metadataPath("workspaces.txt")
     await withRegistryFileLock(registry, async () => {
       const file = Bun.file(registry)
       if (!(await file.exists())) return
 
-      const text = await file.text()
-      const lines = text.split(/\r?\n/).filter(Boolean)
-      const filtered = lines.filter((line) => {
-        const rawPath = line.split("|")[0] ?? ""
-        return registryUnescape(rawPath) !== workspacePath
-      })
+      const document = await readParsedRegistry(registry)
+      const filtered = document.workspaces.filter((entry) => entry.path !== workspacePath)
 
-      if (filtered.length < lines.length) {
-        await writeRegistryAtomically(registry, filtered.join("\n") + (filtered.length > 0 ? "\n" : ""))
+      if (filtered.length < document.workspaces.length) {
+        await writeRegistryAtomically(registry, serializeRegistryEntries(filtered))
       }
     }, onRecover)
   })
@@ -329,23 +529,59 @@ export async function setWorkspacePresence(input: {
   presence: SpinosaWorkspacePresence
   onRecover?: (msg: string) => void
 }): Promise<void> {
+  await ensureGlobalMetadata()
+  const registry = metadataPath(WORKSPACE_REGISTRY_FILENAME)
+  await readRegistryDocument(registry, metadataPath(LEGACY_WORKSPACE_REGISTRY_FILENAME))
+  const meta = await readWorkspaceMeta(input.workspacePath).catch(() => undefined)
   return withRegistryLock(async () => {
-    const registry = metadataPath("workspaces.txt")
     await withRegistryFileLock(registry, async () => {
       const file = Bun.file(registry)
       if (!(await file.exists())) return
 
-      const lines = (await file.text()).split(/\r?\n/).filter(Boolean)
+      const document = await readParsedRegistry(registry)
       let changed = false
-      const updated = lines.map((line) => {
-        const decoded = decodeRegistryLine(line)
-        if (!decoded) return line
-        const existingID = decoded.workspaceID ?? workspaceIDFromMarker(decoded.workspacePath)
-        if (decoded.workspacePath !== input.workspacePath && (!input.workspaceID || existingID !== input.workspaceID)) return line
+      const now = new Date().toISOString()
+      const updated = document.workspaces.map((entry) => {
+        const existingID = entry.workspaceID ?? workspaceIDFromMarker(entry.path)
+        if (entry.path !== input.workspacePath && (!input.workspaceID || existingID !== input.workspaceID)) return entry
         changed = true
-        return encodeRegistryLine(decoded, existingID ?? input.workspaceID, input.presence)
+        return {
+          ...entry,
+          name: meta?.projectName ? resolveWorkspaceDisplayName(input.workspacePath, meta.projectName) : entry.name,
+          ...(existingID ?? input.workspaceID ? { workspaceID: existingID ?? input.workspaceID } : {}),
+          presence: input.presence,
+          setupStatus: meta?.setupStatus ?? entry.setupStatus,
+          ...(input.presence === "present" || input.presence === "legacy" ? { lastSeenAt: now } : {}),
+        }
       })
-      if (changed) await writeRegistryAtomically(registry, updated.join("\n") + "\n")
+      if (changed) await writeRegistryAtomically(registry, serializeRegistryEntries(updated))
+    }, input.onRecover)
+  })
+}
+
+export async function setWorkspaceTags(input: {
+  workspacePath: string
+  workspaceID?: SpinosaWorkspaceID
+  tags: string[]
+  onRecover?: (msg: string) => void
+}): Promise<void> {
+  await ensureGlobalMetadata()
+  const registry = metadataPath(WORKSPACE_REGISTRY_FILENAME)
+  await readRegistryDocument(registry, metadataPath(LEGACY_WORKSPACE_REGISTRY_FILENAME))
+  const tags = [...new Set(input.tags.map((tag) => tag.trim()).filter(Boolean))]
+  return withRegistryLock(async () => {
+    await withRegistryFileLock(registry, async () => {
+      const file = Bun.file(registry)
+      if (!(await file.exists())) return
+      const document = await readParsedRegistry(registry)
+      let changed = false
+      const updated = document.workspaces.map((entry) => {
+        const existingID = entry.workspaceID ?? workspaceIDFromMarker(entry.path)
+        if (entry.path !== input.workspacePath && (!input.workspaceID || existingID !== input.workspaceID)) return entry
+        changed = true
+        return { ...entry, ...(existingID ? { workspaceID: existingID } : {}), tags }
+      })
+      if (changed) await writeRegistryAtomically(registry, serializeRegistryEntries(updated))
     }, input.onRecover)
   })
 }
@@ -355,16 +591,20 @@ export async function listRegisteredWorkspaces(): Promise<SpinosaRegisteredWorks
   await Promise.all(entries.filter((entry) => validateWorkspace(entry.path)).map((entry) =>
     registerWorkspace(
       entry.path,
-      resolveWorkspaceDisplayName(entry.path, entry.project),
+      resolveWorkspaceDisplayName(entry.path, entry.name),
       undefined,
       entry.workspaceID,
     ),
   ))
-  return entries.map((entry) => ({
+  const refreshed = await loadRegistry(undefined, { allowMissingMarker: true })
+  return refreshed.map((entry) => ({
     path: entry.path,
-    projectName: resolveWorkspaceDisplayName(entry.path, entry.project),
+    projectName: resolveWorkspaceDisplayName(entry.path, entry.name),
     ...(entry.workspaceID ? { workspaceID: entry.workspaceID } : {}),
-    ...(entry.presence ? { presence: entry.presence } : {}),
+    presence: entry.presence,
+    setupStatus: entry.setupStatus,
+    registeredAt: entry.registeredAt,
+    tags: entry.tags,
   }))
 }
 
@@ -453,12 +693,8 @@ function walkWorkspaceMarker(dir: string, depth: number, seen: Set<string>, resu
 export async function discoverRegisteredWorkspaces(): Promise<string[]> {
   await ensureGlobalMetadata()
 
-  const registryPath = metadataPath("workspaces.txt")
-  const registryFile = Bun.file(registryPath)
-  if (await registryFile.exists()) {
-    const entries = await loadRegistry(registryPath, { allowMissingMarker: true })
-    if (entries.length > 0) return entries.map((e) => e.path)
-  }
+  const entries = await loadRegistry(undefined, { allowMissingMarker: true })
+  if (entries.length > 0) return entries.map((entry) => entry.path)
 
   const cachePath = metadataPath("workspace_cache.txt")
   const cacheFile = Bun.file(cachePath)

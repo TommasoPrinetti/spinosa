@@ -8,9 +8,10 @@ import {
   registerWorkspace,
   registryEscape,
   registryUnescape,
+  setWorkspaceTags,
 } from "../../src/spinosa-core/workspace/registry"
 import { createWorkspaceID } from "../../src/spinosa-core/workspace/identity"
-import { mkdirSync, renameSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, renameSync, writeFileSync } from "node:fs"
 
 describe("workspace registry", () => {
   test("round-trips delimiters and line breaks", () => {
@@ -35,10 +36,15 @@ describe("workspace registry", () => {
       stderr: "pipe",
     }))
 
-    const exits = await Promise.all(children.map((child) => child.exited))
-    expect(exits).toEqual(Array(count).fill(0))
-    const entries = await loadRegistry(path.join(spinosaHome, "metadata", "workspaces.txt"), { allowMissingMarker: true })
+    const results = await Promise.all(children.map(async (child) => ({
+      exit: await child.exited,
+      stderr: await new Response(child.stderr).text(),
+    })))
+    expect(results.filter((result) => result.exit !== 0)).toEqual([])
+    const registryPath = path.join(spinosaHome, "metadata", "workspaces.json")
+    const entries = await loadRegistry(registryPath, { allowMissingMarker: true })
     expect(entries).toHaveLength(count)
+    expect(JSON.parse(await Bun.file(registryPath).text()).schemaVersion).toBe(1)
   })
 
   test("serializes same-process registrations", async () => {
@@ -55,8 +61,58 @@ describe("workspace registry", () => {
     }
   })
 
-  test("parses legacy and ID registry records and enriches legacy marker IDs", async () => {
+  test("persists normalized workspace tags in the rich registry", async () => {
     await using tmp = await tmpdir()
+    const originalHome = process.env.SPINOSA_HOME
+    process.env.SPINOSA_HOME = path.join(tmp.path, "home")
+    try {
+      const workspace = path.join(tmp.path, "workspace")
+      const workspaceID = createWorkspaceID()
+      mkdirSync(path.join(workspace, ".spinosa"), { recursive: true })
+      writeFileSync(path.join(workspace, ".spinosa", "workspace"), `workspace_id: ${workspaceID}\nsetup_status: importing\n`)
+      await registerWorkspace(workspace, "research", undefined, workspaceID)
+      await setWorkspaceTags({ workspacePath: workspace, workspaceID, tags: [" primary ", "research", "primary", ""] })
+
+      expect(await loadRegistry(undefined, { allowMissingMarker: true })).toEqual([
+        expect.objectContaining({
+          path: workspace,
+          name: "research",
+          workspaceID,
+          presence: "present",
+          setupStatus: "importing",
+          tags: ["primary", "research"],
+        }),
+      ])
+    } finally {
+      if (originalHome === undefined) delete process.env.SPINOSA_HOME
+      else process.env.SPINOSA_HOME = originalHome
+    }
+  })
+
+  test("recovers a corrupt JSON registry from its last atomic backup", async () => {
+    await using tmp = await tmpdir()
+    const originalHome = process.env.SPINOSA_HOME
+    process.env.SPINOSA_HOME = path.join(tmp.path, "home")
+    try {
+      const workspace = path.join(tmp.path, "workspace")
+      await registerWorkspace(workspace, "recoverable")
+      const registry = path.join(process.env.SPINOSA_HOME, "metadata", "workspaces.json")
+      await Bun.write(registry, "{broken")
+
+      expect(await loadRegistry(undefined, { allowMissingMarker: true })).toEqual([
+        expect.objectContaining({ path: workspace, name: "recoverable", presence: "unknown" }),
+      ])
+      expect(JSON.parse(await Bun.file(registry).text()).schemaVersion).toBe(1)
+    } finally {
+      if (originalHome === undefined) delete process.env.SPINOSA_HOME
+      else process.env.SPINOSA_HOME = originalHome
+    }
+  })
+
+  test("migrates legacy records to rich JSON and enriches marker IDs", async () => {
+    await using tmp = await tmpdir()
+    const originalHome = process.env.SPINOSA_HOME
+    process.env.SPINOSA_HOME = path.join(tmp.path, "home")
     const legacy = path.join(tmp.path, "legacy")
     const modern = path.join(tmp.path, "modern")
     const legacyID = createWorkspaceID()
@@ -65,13 +121,29 @@ describe("workspace registry", () => {
       mkdirSync(path.join(workspace, ".spinosa"), { recursive: true })
       writeFileSync(path.join(workspace, ".spinosa", "workspace"), `workspace_id: ${id}\n`)
     }
-    const registry = path.join(tmp.path, "workspaces.txt")
-    await Bun.write(registry, `${legacy}|old|2026-07-17\n${modern}|new|2026-07-17|${modernID}\n`)
-    const entries = await loadRegistry(registry)
-    expect(entries).toEqual([
-      { path: legacy, project: "old", workspaceID: legacyID },
-      { path: modern, project: "new", workspaceID: modernID },
-    ])
+    try {
+      const metadata = path.join(process.env.SPINOSA_HOME, "metadata")
+      mkdirSync(metadata, { recursive: true })
+      const legacyRegistry = path.join(metadata, "workspaces.txt")
+      const jsonRegistry = path.join(metadata, "workspaces.json")
+      await Bun.write(legacyRegistry, `${legacy}|old|2026-07-17\n${modern}|new|2026-07-17|${modernID}\n`)
+      const entries = await loadRegistry()
+      expect(entries).toEqual([
+        expect.objectContaining({ path: legacy, name: "old", workspaceID: legacyID, presence: "present", registeredAt: "2026-07-17", tags: [] }),
+        expect.objectContaining({ path: modern, name: "new", workspaceID: modernID, presence: "present", registeredAt: "2026-07-17", tags: [] }),
+      ])
+      expect(JSON.parse(await Bun.file(jsonRegistry).text())).toMatchObject({
+        schemaVersion: 1,
+        workspaces: [
+          { id: legacyID, name: "old", state: { presence: "present", setupStatus: "unknown" } },
+          { id: modernID, name: "new", state: { presence: "present", setupStatus: "unknown" } },
+        ],
+      })
+      expect(existsSync(`${legacyRegistry}.migrated`)).toBe(true)
+    } finally {
+      if (originalHome === undefined) delete process.env.SPINOSA_HOME
+      else process.env.SPINOSA_HOME = originalHome
+    }
   })
 
   test("upserts by ID after a moved workspace and refuses ambiguous matches", async () => {
@@ -89,7 +161,9 @@ describe("workspace registry", () => {
       renameSync(oldPath, movedPath)
       await registerWorkspace(movedPath, "project", undefined, id)
       const entries = await loadRegistry(undefined, { allowMissingMarker: true })
-      expect(entries).toEqual([{ path: movedPath, project: "project", workspaceID: id }])
+      expect(entries).toEqual([
+        expect.objectContaining({ path: movedPath, name: "project", workspaceID: id, presence: "present", tags: [] }),
+      ])
       expect(findWorkspaceMatchesByID(id, [tmp.path])).toEqual([movedPath])
       expect(await recoverWorkspacePathByID(id, [tmp.path])).toBe(movedPath)
 

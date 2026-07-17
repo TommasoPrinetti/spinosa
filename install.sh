@@ -574,7 +574,7 @@ clean_macos_metadata() {
 init_global_metadata() {
   mkdir -p "$SPINOSA_METADATA_DIR"
   local name legacy current
-  for name in config.yaml workspace_cache.txt workspaces.txt; do
+  for name in config.yaml workspace_cache.txt workspaces.json workspaces.txt; do
     legacy="${SPINOSA_HOME}/${name}"
     current="${SPINOSA_METADATA_DIR}/${name}"
     if [ -f "$legacy" ] && [ ! -f "$current" ]; then

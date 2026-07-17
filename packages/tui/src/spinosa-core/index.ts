@@ -66,3 +66,4 @@ export * from "./system/boot"
 
 // --- workspace presence
 export * from "./workspace/presence"
+export * from "./workspace/recovery"

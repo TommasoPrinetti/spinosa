@@ -22,6 +22,7 @@ import type { Theme } from "../context/theme"
 import { useDialog } from "../ui/dialog"
 import { DialogSpinosaWorkspacePicker } from "../component/dialog-spinosa-workspace-picker"
 import { DialogSpinosaStartupChoice } from "../component/dialog-spinosa-startup-choice"
+import { DialogSpinosaMissingWorkspace } from "../component/dialog-spinosa-missing-workspace"
 import { getWorkspaceLaunchDecision } from "../spinosa/workspace-launch"
 import { HomeFooter } from "../component/home-footer"
 import { buttonBackground, buttonBorder, buttonText } from "../util/button"
@@ -36,6 +37,8 @@ import { dirname, join } from "node:path"
 import { statSync } from "node:fs"
 import { useConnected } from "../component/use-connected"
 import { DialogProvider } from "../component/dialog-provider"
+import { inspectWorkspacePresence, isUsableWorkspaceStatus } from "../spinosa-core/workspace/presence"
+import type { SpinosaWorkspaceID } from "../spinosa-core/workspace/identity"
 
 const SHELL_PLACEHOLDER = ["ls -la", "git status", "pwd"]
 const defaultPlaceholder = {
@@ -90,20 +93,29 @@ export function Home() {
   const startupPrompt = createMemo(() => route.prompt ?? spinosa.pendingPrompt)
   const startupPromptIsQueued = createMemo(() => !route.prompt && Boolean(spinosa.pendingPrompt))
   const [bundledVersion] = createResource(readBundledFrameworkVersion)
-  const [recentWorkspaces, setRecentWorkspaces] = createSignal<{ path: string; name: string; status: SpinosaSetupStatus; fileCount: number }[]>([])
+  type RecentWorkspace = {
+    path: string
+    name: string
+    workspaceID?: SpinosaWorkspaceID
+    status: SpinosaSetupStatus
+    fileCount: number
+  }
+  const [recentWorkspaces, setRecentWorkspaces] = createSignal<RecentWorkspace[]>([])
   const [recentLoading, setRecentLoading] = createSignal(true)
   const [selectedRecent, setSelectedRecent] = createSignal(0)
   const loadRecentWorkspaces = async () => {
     setRecentLoading(true)
     try {
       const workspaces = await listRegisteredWorkspaces()
-      const rows: ({ path: string; name: string; status: SpinosaSetupStatus; fileCount: number; lastAccessed: number })[] = []
+      const rows: (RecentWorkspace & { lastAccessed: number })[] = []
       for (const ws of workspaces) {
+        if (!isUsableWorkspaceStatus(ws.presence)) continue
         const meta = await readWorkspaceMeta(ws.path)
         if (!meta) continue
         rows.push({
           path: ws.path,
           name: resolveWorkspaceDisplayName(ws.path, meta?.projectName ?? ws.projectName),
+          workspaceID: ws.workspaceID,
           status: meta?.setupStatus || "unknown",
           fileCount: await countRawMarkdownFiles(join(ws.path, "raw")),
           lastAccessed: getLastAccessed(ws.path),
@@ -299,11 +311,7 @@ export function Home() {
     dialog.replace(() => <DialogSpinosaWorkspacePicker onClose={() => spinosa.restorePickerRoute()} />)
   })
 
-  const pickRecentWorkspace = async (workspacePath: string) => {
-    if (!providerConnected()) {
-      dialog.replace(() => <DialogProvider />)
-      return
-    }
+  const launchRecentWorkspace = async (workspacePath: string) => {
     const launch = await getWorkspaceLaunchDecision(workspacePath)
     if (launch.type === "startup-choice") {
       dialog.replace(() => (
@@ -317,6 +325,37 @@ export function Home() {
       return
     }
     await spinosa.openWorkspace(workspacePath)
+  }
+
+  const pickRecentWorkspace = async (workspace: RecentWorkspace) => {
+    if (!providerConnected()) {
+      dialog.replace(() => <DialogProvider />)
+      return
+    }
+    const presence = inspectWorkspacePresence({
+      workspacePath: workspace.path,
+      workspaceID: workspace.workspaceID,
+    })
+    if (!isUsableWorkspaceStatus(presence.status)) {
+      dialog.replace(() => (
+        <DialogSpinosaMissingWorkspace
+          workspacePath={workspace.path}
+          workspaceName={workspace.name}
+          workspaceID={workspace.workspaceID}
+          onBack={() => dialog.clear()}
+          onRemoved={async () => {
+            dialog.clear()
+            await loadRecentWorkspaces()
+          }}
+          onRecovered={async (workspacePath) => {
+            dialog.clear()
+            await launchRecentWorkspace(workspacePath)
+          }}
+        />
+      ))
+      return
+    }
+    await launchRecentWorkspace(workspace.path)
   }
 
   return (
@@ -406,7 +445,7 @@ export function Home() {
                       flexDirection="row"
                       gap={1}
                       onMouseOver={() => setSelectedRecent(idx)}
-                      onMouseDown={() => { setSelectedRecent(idx); void pickRecentWorkspace(ws.path) }}
+                      onMouseDown={() => { setSelectedRecent(idx); void pickRecentWorkspace(ws) }}
                     >
                       <text fg={recentDotColor(ws.status, theme)}>●</text>
                       <text fg={buttonText(theme, active(), theme.text)}>
