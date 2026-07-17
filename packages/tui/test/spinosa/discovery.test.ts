@@ -74,7 +74,10 @@ describe("hasFrameworkMarker", () => {
 describe("resolveFrameworkRoot", () => {
   test("finds framework root when cwd has the marker (dev mode)", () => {
     process.chdir(tmpDir)
+    const oldHome = process.env.SPINOSA_HOME
+    process.env.SPINOSA_HOME = path.join(tmpDir, "nonexistent")
     expect(resolveFrameworkRoot()).toBe(realTmpDir)
+    process.env.SPINOSA_HOME = oldHome
   })
 
   test("finds framework root via SPINOSA_TEMPLATE_ROOT env var", () => {
@@ -102,7 +105,10 @@ describe("resolveFrameworkRoot", () => {
 describe("resolveFrameworkBin", () => {
   test("finds spinosa binary in workspace-template/.bin/", () => {
     process.chdir(tmpDir)
+    const oldHome = process.env.SPINOSA_HOME
+    process.env.SPINOSA_HOME = path.join(tmpDir, "nonexistent")
     expect(resolveFrameworkBin()).toBe(path.join(realTmpDir, "workspace-template", ".bin", "spinosa"))
+    process.env.SPINOSA_HOME = oldHome
   })
 })
 
