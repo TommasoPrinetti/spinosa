@@ -115,6 +115,18 @@ function launchForCli(cliValue: string): string {
   return "run"
 }
 
+function validateSinglePath(p: string): "valid" | "invalid" {
+  try {
+    if (!existsSync(p)) return "invalid"
+    const st = statSync(p)
+    if (st.isFile()) return "valid"
+    if (st.isDirectory()) return readdirSync(p).length > 0 ? "valid" : "invalid"
+    return "invalid"
+  } catch {
+    return "invalid"
+  }
+}
+
 
 /**
  * Reinstall vendor tools via install.sh.
@@ -199,18 +211,25 @@ async function runReinstall(input?: {
 
 export function Onboarding() {
   const { theme } = useTheme()
-  const { navigate } = useRoute()
+  const route = useRoute()
+  const { navigate } = route
   const spinosa = useSpinosaWorkspace()
   const dimensions = useTerminalDimensions()
   const keymap = useOpencodeKeymap()
   const modeStack = useOpencodeModeStack()
   const exit = useExit()
   const dialog = useDialog()
+  const onboardingRoute = route.data.type === "onboarding" ? route.data : undefined
+  const resumeWorkspacePath = onboardingRoute?.workspacePath
+  const resumeSourceLocation = onboardingRoute?.sourceLocation
+  const resumeWorkspaceName = onboardingRoute?.workspaceName
+  const resumeSourcePath = resumeSourceLocation ? resolveExistingUserPaths([resumeSourceLocation])[0] : undefined
+  const resumeSourceAccepted = Boolean(resumeSourcePath && validateSinglePath(resumeSourcePath) === "valid")
 
-  const [step, setStep] = createSignal<WizardStep>("path")
+  const [step, setStep] = createSignal<WizardStep>(resumeSourceAccepted ? "name" : "path")
   const [sourcePaths, setSourcePaths] = createSignal<SourcePathEntry[]>([{ id: 0 }])
   const [logLines, setLogLines] = createSignal<string[]>([])
-  const [createdWorkspace, setCreatedWorkspace] = createSignal<string | undefined>()
+  const [createdWorkspace, setCreatedWorkspace] = createSignal<string | undefined>(resumeWorkspacePath)
   const [busy, setBusy] = createSignal(false)
   const [importOptions, setImportOptions] = createSignal<ImportOption[]>([])
   const [selectedImport, setSelectedImport] = createSignal(0)
@@ -247,9 +266,9 @@ export function Onboarding() {
     return `${b} B`
   }
   const [processingStatus, setProcessingStatus] = createSignal("")
-  const [sourceIsCloud, setSourceIsCloud] = createSignal(false)
+  const [sourceIsCloud, setSourceIsCloud] = createSignal(Boolean(resumeSourcePath && isCloudStoragePath(resumeSourcePath)))
   const [importSummary, setImportSummary] = createSignal("")
-  const [workspaceName, setWorkspaceName] = createSignal("")
+  const [workspaceName, setWorkspaceName] = createSignal(resumeWorkspaceName ?? "")
   const [startupMessage, setStartupMessage] = createSignal("")
   const [startupElapsedMs, setStartupElapsedMs] = createSignal(0)
   const [startupError, setStartupError] = createSignal<string | undefined>()
@@ -268,7 +287,7 @@ export function Onboarding() {
   let abortProcessing = false
   let gateResolve: (() => void) | undefined
   let sourceInput: TextareaRenderable | undefined
-  let pendingPaths: string[] | undefined
+  let pendingPaths: string[] | undefined = resumeSourcePath && resumeSourceAccepted ? [resumeSourcePath] : undefined
 let nameInput: TextareaRenderable | undefined
   let startupTimer: ReturnType<typeof setInterval> | undefined
 
@@ -351,7 +370,7 @@ let nameInput: TextareaRenderable | undefined
 
   const workflow = createWorkflowGuard()
   const activeWork = createActiveWorkTracker()
-  const pathSnapshot = new Map<number, string>()
+  const pathSnapshot = new Map<number, string>(resumeSourceLocation ? [[0, resumeSourceLocation]] : [])
   const sourceInputs = new Map<number, TextareaRenderable>()
 
   const readPathText = (id: number) => {
@@ -401,17 +420,7 @@ let nameInput: TextareaRenderable | undefined
   const allPathsResolved = () =>
     resolveExistingUserPaths(sourcePaths().map((entry) => readPathText(entry.id)))
 
-  const validateSinglePath = (p: string): "valid" | "invalid" => {
-    try {
-      if (!existsSync(p)) return "invalid"
-      const st = statSync(p)
-      if (st.isFile()) return "valid"
-      if (st.isDirectory()) return readdirSync(p).length > 0 ? "valid" : "invalid"
-      return "invalid"
-    } catch {
-      return "invalid"
-    }
-  }
+  if (resumeSourceLocation) setPathValidities(0, validateSinglePath(resumeSourceLocation))
 
   const defaultWorkspaceName = createMemo(() => {
     const resolved = allPathsResolved()
@@ -437,9 +446,16 @@ let nameInput: TextareaRenderable | undefined
     setWaitingForGate(false)
   }
 
-  const goHome = () => navigate({ type: "global" })
+  const goHome = () => {
+    if (resumeWorkspacePath) {
+      spinosa.useGenericMode()
+      return
+    }
+    navigate({ type: "global" })
+  }
   const navigateBackFrom = (from: WizardStep) => {
     if (from === "path") { goHome(); return }
+    if (from === "name" && resumeSourceAccepted) { logAction("back", `from ${from} to global`); goHome(); return }
     if (from === "name") { logAction("back", `from ${from} to path`); setStep("path"); return }
     if (from === "tools") { logAction("back", `from ${from} to name`); setStep("name"); return }
     if (from === "scan") { logAction("back", `from ${from} to path`); setStep("path"); return }
@@ -655,7 +671,7 @@ let nameInput: TextareaRenderable | undefined
   const continueFromName = () => {
     const primarySource = pendingPaths?.[0]
     const nextWorkspaceName = workspaceName().trim() || defaultWorkspaceName()
-    if (primarySource) setCreatedWorkspace(resolveWorkspacePath(primarySource, nextWorkspaceName))
+    if (primarySource) setCreatedWorkspace(resumeWorkspacePath ?? resolveWorkspacePath(primarySource, nextWorkspaceName))
     logAction("continue", "Name step → Tools step")
     void runToolCheck()
   }
@@ -704,7 +720,7 @@ let nameInput: TextareaRenderable | undefined
     await delay(200)
     const extensions = selectedExtensions().join(",")
     const primarySource = resolved[0]!
-    const plannedWorkspace = preview()?.workspacePath ?? suggestWorkspacePath(primarySource)
+    const plannedWorkspace = resumeWorkspacePath ?? preview()?.workspacePath ?? suggestWorkspacePath(primarySource)
     if (plannedWorkspace) setCreatedWorkspace(plannedWorkspace)
     let totalFailed = 0
     let totalRenamed = 0
@@ -767,6 +783,7 @@ let nameInput: TextareaRenderable | undefined
         corpusPath: primarySource,
         frameworkRoot,
         workspaceName: workspaceName() || defaultWorkspaceName(),
+        resumeWorkspacePath,
         onProgress: setupProgress,
         onRecover: (msg) => appendLogLine(`Note: ${msg}`),
         shouldAbort,
@@ -1010,7 +1027,15 @@ let nameInput: TextareaRenderable | undefined
   }
 
   onMount(() => {
-    focusSourceInput()
+    if (step() === "name") {
+      queueMicrotask(() => {
+        if (!nameInput || nameInput.isDestroyed) return
+        nameInput.focus()
+        nameInput.gotoLineEnd()
+      })
+    } else {
+      focusSourceInput()
+    }
 
     // Auto-add new path input when last input has content
     const autoAddTimer = setInterval(() => {
@@ -1223,7 +1248,7 @@ let nameInput: TextareaRenderable | undefined
               <text fg={buttonText(theme, hoveredButton() === "back", theme.text)}>←</text>
             </box>
             <text fg={theme.text}>
-              <span style={{ bold: true }}>{busy() ? `${waveString(spinIdx())} ` : ""}Create Spinosa workspace</span>
+              <span style={{ bold: true }}>{busy() ? `${waveString(spinIdx())} ` : ""}{resumeWorkspacePath ? "Resume Spinosa workspace" : "Create Spinosa workspace"}</span>
             </text>
           </box>
           <text fg={theme.textMuted}>

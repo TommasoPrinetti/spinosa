@@ -22,6 +22,19 @@ describe("routeForSetupStatus", () => {
     expect(routeForSetupStatus("importing").type).toBe("onboarding")
   })
 
+  test("carries interrupted workspace metadata into onboarding", () => {
+    expect(routeForWorkspaceOpen("importing", undefined, {
+      workspacePath: "/workspaces/demo",
+      sourceLocation: "/sources/demo",
+      workspaceName: "demo",
+    })).toEqual({
+      type: "onboarding",
+      workspacePath: "/workspaces/demo",
+      sourceLocation: "/sources/demo",
+      workspaceName: "demo",
+    })
+  })
+
   test("honors an intentional chat destination for a cli_started workspace", () => {
     expect(routeForWorkspaceOpen("cli_started", { type: "global" })).toEqual({ type: "global" })
   })

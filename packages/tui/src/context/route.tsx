@@ -16,6 +16,9 @@ export type WorkspaceRoute = {
 
 export type OnboardingRoute = {
   type: "onboarding"
+  workspacePath?: string
+  sourceLocation?: string
+  workspaceName?: string
 }
 
 export type AddFilesRoute = {
@@ -82,7 +85,14 @@ function initialRoute(value: unknown): RouteNavigateInput | undefined {
   if (!value || typeof value !== "object" || !("type" in value)) return
   if (value.type === "global") return { type: "global" }
   if (value.type === "add-files") return { type: "add-files" }
-  if (value.type === "onboarding") return { type: "onboarding" }
+  if (value.type === "onboarding") {
+    return {
+      type: "onboarding",
+      workspacePath: "workspacePath" in value && typeof value.workspacePath === "string" ? value.workspacePath : undefined,
+      sourceLocation: "sourceLocation" in value && typeof value.sourceLocation === "string" ? value.sourceLocation : undefined,
+      workspaceName: "workspaceName" in value && typeof value.workspaceName === "string" ? value.workspaceName : undefined,
+    }
+  }
   if (value.type === "workspace") {
     const sessionID = "sessionID" in value && typeof value.sessionID === "string" ? value.sessionID : undefined
     if (!sessionID) return { type: "global", prompt: "prompt" in value ? (value.prompt as PromptInfo | undefined) : undefined }

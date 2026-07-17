@@ -4,6 +4,12 @@ import { recoverWorkspacePathByID, registerWorkspace } from "../spinosa-core/wor
 import { parseWorkspaceID } from "../spinosa-core/workspace/identity"
 import type { SpinosaSetupStatus } from "../spinosa-core/types"
 
+type WorkspaceOpenContext = {
+  workspacePath: string
+  sourceLocation?: string
+  workspaceName?: string
+}
+
 export const SPINOSA_ACTIVE_WORKSPACE_KV = "spinosa_active_workspace_path"
 export const SPINOSA_ACTIVE_WORKSPACE_ID_KV = "spinosa_active_workspace_id"
 export const SPINOSA_GENERIC_MODE_KV = "spinosa_generic_mode"
@@ -28,14 +34,21 @@ export function routeForSetupStatus(
 export function routeForWorkspaceOpen(
   setupStatus: SpinosaSetupStatus,
   requestedRoute?: RouteNavigateInput,
+  context?: WorkspaceOpenContext,
 ): RouteNavigateInput {
-  return requestedRoute ?? routeForSetupStatus(setupStatus)
+  const route = requestedRoute ?? routeForSetupStatus(setupStatus)
+  if (route.type !== "onboarding" || !context) return route
+  return { ...route, ...context }
 }
 
 async function routeForWorkspace(workspacePath: string): Promise<RouteNavigateInput | undefined> {
   try {
     const meta = await readWorkspaceMeta(workspacePath)
-    return meta ? routeForSetupStatus(meta.setupStatus) : undefined
+    return meta ? routeForWorkspaceOpen(meta.setupStatus, undefined, {
+      workspacePath,
+      sourceLocation: meta.sourceLocation,
+      workspaceName: meta.projectName,
+    }) : undefined
   } catch {
     return undefined
   }

@@ -24,6 +24,7 @@ import { DialogSpinosaWorkspacePicker } from "../component/dialog-spinosa-worksp
 import { DialogSpinosaStartupChoice } from "../component/dialog-spinosa-startup-choice"
 import { DialogSpinosaMissingWorkspace } from "../component/dialog-spinosa-missing-workspace"
 import { getWorkspaceLaunchDecision } from "../spinosa/workspace-launch"
+import { setupStatusLabel, setupStatusThemeKey } from "../spinosa/status-labels"
 import { HomeFooter } from "../component/home-footer"
 import { buttonBackground, buttonBorder, buttonText } from "../util/button"
 import { countRawMarkdownFiles, listRegisteredWorkspaces, readBundledFrameworkVersion, isPrereleaseFrameworkVersion, readWorkspaceMeta } from "../spinosa/service"
@@ -64,14 +65,8 @@ function getLastAccessed(workspacePath: string): number {
   }
 }
 
-function recentDotColor(status: SpinosaSetupStatus, theme: Theme) {
-  switch (status) {
-    case "workspace_started": return theme.success
-    case "cli_started": return theme.warning
-    case "not_started":
-    case "importing": return theme.error
-    default: return theme.textMuted
-  }
+function recentStatusColor(status: SpinosaSetupStatus, theme: Theme) {
+  return theme[setupStatusThemeKey(status)]
 }
 
 export function Home() {
@@ -447,11 +442,12 @@ export function Home() {
                       onMouseOver={() => setSelectedRecent(idx)}
                       onMouseDown={() => { setSelectedRecent(idx); void pickRecentWorkspace(ws) }}
                     >
-                      <text fg={recentDotColor(ws.status, theme)}>●</text>
+                      <text fg={theme.success}>●</text>
                       <text fg={buttonText(theme, active(), theme.text)}>
                         <span style={{ bold: active() }}>{ws.name}</span>
                       </text>
                       <text fg={buttonText(theme, active(), theme.textMuted)}>{ws.fileCount} files</text>
+                      <text fg={recentStatusColor(ws.status, theme)}>{setupStatusLabel(ws.status)}</text>
                     </box>
                   )
                 }}

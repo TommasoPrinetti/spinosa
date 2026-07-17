@@ -15,6 +15,7 @@ export interface CreateWorkspaceOptions {
   preferredCli?: string
   launch?: "copy" | "run"
   workspaceName?: string
+  resumeWorkspacePath?: string
   onProgress?: (message: string) => void
   onRecover?: (message: string) => void
   shouldAbort?: () => boolean
@@ -57,8 +58,15 @@ export function resolveWorkspacePath(corpusPath: string, workspaceName?: string)
   return workspacePath
 }
 
-function reserveWorkspacePath(corpusPath: string, workspaceName?: string): { path: string; resumed: boolean } {
+function reserveWorkspacePath(corpusPath: string, workspaceName?: string, resumeWorkspacePath?: string): { path: string; resumed: boolean } {
   const resolvedCorpus = path.resolve(corpusPath)
+  if (resumeWorkspacePath) {
+    const candidate = path.resolve(resumeWorkspacePath)
+    if (!resumableWorkspace(candidate, resolvedCorpus)) {
+      throw new Error(`Workspace cannot be resumed from ${candidate}`)
+    }
+    return { path: candidate, resumed: true }
+  }
   const corpusName = path.basename(resolvedCorpus)
   const parentDir = path.dirname(resolvedCorpus)
   const baseName = workspaceName?.trim() || `${corpusName}-spinosa`
@@ -93,7 +101,7 @@ function materializeWorkspaceConfig(workspacePath: string): void {
 }
 
 export async function createWorkspace(options: CreateWorkspaceOptions): Promise<CreateWorkspaceResult> {
-  const { corpusPath, frameworkRoot, extensions, preferredCli, launch, workspaceName, onProgress, onRecover, shouldAbort } = options
+  const { corpusPath, frameworkRoot, extensions, preferredCli, launch, workspaceName, resumeWorkspacePath, onProgress, onRecover, shouldAbort } = options
   throwIfSpinosaCancelled(shouldAbort)
   const progress = onProgress ?? (() => {})
   const recover = onRecover ?? (() => {})
@@ -101,7 +109,7 @@ export async function createWorkspace(options: CreateWorkspaceOptions): Promise<
 
   const resolvedCorpus = path.resolve(corpusPath)
   const corpusName = path.basename(resolvedCorpus)
-  const reservation = reserveWorkspacePath(corpusPath, workspaceName)
+  const reservation = reserveWorkspacePath(corpusPath, workspaceName, resumeWorkspacePath)
   const workspacePath = reservation.path
 
   const projectName = workspaceName?.trim() || corpusName

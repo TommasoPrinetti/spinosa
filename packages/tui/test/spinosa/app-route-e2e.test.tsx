@@ -106,7 +106,8 @@ async function createRegisteredWorkspace(input: {
   root: string
   home: string
   projectName: string
-  setupStatus: "cli_started" | "workspace_started"
+  setupStatus: "importing" | "cli_started" | "workspace_started"
+  sourceLocation?: string
 }) {
   const workspacePath = path.join(input.root, `${input.projectName}-spinosa`)
   const workspaceID = createWorkspaceID()
@@ -121,6 +122,7 @@ async function createRegisteredWorkspace(input: {
     [
       `workspace_id: ${workspaceID}`,
       `project_name: ${input.projectName}`,
+      ...(input.sourceLocation ? [`source_location: ${input.sourceLocation}`] : []),
       `setup_status: ${input.setupStatus}`,
       "framework_version: 0.1.0",
     ].join("\n"),
@@ -138,7 +140,7 @@ async function appendRegistryEntry(
   workspacePath: string,
   projectName: string,
   workspaceID?: SpinosaWorkspaceID,
-  setupStatus: "cli_started" | "workspace_started" | "unknown" = "unknown",
+  setupStatus: "importing" | "cli_started" | "workspace_started" | "unknown" = "unknown",
 ) {
   const metadataDir = path.join(home, ".spinosa", "metadata")
   mkdirSync(metadataDir, { recursive: true })
@@ -355,6 +357,145 @@ test("a Recent workspace that disappears before click opens recovery instead of 
     rmSync(root, { recursive: true, force: true })
   }
 }, 30_000)
+
+test("a present incomplete Recent workspace resumes at Step 2 and bottom Back returns to global home", async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "spinosa-recent-importing-"))
+  const home = path.join(root, "home")
+  const source = path.join(root, "importing-source")
+  mkdirSync(home, { recursive: true })
+  mkdirSync(source, { recursive: true })
+  await Bun.write(path.join(source, "paper.md"), "partial import\n")
+  try {
+    await createRegisteredWorkspace({
+      root,
+      home,
+      projectName: "importing-demo",
+      setupStatus: "importing",
+      sourceLocation: source,
+    })
+    const frame = await renderRouteFrame("global", {
+      home,
+      act: async (setup) => {
+        const recentFrame = await waitForText(setup, "importing-demo")
+        expect(recentFrame).toContain("Import incomplete")
+        const lines = recentFrame.split("\n")
+        const y = lines.findIndex((line) => line.includes("importing-demo"))
+        const x = lines[y]!.indexOf("importing-demo") + 1
+        await setup.mockMouse.moveTo(x, y)
+        await setup.mockMouse.click(x, y)
+        await waitForText(setup, "Resume Spinosa workspace")
+        const resumedFrame = await waitForText(setup, "Workspace name")
+        expect(resumedFrame).not.toContain("Source folders")
+        const resumedLines = resumedFrame.split("\n")
+        const backY = resumedLines.findIndex((line) => line.includes("Back"))
+        const backX = resumedLines[backY]!.indexOf("Back") + 1
+        await setup.mockMouse.moveTo(backX, backY)
+        await setup.mockMouse.click(backX, backY)
+        await waitForText(setup, "Recent workspaces")
+      },
+    })
+
+    expect(frame).toContain("Recent workspaces")
+    expect(frame).not.toContain("Switch workspace")
+    expect(frame).not.toContain("Workspace not found")
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+}, 30_000)
+
+test("the top arrow exits resumed onboarding to global home", async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "spinosa-resume-arrow-back-"))
+  const home = path.join(root, "home")
+  const source = path.join(root, "importing-source")
+  mkdirSync(home, { recursive: true })
+  mkdirSync(source, { recursive: true })
+  await Bun.write(path.join(source, "paper.md"), "partial import\n")
+  try {
+    await createRegisteredWorkspace({
+      root,
+      home,
+      projectName: "arrow-back-demo",
+      setupStatus: "importing",
+      sourceLocation: source,
+    })
+    const frame = await renderRouteFrame("global", {
+      home,
+      act: async (setup) => {
+        const recentFrame = await waitForText(setup, "arrow-back-demo")
+        const recentLines = recentFrame.split("\n")
+        const recentY = recentLines.findIndex((line) => line.includes("arrow-back-demo"))
+        const recentX = recentLines[recentY]!.indexOf("arrow-back-demo") + 1
+        await setup.mockMouse.moveTo(recentX, recentY)
+        await setup.mockMouse.click(recentX, recentY)
+
+        const resumedFrame = await waitForText(setup, "Workspace name")
+        const resumedLines = resumedFrame.split("\n")
+        const titleY = resumedLines.findIndex((line) => line.includes("Resume Spinosa workspace"))
+        const arrowX = resumedLines[titleY]!.indexOf("←")
+        await setup.mockMouse.moveTo(arrowX, titleY)
+        await setup.mockMouse.click(arrowX, titleY)
+        await waitForText(setup, "Recent workspaces")
+      },
+    })
+
+    expect(frame).toContain("Recent workspaces")
+    expect(frame).not.toContain("Switch workspace")
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+}, 30_000)
+
+test("an incomplete workspace with an invalid saved source resumes at Step 1", async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "spinosa-resume-invalid-source-"))
+  const home = path.join(root, "home")
+  const missingSource = path.join(root, "missing-source")
+  mkdirSync(home, { recursive: true })
+  try {
+    await createRegisteredWorkspace({
+      root,
+      home,
+      projectName: "invalid-source-demo",
+      setupStatus: "importing",
+      sourceLocation: missingSource,
+    })
+    const frame = await renderRouteFrame("global", {
+      home,
+      act: async (setup) => {
+        const recentFrame = await waitForText(setup, "invalid-source-demo")
+        const lines = recentFrame.split("\n")
+        const y = lines.findIndex((line) => line.includes("invalid-source-demo"))
+        const x = lines[y]!.indexOf("invalid-source-demo") + 1
+        await setup.mockMouse.moveTo(x, y)
+        await setup.mockMouse.click(x, y)
+        await waitForText(setup, "Resume Spinosa workspace")
+        await waitForText(setup, "Source folders")
+      },
+    })
+
+    expect(frame).toContain("Source folders")
+    expect(frame).toContain(path.basename(missingSource))
+    expect(frame).not.toContain("Workspace name")
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+}, 30_000)
+
+test("fresh onboarding Back still returns to global home", async () => {
+  const frame = await renderRouteFrame("onboarding", {
+    act: async (setup) => {
+      const onboardingFrame = await waitForText(setup, "Source folders")
+      const lines = onboardingFrame.split("\n")
+      const backY = lines.findIndex((line) => line.includes("Back"))
+      const backX = lines[backY]!.indexOf("Back") + 1
+      await setup.mockMouse.moveTo(backX, backY)
+      await setup.mockMouse.click(backX, backY)
+      await waitForText(setup, "New workspace")
+    },
+  })
+
+  expect(frame).toContain("New workspace")
+  expect(frame).not.toContain("Create Spinosa workspace")
+})
 
 test("Visualizer honors its workspace and session route parameters", async () => {
   const root = mkdtempSync(path.join(tmpdir(), "spinosa-visualizer-route-"))

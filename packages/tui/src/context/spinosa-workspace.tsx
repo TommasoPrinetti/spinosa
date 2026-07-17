@@ -71,7 +71,11 @@ export const { use: useSpinosaWorkspace, provider: SpinosaWorkspaceProvider } = 
       const nextRoute = options?.route
         ?? (route.data.type === "workspace" || route.data.type === "visualizer"
           ? route.data
-          : routeForWorkspaceOpen(loaded.setupStatus))
+          : routeForWorkspaceOpen(loaded.setupStatus, undefined, {
+              workspacePath,
+              sourceLocation: loaded.sourceLocation,
+              workspaceName: loaded.projectName,
+            }))
       route.navigate(nextRoute)
     }
 

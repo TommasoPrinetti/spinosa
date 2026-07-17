@@ -128,7 +128,8 @@ describe("E2E: Workspace creation flow", () => {
     const resumed = await createWorkspace({
       corpusPath: corpusDir,
       frameworkRoot: root!,
-      workspaceName: "e2e-resume-test",
+      workspaceName: "a-name-that-would-not-find-the-interrupted-workspace",
+      resumeWorkspacePath: first.workspacePath,
     })
 
     expect(resumed.workspacePath).toBe(first.workspacePath)
