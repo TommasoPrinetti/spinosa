@@ -25,7 +25,9 @@ test("workspace watcher retries failed refreshes and never overlaps callbacks", 
     2,
   )
 
-  await Bun.sleep(45)
+  for (let attempt = 0; attempt < 100 && (calls < 2 || active > 0); attempt++) {
+    await Bun.sleep(5)
+  }
   dispose()
 
   expect(calls).toBeGreaterThanOrEqual(2)

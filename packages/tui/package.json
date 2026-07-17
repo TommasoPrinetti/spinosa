@@ -7,7 +7,7 @@
   "license": "MIT",
   "scripts": {
     "test": "bun test --timeout 30000 --only-failures",
-    "test:spinosa": "bun test test/spinosa/",
+    "test:spinosa": "bun test --isolate test/spinosa/",
     "typecheck": "tsc --noEmit",
     "typecheck:spinosa": "tsc --noEmit -p tsconfig.spinosa.json",
     "verify:spinosa": "bun run scripts/verify-spinosa.ts"

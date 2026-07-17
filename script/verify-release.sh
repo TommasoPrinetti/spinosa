@@ -8,7 +8,7 @@ test -f workspace-template/.bin/spinosa
 
 for package in packages/*; do
   [ -f "$package/package.json" ] || continue
-  if rg -q '"typecheck"' "$package/package.json"; then
+  if grep -q '"typecheck"' "$package/package.json"; then
     bun run --cwd "$package" typecheck
   fi
 done

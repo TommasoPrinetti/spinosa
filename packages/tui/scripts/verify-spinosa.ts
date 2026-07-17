@@ -19,7 +19,7 @@ function run(command: string, args: string[]) {
 async function main() {
   console.log("== Spinosa TUI verification ==\n")
 
-  const tests = run("bun", ["test", "test/spinosa/"])
+  const tests = run("bun", ["test", "--isolate", "test/spinosa/"])
   console.log("--- bun test test/spinosa/ ---")
   if (tests.stdout) process.stdout.write(tests.stdout)
   if (tests.stderr) process.stderr.write(tests.stderr)
