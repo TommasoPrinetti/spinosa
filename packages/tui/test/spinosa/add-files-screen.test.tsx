@@ -6,9 +6,12 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import { createStore } from "solid-js/store"
 import {
+  createActiveWorkTracker,
   deferPress,
   nextFocusedSourceIndexForAppend,
+  runGuardedBackNavigation,
   shouldCancelSpinosaWorkOnCtrlC,
+  shouldConfirmSpinosaBack,
 } from "../../src/routes/spinosa/wizard-ui"
 
 test("deferPress runs action after the current tick", async () => {
@@ -48,6 +51,51 @@ test("ctrl-c cancels Spinosa work only for active cancellable steps", () => {
     waitingForGate: false,
     cancellableSteps: ["direct", "markitdown", "ocr"],
   })).toBe(false)
+})
+
+test("Back confirmation is limited to active cancellable work", () => {
+  expect(shouldConfirmSpinosaBack({
+    step: "markitdown",
+    busy: true,
+    waitingForGate: false,
+    cancellableSteps: ["direct", "markitdown", "ocr"],
+  })).toBe(true)
+  expect(shouldConfirmSpinosaBack({
+    step: "scan",
+    busy: true,
+    waitingForGate: false,
+    cancellableSteps: ["direct", "markitdown", "ocr"],
+  })).toBe(false)
+})
+
+test("guarded Back stays on cancel and waits for work before navigating", async () => {
+  const stayedEvents: string[] = []
+  expect(await runGuardedBackNavigation({
+    shouldConfirm: true,
+    confirm: async () => false,
+    stop: () => stayedEvents.push("stop"),
+    waitForStop: async () => { stayedEvents.push("wait") },
+    navigate: () => stayedEvents.push("navigate"),
+  })).toBe("stayed")
+  expect(stayedEvents).toEqual([])
+
+  const events: string[] = []
+  let settle!: () => void
+  const tracker = createActiveWorkTracker()
+  void tracker.run(() => new Promise<void>((resolve) => { settle = resolve }))
+  const navigation = runGuardedBackNavigation({
+    shouldConfirm: true,
+    confirm: async () => { events.push("confirm"); return true },
+    stop: () => events.push("stop"),
+    waitForStop: async () => { events.push("wait"); await tracker.wait() },
+    navigate: () => events.push("navigate"),
+  })
+
+  await Promise.resolve()
+  expect(events).toEqual(["confirm", "stop", "wait"])
+  settle()
+  expect(await navigation).toBe("navigated")
+  expect(events).toEqual(["confirm", "stop", "wait", "navigate"])
 })
 
 test("scans and imports files from the dedicated add-files screen", async () => {
@@ -96,6 +144,9 @@ test("scans and imports files from the dedicated add-files screen", async () => 
   mock.module("../../src/ui/toast", () => ({
     Toast: () => null,
     useToast: () => ({ error() {}, show() {} }),
+  }))
+  mock.module("../../src/ui/dialog", () => ({
+    useDialog: () => ({ clear() {}, replace() {} }),
   }))
   mock.module("../../src/spinosa/onboarding-preview", () => ({
     detectDocumentTools: async () => ({ markitdown: true, ocr: true, pdfjs: true }),

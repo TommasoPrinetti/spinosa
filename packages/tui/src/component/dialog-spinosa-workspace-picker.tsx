@@ -20,6 +20,8 @@ import { resolveWorkspaceDisplayName } from "../spinosa/workspace-name"
 import { DialogSpinosaStartupChoice } from "./dialog-spinosa-startup-choice"
 import { buttonBackground, buttonBorder, buttonText } from "../util/button"
 import type { SpinosaSetupStatus } from "../spinosa/types"
+import type { SpinosaWorkspacePresence } from "../spinosa-core/types"
+import { workspacePresenceLabel } from "../spinosa-core/workspace/presence"
 
 type SortColumn = "name" | "folder" | "status" | "version" | "accessed"
 type SortDir = "asc" | "desc"
@@ -32,6 +34,8 @@ type SelectWorkspaceRow = {
   version: string
   needsUpdate: boolean
   lastAccessed: number
+  presence?: SpinosaWorkspacePresence
+  available: boolean
 }
 
 function relativeTime(timestamp: number): string {
@@ -84,14 +88,14 @@ export function DialogSpinosaWorkspacePicker(props: { onClose?: () => void } = {
     }
   }
 
-  const [workspaces] = createResource(async () => {
+  const [workspaces] = createResource(() => spinosa.bootReady, async (bootReady) => {
+    if (!bootReady) return []
     const list = await listRegisteredWorkspaces()
     const bundled = await readBundledFrameworkVersion()
     const pairs = await Promise.all(
       list.map(async (ws) => ({ ws, meta: await readWorkspaceMeta(ws.path) })),
     )
-    const valid = pairs.filter((p): p is { ws: typeof p.ws; meta: NonNullable<typeof p.meta> } => !!p.meta)
-    return valid.map(({ ws, meta }) => ({
+    return pairs.map(({ ws, meta }) => ({
       path: ws.path,
       name: resolveWorkspaceDisplayName(ws.path, meta?.projectName ?? ws.projectName),
       parentFolder: getParentFolder(ws.path),
@@ -99,6 +103,8 @@ export function DialogSpinosaWorkspacePicker(props: { onClose?: () => void } = {
       version: meta?.frameworkVersion || "unknown",
       needsUpdate: workspaceNeedsFrameworkUpdate(meta?.frameworkVersion, bundled),
       lastAccessed: getLastAccessed(ws.path),
+      presence: ws.presence,
+      available: !!meta,
     } satisfies SelectWorkspaceRow))
   })
 
@@ -166,7 +172,7 @@ export function DialogSpinosaWorkspacePicker(props: { onClose?: () => void } = {
         const idx = selected()
         const rows = sorted()
         if (idx < rows.length) {
-          void chooseWorkspace(rows[idx].path)
+          if (rows[idx]?.available) void chooseWorkspace(rows[idx].path)
         } else if (idx === rows.length) {
           dialog.clear()
           route.navigate({ type: "onboarding" })
@@ -264,7 +270,7 @@ export function DialogSpinosaWorkspacePicker(props: { onClose?: () => void } = {
                   flexDirection="row"
                   gap={1}
                   onMouseOver={() => setSelected(i())}
-                  onMouseDown={() => { setSelected(i()); void chooseWorkspace(row.path) }}
+                  onMouseDown={() => { setSelected(i()); if (row.available) void chooseWorkspace(row.path) }}
                 >
                   <box width={30}>
                     <text fg={theme.text} overflow="hidden" wrapMode="none">
@@ -277,8 +283,10 @@ export function DialogSpinosaWorkspacePicker(props: { onClose?: () => void } = {
                     </text>
                   </box>
                   <box width={14} flexShrink={0}>
-                    <text fg={theme.textMuted} overflow="hidden" wrapMode="none">
-                      {setupStatusLabel(row.status)}
+                    <text fg={row.available ? theme.textMuted : theme.warning} overflow="hidden" wrapMode="none">
+                      {row.presence && row.presence !== "present" && row.presence !== "legacy"
+                        ? workspacePresenceLabel(row.presence)
+                        : row.presence === "legacy" ? "Legacy" : setupStatusLabel(row.status)}
                     </text>
                   </box>
                   <box width={10} flexShrink={0}>

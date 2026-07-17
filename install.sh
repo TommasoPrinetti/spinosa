@@ -355,6 +355,21 @@ install_bundled_bun() {
   ok "Installed bundled Bun ${BUNDLED_BUN_VERSION}"
 }
 
+ensure_workspace_links() {
+  local fw_root="$1"
+  local nm="${fw_root}/node_modules/@opencode-ai"
+  mkdir -p "$nm"
+  for pkg_dir in "${fw_root}/packages"/*/ "${fw_root}/packages/sdk/js"; do
+    local pkg_json="${pkg_dir}package.json"
+    [[ -f "$pkg_json" ]] || continue
+    local pkg_name
+    pkg_name="$(grep '"name"' "$pkg_json" | head -1 | sed 's/.*"name": *"\(.*\)".*/\1/')"
+    [[ -n "$pkg_name" && "$pkg_name" == @opencode-ai/* ]] || continue
+    local link="$nm/${pkg_name#@opencode-ai/}"
+    [[ -L "$link" ]] || ln -sf "$pkg_dir" "$link" 2>/dev/null || true
+  done
+}
+
 install_bun_dependencies() {
   local fw_root="$1"
   local bun_bin="${SPINOSA_HOME}/bin/bun"
@@ -379,9 +394,19 @@ install_bun_dependencies() {
   bun_out="$(mktemp "${TMPDIR:-/tmp}/spinosa-bun-install.XXXXXX")"
   local bun_ok=0
   for attempt in 1 2; do
-    if (cd "$fw_root" && PATH="$(dirname "$bun_bin"):$PATH" "$bun_bin" install > "$bun_out" 2>&1); then
-      bun_ok=1
-      break
+    local install_args=(install)
+    if [[ $attempt -eq 2 ]]; then
+      info "Repairing dependency tree after failed validation"
+      rm -rf "${fw_root}/node_modules"
+      install_args+=(--force)
+    fi
+    if (cd "$fw_root" && PATH="$(dirname "$bun_bin"):$PATH" "$bun_bin" "${install_args[@]}" > "$bun_out" 2>&1); then
+      ensure_workspace_links "$fw_root"
+      if SPINOSA_HOME="$SPINOSA_HOME" SPINOSA_TEMPLATE_ROOT="$fw_root" \
+        "$bun_bin" run "${fw_root}/packages/tui/src/spinosa-cli.ts" version >> "$bun_out" 2>&1; then
+        bun_ok=1
+        break
+      fi
     fi
     if [[ $attempt -eq 1 ]]; then
       spinosa_log WARN "bun install failed (attempt 1/2), retrying..."
@@ -393,25 +418,12 @@ install_bun_dependencies() {
     spinosa_log ERROR "bun install failed after 2 attempts. Output:"
     while IFS= read -r line; do spinosa_log ERROR "$line"; done < "$bun_out"
     rm -f "$bun_out"
-    die "Dependency install failed. Check ${SPINOSA_HOME}/logs/spinosa.log for details. If the network is unreliable, set SPINOSA_SKIP_DEPS=1 to skip this step and manage dependencies separately."
+    die "Dependency repair failed. Metadata was preserved; check ${SPINOSA_HOME}/logs/spinosa.log and re-run the installer."
   fi
   rm -f "$bun_out"
   spinner_stop "Dependencies installed"
-  # Ensure all workspace packages are resolvable as @opencode-ai/* symlinks.
-  # for packages with complex native dep chains (core, spinosa-core, etc.).
-  local nm="${fw_root}/node_modules/@opencode-ai"
-  mkdir -p "$nm"
-  for pkg_dir in "${fw_root}/packages"/*/ "${fw_root}/packages/sdk/js"; do
-    local pkg_json="${pkg_dir}package.json"
-    [[ -f "$pkg_json" ]] || continue
-    local pkg_name
-    pkg_name="$(grep '"name"' "$pkg_json" | head -1 | sed 's/.*"name": *"\(.*\)".*/\1/')"
-    [[ -n "$pkg_name" && "$pkg_name" == @opencode-ai/* ]] || continue
-    local link="$nm/${pkg_name#@opencode-ai/}"
-    [[ -L "$link" ]] || ln -sf "$pkg_dir" "$link" 2>/dev/null || true
-  done
-
-
+  [ -d "${fw_root}/node_modules" ] \
+    || die "Dependencies missing after repair. Metadata was preserved; check ${SPINOSA_HOME}/logs/spinosa.log"
 }
 
 available_disk_bytes() {
@@ -678,6 +690,17 @@ version_dir_has_framework() {
   [ -d "$fw_dir" ] || return 1
   [ -f "${fw_dir}/workspace-template/.spinosa/workspace-files.tsv" ] || return 1
   [ -f "${fw_dir}/workspace-template/.bin/spinosa" ] || return 1
+  [ -d "${fw_dir}/packages/opencode" ] || return 1
+}
+
+# Runtime deps required for the TUI. Incomplete bun installs (half-failed or
+# half-uninstalled homes) often leave a version tree without node_modules.
+version_dir_has_runtime_deps() {
+  local version="$1"
+  local fw_dir="${SPINOSA_HOME}/versions/${version}"
+  [ -d "${fw_dir}/node_modules" ] || return 1
+  # bun install layout; empty or non-bun trees are treated as incomplete
+  [ -d "${fw_dir}/node_modules/.bun" ] || [ -d "${fw_dir}/node_modules/@opencode-ai" ] || return 1
 }
 
 version_install_complete() {
@@ -687,20 +710,123 @@ version_install_complete() {
     .*|*/*) return 1 ;;
   esac
   version_dir_has_framework "$version" || return 1
+  # When SPINOSA_SKIP_DEPS=1 for this run, skip node_modules check. Broken
+  # previously-stamped trees still fail completeness so repair can reinstall.
+  if [ "${SPINOSA_SKIP_DEPS:-}" != "1" ]; then
+    version_dir_has_runtime_deps "$version" || return 1
+  fi
   if [ -f "${SPINOSA_HOME}/versions/${version}/${SPINOSA_INSTALL_COMPLETE_STAMP}" ]; then
     return 0
   fi
   local last
   last="$(read_last_installed_version 2>/dev/null || true)"
+  # Strip optional quotes from yaml values
+  last="${last%\"}"
+  last="${last#\"}"
   [ -n "$last" ] && [ "$last" = "$version" ]
 }
 
+# Detect half-uninstalled / half-installed ~/.spinosa and clean debris so a
+# normal install can repair rather than crash (missing bin, incomplete deps,
+# orphan staging dirs, metadata-only homes after uninstall, etc.).
+repair_spinosa_home() {
+  local repaired=0
+  local entry version base complete has_versions
 
+  mkdir -p "${SPINOSA_HOME}" "${SPINOSA_METADATA_DIR}"
 
+  # Stale lock / staging / backup trees left by interrupted installs
+  if [ -d "${SPINOSA_HOME}/versions" ]; then
+    for entry in "${SPINOSA_HOME}/versions"/* "${SPINOSA_HOME}/versions"/.[!.]* "${SPINOSA_HOME}/versions"/..?*; do
+      [ -e "$entry" ] || continue
+      base="$(basename "$entry")"
+      case "$base" in
+        .|..|.install.lock) continue ;;
+      esac
+      # Match .*.staging.* and .*.backup.* leftover dirs
+      case "$base" in
+        .*.staging.*|*.staging.*|.*.backup.*|*.backup.*)
+          info "Removing leftover install stage: versions/${base}"
+          rm -rf "$entry"
+          repaired=1
+          ;;
+      esac
+    done
+
+    # Incomplete version trees (missing stamp, framework files, or node_modules)
+    for entry in "${SPINOSA_HOME}/versions"/*; do
+      [ -e "$entry" ] || continue
+      [ -d "$entry" ] || continue
+      version="$(basename "$entry")"
+      case "$version" in
+        .*|*/*) continue ;;
+      esac
+      if ! version_install_complete "$version"; then
+        info "Removing incomplete install: versions/${version}"
+        rm -rf "$entry"
+        repaired=1
+      fi
+    done
+  fi
+
+  complete="$(get_installed_version || true)"
+
+  if [ -z "$complete" ]; then
+    # Half-uninstall: metadata kept, runtime removed — or install never finished.
+    has_versions=0
+    if [ -d "${SPINOSA_HOME}/versions" ]; then
+      for entry in "${SPINOSA_HOME}/versions"/*; do
+        [ -e "$entry" ] || continue
+        has_versions=1
+        break
+      done
+    fi
+    if [ -d "${SPINOSA_HOME}/bin" ] || [ -f "${SPINOSA_HOME}/env.sh" ] || [ -d "${SPINOSA_HOME}/lib" ] \
+      || { [ -d "${SPINOSA_HOME}/versions" ] && [ "$has_versions" -eq 0 ]; }; then
+      info "Detected partial Spinosa home (no complete version) — cleaning runtime debris for repair"
+      rm -rf "${SPINOSA_HOME}/bin" "${SPINOSA_HOME}/lib" 2>/dev/null || true
+      rm -f "${SPINOSA_HOME}/env.sh" 2>/dev/null || true
+      # Drop empty versions shell so install recreates a clean tree
+      if [ -d "${SPINOSA_HOME}/versions" ] && [ "$has_versions" -eq 0 ]; then
+        # keep directory for lock creation later; only remove empties via rmdir if possible
+        :
+      fi
+      repaired=1
+    fi
+  else
+    # Complete tree exists but launcher/runtime is missing or broken
+    if [ ! -x "${SPINOSA_HOME}/bin/spinosa" ] || [ ! -x "${SPINOSA_HOME}/bin/bun" ]; then
+      info "Detected broken runtime under ${SPINOSA_HOME}/bin — will reinstall"
+      REINSTALL=1
+      repaired=1
+    fi
+  fi
+
+  # Target version specifically incomplete → force clean reinstall of that tree
+  if [ -n "${VERSION:-}" ] && [ -d "${SPINOSA_HOME}/versions/${VERSION}" ] \
+    && ! version_install_complete "$VERSION"; then
+    info "Target v${VERSION} is incomplete — removing for clean reinstall"
+    rm -rf "${SPINOSA_HOME}/versions/${VERSION}"
+    REINSTALL=1
+    repaired=1
+  fi
+
+  if [ "$repaired" -eq 1 ]; then
+    ok "Spinosa home prepared for repair install (workspace metadata kept)"
+    spinosa_log INFO "repair_spinosa_home cleaned partial install home=${SPINOSA_HOME}"
+  fi
+}
 
 mark_version_install_complete() {
   local version="$1"
   local stamp="${SPINOSA_HOME}/versions/${version}/${SPINOSA_INSTALL_COMPLETE_STAMP}"
+  # Never stamp an incomplete tree as complete
+  if ! version_dir_has_framework "$version"; then
+    die "Refusing to mark incomplete v${version} as installed (missing framework files)"
+  fi
+  if [ "${SPINOSA_SKIP_DEPS:-}" != "1" ] && ! version_dir_has_runtime_deps "$version"; then
+    die "Refusing to mark incomplete v${version} as installed (missing node_modules — re-run install)"
+  fi
   printf '%s %s\n' "$version" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$stamp"
   write_install_metadata
 }
@@ -968,9 +1094,20 @@ install_shims() {
   local shim="${SPINOSA_BIN_DIR}/spinosa"
   cat > "$shim" << SHIM_EOF
 #!/bin/sh
-target="${SPINOSA_HOME}/bin/spinosa"
+home="${SPINOSA_HOME}"
+target="\${home}/bin/spinosa"
+if [ ! -f "\$target" ]; then
+  version=\$(awk '\$1 == "last_installed_version:" { print \$2; exit }' "\${home}/metadata/config.yaml" 2>/dev/null | tr -d '"[:space:]')
+  installer="\${home}/versions/\${version}/install.sh"
+  if [ -n "\$version" ] && [ -f "\$installer" ] && command -v bash >/dev/null 2>&1; then
+    echo "spinosa: launcher missing; repairing v\${version} while preserving metadata..." >&2
+    bash "\$installer" --version "\$version" --yes --reinstall --no-launch --no-modify-path || true
+  fi
+fi
 if [ ! -f "\$target" ]; then
   echo "spinosa: installation broken — missing \${target}" >&2
+  echo "spinosa: repair with a reinstall, e.g.:" >&2
+  echo "  curl -fsSL https://github.com/TommasoPrinetti/spinosa/releases/download/beta/install.sh | bash -s -- --yes --reinstall" >&2
   exit 1
 fi
 exec bash "\$target" "\$@"
@@ -1203,6 +1340,14 @@ run_basic_test() {
     warn "TUI packages (packages/opencode) not found"
     ok=false
   fi
+  if [[ "${SPINOSA_SKIP_DEPS:-}" != "1" ]]; then
+    if [[ -d "${fw_root}/node_modules" ]]; then
+      ok "node_modules present"
+    else
+      warn "node_modules missing under versions/${VERSION}"
+      ok=false
+    fi
+  fi
 
   # Check shim
   if [[ -f "${SPINOSA_BIN_DIR}/spinosa" ]]; then
@@ -1215,7 +1360,7 @@ run_basic_test() {
   if $ok; then
     ok "All components verified"
   else
-    warn "Some components missing — spinosa may not work until dependencies are installed"
+    warn "Some components missing — re-run install with --reinstall --yes to repair"
   fi
 }
 maybe_launch_dashboard() {
@@ -1275,6 +1420,10 @@ main() {
   # Early trap: ensure lock cleanup on any exit before full cleanup trap is registered
   trap 'rm -rf "${INSTALL_LOCKDIR:-}"' EXIT
   trap 'rm -rf "${INSTALL_LOCKDIR:-}"; exit 1' INT TERM HUP
+
+  # Repair only after owning the global lock. This preserves metadata and
+  # prevents one installer from deleting another installer's active lock.
+  repair_spinosa_home
 
   check_release_age "$VERSION" "$MIN_DAYS"
 
@@ -1391,4 +1540,6 @@ main() {
   return 0
 }
 
-main "$@"
+if [[ "${SPINOSA_INSTALLER_LIB_ONLY:-0}" != "1" ]]; then
+  main "$@"
+fi

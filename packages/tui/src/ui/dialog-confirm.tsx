@@ -12,6 +12,14 @@ export type DialogConfirmProps = {
   onConfirm?: () => void
   onCancel?: () => void
   label?: string
+  confirmLabel?: string
+  defaultChoice?: "confirm" | "cancel"
+}
+
+export type DialogConfirmShowOptions = {
+  cancelLabel?: string
+  confirmLabel?: string
+  defaultChoice?: "confirm" | "cancel"
 }
 
 export type DialogConfirmResult = boolean | undefined
@@ -20,7 +28,7 @@ export function DialogConfirm(props: DialogConfirmProps) {
   const dialog = useDialog()
   const { theme } = useTheme()
   const [store, setStore] = createStore({
-    active: "confirm" as "confirm" | "cancel",
+    active: (props.defaultChoice ?? "confirm") as "confirm" | "cancel",
   })
 
   useBindings(() => ({
@@ -66,13 +74,14 @@ export function DialogConfirm(props: DialogConfirmProps) {
       <box paddingBottom={1}>
         <text fg={theme.textMuted}>{props.message}</text>
       </box>
-      <box flexDirection="row" justifyContent="flex-end" paddingBottom={1}>
+      <box flexDirection="row" justifyContent="flex-end" paddingBottom={1} gap={2}>
         <For each={["cancel", "confirm"] as const}>
           {(key) => (
             <box
               paddingLeft={1}
               paddingRight={1}
               backgroundColor={key === store.active ? theme.primary : undefined}
+              onMouseOver={() => setStore("active", key)}
               onMouseUp={() => {
                 if (key === "confirm") props.onConfirm?.()
                 if (key === "cancel") props.onCancel?.()
@@ -80,7 +89,7 @@ export function DialogConfirm(props: DialogConfirmProps) {
               }}
             >
               <text fg={key === store.active ? theme.selectedListItemText : theme.textMuted}>
-                {Locale.titlecase(key === "cancel" ? (props.label ?? key) : key)}
+                {Locale.titlecase(key === "cancel" ? (props.label ?? key) : (props.confirmLabel ?? key))}
               </text>
             </box>
           )}
@@ -90,7 +99,15 @@ export function DialogConfirm(props: DialogConfirmProps) {
   )
 }
 
-DialogConfirm.show = (dialog: DialogContext, title: string, message: string, label?: string) => {
+DialogConfirm.show = (
+  dialog: DialogContext,
+  title: string,
+  message: string,
+  labelOrOptions?: string | DialogConfirmShowOptions,
+) => {
+  const options = typeof labelOrOptions === "string"
+    ? { cancelLabel: labelOrOptions }
+    : labelOrOptions
   return new Promise<DialogConfirmResult>((resolve) => {
     dialog.replace(
       () => (
@@ -99,7 +116,9 @@ DialogConfirm.show = (dialog: DialogContext, title: string, message: string, lab
           message={message}
           onConfirm={() => resolve(true)}
           onCancel={() => resolve(false)}
-          label={label}
+          label={options?.cancelLabel}
+          confirmLabel={options?.confirmLabel}
+          defaultChoice={options?.defaultChoice}
         />
       ),
       () => resolve(undefined),

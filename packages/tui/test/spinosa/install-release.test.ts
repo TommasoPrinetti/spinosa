@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { mkdir } from "node:fs/promises"
+import { existsSync } from "node:fs"
+import { chmod, mkdir } from "node:fs/promises"
 import path from "node:path"
 import { tmpdir } from "../fixture/fixture"
 import { installedUpgradeVersion, verifyInstallerChecksum } from "../../src/spinosa-core/commands/upgrade"
@@ -58,6 +59,83 @@ describe("install and release flow", () => {
     expect(installer).not.toContain('versions/.lock.${$}-${VERSION}')
     expect(installer.indexOf('install_bun_dependencies "$fw_root"')).toBeLessThan(installer.indexOf('mv "$INSTALL_STAGE_DIR" "$version_dir"'))
     expect(installer).toContain('mv "${INSTALL_BACKUP_DIR}" "${SPINOSA_HOME}/versions/${VERSION}"')
+    expect(installer).toContain('install_args+=(--force)')
+    expect(installer).toContain('spinosa-cli.ts" version')
+  })
+
+  test("installer repair preserves metadata and removes only broken runtime state", async () => {
+    await using tmp = await tmpdir()
+    const home = path.join(tmp.path, "home")
+    const metadata = path.join(home, "metadata")
+    await mkdir(metadata, { recursive: true })
+    await mkdir(path.join(home, "versions", "broken", "node_modules"), { recursive: true })
+    await mkdir(path.join(home, "versions", ".install.lock"), { recursive: true })
+    await mkdir(path.join(home, "bin"), { recursive: true })
+    await mkdir(path.join(home, "lib"), { recursive: true })
+    await Bun.write(path.join(metadata, "workspaces.txt"), "workspace-id\t/path\n")
+    await Bun.write(path.join(home, "env.sh"), "keep=no\n")
+
+    const result = Bun.spawnSync({
+      cmd: ["bash", "-c", 'installer="$1"; set --; source "$installer"; repair_spinosa_home', "spinosa-test", path.join(repoRoot, "install.sh")],
+      cwd: repoRoot,
+      env: {
+        ...process.env,
+        SPINOSA_INSTALLER_LIB_ONLY: "1",
+        SPINOSA_HOME: home,
+        SPINOSA_BIN_DIR: path.join(tmp.path, "bin"),
+        NO_COLOR: "1",
+      },
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+
+    expect(result.exitCode).toBe(0)
+    expect(await Bun.file(path.join(metadata, "workspaces.txt")).text()).toBe("workspace-id\t/path\n")
+    expect(existsSync(path.join(home, "versions", "broken"))).toBe(false)
+    expect(existsSync(path.join(home, "versions", ".install.lock"))).toBe(true)
+    expect(existsSync(path.join(home, "env.sh"))).toBe(false)
+  })
+
+  test("installed launcher repairs a corrupt runtime and restarts the original command", async () => {
+    await using tmp = await tmpdir()
+    const home = path.join(tmp.path, "home")
+    const root = path.join(home, "versions", "1.2.3")
+    const launcher = await Bun.file(path.join(repoRoot, "workspace-template", ".bin", "spinosa")).text()
+    await mkdir(path.join(home, "metadata"), { recursive: true })
+    await mkdir(path.join(home, "bin"), { recursive: true })
+    await mkdir(path.join(root, "workspace-template", ".spinosa"), { recursive: true })
+    await mkdir(path.join(root, "metadata"), { recursive: true })
+    await Bun.write(path.join(home, "metadata", "workspaces.txt"), "workspace-id\t/path\n")
+    await Bun.write(path.join(root, "workspace-template", ".spinosa", "workspace-files.tsv"), "fixture\n")
+    await Bun.write(path.join(root, "metadata", "version"), "1.2.3\n")
+    await Bun.write(path.join(home, "bin", "spinosa"), launcher)
+    await Bun.write(path.join(home, "bin", "bun"), [
+      "#!/bin/sh",
+      'if [ -f "$SPINOSA_HOME/repaired" ]; then echo "repaired runtime"; exit 0; fi',
+      "exit 1",
+      "",
+    ].join("\n"))
+    await Bun.write(path.join(root, "install.sh"), [
+      "#!/bin/sh",
+      'touch "$SPINOSA_HOME/repaired"',
+      "exit 0",
+      "",
+    ].join("\n"))
+    await chmod(path.join(home, "bin", "spinosa"), 0o755)
+    await chmod(path.join(home, "bin", "bun"), 0o755)
+
+    const result = Bun.spawnSync({
+      cmd: [path.join(home, "bin", "spinosa"), "version"],
+      cwd: tmp.path,
+      env: { ...process.env, SPINOSA_HOME: home, NO_COLOR: "1" },
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+
+    expect(result.exitCode).toBe(0)
+    expect(result.stderr.toString()).toContain("runtime corruption detected")
+    expect(result.stdout.toString()).toContain("repaired runtime")
+    expect(await Bun.file(path.join(home, "metadata", "workspaces.txt")).text()).toBe("workspace-id\t/path\n")
   })
 
   test("uninstaller rejects a non-Spinosa home", async () => {

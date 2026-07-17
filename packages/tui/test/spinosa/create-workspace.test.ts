@@ -89,6 +89,7 @@ describe("E2E: Workspace creation flow", () => {
     expect(meta).toBeTruthy()
     expect(meta!.projectName).toBe("e2e-meta-test")
     expect(meta!.setupStatus).toBe("not_started")
+    expect(meta!.workspaceID).toMatch(/^spw_01_[0-9a-f]{32}$/)
   })
 
   test("second workspace creation auto-increments name", async () => {
@@ -121,6 +122,7 @@ describe("E2E: Workspace creation flow", () => {
       workspaceName: "e2e-resume-test",
     })
     await writeWorkspaceStatus(first.workspacePath, "importing")
+    const before = (await readWorkspaceMeta(first.workspacePath))!.workspaceID
     await Bun.write(path.join(first.workspacePath, "raw", "partial.md"), "partial\n")
 
     const resumed = await createWorkspace({
@@ -131,6 +133,7 @@ describe("E2E: Workspace creation flow", () => {
 
     expect(resumed.workspacePath).toBe(first.workspacePath)
     expect(resumed.resumed).toBe(true)
+    expect((await readWorkspaceMeta(resumed.workspacePath))!.workspaceID).toBe(before)
     expect(await Bun.file(path.join(resumed.workspacePath, "raw", "partial.md")).text()).toBe("partial\n")
   })
 

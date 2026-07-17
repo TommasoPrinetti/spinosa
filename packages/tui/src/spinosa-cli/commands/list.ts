@@ -3,7 +3,7 @@ import { homedir } from "node:os"
 import path from "node:path"
 import type { SpinosaCliIo } from "../io"
 import { emitResult } from "../io"
-import { registryUnescape, readWorkspaceMeta } from "../../spinosa-core"
+import { inspectWorkspacePresence, parseWorkspaceID, registryUnescape, readWorkspaceMeta, workspacePresenceLabel } from "../../spinosa-core"
 
 interface WorkspaceEntry {
   path: string
@@ -30,10 +30,15 @@ async function loadWorkspaces(): Promise<WorkspaceEntry[]> {
     const wsPath = registryUnescape(parts[0]!)
     const wsName = registryUnescape(parts[1]!)
     const registered = parts[2] ?? ""
+    const workspaceID = parseWorkspaceID(parts[3])
     let status = "unknown"
+    const presence = inspectWorkspacePresence({ workspacePath: wsPath, workspaceID })
+    status = workspacePresenceLabel(presence.status) ?? status
     try {
       const meta = await readWorkspaceMeta(wsPath)
-      if (meta) status = meta.setupStatus
+      if (meta && presence.status !== "non_existent" && presence.status !== "invalid" && presence.status !== "identity_mismatch") {
+        status = meta.setupStatus
+      }
     } catch {
       // workspace may have been deleted
     }

@@ -14,6 +14,7 @@ export * from "./corpus/index"
 
 // --- workspace
 export * from "./workspace-name"
+export * from "./workspace/identity"
 
 // --- utils
 export * from "./utils/path"
@@ -61,3 +62,7 @@ export * from "./commands/upgrade"
 // --- system
 export * from "./system/channels"
 export * from "./system/maintenance"
+export * from "./system/boot"
+
+// --- workspace presence
+export * from "./workspace/presence"

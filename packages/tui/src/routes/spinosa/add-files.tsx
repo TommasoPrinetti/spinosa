@@ -18,6 +18,7 @@ import { tuiLog, logStep, logAction, logTool, logGate, logError, setToastError }
 import { CenteredColumn } from "../../component/centered-column"
 import { OPENCODE_BASE_MODE, useOpencodeKeymap, useOpencodeModeStack } from "../../keymap"
 import { useExit } from "../../context/exit"
+import { useDialog } from "../../ui/dialog"
 import { buttonBackground, buttonText } from "../../util/button"
 import {
   buildImportScanPreview,
@@ -30,13 +31,17 @@ import { resolveFrameworkRoot } from "../../spinosa-core/framework/discovery"
 import { normalizePathInput, resolveExistingUserPaths, isCloudStoragePath } from "../../spinosa-core/utils/path"
 import {
   blurIfFocused,
+  confirmSpinosaBack,
+  createActiveWorkTracker,
   createWorkflowGuard,
   deferPress,
   delay,
   generateScanLines,
   ImportOptionsSelector,
   nextFocusedSourceIndexForAppend,
+  runGuardedBackNavigation,
   shouldCancelSpinosaWorkOnCtrlC,
+  shouldConfirmSpinosaBack,
   type ImportOption,
   LogScrollbox,
   LogoSummary,
@@ -154,6 +159,7 @@ export function AddFiles() {
   const keymap = useOpencodeKeymap()
   const modeStack = useOpencodeModeStack()
   const exit = useExit()
+  const dialog = useDialog()
   // ── Core state ────────────────────────────────────────────────────────────
   const [step, setStep] = createSignal<WizardStep>("path")
   const [sourcePaths, setSourcePaths] = createSignal<SourcePathEntry[]>([{ id: 0 }])
@@ -191,6 +197,7 @@ export function AddFiles() {
   const spinOff = () => { if (spinTimer) { clearInterval(spinTimer); spinTimer = undefined; setSpinIdx(0) } }
 
   const workflow = createWorkflowGuard()
+  const activeWork = createActiveWorkTracker()
   let activeChild: ChildProcess | undefined
   let sourceInput: TextareaRenderable | undefined
   const sourceInputs = new Map<number, TextareaRenderable>()
@@ -359,6 +366,9 @@ export function AddFiles() {
   }
 
   const stopActiveWork = () => {
+    if (CANCELABLE_STEPS.some((candidate) => candidate === step())) {
+      setProcessingStatus("Stopping current operation...")
+    }
     if (gateResolve) { gateResolve(); gateResolve = undefined }
     abortProcessing = true
     workflow.bump()
@@ -368,19 +378,9 @@ export function AddFiles() {
   }
 
   const goToWorkspace = () => navigate({ type: "global" })
-  const leavePathStep = () => {
-    stopActiveWork()
-    goToWorkspace()
-  }
-
-  const handleBackPress = () => {
-    if (step() === "path") leavePathStep()
-    else moveBack()
-  }
-
-  const moveBack = () => {
-    const from = step()
-    stopActiveWork()
+  const navigateBackFrom = (from: WizardStep) => {
+    if (from === "path") { goToWorkspace(); return }
+    if (from === "done") { spinosa.refresh(); goToWorkspace(); return }
     if (from === "tools") { logAction("back", "tools to path"); setStep("path"); return }
     if (from === "scan") { logAction("back", "scan to tools"); setStep("tools"); return }
     if (from === "direct" || from === "markitdown" || from === "ocr") { logAction("back", `${from} to scan`); setStep("scan"); return }
@@ -388,6 +388,28 @@ export function AddFiles() {
       setStep(importOptions().length > 0 ? "scan" : "path")
     }
   }
+
+  let backNavigationPending = false
+  const requestBack = (confirmIfActive = true) => {
+    if (backNavigationPending) return
+    const from = step()
+    backNavigationPending = true
+    void runGuardedBackNavigation({
+      shouldConfirm: confirmIfActive && shouldConfirmSpinosaBack({
+        step: from,
+        busy: busy(),
+        waitingForGate: waitingForGate(),
+        cancellableSteps: CANCELABLE_STEPS,
+      }),
+      confirm: () => confirmSpinosaBack(dialog, from),
+      stop: stopActiveWork,
+      waitForStop: () => activeWork.wait(),
+      navigate: () => navigateBackFrom(from),
+    }).finally(() => { backNavigationPending = false })
+  }
+
+  const handleBackPress = () => requestBack(true)
+  const leavePathStep = handleBackPress
 
   const handleInterrupt = () => {
     if (!shouldCancelSpinosaWorkOnCtrlC({
@@ -401,7 +423,7 @@ export function AddFiles() {
     }
 
     appendLogLine("Cancellation requested. Stopping current Spinosa operation...")
-    moveBack()
+    requestBack(false)
   }
 
   // ── Gate helper ───────────────────────────────────────────────────────────
@@ -731,7 +753,7 @@ export function AddFiles() {
       return
     }
     logAction("continue", `Scan → Processing (${selectedExtensions().length} types: ${selectedExtensions().join(",")})`)
-    void startProcessing()
+    void activeWork.run(startProcessing)
   }
 
   // ── Mount (keymap + timers) ──────────────────────────────────────────────
@@ -783,8 +805,7 @@ export function AddFiles() {
         consume(); return
       }
       if (event.name === "escape") {
-        if (step() === "path") leavePathStep()
-        else moveBack()
+        handleBackPress()
         consume(); return
       }
 
@@ -870,7 +891,7 @@ export function AddFiles() {
       }
 
       if (step() === "error" && event.name === "return") {
-        moveBack()
+        handleBackPress()
         consume(); return
       }
     })
@@ -1102,7 +1123,7 @@ export function AddFiles() {
               </Show>
             </WizardPanel>
             <WizardActionRow>
-              <WizardActionButton theme={theme} label="Back" onPress={moveBack} />
+              <WizardActionButton theme={theme} label="Back" onPress={handleBackPress} />
               <box flexGrow={1} />
               <Show when={step() === "tools" && toolActionLabel() !== "" && !toolChecks().some((t) => t.status === "checking")}>
                 <WizardActionButton
@@ -1165,7 +1186,7 @@ export function AddFiles() {
                 />
               </Show>
               <Show when={step() === "error"}>
-                <WizardActionButton theme={theme} label="Back" onPress={moveBack} />
+                <WizardActionButton theme={theme} label="Back" onPress={handleBackPress} />
                 <box flexGrow={1} />
                 <WizardActionButton theme={theme} label="Retry" primary onPress={() => void continueFromPath()} />
               </Show>

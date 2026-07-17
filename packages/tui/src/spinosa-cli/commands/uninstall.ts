@@ -2,6 +2,7 @@ import { existsSync, rmSync } from "node:fs"
 import { homedir } from "node:os"
 import type { SpinosaCliIo } from "../io"
 import { emitResult } from "../io"
+import { confirmTerminal } from "../terminal"
 
 function spinosaHome(): string {
   return process.env.SPINOSA_HOME ?? `${homedir()}/.spinosa`
@@ -20,64 +21,15 @@ function validateHome(home: string): string | undefined {
   return
 }
 
-async function confirmUninstall(): Promise<boolean> {
-  if (!process.stdin.isTTY) return false
-
-  const stdin = process.stdin
-  const stdout = process.stdout
-
-  return new Promise((resolve) => {
-    stdin.setRawMode?.(true)
-    stdin.resume()
-    let selected = 1
-
-    const render = () => {
-      stdout.write("\r")
-      if (selected === 0) {
-        stdout.write(
-          `  \x1b[33m\u25c6\x1b[0m  Are you sure you want to uninstall?\n` +
-          `  \x1b[2m\u2502\x1b[0m  \x1b[32m\u25cf\x1b[0m Yes / \x1b[2m\u25cb\x1b[0m No\n` +
-          `  \x1b[2m\u2514\x1b[0m  \n`,
-        )
-      } else {
-        stdout.write(
-          `  \x1b[33m\u25c6\x1b[0m  Are you sure you want to uninstall?\n` +
-          `  \x1b[2m\u2502\x1b[0m  \x1b[2m\u25cb\x1b[0m Yes / \x1b[32m\u25cf\x1b[0m No\n` +
-          `  \x1b[2m\u2514\x1b[0m  \n`,
-        )
-      }
-    }
-
-    const cleanup = () => {
-      stdin.setRawMode?.(false)
-      stdin.pause()
-      stdin.removeAllListeners("data")
-    }
-
-    render()
-    const onData = (data: Buffer) => {
-      const key = data.toString()
-      if (key === "\x1b[A" || key === "\u001b[A") {
-        selected = 0
-        stdout.write("\x1b[3A")
-        render()
-      } else if (key === "\x1b[B" || key === "\u001b[B") {
-        selected = 1
-        stdout.write("\x1b[3A")
-        render()
-      } else if (key === "\r" || key === "\n") {
-        cleanup()
-        resolve(selected === 0)
-      } else if (key === "\u0003") {
-        cleanup()
-        resolve(false)
-      }
-    }
-    stdin.on("data", onData)
-  })
+export async function confirmUninstall(): Promise<boolean> {
+  return confirmTerminal("Are you sure you want to uninstall?")
 }
 
-export async function runUninstall(io: SpinosaCliIo, yes: boolean): Promise<number> {
+export async function runUninstall(
+  io: SpinosaCliIo,
+  yes: boolean,
+  confirm: () => Promise<boolean> = confirmUninstall,
+): Promise<number> {
   const home = spinosaHome()
   const validationError = validateHome(home)
   if (validationError) {
@@ -90,7 +42,13 @@ export async function runUninstall(io: SpinosaCliIo, yes: boolean): Promise<numb
       io.error("Uninstall requires --yes in non-interactive mode")
       return 1
     }
-    const confirmed = await confirmUninstall()
+    let confirmed: boolean
+    try {
+      confirmed = await confirm()
+    } catch (error) {
+      io.error(`Error: ${error instanceof Error ? error.message : String(error)}`)
+      return 1
+    }
     if (!confirmed) {
       io.out("Canceled.")
       return 0

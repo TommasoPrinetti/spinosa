@@ -5,6 +5,8 @@ import { SplitBorder } from "../../ui/border"
 import { buttonBackground, buttonBorder, buttonText } from "../../util/button"
 import { Locale } from "../../util/locale"
 import type { ImportScanPreview, NewWorkspacePreview } from "../../spinosa/onboarding-preview"
+import type { DialogContext } from "../../ui/dialog"
+import { DialogConfirm } from "../../ui/dialog-confirm"
 
 export type ImportOption = {
   ext: string
@@ -38,6 +40,67 @@ export function createWorkflowGuard() {
     bump: () => ++generation,
     active: (gen: number) => gen === generation,
   }
+}
+
+/** Tracks one wizard operation so cancellation can settle before navigation. */
+export function createActiveWorkTracker() {
+  let active: Promise<void> | undefined
+  return {
+    run(work: () => Promise<void>) {
+      if (active) return active
+      const current = work()
+      active = current
+      void current.then(
+        () => { if (active === current) active = undefined },
+        () => { if (active === current) active = undefined },
+      )
+      return current
+    },
+    async wait() {
+      await active?.then(() => undefined, () => undefined)
+    },
+  }
+}
+
+export function shouldConfirmSpinosaBack(props: {
+  step: string
+  busy: boolean
+  waitingForGate: boolean
+  cancellableSteps: readonly string[]
+}) {
+  return props.cancellableSteps.includes(props.step) && (props.busy || props.waitingForGate)
+}
+
+export async function confirmSpinosaBack(dialog: DialogContext, step: string) {
+  const operation = step === "direct"
+    ? "the current file copy"
+    : step === "markitdown"
+      ? "the current MarkItDown conversion"
+      : step === "ocr"
+        ? "the current OCR operation"
+        : step === "verification"
+          ? "the current verification"
+          : "the current workspace setup"
+  return (await DialogConfirm.show(
+    dialog,
+    "Stop current operation?",
+    `Going back will stop ${operation}. Files already imported will remain.`,
+    { cancelLabel: "Stay", confirmLabel: "Stop and go back", defaultChoice: "cancel" },
+  )) === true
+}
+
+export async function runGuardedBackNavigation(input: {
+  shouldConfirm: boolean
+  confirm: () => Promise<boolean>
+  stop: () => void
+  waitForStop: () => Promise<void>
+  navigate: () => void
+}): Promise<"stayed" | "navigated"> {
+  if (input.shouldConfirm && !(await input.confirm())) return "stayed"
+  input.stop()
+  await input.waitForStop()
+  input.navigate()
+  return "navigated"
 }
 
 export function delay(ms: number) {

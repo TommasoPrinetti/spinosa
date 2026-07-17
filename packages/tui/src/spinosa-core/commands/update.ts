@@ -16,6 +16,8 @@ import path from "node:path"
 import { safeCopy, copyDirContents, cleanMacMetadata, isCloudStoragePath, shouldSkipTemplateCopyEntry, writeTextAtomic } from "../utils/fs"
 import { compareFrameworkVersions } from "../utils/version"
 import { writeWorkspaceFrameworkVersion } from "../workspace/meta"
+import { inspectWorkspacePresence, isUsableWorkspacePresence } from "../workspace/presence"
+import { loadRegistry } from "../workspace/registry"
 import { readFrameworkVersionFromRoot, resolveTemplateRootFromFrameworkRoot } from "../framework/discovery"
 import { spinosaLogInfo, spinosaLogWarn } from "../utils/log"
 import { resolvePathWithinRoot } from "../utils/path"
@@ -36,6 +38,7 @@ export interface UpdateResult {
   removed: number
   skipped: number
   changes: boolean
+  presence?: import("../types").SpinosaWorkspacePresence
 }
 
 interface FrameworkEntry {
@@ -495,6 +498,16 @@ function restoreUpdateSnapshot(workspacePath: string, snapshot: UpdateSnapshot):
 }
 
 export async function updateWorkspace(options: UpdateOptions): Promise<UpdateResult> {
+  const registered = (await loadRegistry(undefined, { allowMissingMarker: true }))
+    .find((entry) => entry.path === options.workspacePath)
+  const presence = registered || !existsSync(options.workspacePath)
+    ? inspectWorkspacePresence({ workspacePath: options.workspacePath, workspaceID: registered?.workspaceID })
+    : undefined
+  if (presence && !isUsableWorkspacePresence(presence)) {
+    spinosaLogWarn("update", `Skipping ${options.workspacePath}: workspace is ${presence.status}`)
+    return { success: true, added: 0, updated: 0, removed: 0, skipped: 1, changes: false, presence: presence.status }
+  }
+
   const lockPath = path.join(options.workspacePath, ".spinosa", "update.lock")
   const deadline = Date.now() + (options.lockTimeoutMs ?? 10_000)
   while (true) {

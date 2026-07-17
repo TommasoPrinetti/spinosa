@@ -104,6 +104,13 @@ Exits with code `1` if any critical issue is found (version skew, missing tools)
 
 Remove Spinosa runtime files from the system. Your workspace folders stay in place, and `~/.spinosa/metadata/` is kept so future reinstalls can reuse workspace registry and configuration metadata.
 
+```bash
+spinosa uninstall         # interactive y/N confirmation
+spinosa uninstall --yes   # non-interactive confirmation
+```
+
+Interactive prompts read from the controlling terminal even when Spinosa is launched through a Bun or shell wrapper. If no terminal is available, use `--yes` explicitly.
+
 ### `spinosa startup-autoclean`
 
 Remove abandoned installer staging and backup directories under `~/.spinosa/versions/`, including their stale `node_modules` trees. It never removes completed releases, so workspaces that still link to an older framework remain runnable.

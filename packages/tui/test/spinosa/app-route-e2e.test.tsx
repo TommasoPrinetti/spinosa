@@ -1,7 +1,7 @@
 import { expect, mock, test } from "bun:test"
 import { createTestRenderer } from "@opentui/core/testing"
 import { Effect, Fiber } from "effect"
-import { mkdirSync, mkdtempSync, rmSync, utimesSync } from "node:fs"
+import { existsSync, mkdirSync, mkdtempSync, rmSync, utimesSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -243,13 +243,14 @@ test("Spinosa app route E2E boots and navigates key workspace flows", async () =
     })
 
     expect(filteredFrame).toContain("visible-demo")
-    expect(filteredFrame).not.toContain("stale-demo")
+    expect(filteredFrame).toContain("stale-demo")
+    expect(filteredFrame).toContain("NON EXISTENT")
   } finally {
     rmSync(filteredRoot, { recursive: true, force: true })
   }
 }, 30_000)
 
-test("homepage surfaces stale installer cleanup after it has rendered", async () => {
+test("boot cleanup removes stale installer files before the homepage renders", async () => {
   const root = mkdtempSync(path.join(tmpdir(), "spinosa-home-maintenance-"))
   const home = path.join(root, "home")
   const stale = path.join(home, ".spinosa", "versions", ".0.9.0.staging.999999")
@@ -260,10 +261,15 @@ test("homepage surfaces stale installer cleanup after it has rendered", async ()
     const frame = await renderRouteFrame("workspace", {
       home,
       height: 50,
-      act: async (setup) => { await waitForText(setup, "leftover install file") },
+      act: async (setup) => {
+        for (let attempt = 0; attempt < 30 && existsSync(stale); attempt++) {
+          await setup.renderOnce()
+          await new Promise((resolve) => setTimeout(resolve, 25))
+        }
+      },
     })
-    expect(frame).toContain("leftover install file")
-    expect(frame).toContain("Clean up")
+    expect(frame).not.toContain("leftover install file")
+    expect(existsSync(stale)).toBe(false)
   } finally {
     rmSync(root, { recursive: true, force: true })
   }

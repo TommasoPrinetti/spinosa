@@ -50,7 +50,7 @@ import { ThemeProvider, useTheme } from "./context/theme"
 import { Home } from "./routes/home"
 import { Session } from "./routes/session"
 
-import { SpinosaWorkspaceProvider } from "./context/spinosa-workspace"
+import { SpinosaWorkspaceProvider, useSpinosaWorkspace } from "./context/spinosa-workspace"
 import { PromptHistoryProvider } from "./component/prompt/history"
 import { FrecencyProvider } from "./component/prompt/frecency"
 import { PromptStashProvider } from "./component/prompt/stash"
@@ -410,6 +410,10 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
   const pluginRuntime = usePluginRuntime()
   const attention = createTuiAttention({ renderer, config: tuiConfig, kv })
   const clipboard = useClipboard()
+  const spinosa = useSpinosaWorkspace()
+  const [startupLoadingComplete, setStartupLoadingComplete] = createSignal(startup.skipInitialLoading)
+  const appReady = () => ready() && (startup.skipInitialLoading || spinosa.bootReady)
+  const tuiReady = () => appReady() && (startup.skipInitialLoading || startupLoadingComplete())
 
   const api = createTuiApi(
     createTuiApiAdapters({
@@ -1120,7 +1124,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       <Show when={Flag.OPENCODE_SHOW_TTFD}>
         <TimeToFirstDraw />
       </Show>
-      <Show when={ready()}>
+      <Show when={tuiReady()}>
         <box flexGrow={1} minHeight={0} flexDirection="column">
           <Show when={route.data.type === "workspace"}>
             <Session />
@@ -1145,7 +1149,11 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         <pluginRuntime.Slot name="app" />
       </Show>
       <Show when={!startup.skipInitialLoading}>
-        <StartupLoading ready={ready} />
+        <StartupLoading
+          ready={appReady}
+          operations={() => spinosa.bootOperations}
+          onComplete={() => setStartupLoadingComplete(true)}
+        />
       </Show>
     </box>
   )

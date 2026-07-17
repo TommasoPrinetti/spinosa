@@ -1,9 +1,10 @@
-import { existsSync, mkdirSync, readdirSync, openSync, writeSync, closeSync, fsyncSync } from "node:fs"
+import { existsSync, mkdirSync, readdirSync, openSync, closeSync, fsyncSync } from "node:fs"
 import { mkdir, rename, rm, stat, readFile, writeFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import path from "node:path"
 import { resolveWorkspaceDisplayName } from "../workspace-name"
-import type { SpinosaRegisteredWorkspace } from "../types"
+import type { SpinosaRegisteredWorkspace, SpinosaWorkspacePresence } from "../types"
+import { ensureWorkspaceID, parseWorkspaceID, readWorkspaceID, type SpinosaWorkspaceID } from "./identity"
 // In-process mutex serializing registry file read-modify-write cycles
 let registryLock: Promise<void> = Promise.resolve()
 
@@ -145,13 +146,47 @@ async function withRegistryFileLock<T>(
   }
 }
 
-function decodeRegistryLine(line: string): { workspacePath: string; project: string } | undefined {
-  const [rawPath, rawProject = ""] = line.split("|", 2)
+type DecodedRegistryLine = {
+  workspacePath: string
+  project: string
+  registered: string
+  workspaceID?: SpinosaWorkspaceID
+  presence?: SpinosaWorkspacePresence
+}
+
+function decodeRegistryLine(line: string): DecodedRegistryLine | undefined {
+  const [rawPath, rawProject = "", registered = "", rawWorkspaceID, rawPresence] = line.split("|")
   if (!rawPath) return
   return {
     workspacePath: registryUnescape(rawPath),
     project: registryUnescape(rawProject),
+    registered,
+    workspaceID: parseWorkspaceID(rawWorkspaceID),
+    presence: parseWorkspacePresence(rawPresence),
   }
+}
+
+function parseWorkspacePresence(value: string | undefined): SpinosaWorkspacePresence | undefined {
+  switch (value) {
+    case "present":
+    case "legacy":
+    case "moved":
+    case "non_existent":
+    case "invalid":
+    case "identity_mismatch":
+      return value
+    default:
+      return undefined
+  }
+}
+
+function encodeRegistryLine(input: DecodedRegistryLine, workspaceID?: SpinosaWorkspaceID, presence?: SpinosaWorkspacePresence): string {
+  const identityField = workspaceID ? `|${workspaceID}` : presence ? "|" : ""
+  return `${registryEscape(input.workspacePath)}|${registryEscape(input.project)}|${input.registered}${identityField}${presence ? `|${presence}` : ""}`
+}
+
+function workspaceIDFromMarker(workspacePath: string): SpinosaWorkspaceID | undefined {
+  return readWorkspaceID(workspacePath)
 }
 
 export async function ensureGlobalMetadata(): Promise<void> {
@@ -167,14 +202,16 @@ export async function ensureGlobalMetadata(): Promise<void> {
 export async function loadRegistry(
   configPath?: string,
   options?: { allowMissingMarker?: boolean },
-): Promise<{ path: string; project: string }[]> {
+): Promise<{ path: string; project: string; workspaceID?: SpinosaWorkspaceID; presence?: SpinosaWorkspacePresence }[]> {
   const registry = configPath ?? metadataPath("workspaces.txt")
   const file = Bun.file(registry)
   if (!(await file.exists())) return []
 
   const lines = (await file.text()).split(/\r?\n/).filter(Boolean)
-  const results: { path: string; project: string }[] = []
+  const results: { path: string; project: string; workspaceID?: SpinosaWorkspaceID; presence?: SpinosaWorkspacePresence }[] = []
   const seen = new Set<string>()
+  const pathsByID = new Map<SpinosaWorkspaceID, string>()
+  const resultIndexByID = new Map<SpinosaWorkspaceID, number>()
 
   for (const line of lines) {
     const decoded = decodeRegistryLine(line)
@@ -183,10 +220,33 @@ export async function loadRegistry(
     if (!options?.allowMissingMarker && !validateWorkspace(workspacePath)) continue
     if (seen.has(workspacePath)) continue
     seen.add(workspacePath)
-    results.push({
+    const workspaceID = decoded.workspaceID ?? workspaceIDFromMarker(workspacePath)
+    const existingPath = workspaceID ? pathsByID.get(workspaceID) : undefined
+    if (workspaceID && existingPath && existingPath !== workspacePath) {
+      const existingLive = validateWorkspace(existingPath)
+      const currentLive = validateWorkspace(workspacePath)
+      if (existingLive && currentLive) {
+        throw new Error(`Workspace ID ${workspaceID} maps to multiple live paths`)
+      }
+      if (!currentLive || existingLive) continue
+      const index = resultIndexByID.get(workspaceID)
+      if (index !== undefined) {
+        results[index] = { path: workspacePath, project, workspaceID }
+        pathsByID.set(workspaceID, workspacePath)
+        continue
+      }
+    }
+    const result = {
       path: workspacePath,
       project,
-    })
+      ...(workspaceID ? { workspaceID } : {}),
+      ...(decoded.presence ? { presence: decoded.presence } : {}),
+    }
+    if (workspaceID) {
+      pathsByID.set(workspaceID, workspacePath)
+      resultIndexByID.set(workspaceID, results.length)
+    }
+    results.push(result)
   }
 
   return results
@@ -196,9 +256,15 @@ export async function registerWorkspace(
   workspacePath: string,
   project: string,
   onRecover?: (msg: string) => void,
+  workspaceID?: SpinosaWorkspaceID,
 ): Promise<void> {
   return withRegistryLock(async () => {
     const registry = metadataPath("workspaces.txt")
+    const markerID = workspaceIDFromMarker(workspacePath)
+    if (workspaceID && markerID !== workspaceID) {
+      throw new Error(`Workspace ID does not match the workspace marker at ${workspacePath}`)
+    }
+    const canonicalID = workspaceID ?? (validateWorkspace(workspacePath) ? ensureWorkspaceID(workspacePath) : undefined)
     const encodedPath = registryEscape(workspacePath)
     const encodedProject = registryEscape(project)
 
@@ -213,12 +279,21 @@ export async function registerWorkspace(
       }
 
       const filtered = lines.filter((line) => {
-        const rawPath = line.split("|")[0] ?? ""
-        return rawPath !== encodedPath
+        const decoded = decodeRegistryLine(line)
+        if (!decoded) return true
+        if (decoded.workspacePath === workspacePath) return false
+        const existingID = decoded.workspaceID ?? workspaceIDFromMarker(decoded.workspacePath)
+        if (canonicalID && existingID === canonicalID) {
+          if (validateWorkspace(decoded.workspacePath)) {
+            throw new Error(`Workspace ID ${canonicalID} is already registered at ${decoded.workspacePath}`)
+          }
+          return false
+        }
+        return true
       })
 
       const today = new Date().toISOString().slice(0, 10)
-      filtered.push(`${encodedPath}|${encodedProject}|${today}`)
+      filtered.push(`${encodedPath}|${encodedProject}|${today}${canonicalID ? `|${canonicalID}` : ""}`)
       await writeRegistryAtomically(registry, filtered.join("\n") + "\n")
     }, onRecover)
   })
@@ -248,27 +323,48 @@ export async function unregisterWorkspace(
   })
 }
 
+export async function setWorkspacePresence(input: {
+  workspacePath: string
+  workspaceID?: SpinosaWorkspaceID
+  presence: SpinosaWorkspacePresence
+  onRecover?: (msg: string) => void
+}): Promise<void> {
+  return withRegistryLock(async () => {
+    const registry = metadataPath("workspaces.txt")
+    await withRegistryFileLock(registry, async () => {
+      const file = Bun.file(registry)
+      if (!(await file.exists())) return
+
+      const lines = (await file.text()).split(/\r?\n/).filter(Boolean)
+      let changed = false
+      const updated = lines.map((line) => {
+        const decoded = decodeRegistryLine(line)
+        if (!decoded) return line
+        const existingID = decoded.workspaceID ?? workspaceIDFromMarker(decoded.workspacePath)
+        if (decoded.workspacePath !== input.workspacePath && (!input.workspaceID || existingID !== input.workspaceID)) return line
+        changed = true
+        return encodeRegistryLine(decoded, existingID ?? input.workspaceID, input.presence)
+      })
+      if (changed) await writeRegistryAtomically(registry, updated.join("\n") + "\n")
+    }, input.onRecover)
+  })
+}
+
 export async function listRegisteredWorkspaces(): Promise<SpinosaRegisteredWorkspace[]> {
   const entries = await loadRegistry(undefined, { allowMissingMarker: true })
-  const valid: { path: string; project: string }[] = []
-  const trulyGone: string[] = []
-  for (const entry of entries) {
-    if (validateWorkspace(entry.path)) {
-      valid.push(entry)
-    } else if (!existsSync(entry.path)) {
-      // Only prune when the workspace directory is entirely absent (truly
-      // deleted). A registered path that still exists but lacks its marker is
-      // mid-setup or half-failed — never prune it from under the user.
-      trulyGone.push(entry.path)
-    }
-  }
-  // Prune genuinely-deleted entries in the background.
-  if (trulyGone.length > 0) {
-    Promise.all(trulyGone.map((p) => unregisterWorkspace(p).catch(() => {})))
-  }
-  return valid.map((entry) => ({
+  await Promise.all(entries.filter((entry) => validateWorkspace(entry.path)).map((entry) =>
+    registerWorkspace(
+      entry.path,
+      resolveWorkspaceDisplayName(entry.path, entry.project),
+      undefined,
+      entry.workspaceID,
+    ),
+  ))
+  return entries.map((entry) => ({
     path: entry.path,
     projectName: resolveWorkspaceDisplayName(entry.path, entry.project),
+    ...(entry.workspaceID ? { workspaceID: entry.workspaceID } : {}),
+    ...(entry.presence ? { presence: entry.presence } : {}),
   }))
 }
 
@@ -289,6 +385,42 @@ export function scanWorkspaces(roots: string[]): string[] {
   }
 
   return results
+}
+
+function configuredSearchRoots(roots: string[] = []): string[] {
+  const configured = process.env.SPINOSA_WORKSPACE_SEARCH_ROOTS?.split(path.delimiter).filter(Boolean) ?? []
+  return [...new Set([...roots, ...configured].map((root) => path.resolve(root)).filter((root) => root !== path.parse(root).root))]
+}
+
+/** Finds canonical markers with this exact ID within explicit/configured roots only. */
+export function findWorkspaceMatchesByID(workspaceID: SpinosaWorkspaceID, roots: string[] = []): string[] {
+  const seen = new Set<string>()
+  const results: string[] = []
+  for (const root of configuredSearchRoots(roots)) walkWorkspaceIDMarker(root, 0, workspaceID, seen, results)
+  return results
+}
+
+function walkWorkspaceIDMarker(dir: string, depth: number, workspaceID: SpinosaWorkspaceID, seen: Set<string>, results: string[]) {
+  if (depth > 5 || seen.has(dir) || !existsSync(dir)) return
+  seen.add(dir)
+  if (workspaceIDFromMarker(dir) === workspaceID) results.push(dir)
+  if (depth === 5) return
+  try {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (entry.isDirectory() && !entry.name.startsWith(".")) {
+        walkWorkspaceIDMarker(path.join(dir, entry.name), depth + 1, workspaceID, seen, results)
+      }
+    }
+  } catch {}
+}
+
+/** Repairs a stale registry entry only when an ID has one unambiguous marker match. */
+export async function recoverWorkspacePathByID(workspaceID: SpinosaWorkspaceID, roots: string[] = []): Promise<string | undefined> {
+  const matches = findWorkspaceMatchesByID(workspaceID, roots)
+  if (matches.length !== 1) return
+  const workspacePath = matches[0]
+  await registerWorkspace(workspacePath, resolveWorkspaceDisplayName(workspacePath), undefined, workspaceID)
+  return workspacePath
 }
 
 function walkWorkspaceMarker(dir: string, depth: number, seen: Set<string>, results: string[]) {

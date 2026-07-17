@@ -26,6 +26,7 @@ import { resolveFrameworkRoot } from "../../spinosa-core/framework/discovery"
 import { spawn } from "node:child_process"
 import { tuiLog, logStep, logAction, logPhase, logTool, logResult, logError, logGate } from "../../spinosa/log"
 import { useExit } from "../../context/exit"
+import { useDialog } from "../../ui/dialog"
 import type { CliRunResult } from "../../spinosa/types"
 import { readBundledFrameworkVersion, isPrereleaseFrameworkVersion, readStartupPrompt, writePreferredCli } from "../../spinosa/service"
 import { writeWorkspaceStatus } from "../../spinosa-core/workspace/meta"
@@ -43,13 +44,17 @@ import {
 } from "../../spinosa/onboarding-preview"
 import {
   blurIfFocused,
+  confirmSpinosaBack,
+  createActiveWorkTracker,
   createWorkflowGuard,
   deferPress,
   delay,
   generateScanLines,
   ImportOptionsSelector,
   nextFocusedSourceIndexForAppend,
+  runGuardedBackNavigation,
   shouldCancelSpinosaWorkOnCtrlC,
+  shouldConfirmSpinosaBack,
   type ImportOption,
   LogScrollbox,
   LogoSummary,
@@ -200,6 +205,7 @@ export function Onboarding() {
   const keymap = useOpencodeKeymap()
   const modeStack = useOpencodeModeStack()
   const exit = useExit()
+  const dialog = useDialog()
 
   const [step, setStep] = createSignal<WizardStep>("path")
   const [sourcePaths, setSourcePaths] = createSignal<SourcePathEntry[]>([{ id: 0 }])
@@ -344,6 +350,7 @@ let nameInput: TextareaRenderable | undefined
   }
 
   const workflow = createWorkflowGuard()
+  const activeWork = createActiveWorkTracker()
   const pathSnapshot = new Map<number, string>()
   const sourceInputs = new Map<number, TextareaRenderable>()
 
@@ -419,17 +426,10 @@ let nameInput: TextareaRenderable | undefined
     return entries.some((e) => pathValidities[e.id] === "valid")
   })
 
-  const goHome = () => navigate({ type: "global" })
-  const leavePathStep = () => {
-    goHome()
-  }
-
-  const handleBackPress = () => {
-    if (step() === "path") leavePathStep()
-    else moveBack()
-  }
-
   const stopActiveWork = () => {
+    if (CANCELABLE_STEPS.some((candidate) => candidate === step())) {
+      setProcessingStatus("Stopping current operation...")
+    }
     if (gateResolve) { gateResolve(); gateResolve = undefined }
     workflow.bump()
     abortProcessing = true
@@ -437,14 +437,14 @@ let nameInput: TextareaRenderable | undefined
     setWaitingForGate(false)
   }
 
-  const moveBack = () => {
-    const from = step()
-    stopActiveWork()
-    if (step() === "name") { logAction("back", `from ${step()} to path`); setStep("path"); return }
-    if (step() === "tools") { logAction("back", `from ${step()} to name`); setStep("name"); return }
-    if (step() === "scan") { logAction("back", `from ${step()} to path`); setStep("path"); return }
-    if (step() === "setup" || step() === "direct" || step() === "markitdown" || step() === "ocr" || step() === "verification") { logAction("back", `from ${step()} to scan`); setStep("scan"); return }
-    if (step() === "provider") {
+  const goHome = () => navigate({ type: "global" })
+  const navigateBackFrom = (from: WizardStep) => {
+    if (from === "path") { goHome(); return }
+    if (from === "name") { logAction("back", `from ${from} to path`); setStep("path"); return }
+    if (from === "tools") { logAction("back", `from ${from} to name`); setStep("name"); return }
+    if (from === "scan") { logAction("back", `from ${from} to path`); setStep("path"); return }
+    if (from === "setup" || from === "direct" || from === "markitdown" || from === "ocr" || from === "verification") { logAction("back", `from ${from} to scan`); setStep("scan"); return }
+    if (from === "provider") {
       setGateLabel("Choose provider")
       setGateAction(() => () => {
         setWaitingForGate(false)
@@ -454,11 +454,33 @@ let nameInput: TextareaRenderable | undefined
       setStep("verification")
       return
     }
-    if (step() === "startup") { setStep("provider"); return }
-    if (step() === "error") {
+    if (from === "startup") { setStep("provider"); return }
+    if (from === "error") {
       setStep(importOptions().length > 0 ? "imports" : "path")
     }
   }
+
+  let backNavigationPending = false
+  const requestBack = (confirmIfActive = true) => {
+    if (backNavigationPending) return
+    const from = step()
+    backNavigationPending = true
+    void runGuardedBackNavigation({
+      shouldConfirm: confirmIfActive && shouldConfirmSpinosaBack({
+        step: from,
+        busy: busy(),
+        waitingForGate: waitingForGate(),
+        cancellableSteps: CANCELABLE_STEPS,
+      }),
+      confirm: () => confirmSpinosaBack(dialog, from),
+      stop: stopActiveWork,
+      waitForStop: () => activeWork.wait(),
+      navigate: () => navigateBackFrom(from),
+    }).finally(() => { backNavigationPending = false })
+  }
+
+  const handleBackPress = () => requestBack(true)
+  const leavePathStep = handleBackPress
 
   const handleInterrupt = () => {
     if (!shouldCancelSpinosaWorkOnCtrlC({
@@ -472,7 +494,7 @@ let nameInput: TextareaRenderable | undefined
     }
 
     appendLogLine("Cancellation requested. Stopping current Spinosa operation...")
-    moveBack()
+    requestBack(false)
   }
 
   const renderToolSummaryLine = (check: ToolCheckResult): string => {
@@ -646,7 +668,7 @@ let nameInput: TextareaRenderable | undefined
       return
     }
     logAction("continue", `Imports → Processing (${selectedExtensions().length} types: ${selectedExtensions().join(",")})`)
-    startProcessing()
+    void activeWork.run(startProcessing)
   }
 
 
@@ -773,6 +795,7 @@ let nameInput: TextareaRenderable | undefined
       const totalMd = classified.markitdownFiles.length
       const totalOcr = classified.ocrFiles.length
       // Phase B1: Direct copy
+      setStep("direct")
       const totalDirect = classified.directFiles.length
       appendLogLine(`[diag] direct=${totalDirect} markitdown=${classified.markitdownFiles.length} ocr=${classified.ocrFiles.length}`)
       // Seed the denominator; the progress listener also drives it from emitter events.
@@ -1038,8 +1061,7 @@ let nameInput: TextareaRenderable | undefined
         consume(); return
       }
       if (event.name === "escape") {
-        if (step() === "path") leavePathStep()
-        else moveBack()
+        handleBackPress()
         consume(); return
       }
 
@@ -1095,7 +1117,7 @@ let nameInput: TextareaRenderable | undefined
           consume(); return
         }
         if (event.name === "escape") {
-          moveBack()
+          handleBackPress()
           consume(); return
         }
       }
@@ -1149,7 +1171,7 @@ let nameInput: TextareaRenderable | undefined
       }
 
       if (step() === "error" && event.name === "return") {
-        moveBack()
+        handleBackPress()
         consume(); return
       }
     })
@@ -1353,7 +1375,7 @@ let nameInput: TextareaRenderable | undefined
               <WizardActionButton
                 theme={theme}
                 label="Back"
-                onPress={moveBack}
+                onPress={handleBackPress}
               />
               <box flexGrow={1} />
               <WizardActionButton
@@ -1440,7 +1462,7 @@ let nameInput: TextareaRenderable | undefined
               </Show>
             </WizardPanel>
             <WizardActionRow>
-              <WizardActionButton theme={theme} label="Back" onPress={moveBack} />
+              <WizardActionButton theme={theme} label="Back" onPress={handleBackPress} />
               <box flexGrow={1} />
               <Show when={step() === "tools" && toolActionLabel() !== "" && !toolChecks().some((t) => t.status === "checking")}>
                 <WizardActionButton
@@ -1513,7 +1535,7 @@ let nameInput: TextareaRenderable | undefined
             </WizardPanel>
             <WizardActionRow>
               <Show when={startupError()}>
-                <WizardActionButton theme={theme} label="Back" onPress={moveBack} />
+                <WizardActionButton theme={theme} label="Back" onPress={handleBackPress} />
                 <box flexGrow={1} />
                 <WizardActionButton
                   theme={theme}
@@ -1554,7 +1576,7 @@ let nameInput: TextareaRenderable | undefined
                 />
               </Show>
               <Show when={step() === "error"}>
-                <WizardActionButton theme={theme} label="Back" onPress={moveBack} />
+                <WizardActionButton theme={theme} label="Back" onPress={handleBackPress} />
                 <box flexGrow={1} />
                 <WizardActionButton theme={theme} label="Retry" primary onPress={() => void continueFromPath()} />
               </Show>

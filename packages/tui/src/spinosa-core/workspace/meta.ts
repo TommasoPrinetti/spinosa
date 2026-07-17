@@ -4,6 +4,7 @@ import { resolveWorkspaceDisplayName } from "../workspace-name"
 import type { SpinosaSetupStatus, SpinosaWorkspaceMeta } from "../types"
 import { SPINOSA_AGENT_FILES } from "../constants"
 import { writeTextAtomic } from "../utils/fs"
+import { readWorkspaceIDFromMarker, workspaceMarkerPath } from "./identity"
 
 const SETUP_STATUSES = new Set<SpinosaSetupStatus>([
   "not_started",
@@ -43,7 +44,7 @@ async function readConfiguration(workspacePath: string): Promise<{ setupStatus?:
 }
 
 export async function readWorkspaceMarker(workspacePath: string): Promise<Partial<SpinosaWorkspaceMeta>> {
-  const file = Bun.file(path.join(workspacePath, ".spinosa", "workspace"))
+  const file = Bun.file(workspaceMarkerPath(workspacePath))
   if (!(await file.exists())) return { path: workspacePath }
 
   const text = await file.text()
@@ -56,6 +57,7 @@ export async function readWorkspaceMarker(workspacePath: string): Promise<Partia
   const setupStatus = parseSetupStatus(read("setup_status"))
   return {
     path: workspacePath,
+    workspaceID: readWorkspaceIDFromMarker(text),
     projectName: resolveWorkspaceDisplayName(workspacePath, read("project_name")),
     setupStatus: setupStatus ?? (config.setupStatus ? parseSetupStatus(config.setupStatus) : "unknown"),
     frameworkVersion: read("framework_version") ?? "unknown",
@@ -70,6 +72,7 @@ export async function readWorkspaceMeta(workspacePath: string): Promise<SpinosaW
   const partial = await readWorkspaceMarker(workspacePath)
   return {
     path: workspacePath,
+    workspaceID: partial.workspaceID,
     projectName: resolveWorkspaceDisplayName(workspacePath, partial.projectName),
     setupStatus: partial.setupStatus ?? "unknown",
     frameworkVersion: partial.frameworkVersion ?? "unknown",

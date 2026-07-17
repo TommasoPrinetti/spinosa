@@ -3,6 +3,7 @@ import path from "node:path"
 import { copyDirContents, cleanMacMetadata } from "../utils/fs"
 import { registerWorkspace, writeSetupFiles } from "../workspace/registry"
 import { writeWorkspaceStatus } from "../workspace/meta"
+import { createWorkspaceID, ensureWorkspaceID } from "../workspace/identity"
 import { spinosaLogInfo } from "../utils/log"
 import { readFrameworkVersionFromRoot, resolveTemplateRootFromFrameworkRoot } from "../framework/discovery"
 import { throwIfSpinosaCancelled } from "../import/cancellation"
@@ -135,9 +136,11 @@ export async function createWorkspace(options: CreateWorkspaceOptions): Promise<
     // ── Step 4: Write workspace metadata ───────────────────────────────
     const sourceFrameworkVersion = readFrameworkVersionFromRoot(frameworkRoot)
     progress("Writing workspace metadata...")
+    const workspaceID = reservation.resumed ? ensureWorkspaceID(workspacePath) : createWorkspaceID()
     if (!reservation.resumed) {
       const markerLines = [
         `workspace_version: 1`,
+        `workspace_id: ${workspaceID}`,
         `framework_version: ${sourceFrameworkVersion}`,
         `created: ${today()}`,
         `project_name: ${projectName}`,
@@ -150,7 +153,7 @@ export async function createWorkspace(options: CreateWorkspaceOptions): Promise<
 
     // ── Step 5: Register workspace ─────────────────────────────────────
     progress("Registering in global registry...")
-    await registerWorkspace(workspacePath, projectName, recover)
+    await registerWorkspace(workspacePath, projectName, recover, workspaceID)
     throwIfSpinosaCancelled(shouldAbort)
 
     if (preferredCli) {

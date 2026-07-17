@@ -1,6 +1,6 @@
 import path from "node:path"
 import { homedir } from "node:os"
-import { createInterface } from "node:readline/promises"
+import { confirmTerminal } from "../terminal"
 import {
   checkUpgradeAvailable,
   discoverRegisteredWorkspaces,
@@ -23,24 +23,12 @@ export interface PreflightDependencies {
   out(message: string): void
 }
 
-async function confirm(question: string, defaultYes = false): Promise<boolean> {
-  const prompt = createInterface({ input: process.stdin, output: process.stdout })
-  try {
-    const hint = defaultYes ? "[Y/n]" : "[y/N]"
-    const answer = (await prompt.question(`✨ ${question} ${hint} `)).trim().toLowerCase()
-    if (!answer) return defaultYes
-    return answer === "y" || answer === "yes"
-  } finally {
-    prompt.close()
-  }
-}
-
 const defaults: PreflightDependencies = {
   checkUpgradeAvailable,
   upgradeFramework: () => upgradeFramework({ yes: true }),
   discoverRegisteredWorkspaces,
   updateWorkspace: (workspacePath, frameworkRoot) => updateWorkspace({ workspacePath, frameworkRoot }),
-  confirm,
+  confirm: (question, defaultYes) => confirmTerminal(`✨ ${question}`, defaultYes),
   frameworkRoot: (version) => path.join(process.env.SPINOSA_HOME ?? path.join(homedir(), ".spinosa"), "versions", version),
   out: (message) => process.stdout.write(`${message}\n`),
 }
@@ -71,7 +59,9 @@ export async function runLaunchPreflight(deps: PreflightDependencies = defaults)
     for (const workspace of workspaces) {
       try {
         const result = await deps.updateWorkspace(workspace, frameworkRoot)
-        if (result.success) deps.out(`✓ Updated ${path.basename(workspace) || workspace}`)
+        if (result.success && result.presence) {
+          deps.out(`↷ Skipped ${path.basename(workspace) || workspace}: ${result.presence.replaceAll("_", " ").toUpperCase()}`)
+        } else if (result.success) deps.out(`✓ Updated ${path.basename(workspace) || workspace}`)
         else {
           failed++
           deps.out(`⚠ Could not update ${path.basename(workspace) || workspace}`)

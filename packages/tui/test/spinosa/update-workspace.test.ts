@@ -4,9 +4,30 @@ import { mkdir } from "node:fs/promises"
 import { existsSync } from "node:fs"
 import { tmpdir } from "../fixture/fixture"
 import { updateWorkspace } from "../../src/spinosa-core/commands/update"
+import { createWorkspaceID } from "../../src/spinosa-core/workspace/identity"
 
 describe("workspace update flow", () => {
   const repoRoot = path.resolve(import.meta.dir, "../../../..")
+
+  test("skips a registered workspace that is no longer present", async () => {
+    await using tmp = await tmpdir()
+    const originalHome = process.env.SPINOSA_HOME
+    process.env.SPINOSA_HOME = path.join(tmp.path, "home")
+    try {
+      const missing = path.join(tmp.path, "deleted-workspace")
+      const registry = path.join(process.env.SPINOSA_HOME, "metadata", "workspaces.txt")
+      await mkdir(path.dirname(registry), { recursive: true })
+      await Bun.write(registry, `${missing}|deleted|2026-07-17|${createWorkspaceID()}\n`)
+
+      const result = await updateWorkspace({ workspacePath: missing, frameworkRoot: tmp.path })
+
+      expect(result).toMatchObject({ success: true, skipped: 1, changes: false, presence: "non_existent" })
+    } finally {
+      if (originalHome === undefined) delete process.env.SPINOSA_HOME
+      else process.env.SPINOSA_HOME = originalHome
+    }
+  })
+
   test("updates a workspace from repo-root workspace-template layout", async () => {
     await using tmp = await tmpdir()
     const frameworkRoot = path.join(tmp.path, "install")
