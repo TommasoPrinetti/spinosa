@@ -6,6 +6,15 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 **Release policy:** versions are published only with explicit maintainer approval.
 
+## [0.9.0-beta.22] — 2026-07-17
+
+### Fixed
+
+- TUI now lands on the global homepage (workspace picker) instead of auto-opening the last-used workspace
+- Resolved 14 pre-existing TypeScript errors: missing `inspectWorkspacePresence` import, `createResource` type inference in `dialog-move-session`, and read-only `Breakpoints` mutation in `anthropic-messages`
+- Framework root resolution now prefers the installed release over the dev repo (`spinosa-main`) so workspace creation doesn't stamp with the wrong version
+- Removed stale serena MCP plugin config
+
 ## [0.9.0-beta.21] — 2026-07-17
 
 ### Fixed
