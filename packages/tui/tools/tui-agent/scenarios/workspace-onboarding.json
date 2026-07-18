@@ -1,5 +1,5 @@
 {
-  "$schema": "../scenario.schema.json",
+  
   "name": "workspace-onboarding",
   "description": "Exercise workspace onboarding wizard for a not_started workspace: source folder step, back to picker, workspace selection resumes wizard.",
   "adapter": "../adapters/spinosa.ts",

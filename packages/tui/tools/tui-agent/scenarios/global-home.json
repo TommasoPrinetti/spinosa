@@ -1,5 +1,5 @@
 {
-  "$schema": "../scenario.schema.json",
+  
   "name": "global-home",
   "description": "Exercise workspace picker, Switch workspace dialog, Import files wizard, and Visualizer entry points.",
   "adapter": "../adapters/spinosa.ts",

@@ -1,5 +1,5 @@
 {
-  "$schema": "../scenario.schema.json",
+  
   "name": "session-workflows",
   "description": "Open /session from a workspace, select a session, use Export dialog.",
   "adapter": "../adapters/spinosa.ts",

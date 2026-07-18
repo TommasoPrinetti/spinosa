@@ -1,5 +1,5 @@
 {
-  "$schema": "../scenario.schema.json",
+  
   "name": "footer-dialogs",
   "description": "Exercise all five HomeFooter actions via click and keyboard shortcuts: Settings (Shift+S), Agents (Shift+A), Keys (Shift+K), Workspaces (Shift+W), Models (Shift+M).",
   "adapter": "../adapters/spinosa.ts",
