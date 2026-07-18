@@ -8,7 +8,7 @@
   "scripts": {
     "test": "bun test --timeout 30000 --only-failures",
     "test:spinosa": "bun test --isolate test/spinosa/",
-    "tui:agent": "bun x tui-agent",
+    "tui:agent": "bun x tui-agent-use",
     "typecheck": "tsc --noEmit",
     "typecheck:spinosa": "tsc --noEmit -p tsconfig.spinosa.json",
     "verify:spinosa": "bun run scripts/verify-spinosa.ts"
@@ -87,6 +87,6 @@
     "@napi-rs/canvas-linux-riscv64-gnu": "1.0.2",
     "@napi-rs/canvas-win32-x64-msvc": "1.0.2",
     "@napi-rs/canvas-win32-arm64-msvc": "1.0.2",
-    "tui-agent": "0.1.2"
+    "tui-agent-use": "0.1.2"
   }
 }
