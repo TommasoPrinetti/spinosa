@@ -144,6 +144,9 @@ const adapter: TuiAgentAdapter = {
           : json({ message: "Session not found" }, { status: 404 });
       }
       if (/^\/session\/[^/]+\/message$/.test(url.pathname)) return json([]);
+      if (/^\/session\/[^/]+\/part$/.test(url.pathname)) return json([]);
+      if (/^\/session\/[^/]+\/permission$/.test(url.pathname)) return json([]);
+      if (/^\/session\/[^/]+\/question$/.test(url.pathname)) return json([]);
       if (/^\/session\/[^/]+\/(todo|diff)$/.test(url.pathname)) return json([]);
       if (url.pathname === "/config/providers")
         return json({ providers: [provider], default: { test: "test-model" } });

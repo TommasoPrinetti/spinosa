@@ -401,7 +401,7 @@ export function Visualizer() {
     <CenteredColumn maxWidth={MAX_WIDTH}>
       <box width="100%" flexGrow={1} minHeight={0} flexDirection="column" paddingX={1}>
         <box flexDirection="row" alignItems="center" justifyContent="space-between" width="100%">
-          <ActionButton label="← Back" onClick={() => route.navigate({ type: "global" })} />
+          <ActionButton label="< Back" onClick={() => route.navigate({ type: "global" })} />
           <text fg={theme.text}><span style={{ bold: true }}>Conversation graphs</span></text>
           <ActionButton label="⇩ Export" accent onClick={openExport} disabled={!workspace()} />
         </box>
