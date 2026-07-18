@@ -1,0 +1,430 @@
+{
+  "schemaVersion": 1,
+  "scenario": {
+    "name": "workspace-session",
+    "description": "Open /session from a Spinosa workspace and prove that only that workspace's chats are rendered.",
+    "source": "/Users/tommasoprinetti/Documents/spinosa-main/packages/tui/tools/tui-agent/scenarios/workspace-session.json"
+  },
+  "adapter": "spinosa",
+  "status": "passed",
+  "startedAt": "2026-07-18T14:54:25.618Z",
+  "durationMs": 3564,
+  "terminal": {
+    "width": 100,
+    "height": 50
+  },
+  "fixture": {
+    "root": "/private/var/folders/ky/cxzrn_m55hb27d6nnvcg3w7m0000gn/T/tui-agent-pt7KXi",
+    "home": "/private/var/folders/ky/cxzrn_m55hb27d6nnvcg3w7m0000gn/T/tui-agent-pt7KXi/home",
+    "cwd": "/private/var/folders/ky/cxzrn_m55hb27d6nnvcg3w7m0000gn/T/tui-agent-pt7KXi/session-evidence-workspace",
+    "data": {
+      "workspace": "/private/var/folders/ky/cxzrn_m55hb27d6nnvcg3w7m0000gn/T/tui-agent-pt7KXi/session-evidence-workspace"
+    }
+  },
+  "steps": [
+    {
+      "index": 0,
+      "action": "launch",
+      "label": "initial",
+      "durationMs": 3255,
+      "frame": "/Users/tommasoprinetti/Documents/spinosa-main/packages/tui/.tui-agent/artifacts/workspace-session-2026-07-18T14-54-24.523Z/000-initial.txt",
+      "spans": "/Users/tommasoprinetti/Documents/spinosa-main/packages/tui/.tui-agent/artifacts/workspace-session-2026-07-18T14-54-24.523Z/000-initial.spans.json",
+      "svg": "/Users/tommasoprinetti/Documents/spinosa-main/packages/tui/.tui-agent/artifacts/workspace-session-2026-07-18T14-54-24.523Z/000-initial.svg",
+      "tree": "/Users/tommasoprinetti/Documents/spinosa-main/packages/tui/.tui-agent/artifacts/workspace-session-2026-07-18T14-54-24.523Z/000-initial.tree.json",
+      "state": "/Users/tommasoprinetti/Documents/spinosa-main/packages/tui/.tui-agent/artifacts/workspace-session-2026-07-18T14-54-24.523Z/000-initial.state.json",
+      "diagnostics": {
+        "layout": []
+      }
+    },
+    {
+      "index": 1,
+      "action": "waitForText",
+      "label": "waitForText-workspace v0.1.0",
+      "durationMs": 20,
+      "frame": "/Users/tommasoprinetti/Documents/spinosa-main/packages/tui/.tui-agent/artifacts/workspace-session-2026-07-18T14-54-24.523Z/001-waitfortext-workspace-v0-1-0.txt",
+      "spans": "/Users/tommasoprinetti/Documents/spinosa-main/packages/tui/.tui-agent/artifacts/workspace-session-2026-07-18T14-54-24.523Z/001-waitfortext-workspace-v0-1-0.spans.json",
+      "svg": "/Users/tommasoprinetti/Documents/spinosa-main/packages/tui/.tui-agent/artifacts/workspace-session-2026-07-18T14-54-24.523Z/001-waitfortext-workspace-v0-1-0.svg",
+      "tree": "/Users/tommasoprinetti/Documents/spinosa-main/packages/tui/.tui-agent/artifacts/workspace-session-2026-07-18T14-54-24.523Z/001-waitfortext-workspace-v0-1-0.tree.json",
+      "state": "/Users/tommasoprinetti/Documents/spinosa-main/packages/tui/.tui-agent/artifacts/workspace-session-2026-07-18T14-54-24.523Z/001-waitfortext-workspace-v0-1-0.state.json",
+      "diagnostics": {
+        "layout": []
+      }
+    },
+    {
+      "index": 2,
+      "action": "waitForText",
+      "label": "waitForText-Describe the task",
+      "durationMs": 25,
+      "frame": "/Users/tommasoprinetti/Documents/spinosa-main/packages/tui/.tui-agent/artifacts/workspace-session-2026-07-18T14-54-24.523Z/002-waitfortext-describe-the-task.txt",
+      "spans": "/Users/tommasoprinetti/Documents/spinosa-main/packages/tui/.tui-agent/artifacts/workspace-session-2026-07-18T14-54-24.523Z/002-waitfortext-describe-the-task.spans.json",
+      "svg": "/Users/tommasoprinetti/Documents/spinosa-main/packages/tui/.tui-agent/artifacts/workspace-session-2026-07-18T14-54-24.523Z/002-waitfortext-describe-the-task.svg",
+      "tree": "/Users/tommasoprinetti/Documents/spinosa-main/packages/tui/.tui-agent/artifacts/workspace-session-2026-07-18T14-54-24.523Z/002-waitfortext-describe-the-task.tree.json",
+      "state": "/Users/tommasoprinetti/Documents/spinosa-main/packages/tui/.tui-agent/artifacts/workspace-session-2026-07-18T14-54-24.523Z/002-waitfortext-describe-the-task.state.json",
+      "diagnostics": {
+        "layout": []
+      }
+    },
+    {
+      "index": 3,
+      "action": "waitForFocus",
+      "label": "waitForFocus",
+      "durationMs": 20,
+      "frame": "/Users/tommasoprinetti/Documents/spinosa-main/packages/tui/.tui-agent/artifacts/workspace-session-2026-07-18T14-54-24.523Z/003-waitforfocus.txt",
+      "spans": "/Users/tommasoprinetti/Documents/spinosa-main/packages/tui/.tui-agent/artifacts/workspace-session-2026-07-18T14-54-24.523Z/003-waitforfocus.spans.json",
+      "svg": "/Users/tommasoprinetti/Documents/spinosa-main/packages/tui/.tui-agent/artifacts/workspace-session-2026-07-18T14-54-24.523Z/003-waitforfocus.svg",
+      "tree": "/Users/tommasoprinetti/Documents/spinosa-main/packages/tui/.tui-agent/artifacts/workspace-session-2026-07-18T14-54-24.523Z/003-waitforfocus.tree.json",
+      "state": "/Users/tommasoprinetti/Documents/spinosa-main/packages/tui/.tui-agent/artifacts/workspace-session-2026-07-18T14-54-24.523Z/003-waitforfocus.state.json",
+      "diagnostics": {
+        "layout": []
+      }
+    },
+    {
+      "index": 4,
+      "action": "type",
+      "label": "type-/session",
+      "durationMs": 39,
+      "frame": "/Users/tommasoprinetti/Documents/spinosa-main/packages/tui/.tui-agent/artifacts/workspace-session-2026-07-18T14-54-24.523Z/004-type-session.txt",
+      "spans": "/Users/tommasoprinetti/Documents/spinosa-main/packages/tui/.tui-agent/artifacts/workspace-session-2026-07-18T14-54-24.523Z/004-type-session.spans.json",
+      "svg": "/Users/tommasoprinetti/Documents/spinosa-main/packages/tui/.tui-agent/artifacts/workspace-session-2026-07-18T14-54-24.523Z/004-type-session.svg",
+      "tree": "/Users/tommasoprinetti/Documents/spinosa-main/packages/tui/.tui-agent/artifacts/workspace-session-2026-07-18T14-54-24.523Z/004-type-session.tree.json",
+      "state": "/Users/tommasoprinetti/Documents/spinosa-main/packages/tui/.tui-agent/artifacts/workspace-session-2026-07-18T14-54-24.523Z/004-type-session.state.json",
+      "diagnostics": {
+        "layout": []
+      }
+    },
+    {
+      "index": 5,
+      "action": "key",
+      "label": "key-RETURN",
+      "durationMs": 48,
+      "frame": "/Users/tommasoprinetti/Documents/spinosa-main/packages/tui/.tui-agent/artifacts/workspace-session-2026-07-18T14-54-24.523Z/005-key-return.txt",
+      "spans": "/Users/tommasoprinetti/Documents/spinosa-main/packages/tui/.tui-agent/artifacts/workspace-session-2026-07-18T14-54-24.523Z/005-key-return.spans.json",
+      "svg": "/Users/tommasoprinetti/Documents/spinosa-main/packages/tui/.tui-agent/artifacts/workspace-session-2026-07-18T14-54-24.523Z/005-key-return.svg",
+      "tree": "/Users/tommasoprinetti/Documents/spinosa-main/packages/tui/.tui-agent/artifacts/workspace-session-2026-07-18T14-54-24.523Z/005-key-return.tree.json",
+      "state": "/Users/tommasoprinetti/Documents/spinosa-main/packages/tui/.tui-agent/artifacts/workspace-session-2026-07-18T14-54-24.523Z/005-key-return.state.json",
+      "diagnostics": {
+        "layout": []
+      }
+    },
+    {
+      "index": 6,
+      "action": "waitForText",
+      "label": "waitForText-Workspace evidence chat",
+      "durationMs": 25,
+      "frame": "/Users/tommasoprinetti/Documents/spinosa-main/packages/tui/.tui-agent/artifacts/workspace-session-2026-07-18T14-54-24.523Z/006-waitfortext-workspace-evidence-chat.txt",
+      "spans": "/Users/tommasoprinetti/Documents/spinosa-main/packages/tui/.tui-agent/artifacts/workspace-session-2026-07-18T14-54-24.523Z/006-waitfortext-workspace-evidence-chat.spans.json",
+      "svg": "/Users/tommasoprinetti/Documents/spinosa-main/packages/tui/.tui-agent/artifacts/workspace-session-2026-07-18T14-54-24.523Z/006-waitfortext-workspace-evidence-chat.svg",
+      "tree": "/Users/tommasoprinetti/Documents/spinosa-main/packages/tui/.tui-agent/artifacts/workspace-session-2026-07-18T14-54-24.523Z/006-waitfortext-workspace-evidence-chat.tree.json",
+      "state": "/Users/tommasoprinetti/Documents/spinosa-main/packages/tui/.tui-agent/artifacts/workspace-session-2026-07-18T14-54-24.523Z/006-waitfortext-workspace-evidence-chat.state.json",
+      "diagnostics": {
+        "layout": []
+      }
+    },
+    {
+      "index": 7,
+      "action": "capture",
+      "label": "session-dialog",
+      "durationMs": 20,
+      "frame": "/Users/tommasoprinetti/Documents/spinosa-main/packages/tui/.tui-agent/artifacts/workspace-session-2026-07-18T14-54-24.523Z/007-session-dialog.txt",
+      "spans": "/Users/tommasoprinetti/Documents/spinosa-main/packages/tui/.tui-agent/artifacts/workspace-session-2026-07-18T14-54-24.523Z/007-session-dialog.spans.json",
+      "svg": "/Users/tommasoprinetti/Documents/spinosa-main/packages/tui/.tui-agent/artifacts/workspace-session-2026-07-18T14-54-24.523Z/007-session-dialog.svg",
+      "tree": "/Users/tommasoprinetti/Documents/spinosa-main/packages/tui/.tui-agent/artifacts/workspace-session-2026-07-18T14-54-24.523Z/007-session-dialog.tree.json",
+      "state": "/Users/tommasoprinetti/Documents/spinosa-main/packages/tui/.tui-agent/artifacts/workspace-session-2026-07-18T14-54-24.523Z/007-session-dialog.state.json",
+      "diagnostics": {
+        "layout": []
+      }
+    },
+    {
+      "index": 8,
+      "action": "assert",
+      "label": "assert",
+      "durationMs": 20,
+      "frame": "/Users/tommasoprinetti/Documents/spinosa-main/packages/tui/.tui-agent/artifacts/workspace-session-2026-07-18T14-54-24.523Z/008-assert.txt",
+      "spans": "/Users/tommasoprinetti/Documents/spinosa-main/packages/tui/.tui-agent/artifacts/workspace-session-2026-07-18T14-54-24.523Z/008-assert.spans.json",
+      "svg": "/Users/tommasoprinetti/Documents/spinosa-main/packages/tui/.tui-agent/artifacts/workspace-session-2026-07-18T14-54-24.523Z/008-assert.svg",
+      "tree": "/Users/tommasoprinetti/Documents/spinosa-main/packages/tui/.tui-agent/artifacts/workspace-session-2026-07-18T14-54-24.523Z/008-assert.tree.json",
+      "state": "/Users/tommasoprinetti/Documents/spinosa-main/packages/tui/.tui-agent/artifacts/workspace-session-2026-07-18T14-54-24.523Z/008-assert.state.json",
+      "diagnostics": {
+        "layout": []
+      }
+    }
+  ],
+  "requests": [
+    {
+      "method": "GET",
+      "path": "/path",
+      "query": {
+        "directory": "/private/var/folders/ky/cxzrn_m55hb27d6nnvcg3w7m0000gn/T/tui-agent-pt7KXi/session-evidence-workspace"
+      },
+      "status": 200,
+      "durationMs": 1
+    },
+    {
+      "method": "GET",
+      "path": "/project/current",
+      "query": {
+        "directory": "/private/var/folders/ky/cxzrn_m55hb27d6nnvcg3w7m0000gn/T/tui-agent-pt7KXi/session-evidence-workspace"
+      },
+      "status": 200,
+      "durationMs": 0
+    },
+    {
+      "method": "GET",
+      "path": "/config/providers",
+      "query": {
+        "directory": "/private/var/folders/ky/cxzrn_m55hb27d6nnvcg3w7m0000gn/T/tui-agent-pt7KXi/session-evidence-workspace"
+      },
+      "status": 200,
+      "durationMs": 0
+    },
+    {
+      "method": "GET",
+      "path": "/provider",
+      "query": {
+        "directory": "/private/var/folders/ky/cxzrn_m55hb27d6nnvcg3w7m0000gn/T/tui-agent-pt7KXi/session-evidence-workspace"
+      },
+      "status": 200,
+      "durationMs": 0
+    },
+    {
+      "method": "GET",
+      "path": "/experimental/capabilities",
+      "query": {
+        "directory": "/private/var/folders/ky/cxzrn_m55hb27d6nnvcg3w7m0000gn/T/tui-agent-pt7KXi/session-evidence-workspace"
+      },
+      "status": 200,
+      "durationMs": 0
+    },
+    {
+      "method": "GET",
+      "path": "/experimental/console",
+      "query": {
+        "directory": "/private/var/folders/ky/cxzrn_m55hb27d6nnvcg3w7m0000gn/T/tui-agent-pt7KXi/session-evidence-workspace"
+      },
+      "status": 200,
+      "durationMs": 0
+    },
+    {
+      "method": "GET",
+      "path": "/agent",
+      "query": {
+        "directory": "/private/var/folders/ky/cxzrn_m55hb27d6nnvcg3w7m0000gn/T/tui-agent-pt7KXi/session-evidence-workspace"
+      },
+      "status": 200,
+      "durationMs": 0
+    },
+    {
+      "method": "GET",
+      "path": "/config",
+      "query": {
+        "directory": "/private/var/folders/ky/cxzrn_m55hb27d6nnvcg3w7m0000gn/T/tui-agent-pt7KXi/session-evidence-workspace"
+      },
+      "status": 200,
+      "durationMs": 0
+    },
+    {
+      "method": "GET",
+      "path": "/api/location",
+      "query": {
+        "directory": "/private/var/folders/ky/cxzrn_m55hb27d6nnvcg3w7m0000gn/T/tui-agent-pt7KXi/session-evidence-workspace",
+        "location[directory]": "/private/var/folders/ky/cxzrn_m55hb27d6nnvcg3w7m0000gn/T/tui-agent-pt7KXi/session-evidence-workspace"
+      },
+      "status": 200,
+      "durationMs": 0
+    },
+    {
+      "method": "GET",
+      "path": "/api/agent",
+      "query": {
+        "directory": "/private/var/folders/ky/cxzrn_m55hb27d6nnvcg3w7m0000gn/T/tui-agent-pt7KXi/session-evidence-workspace",
+        "location[directory]": "/private/var/folders/ky/cxzrn_m55hb27d6nnvcg3w7m0000gn/T/tui-agent-pt7KXi/session-evidence-workspace"
+      },
+      "status": 200,
+      "durationMs": 0
+    },
+    {
+      "method": "GET",
+      "path": "/api/integration",
+      "query": {
+        "directory": "/private/var/folders/ky/cxzrn_m55hb27d6nnvcg3w7m0000gn/T/tui-agent-pt7KXi/session-evidence-workspace",
+        "location[directory]": "/private/var/folders/ky/cxzrn_m55hb27d6nnvcg3w7m0000gn/T/tui-agent-pt7KXi/session-evidence-workspace"
+      },
+      "status": 200,
+      "durationMs": 0
+    },
+    {
+      "method": "GET",
+      "path": "/api/model",
+      "query": {
+        "directory": "/private/var/folders/ky/cxzrn_m55hb27d6nnvcg3w7m0000gn/T/tui-agent-pt7KXi/session-evidence-workspace",
+        "location[directory]": "/private/var/folders/ky/cxzrn_m55hb27d6nnvcg3w7m0000gn/T/tui-agent-pt7KXi/session-evidence-workspace"
+      },
+      "status": 200,
+      "durationMs": 0
+    },
+    {
+      "method": "GET",
+      "path": "/api/provider",
+      "query": {
+        "directory": "/private/var/folders/ky/cxzrn_m55hb27d6nnvcg3w7m0000gn/T/tui-agent-pt7KXi/session-evidence-workspace",
+        "location[directory]": "/private/var/folders/ky/cxzrn_m55hb27d6nnvcg3w7m0000gn/T/tui-agent-pt7KXi/session-evidence-workspace"
+      },
+      "status": 200,
+      "durationMs": 0
+    },
+    {
+      "method": "GET",
+      "path": "/api/reference",
+      "query": {
+        "directory": "/private/var/folders/ky/cxzrn_m55hb27d6nnvcg3w7m0000gn/T/tui-agent-pt7KXi/session-evidence-workspace",
+        "location[directory]": "/private/var/folders/ky/cxzrn_m55hb27d6nnvcg3w7m0000gn/T/tui-agent-pt7KXi/session-evidence-workspace"
+      },
+      "status": 200,
+      "durationMs": 0
+    },
+    {
+      "method": "GET",
+      "path": "/api/command",
+      "query": {
+        "directory": "/private/var/folders/ky/cxzrn_m55hb27d6nnvcg3w7m0000gn/T/tui-agent-pt7KXi/session-evidence-workspace",
+        "location[directory]": "/private/var/folders/ky/cxzrn_m55hb27d6nnvcg3w7m0000gn/T/tui-agent-pt7KXi/session-evidence-workspace"
+      },
+      "status": 200,
+      "durationMs": 0
+    },
+    {
+      "method": "GET",
+      "path": "/api/skill",
+      "query": {
+        "directory": "/private/var/folders/ky/cxzrn_m55hb27d6nnvcg3w7m0000gn/T/tui-agent-pt7KXi/session-evidence-workspace",
+        "location[directory]": "/private/var/folders/ky/cxzrn_m55hb27d6nnvcg3w7m0000gn/T/tui-agent-pt7KXi/session-evidence-workspace"
+      },
+      "status": 200,
+      "durationMs": 0
+    },
+    {
+      "method": "GET",
+      "path": "/project/proj_test/directories",
+      "query": {
+        "directory": "/private/var/folders/ky/cxzrn_m55hb27d6nnvcg3w7m0000gn/T/tui-agent-pt7KXi/session-evidence-workspace"
+      },
+      "status": 200,
+      "durationMs": 0
+    },
+    {
+      "method": "GET",
+      "path": "/session",
+      "query": {
+        "start": "1781794468752",
+        "directory": "/private/var/folders/ky/cxzrn_m55hb27d6nnvcg3w7m0000gn/T/tui-agent-pt7KXi/session-evidence-workspace"
+      },
+      "status": 200,
+      "durationMs": 0
+    },
+    {
+      "method": "GET",
+      "path": "/command",
+      "query": {
+        "directory": "/private/var/folders/ky/cxzrn_m55hb27d6nnvcg3w7m0000gn/T/tui-agent-pt7KXi/session-evidence-workspace"
+      },
+      "status": 200,
+      "durationMs": 0
+    },
+    {
+      "method": "GET",
+      "path": "/lsp",
+      "query": {
+        "directory": "/private/var/folders/ky/cxzrn_m55hb27d6nnvcg3w7m0000gn/T/tui-agent-pt7KXi/session-evidence-workspace"
+      },
+      "status": 200,
+      "durationMs": 0
+    },
+    {
+      "method": "GET",
+      "path": "/mcp",
+      "query": {
+        "directory": "/private/var/folders/ky/cxzrn_m55hb27d6nnvcg3w7m0000gn/T/tui-agent-pt7KXi/session-evidence-workspace"
+      },
+      "status": 200,
+      "durationMs": 0
+    },
+    {
+      "method": "GET",
+      "path": "/experimental/resource",
+      "query": {
+        "directory": "/private/var/folders/ky/cxzrn_m55hb27d6nnvcg3w7m0000gn/T/tui-agent-pt7KXi/session-evidence-workspace"
+      },
+      "status": 200,
+      "durationMs": 0
+    },
+    {
+      "method": "GET",
+      "path": "/formatter",
+      "query": {
+        "directory": "/private/var/folders/ky/cxzrn_m55hb27d6nnvcg3w7m0000gn/T/tui-agent-pt7KXi/session-evidence-workspace"
+      },
+      "status": 200,
+      "durationMs": 0
+    },
+    {
+      "method": "GET",
+      "path": "/session/status",
+      "query": {
+        "directory": "/private/var/folders/ky/cxzrn_m55hb27d6nnvcg3w7m0000gn/T/tui-agent-pt7KXi/session-evidence-workspace"
+      },
+      "status": 200,
+      "durationMs": 0
+    },
+    {
+      "method": "GET",
+      "path": "/provider/auth",
+      "query": {
+        "directory": "/private/var/folders/ky/cxzrn_m55hb27d6nnvcg3w7m0000gn/T/tui-agent-pt7KXi/session-evidence-workspace"
+      },
+      "status": 200,
+      "durationMs": 0
+    },
+    {
+      "method": "GET",
+      "path": "/vcs",
+      "query": {
+        "directory": "/private/var/folders/ky/cxzrn_m55hb27d6nnvcg3w7m0000gn/T/tui-agent-pt7KXi/session-evidence-workspace"
+      },
+      "status": 200,
+      "durationMs": 0
+    },
+    {
+      "method": "GET",
+      "path": "/experimental/workspace",
+      "query": {
+        "directory": "/private/var/folders/ky/cxzrn_m55hb27d6nnvcg3w7m0000gn/T/tui-agent-pt7KXi/session-evidence-workspace"
+      },
+      "status": 200,
+      "durationMs": 0
+    },
+    {
+      "method": "GET",
+      "path": "/experimental/workspace/status",
+      "query": {
+        "directory": "/private/var/folders/ky/cxzrn_m55hb27d6nnvcg3w7m0000gn/T/tui-agent-pt7KXi/session-evidence-workspace"
+      },
+      "status": 200,
+      "durationMs": 0
+    },
+    {
+      "method": "GET",
+      "path": "/session",
+      "query": {
+        "roots": "true",
+        "limit": "100",
+        "directory": "/private/var/folders/ky/cxzrn_m55hb27d6nnvcg3w7m0000gn/T/tui-agent-pt7KXi/session-evidence-workspace"
+      },
+      "status": 200,
+      "durationMs": 2
+    }
+  ],
+  "diagnostics": {
+    "layoutOccurrences": 0,
+    "layout": []
+  }
+}

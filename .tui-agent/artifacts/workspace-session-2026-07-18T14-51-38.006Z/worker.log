@@ -1,0 +1,18 @@
+maybeMakeRenderable received an invalid node {
+  '$$typeof': Symbol(react.transitional.element),
+  type: [Function: provider],
+  key: null,
+  props: {
+    exit: [Function: exit],
+    children: {
+      '$$typeof': Symbol(react.transitional.element),
+      type: [Function: provider],
+      key: null,
+      props: [Object],
+      _owner: null,
+      _store: {}
+    }
+  },
+  _owner: null,
+  _store: {}
+}

@@ -108,6 +108,8 @@ export async function runCli(argv: string[]) {
     const worker = Bun.spawn(
       [
         process.execPath,
+        "--preload",
+        "@opentui/solid/preload",
         workerEntry("worker"),
         resolved.source,
         artifactDirectory,

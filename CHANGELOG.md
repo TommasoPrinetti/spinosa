@@ -6,6 +6,37 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 **Release policy:** versions are published only with explicit maintainer approval.
 
+## [0.9.0-beta.24] — 2026-07-18
+
+### Added
+
+- `@spinosa/tui-agent` — deterministic OpenTUI driver for agent-operated TUI debugging. Ships as a npm-packable package with a CLI (`tui-agent run`, `interact`, `list`, `show`, `diff`, `doctor`), JSON scenario DSL, JSONL agent control loop, artifact output (text, SVG, spans, tree, state), and a Spinosa adapter example. See `packages/tui/tools/tui-agent/README.md`.
+- `/session` command alias for `/sessions` in the TUI command palette.
+- HomeFooter keyboard labels (Shift+S/A/K/W/M) are now wired to actual key bindings via `useBindings`.
+
+### Changed
+
+- `/session` command now scopes to the active Spinosa workspace path instead of the TUI host directory. Sessions created in workspace B from a TUI launched in workspace A are visible when switching to workspace B.
+- HTTP API `session.list` now accepts a `workspaceID` filter parameter.
+
+### Fixed
+
+- HomeFooter `onMouseDown` changed to `onMouseUp` so click-outside-to-dismiss on dialogs does not also fire footer actions.
+- Dialog backdrop now correctly distinguishes backdrop clicks from inner-dialog clicks via a `backdropPressed` flag and `stopPropagation`.
+- Dialog max height is now responsive to terminal height: smaller than 30 rows gets `height - 2`, otherwise 60% of terminal height.
+- Dialog, dialog-select, and dialog-export-options use `flexDirection="column"` and `minHeight={0}` so content shrinks inside small modals.
+- Session list scrolls inside small modals (`minHeight={0}` boundary before prompt/footer).
+- Export options layout is columnar on narrow terminals; labels and options no longer render across one row.
+- Workspace picker columns (Name, Parent, Status, Version, Accessed) are now responsive — hide Version below 72 columns, hide Accessed below 94 columns.
+- Workspace picker adds a `›` selection indicator, uses `compactColumns()` for narrower terminal widths.
+- Home reduces decorative chrome below 24 terminal rows (hides spacer, version label, ASCII banner, limits recent cards to 1).
+- ASCII banner falls back to bold plain text when the terminal is too narrow for the `block` font rendering.
+- Visualizer hides the stacked inspector when terminal height is below 28 rows.
+- Visualizer hides keyboard shortcut hint bar below 28 rows.
+- Prompt workspace status bar uses `overflow="hidden"` and shows a separator pipe below 80 columns.
+- Session transcript scroll container has `minHeight={0}` to prevent overflow in constrained layouts.
+- DialogProvider wraps dialog overlay with a positioned `box` instead of layering the overlay over the entire screen, preventing obscure mouse-targeting issues.
+
 ## [0.9.0-beta.22] — 2026-07-17
 
 ### Fixed

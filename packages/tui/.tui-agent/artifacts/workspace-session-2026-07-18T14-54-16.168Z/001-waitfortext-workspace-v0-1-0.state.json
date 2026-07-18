@@ -1,0 +1,74 @@
+{
+  "terminal": {
+    "width": 100,
+    "height": 50,
+    "cursor": [
+      10,
+      30
+    ]
+  },
+  "focus": {
+    "renderable": {
+      "id": "textarea-1",
+      "type": "TextareaRenderable",
+      "bounds": {
+        "x": 9,
+        "y": 29,
+        "width": 83,
+        "height": 1
+      }
+    },
+    "editor": {
+      "id": "textarea-1",
+      "type": "TextareaRenderable",
+      "bounds": {
+        "x": 9,
+        "y": 29,
+        "width": 83,
+        "height": 1
+      }
+    }
+  },
+  "adapter": {
+    "route": "home",
+    "routeState": {
+      "name": "home"
+    },
+    "dialog": {
+      "open": false,
+      "depth": 0,
+      "size": "medium"
+    },
+    "state": {
+      "ready": true,
+      "sessionCount": 2,
+      "path": {
+        "state": "/private/var/folders/ky/cxzrn_m55hb27d6nnvcg3w7m0000gn/T/tui-agent-IpkJ6o/home/.local/state/opencode",
+        "config": "/private/var/folders/ky/cxzrn_m55hb27d6nnvcg3w7m0000gn/T/tui-agent-IpkJ6o/home/.config/opencode",
+        "worktree": "/private/var/folders/ky/cxzrn_m55hb27d6nnvcg3w7m0000gn/T/tui-agent-IpkJ6o",
+        "directory": "/private/var/folders/ky/cxzrn_m55hb27d6nnvcg3w7m0000gn/T/tui-agent-IpkJ6o/session-evidence-workspace"
+      }
+    },
+    "mode": "base"
+  },
+  "renderer": {
+    "frameId": 11,
+    "scheduler": {
+      "isRunning": false,
+      "isRendering": false,
+      "hasScheduledRender": false
+    },
+    "native": {
+      "nativeLastFrameTime": 13042,
+      "nativeAverageFrameTime": 309419.0909090909,
+      "nativeFrameCount": 11,
+      "cellsUpdated": 0,
+      "averageCellsUpdated": 699,
+      "nativeRenderTime": 24,
+      "nativeStdoutWriteTime": 0
+    }
+  },
+  "diagnostics": {
+    "layout": []
+  }
+}

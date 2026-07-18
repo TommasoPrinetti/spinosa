@@ -1,0 +1,50 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                   Spinosa vdev · workspace v0.1.0
+
+                                     SESSION-EVIDENCE-WORKSPACE
+
+
+      │                            │                                 │
+      │       Import files         │       Switch workspace          │       Visualizer
+      │                            │                                 │
+      ┃ /sessions   Switch session                                                           ┃
+      ┃ /new        New session                                                              ┃
+      ┃
+      ┃  /session
+      ┃
+      ┃
+      ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+       ● Workspace: session-evidence-workspace                     tab agents  ctrl+p commands
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+             [S] Settings  |  [A] Agents  |  [K] Keys  |  [W] Workspaces  |  [M] Models

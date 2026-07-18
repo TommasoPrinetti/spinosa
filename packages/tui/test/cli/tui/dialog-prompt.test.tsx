@@ -36,6 +36,7 @@ async function mountPrompt(input: {
     { TuiConfigProvider },
     { ToastProvider },
     { OpencodeKeymapProvider, registerOpencodeKeymap },
+    { ExitProvider },
   ] = await Promise.all([
     import("../../../src/ui/dialog"),
     import("../../../src/ui/dialog-prompt"),
@@ -44,6 +45,7 @@ async function mountPrompt(input: {
     import("../../../src/config"),
     import("../../../src/ui/toast"),
     import("../../../src/keymap"),
+    import("../../../src/context/exit"),
   ])
 
   function Harness() {
@@ -70,9 +72,11 @@ async function mountPrompt(input: {
             <KVProvider>
               <ThemeProvider mode="dark">
                 <ToastProvider>
-                  <DialogProvider>
+                  <ExitProvider exit={() => {}}>
+                    <DialogProvider>
                     <DialogPrompt title="Rename Session" value="draft" onConfirm={input.onConfirm} />
                   </DialogProvider>
+                  </ExitProvider>
                 </ToastProvider>
               </ThemeProvider>
             </KVProvider>
