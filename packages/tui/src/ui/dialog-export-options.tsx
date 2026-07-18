@@ -82,7 +82,7 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
   })
 
   return (
-    <box paddingLeft={2} paddingRight={2} gap={1}>
+    <box paddingLeft={2} paddingRight={2} gap={1} flexDirection="column" minHeight={0}>
       <box flexDirection="row" justifyContent="space-between">
         <text attributes={TextAttributes.BOLD} fg={theme.text}>
           Export Options

@@ -1,5 +1,6 @@
 import { createMemo, createResource, createSignal, For, onCleanup, onMount, Show } from "solid-js"
 import { TextAttributes } from "@opentui/core"
+import { useTerminalDimensions } from "@opentui/solid"
 import { dirname, join } from "node:path"
 import { statSync } from "node:fs"
 import { useDialog } from "../ui/dialog"
@@ -78,6 +79,14 @@ export function DialogSpinosaWorkspacePicker(props: { onClose?: () => void } = {
   const spinosa = useSpinosaWorkspace()
   const { theme } = useTheme()
   const keymap = useOpencodeKeymap()
+  const dimensions = useTerminalDimensions()
+
+  const compactColumns = () => dimensions().width < 72
+  const showVersion = () => dimensions().width >= 72
+  const showAccessed = () => dimensions().width >= 94
+  const nameWidth = () => compactColumns() ? 20 : 22
+  const folderWidth = () => compactColumns() ? 17 : showAccessed() ? 24 : 22
+  const statusWidth = () => compactColumns() ? 13 : 14
 
   const [sortColumn, setSortColumn] = createSignal<SortColumn>("name")
   const [sortDir, setSortDir] = createSignal<SortDir>("asc")
@@ -271,31 +280,35 @@ export function DialogSpinosaWorkspacePicker(props: { onClose?: () => void } = {
             paddingBottom={1}
             backgroundColor={theme.backgroundPanel}
           >
-            <box width={30} onMouseDown={() => toggleSort("name")}>
+            <box width={nameWidth()} onMouseDown={() => toggleSort("name")}>
               <text fg={theme.textMuted}>
                 Name{sortColumn() === "name" ? (sortDir() === "asc" ? " ↑" : " ↓") : ""}
               </text>
             </box>
-            <box width={30} onMouseDown={() => toggleSort("folder")}>
+            <box width={folderWidth()} onMouseDown={() => toggleSort("folder")}>
               <text fg={theme.textMuted}>
                 Parent{sortColumn() === "folder" ? (sortDir() === "asc" ? " ↑" : " ↓") : ""}
               </text>
             </box>
-            <box width={14} onMouseDown={() => toggleSort("status")}>
+            <box width={statusWidth()} onMouseDown={() => toggleSort("status")}>
               <text fg={theme.textMuted}>
                 Status{sortColumn() === "status" ? (sortDir() === "asc" ? " ↑" : " ↓") : ""}
               </text>
             </box>
-            <box width={10} onMouseDown={() => toggleSort("version")}>
-              <text fg={theme.textMuted}>
-                Ver{sortColumn() === "version" ? (sortDir() === "asc" ? " ↑" : " ↓") : ""}
-              </text>
-            </box>
-            <box width={20} onMouseDown={() => toggleSort("accessed")}>
-              <text fg={theme.textMuted}>
-                Accessed{sortColumn() === "accessed" ? (sortDir() === "asc" ? " ↑" : " ↓") : ""}
-              </text>
-            </box>
+            <Show when={showVersion()}>
+              <box width={9} onMouseDown={() => toggleSort("version")}>
+                <text fg={theme.textMuted}>
+                  Ver{sortColumn() === "version" ? (sortDir() === "asc" ? " ↑" : " ↓") : ""}
+                </text>
+              </box>
+            </Show>
+            <Show when={showAccessed()}>
+              <box width={17} onMouseDown={() => toggleSort("accessed")}>
+                <text fg={theme.textMuted}>
+                  Accessed{sortColumn() === "accessed" ? (sortDir() === "asc" ? " ↑" : " ↓") : ""}
+                </text>
+              </box>
+            </Show>
           </box>
 
           {/* data rows */}
@@ -314,33 +327,37 @@ export function DialogSpinosaWorkspacePicker(props: { onClose?: () => void } = {
                   onMouseOver={() => setSelected(i())}
                   onMouseDown={() => { setSelected(i()); void chooseWorkspace(row) }}
                 >
-                  <box width={30}>
+                  <box width={nameWidth()}>
                     <text fg={row.available ? theme.text : theme.error} overflow="hidden" wrapMode="none">
-                      <span style={{ bold: active() }}>{row.available ? "" : "✕ "}{row.name}</span>
+                      <span style={{ bold: active() }}>{active() ? "› " : "  "}{row.available ? "" : "✕ "}{row.name}</span>
                     </text>
                   </box>
-                  <box width={30}>
+                  <box width={folderWidth()}>
                     <text fg={theme.textMuted} overflow="hidden" wrapMode="none">
-                      {truncatePathTail(row.parentFolder, 28)}
+                      {truncatePathTail(row.parentFolder, Math.max(8, folderWidth() - 2))}
                     </text>
                   </box>
-                  <box width={14} flexShrink={0}>
+                  <box width={statusWidth()} flexShrink={0}>
                     <text fg={row.available ? theme.textMuted : theme.error} overflow="hidden" wrapMode="none">
                       {row.presence && row.presence !== "present" && row.presence !== "legacy"
                         ? `✕ ${workspacePresenceLabel(row.presence) === "NON EXISTENT" ? "NOT FOUND" : workspacePresenceLabel(row.presence)}`
                         : row.presence === "legacy" ? "Legacy" : setupStatusLabel(row.status)}
                     </text>
                   </box>
-                  <box width={10} flexShrink={0}>
-                    <text fg={theme.textMuted} overflow="hidden" wrapMode="none">
-                      v{row.version}{row.needsUpdate ? " ⚠" : ""}
-                    </text>
-                  </box>
-                  <box width={20} flexShrink={0}>
-                    <text fg={theme.textMuted} overflow="hidden" wrapMode="none">
-                      {relativeTime(row.lastAccessed)}
-                    </text>
-                  </box>
+                  <Show when={showVersion()}>
+                    <box width={9} flexShrink={0}>
+                      <text fg={theme.textMuted} overflow="hidden" wrapMode="none">
+                        v{row.version}{row.needsUpdate ? " ⚠" : ""}
+                      </text>
+                    </box>
+                  </Show>
+                  <Show when={showAccessed()}>
+                    <box width={17} flexShrink={0}>
+                      <text fg={theme.textMuted} overflow="hidden" wrapMode="none">
+                        {relativeTime(row.lastAccessed)}
+                      </text>
+                    </box>
+                  </Show>
                 </box>
               )
             }}
@@ -370,7 +387,9 @@ export function DialogSpinosaWorkspacePicker(props: { onClose?: () => void } = {
         onMouseOver={() => setSelected(sorted().length)}
       >
         <text fg={buttonText(theme, selected() === sorted().length, theme.primary)}>
-          <span style={{ bold: selected() === sorted().length }}>+ New workspace</span>
+          <span style={{ bold: selected() === sorted().length }}>
+            {selected() === sorted().length ? "› " : "  "}+ New workspace
+          </span>
         </text>
         <text fg={buttonText(theme, selected() === sorted().length, theme.textMuted)}>
           Import source folders into a new workspace

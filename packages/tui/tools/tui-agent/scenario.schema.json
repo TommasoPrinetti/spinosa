@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spinosa.local/tui-agent-scenario.schema.json",
+  "title": "TUI Agent Lab scenario",
+  "type": "object",
+  "required": ["name", "description", "steps"],
+  "properties": {
+    "name": { "type": "string", "minLength": 1 },
+    "description": { "type": "string", "minLength": 1 },
+    "adapter": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Trusted adapter module. Relative paths resolve from the scenario file."
+    },
+    "terminal": {
+      "type": "object",
+      "properties": {
+        "width": { "type": "integer", "minimum": 1 },
+        "height": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "fixture": {
+      "type": "object",
+      "properties": {
+        "workspace": { "type": "object" },
+        "sessions": { "type": "array", "items": { "type": "object" } },
+        "kv": { "type": "object" },
+        "files": { "type": "array", "items": { "type": "object" } },
+        "responses": { "type": "array", "items": { "type": "object" } }
+      }
+    },
+    "route": { "type": "object" },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["action"],
+        "properties": {
+          "action": {
+            "enum": [
+              "waitForText",
+              "waitForAbsent",
+              "waitForFocus",
+              "key",
+              "type",
+              "paste",
+              "click",
+              "doubleClick",
+              "clickText",
+              "move",
+              "drag",
+              "scroll",
+              "resize",
+              "wait",
+              "capture",
+              "assert"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

@@ -85,6 +85,7 @@ export function Home() {
   const providerConnected = useConnected()
   const { theme } = useTheme()
   const workspaceReady = createMemo(() => Boolean(spinosa.activePath && !spinosa.genericMode))
+  const compactLayout = createMemo(() => dimensions().height < 24)
   const startupPrompt = createMemo(() => route.prompt ?? spinosa.pendingPrompt)
   const startupPromptIsQueued = createMemo(() => !route.prompt && Boolean(spinosa.pendingPrompt))
   const [bundledVersion] = createResource(readBundledFrameworkVersion)
@@ -129,6 +130,10 @@ export function Home() {
     const workspacePath = spinosa.activePath
     if (!workspacePath || spinosa.genericMode) return undefined
     return workspaceAsciiBannerText(workspacePath)
+  })
+  const workspaceBannerFits = createMemo(() => {
+    const banner = workspaceBannerText()
+    return Boolean(banner && banner.length * 9 <= dimensions().width - 4)
   })
   const versionLabel = createMemo(() => {
     const parts: string[] = []
@@ -356,9 +361,12 @@ export function Home() {
   return (
     <HomeSessionDestinationProvider>
       <CenteredColumn>
-        <box flexGrow={1} alignItems="center" paddingLeft={2} paddingRight={2}>
+        <box flexGrow={1} height="100%" minHeight={0} flexDirection="column" alignItems="center" paddingLeft={2} paddingRight={2}>
           <box flexGrow={1} minHeight={0} />
-          <box height={4} minHeight={0} flexShrink={1} />
+          <Show when={!compactLayout()}>
+            <box height={4} minHeight={0} flexShrink={1} />
+          </Show>
+          <Show when={!compactLayout()}>
           <box flexShrink={0} alignItems="center" flexDirection="column">
             <Show when={versionLabel()}>
               <text fg={theme.textMuted}>{versionLabel()}</text>
@@ -403,17 +411,33 @@ export function Home() {
             <pluginRuntime.Slot name="home_logo" mode="replace">
               <Show when={workspaceBannerText()} fallback={<Logo />}>
                 {(banner) => (
-                  <ascii_font
-                    text={banner()}
-                    font="block"
-                    color={theme.text}
-                    selectable={false}
-                  />
+                  <Show
+                    when={workspaceBannerFits()}
+                    fallback={
+                      <text
+                        width="100%"
+                        fg={theme.text}
+                        attributes={TextAttributes.BOLD}
+                        wrapMode="none"
+                        overflow="hidden"
+                      >
+                        {banner()}
+                      </text>
+                    }
+                  >
+                    <ascii_font
+                      text={banner()}
+                      font="block"
+                      color={theme.text}
+                      selectable={false}
+                    />
+                  </Show>
                 )}
               </Show>
             </pluginRuntime.Slot>
           </box>
           <box height={1} minHeight={0} flexShrink={1} />
+          </Show>
 
           {/* recent workspaces (global home only) */}
           <Show when={providerConnected() && !workspaceReady() && recentLoading()}>
@@ -424,7 +448,7 @@ export function Home() {
             <box width="100%" maxWidth={promptMaxWidth()} flexDirection="column" flexShrink={0}>
               <text fg={theme.textMuted}>Recent workspaces</text>
               <box height={1} />
-              <For each={recentWorkspaces()}>
+              <For each={recentWorkspaces().slice(0, compactLayout() ? 1 : RECENT_WORKSPACE_COUNT)}>
                 {(ws, i) => {
                   const idx = i()
                   const active = () => selectedRecent() === idx

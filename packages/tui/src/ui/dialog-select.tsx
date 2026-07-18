@@ -558,7 +558,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   }
 
   return (
-    <box gap={1} paddingBottom={1} flexGrow={1}>
+    <box gap={1} paddingBottom={1} flexGrow={1} minHeight={0} flexDirection="column">
       <box paddingLeft={4} paddingRight={4}>
         <box flexDirection="row" justifyContent="space-between">
           {props.titleView ?? (
@@ -598,7 +598,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           </box>
         </Show>
       </box>
-      <box flexGrow={1} flexShrink={1}>
+      <box flexGrow={1} flexShrink={1} minHeight={0}>
         <Show
           when={grouped().length > 0}
           fallback={

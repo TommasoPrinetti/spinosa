@@ -20,6 +20,7 @@ import {
   batch,
   Show,
   on,
+  type ParentProps,
 } from "solid-js"
 import { TuiPathsProvider, TuiStartupProvider, TuiTerminalEnvironmentProvider, useTuiStartup } from "./context/runtime"
 import { DialogProvider, useDialog } from "./ui/dialog"
@@ -147,6 +148,15 @@ export type TuiInput = {
   headers?: RequestInit["headers"]
   events?: EventSource
   pluginHost: TuiPluginHost
+}
+
+function SpinosaSyncProvider(props: ParentProps) {
+  const spinosa = useSpinosaWorkspace()
+  return (
+    <SyncProvider sessionDirectory={() => (spinosa.genericMode ? undefined : spinosa.activePath)}>
+      {props.children}
+    </SyncProvider>
+  )
 }
 
 function errorMessage(error: unknown) {
@@ -318,7 +328,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                         >
                                           <PermissionProvider>
                                             <ProjectProvider>
-                                              <SyncProvider>
+                                              <SpinosaSyncProvider>
                                                 <DataProvider>
                                                   <ThemeProvider mode={mode}>
                                                     <LocalProvider>
@@ -349,7 +359,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                                     </LocalProvider>
                                                   </ThemeProvider>
                                                 </DataProvider>
-                                              </SyncProvider>
+                                              </SpinosaSyncProvider>
                                             </ProjectProvider>
                                           </PermissionProvider>
                                         </SDKProvider>
@@ -599,7 +609,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         category: "Session",
         suggested: sync.data.session.length > 0,
         slashName: "sessions",
-        slashAliases: ["resume", "continue"],
+        slashAliases: ["session", "resume", "continue"],
         run: () => {
           dialog.replace(() => <DialogSessionList />)
         },
@@ -1143,9 +1153,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
           </Show>
           {plugin()}
         </box>
-        <box flexShrink={0}>
-          <pluginRuntime.Slot name="app_bottom" />
-        </box>
+        <pluginRuntime.Slot name="app_bottom" />
         <pluginRuntime.Slot name="app" />
       </Show>
       <Show when={!startup.skipInitialLoading}>

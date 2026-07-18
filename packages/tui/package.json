@@ -8,6 +8,7 @@
   "scripts": {
     "test": "bun test --timeout 30000 --only-failures",
     "test:spinosa": "bun test --isolate test/spinosa/",
+    "tui:agent": "bun tools/tui-agent/cli.ts",
     "typecheck": "tsc --noEmit",
     "typecheck:spinosa": "tsc --noEmit -p tsconfig.spinosa.json",
     "verify:spinosa": "bun run scripts/verify-spinosa.ts"

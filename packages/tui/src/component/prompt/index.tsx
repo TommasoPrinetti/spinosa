@@ -1708,9 +1708,13 @@ export function Prompt(props: PromptProps) {
             <Match when={true}>{props.hint ?? <text />}</Match>
           </Switch>
           <Show when={status().type !== "retry"}>
-            <box gap={2} flexDirection="row" flexGrow={1} justifyContent="space-between">
-              <box gap={2} flexDirection="row" flexGrow={1}>
-                <text fg={workspaceStatus().ok ? theme.text : theme.textMuted} wrapMode="none">
+            <box gap={2} flexDirection="row" width="100%" minWidth={0} justifyContent="space-between">
+              <box gap={2} flexDirection="row" flexGrow={1} flexShrink={1} minWidth={0}>
+                <text
+                  fg={workspaceStatus().ok ? theme.text : theme.textMuted}
+                  wrapMode="none"
+                  overflow="hidden"
+                >
                   <span style={{ fg: workspaceStatus().ok ? theme.success : theme.error }}>● </span>
                   {workspaceStatus().label}
                 </text>
@@ -1721,6 +1725,9 @@ export function Prompt(props: PromptProps) {
                 </Show>
               </box>
               <box gap={2} flexDirection="row" flexShrink={0}>
+                <Show when={dimensions().width < 80}>
+                  <text fg={theme.textMuted}>│</text>
+                </Show>
                 <Switch>
                   <Match when={store.mode === "normal"}>
                     <Switch>

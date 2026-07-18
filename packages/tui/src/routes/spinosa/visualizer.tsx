@@ -110,6 +110,7 @@ export function Visualizer() {
   )
   const scene = createMemo(() => buildGraphScene(mode(), graphModel()))
   const isWide = () => dimensions().width >= 108
+  const isShort = () => dimensions().height < 28
   const isTooSmall = () => dimensions().width < MIN_WIDTH || dimensions().height < MIN_HEIGHT
   const canvasHeight = () => Math.max(10, dimensions().height - 13)
 
@@ -444,7 +445,7 @@ export function Visualizer() {
                 />
               </Show>
             </box>
-            <Show when={!stateMessage()}>
+            <Show when={!stateMessage() && !isShort()}>
               <GraphInspector scene={scene()} hit={selected() ?? hovered()} compact={!isWide()} />
             </Show>
           </box>
@@ -480,15 +481,17 @@ export function Visualizer() {
             </For>
           </box>
 
-          <box paddingTop={1} width="100%">
+          <box paddingTop={1} width="100%" minHeight={0} flexDirection="column">
             <text fg={theme.textMuted} attributes={TextAttributes.DIM} wrapMode="none" overflow="hidden">
               {statusText()}
             </text>
-            <text fg={theme.textMuted} attributes={TextAttributes.DIM} wrapMode="none" overflow="hidden">
-              {isWide()
-                ? "drag pan · wheel pan · ctrl+wheel zoom · +/− zoom · 0 fit · ←/→ select · enter inspect · ? help"
-                : "drag pan · ctrl+wheel zoom · +/− zoom · 0 fit · ? help"}
-            </text>
+            <Show when={!isShort()}>
+              <text fg={theme.textMuted} attributes={TextAttributes.DIM} wrapMode="none" overflow="hidden">
+                {isWide()
+                  ? "drag pan · wheel pan · ctrl+wheel zoom · +/− zoom · 0 fit · ←/→ select · enter inspect · ? help"
+                  : "drag pan · ctrl+wheel zoom · +/− zoom · 0 fit · ? help"}
+              </text>
+            </Show>
           </box>
         </Show>
       </box>

@@ -6,6 +6,7 @@ import { DialogSpinosaSettings } from "./dialog-spinosa-settings"
 import { DialogAgent } from "./dialog-agent"
 import { DialogPlaceholder } from "./dialog-placeholder"
 import { MAIN_CONTENT_MAX_WIDTH } from "../util/layout"
+import { useBindings } from "../keymap"
 
 export function HomeFooter() {
   const { theme } = useTheme()
@@ -27,6 +28,15 @@ export function HomeFooter() {
     { key: "M", label: "Models", action: openModels },
   ]
 
+  useBindings(() => ({
+    bindings: shortcuts.map((item) => ({
+      key: `shift+${item.key.toLowerCase()}`,
+      desc: `Open ${item.label.toLowerCase()}`,
+      group: "Home",
+      cmd: item.action,
+    })),
+  }))
+
   return (
     <box width="100%" maxWidth={MAIN_CONTENT_MAX_WIDTH} flexDirection="row" justifyContent="center" gap={0}>
       <For each={shortcuts}>
@@ -40,7 +50,7 @@ export function HomeFooter() {
               backgroundColor={hovered() === item.key ? theme.backgroundPanel : undefined}
               onMouseOver={() => setHovered(item.key)}
               onMouseOut={() => setHovered(undefined)}
-              onMouseDown={item.action}
+              onMouseUp={item.action}
             >
               <text
                 fg={hovered() === item.key ? RGBA.fromInts(0, 0, 0, 255) : theme.textMuted}

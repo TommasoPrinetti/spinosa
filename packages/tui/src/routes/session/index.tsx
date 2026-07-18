@@ -1364,6 +1364,7 @@ export function Session() {
                 stickyScroll={true}
                 stickyStart="bottom"
                 flexGrow={1}
+                minHeight={0}
                 scrollAcceleration={scrollAcceleration()}
               >
                 <box height={1} />

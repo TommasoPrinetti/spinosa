@@ -1,7 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 import { describe, expect, test } from "bun:test"
 import { tmpdir } from "../../../fixture/fixture"
-import { mount, wait } from "./sync-fixture"
+import { directory, mount, wait } from "./sync-fixture"
 import type { GlobalEvent } from "@opencode-ai/sdk/v2"
 
 function branchEvent(branch: string, workspace?: string): GlobalEvent {
@@ -27,7 +27,8 @@ describe("tui sync", () => {
       expect(kv.get("session_directory_filter_enabled", true)).toBe(true)
       expect(session.at(-1)?.searchParams.get("roots")).toBeNull()
       expect(session.at(-1)?.searchParams.get("scope")).toBeNull()
-      expect(session.at(-1)?.searchParams.get("path")).toBe("packages/tui")
+      expect(session.at(-1)?.searchParams.get("directory")).toBe(directory)
+      expect(session.at(-1)?.searchParams.get("path")).toBeNull()
 
       kv.set("session_directory_filter_enabled", false)
       await sync.session.refresh()
