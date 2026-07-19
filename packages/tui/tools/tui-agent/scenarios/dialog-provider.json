@@ -30,6 +30,6 @@
     { "action": "assert", "visible": ["Providers"] },
     { "action": "capture", "name": "provider-dialog" },
 
-    { "action": "key", "key": "escape" }
+    { "action": "clickText", "text": "esc" }
   ]
 }

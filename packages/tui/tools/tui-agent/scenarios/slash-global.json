@@ -28,6 +28,6 @@
     { "action": "key", "key": "RETURN" },
     { "action": "waitForText", "text": "Select model", "timeoutMs": 5000 },
     { "action": "assert", "visible": ["Select model"] },
-    { "action": "key", "key": "escape" }
+    { "action": "clickText", "text": "esc" }
   ]
 }

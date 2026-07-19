@@ -42,6 +42,6 @@
     { "action": "waitForText", "text": "Fork session", "timeoutMs": 5000 },
     { "action": "assert", "visible": ["Fork session"] },
     { "action": "capture", "name": "fork-dialog" },
-    { "action": "key", "key": "escape" }
+    { "action": "clickText", "text": "esc" }
   ]
 }

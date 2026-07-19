@@ -31,6 +31,6 @@
     { "action": "assert", "visible": ["Switch org"] },
     { "action": "capture", "name": "org-dialog" },
 
-    { "action": "key", "key": "escape" }
+    { "action": "clickText", "text": "esc" }
   ]
 }

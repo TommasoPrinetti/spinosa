@@ -30,6 +30,6 @@
     { "action": "assert", "visible": ["Themes"] },
     { "action": "capture", "name": "theme-dialog" },
 
-    { "action": "key", "key": "escape" }
+    { "action": "clickText", "text": "esc" }
   ]
 }

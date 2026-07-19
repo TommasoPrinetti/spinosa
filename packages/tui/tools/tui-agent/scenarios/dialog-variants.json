@@ -31,6 +31,6 @@
     { "action": "assert", "visible": ["Select variant"] },
     { "action": "capture", "name": "variants-dialog" },
 
-    { "action": "key", "key": "escape" }
+    { "action": "clickText", "text": "esc" }
   ]
 }

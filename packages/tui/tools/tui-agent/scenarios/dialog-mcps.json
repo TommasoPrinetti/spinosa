@@ -30,6 +30,6 @@
     { "action": "assert", "visible": ["MCPs"] },
     { "action": "capture", "name": "mcps-dialog" },
 
-    { "action": "key", "key": "escape" }
+    { "action": "clickText", "text": "esc" }
   ]
 }
