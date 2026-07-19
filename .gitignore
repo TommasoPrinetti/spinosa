@@ -64,3 +64,4 @@ framework/bin/lib/vendor/
 /.spinosa/
 /.trash/
 /agent_reports/
+.tui-agent/
