@@ -1,0 +1,42 @@
+{
+  "name": "edge-long-sessions",
+  "description": "Verify 15 sessions with long titles display correctly in the session list",
+  "adapter": "../adapters/spinosa.ts",
+  "terminal": { "width": 100, "height": 50 },
+  "fixture": {
+    "workspace": { "name": "long-sessions-test", "setupStatus": "workspace_started" },
+    "sessions": [
+      { "id": "ses_l1", "title": "AAAAAAAAAA very long session name that might overflow the dialog bounds", "directory": "$WORKSPACE", "updated": 100 },
+      { "id": "ses_l2", "title": "BBBBBBBBBB very long session name that might overflow the dialog bounds", "directory": "$WORKSPACE", "updated": 93 },
+      { "id": "ses_l3", "title": "CCCCCCCCCC very long session name that might overflow the dialog bounds", "directory": "$WORKSPACE", "updated": 86 },
+      { "id": "ses_l4", "title": "DDDDDDDDDD very long session name that might overflow the dialog bounds", "directory": "$WORKSPACE", "updated": 80 },
+      { "id": "ses_l5", "title": "EEEEEEEEEE very long session name that might overflow the dialog bounds", "directory": "$WORKSPACE", "updated": 75 },
+      { "id": "ses_l6", "title": "FFFFFFFFFFFF very long session name that might overflow the dialog bounds", "directory": "$WORKSPACE", "updated": 70 },
+      { "id": "ses_l7", "title": "GGGGGGGGGGGG very long session name that might overflow the dialog bounds", "directory": "$WORKSPACE", "updated": 65 },
+      { "id": "ses_l8", "title": "HHHHHHHHHH very long session name that might overflow the dialog bounds", "directory": "$WORKSPACE", "updated": 60 },
+      { "id": "ses_l9", "title": "IIIIIIIIII very long session name that might overflow the dialog bounds", "directory": "$WORKSPACE", "updated": 55 },
+      { "id": "ses_l10", "title": "JJJJJJJJJJ very long session name that might overflow the dialog bounds", "directory": "$WORKSPACE", "updated": 50 },
+      { "id": "ses_l11", "title": "KKKKKKKKKK very long session name that might overflow the dialog bounds", "directory": "$WORKSPACE", "updated": 45 },
+      { "id": "ses_l12", "title": "LLLLLLLLLL very long session name that might overflow the dialog bounds", "directory": "$WORKSPACE", "updated": 40 },
+      { "id": "ses_l13", "title": "MMMMMMMMMM very long session name that might overflow the dialog bounds", "directory": "$WORKSPACE", "updated": 35 },
+      { "id": "ses_l14", "title": "NNNNNNNNNN very long session name that might overflow the dialog bounds", "directory": "$WORKSPACE", "updated": 30 },
+      { "id": "ses_l15", "title": "OOOOOOOOOO very long session name that might overflow the dialog bounds", "directory": "$WORKSPACE", "updated": 25 }
+    ],
+    "responses": [
+      { "path": "/global/config", "body": { "autoupdate": "notify" } },
+      { "path": "/file", "body": [] }
+    ]
+  },
+  "steps": [
+    { "action": "waitForText", "text": "Describe the task", "timeoutMs": 8000 },
+    { "action": "capture", "name": "home" },
+
+    { "action": "type", "text": "/session" },
+    { "action": "key", "key": "RETURN" },
+    { "action": "waitForText", "text": "very long session name", "timeoutMs": 5000 },
+    { "action": "assert", "visible": ["very long session name"] },
+    { "action": "capture", "name": "long-sessions" },
+
+    { "action": "key", "key": "escape" }
+  ]
+}

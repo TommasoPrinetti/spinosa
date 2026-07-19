@@ -1,0 +1,32 @@
+{
+  "name": "edge-unicode-names",
+  "description": "Verify sessions with exotic Unicode titles display correctly in the session list",
+  "adapter": "../adapters/spinosa.ts",
+  "terminal": { "width": 100, "height": 50 },
+  "fixture": {
+    "workspace": { "name": "unicode-sessions-test", "setupStatus": "workspace_started" },
+    "sessions": [
+      { "id": "ses_e1", "title": "emoji📄test", "directory": "$WORKSPACE", "updated": 100 },
+      { "id": "ses_e2", "title": "русский_документ", "directory": "$WORKSPACE", "updated": 90 },
+      { "id": "ses_e3", "title": "عربي_ملف", "directory": "$WORKSPACE", "updated": 80 },
+      { "id": "ses_e4", "title": "file with spaces.pdf", "directory": "$WORKSPACE", "updated": 70 },
+      { "id": "ses_e5", "title": "#hashtag_file.csv", "directory": "$WORKSPACE", "updated": 60 }
+    ],
+    "responses": [
+      { "path": "/global/config", "body": { "autoupdate": "notify" } },
+      { "path": "/file", "body": [] }
+    ]
+  },
+  "steps": [
+    { "action": "waitForText", "text": "Describe the task", "timeoutMs": 8000 },
+    { "action": "capture", "name": "home" },
+
+    { "action": "type", "text": "/session" },
+    { "action": "key", "key": "RETURN" },
+    { "action": "waitForText", "text": "emoji", "timeoutMs": 5000 },
+    { "action": "assert", "visible": ["emoji📄test", "русский_документ", "عربي_ملف", "file with spaces.pdf", "#hashtag_file.csv"] },
+    { "action": "capture", "name": "unicode-sessions" },
+
+    { "action": "key", "key": "escape" }
+  ]
+}

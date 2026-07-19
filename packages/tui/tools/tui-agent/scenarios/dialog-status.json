@@ -1,0 +1,35 @@
+{
+  "name": "dialog-status",
+  "description": "Open dialog via /status, verify OpenCode Status dialog renders, then close with escape",
+  "adapter": "../adapters/spinosa.ts",
+  "terminal": { "width": 100, "height": 50 },
+  "fixture": {
+    "workspace": { "name": "status-dialog-test", "setupStatus": "workspace_started" },
+    "sessions": [
+      { "id": "ses_st", "title": "Status dialog session", "directory": "$WORKSPACE", "updated": 100 }
+    ],
+    "responses": [
+      { "path": "/global/config", "body": { "autoupdate": "notify" } },
+      { "path": "/file", "body": [] },
+      { "path": "/session/ses_st/children", "body": [] },
+      { "path": "/session/ses_st/diff", "body": [] },
+      { "path": "/session/ses_st/todo", "body": [] },
+      { "path": "/session/ses_st/permission", "body": [] },
+      { "path": "/session/ses_st/question", "body": [] },
+      { "path": "/session/ses_st/message", "body": [] },
+      { "path": "/session/ses_st/part", "body": [] }
+    ]
+  },
+  "steps": [
+    { "action": "waitForText", "text": "Describe the task", "timeoutMs": 8000 },
+    { "action": "capture", "name": "home" },
+
+    { "action": "type", "text": "/status" },
+    { "action": "key", "key": "RETURN" },
+    { "action": "waitForText", "text": "Status", "timeoutMs": 5000 },
+    { "action": "assert", "visible": ["Status"] },
+    { "action": "capture", "name": "status-dialog" },
+
+    { "action": "key", "key": "escape" }
+  ]
+}
