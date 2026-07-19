@@ -1,0 +1,37 @@
+{
+  "name": "route-global-to-session",
+  "description": "Select a session from /sessions dialog and verify the route transitions from global home to the session view",
+  "adapter": "../adapters/spinosa.ts",
+  "terminal": { "width": 100, "height": 50 },
+  "fixture": {
+    "workspace": { "name": "route-to-session-ws", "setupStatus": "workspace_started" },
+    "sessions": [
+      { "id": "ses_route_to", "title": "Route to session target", "directory": "$WORKSPACE", "updated": 500 }
+    ],
+    "responses": [
+      { "path": "/global/config", "body": { "autoupdate": "notify" } },
+      { "path": "/file", "body": [] },
+      { "path": "/session/ses_route_to/children", "body": [] },
+      { "path": "/session/ses_route_to/diff", "body": [] },
+      { "path": "/session/ses_route_to/todo", "body": [] },
+      { "path": "/session/ses_route_to/permission", "body": [] },
+      { "path": "/session/ses_route_to/question", "body": [] },
+      { "path": "/session/ses_route_to/message", "body": [] },
+      { "path": "/session/ses_route_to/part", "body": [] }
+    ]
+  },
+  "steps": [
+    { "action": "waitForText", "text": "Describe the task", "timeoutMs": 8000 },
+    { "action": "capture", "name": "global-home" },
+
+    { "action": "type", "text": "/session" },
+    { "action": "key", "key": "RETURN" },
+    { "action": "waitForText", "text": "Sessions", "timeoutMs": 5000 },
+    { "action": "assert", "visible": ["Sessions", "Route to session target"] },
+
+    { "action": "clickText", "text": "Route to session target" },
+    { "action": "waitForText", "text": "Export", "timeoutMs": 5000 },
+    { "action": "assert", "visible": ["Export"] },
+    { "action": "capture", "name": "session-view" }
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "name": "dialog-model",
+  "description": "Open dialog via /models, interact with model list and cycle through agent variants, then close",
+  "adapter": "../adapters/spinosa.ts",
+  "terminal": { "width": 100, "height": 50 },
+  "fixture": {
+    "workspace": { "name": "model-dialog-test", "setupStatus": "workspace_started" },
+    "sessions": [
+      { "id": "ses_model", "title": "Model dialog session", "directory": "$WORKSPACE", "updated": 500 }
+    ],
+    "responses": [
+      { "path": "/global/config", "body": { "autoupdate": "notify" } },
+      { "path": "/file", "body": [] },
+      { "path": "/session/ses_model/children", "body": [] },
+      { "path": "/session/ses_model/diff", "body": [] },
+      { "path": "/session/ses_model/todo", "body": [] },
+      { "path": "/session/ses_model/permission", "body": [] },
+      { "path": "/session/ses_model/question", "body": [] },
+      { "path": "/session/ses_model/message", "body": [] },
+      { "path": "/session/ses_model/part", "body": [] }
+    ]
+  },
+  "steps": [
+    { "action": "waitForText", "text": "Describe the task", "timeoutMs": 8000 },
+    { "action": "capture", "name": "home" },
+
+    { "action": "type", "text": "/models" },
+    { "action": "key", "key": "RETURN" },
+    { "action": "waitForText", "text": "Select model", "timeoutMs": 5000 },
+    { "action": "assert", "visible": ["Select model"] },
+    { "action": "capture", "name": "model-dialog" },
+
+    { "action": "key", "key": "escape" }
+  ]
+}

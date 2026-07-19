@@ -1,0 +1,39 @@
+{
+  "name": "route-session-to-global",
+  "description": "Click < Back from a session view and verify the route returns to global home with Describe the task visible",
+  "adapter": "../adapters/spinosa.ts",
+  "terminal": { "width": 100, "height": 50 },
+  "fixture": {
+    "workspace": { "name": "route-back-workspace", "setupStatus": "workspace_started" },
+    "sessions": [
+      { "id": "ses_route_back", "title": "Route back session", "directory": "$WORKSPACE", "updated": 500 }
+    ],
+    "responses": [
+      { "path": "/global/config", "body": { "autoupdate": "notify" } },
+      { "path": "/file", "body": [] },
+      { "path": "/session/ses_route_back/children", "body": [] },
+      { "path": "/session/ses_route_back/diff", "body": [] },
+      { "path": "/session/ses_route_back/todo", "body": [] },
+      { "path": "/session/ses_route_back/permission", "body": [] },
+      { "path": "/session/ses_route_back/question", "body": [] },
+      { "path": "/session/ses_route_back/message", "body": [] },
+      { "path": "/session/ses_route_back/part", "body": [] }
+    ]
+  },
+  "steps": [
+    { "action": "waitForText", "text": "Describe the task", "timeoutMs": 8000 },
+    { "action": "capture", "name": "global-home" },
+
+    { "action": "type", "text": "/session" },
+    { "action": "key", "key": "RETURN" },
+    { "action": "waitForText", "text": "Route back session", "timeoutMs": 5000 },
+    { "action": "clickText", "text": "Route back session" },
+    { "action": "waitForText", "text": "Export", "timeoutMs": 5000 },
+    { "action": "capture", "name": "in-session" },
+
+    { "action": "clickText", "text": "< Back" },
+    { "action": "waitForText", "text": "Describe the task", "timeoutMs": 5000 },
+    { "action": "assert", "visible": ["Describe the task"] },
+    { "action": "capture", "name": "back-home" }
+  ]
+}

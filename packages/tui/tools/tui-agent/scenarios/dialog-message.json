@@ -1,0 +1,43 @@
+{
+  "name": "dialog-message",
+  "description": "Click a user message in the session transcript to open DialogMessage and verify the message detail view",
+  "adapter": "../adapters/spinosa.ts",
+  "terminal": { "width": 100, "height": 50 },
+  "fixture": {
+    "workspace": { "name": "message-dialog-test", "setupStatus": "workspace_started" },
+    "sessions": [
+      { "id": "ses_message", "title": "Message dialog session", "directory": "$WORKSPACE", "updated": 500 }
+    ],
+    "responses": [
+      { "path": "/global/config", "body": { "autoupdate": "notify" } },
+      { "path": "/file", "body": [] },
+      { "path": "/session/ses_message/children", "body": [] },
+      { "path": "/session/ses_message/diff", "body": [] },
+      { "path": "/session/ses_message/todo", "body": [] },
+      { "path": "/session/ses_message/permission", "body": [] },
+      { "path": "/session/ses_message/question", "body": [] },
+      { "path": "/session/ses_message/message", "body": [
+        { "info": { "id": "msg_1", "sessionID": "ses_message", "role": "user", "time": { "created": 100 }, "agent": "auto", "model": { "providerID": "test", "modelID": "test-model" } }, "parts": [{ "id": "part_1", "sessionID": "ses_message", "messageID": "msg_1", "type": "text", "text": "Hello, can you help me?", "synthetic": false }] },
+        { "info": { "id": "msg_2", "sessionID": "ses_message", "role": "assistant", "time": { "created": 200 }, "parentID": "msg_1", "modelID": "test-model", "providerID": "test", "mode": "default", "agent": "auto", "path": { "cwd": "/tmp", "root": "/tmp" }, "cost": 0, "tokens": { "input": 0, "output": 0, "reasoning": 0, "cache": { "read": 0, "write": 0 } } }, "parts": [{ "id": "part_2", "sessionID": "ses_message", "messageID": "msg_2", "type": "text", "text": "Sure, how can I help?", "synthetic": false }] }
+      ] },
+      { "path": "/session/ses_message/part", "body": [] }
+    ]
+  },
+  "steps": [
+    { "action": "waitForText", "text": "Describe the task", "timeoutMs": 8000 },
+    { "action": "capture", "name": "home" },
+
+    { "action": "type", "text": "/session" },
+    { "action": "key", "key": "RETURN" },
+    { "action": "waitForText", "text": "Message dialog session", "timeoutMs": 5000 },
+    { "action": "clickText", "text": "Message dialog session" },
+    { "action": "waitForText", "text": "Hello, can you help me?", "timeoutMs": 5000 },
+
+    { "action": "clickText", "text": "Hello, can you help me?" },
+    { "action": "waitForText", "text": "Message actions", "timeoutMs": 5000 },
+    { "action": "assert", "visible": ["Message actions"] },
+    { "action": "capture", "name": "message-dialog" },
+
+    { "action": "key", "key": "escape" }
+  ]
+}

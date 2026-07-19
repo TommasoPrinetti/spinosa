@@ -1,0 +1,19 @@
+{
+  "name": "states-empty",
+  "description": "Render with no sessions and no workspace to verify empty states display appropriate placeholder text",
+  "adapter": "../adapters/spinosa.ts",
+  "terminal": { "width": 100, "height": 50 },
+  "fixture": {
+    "workspace": { "name": "empty-state-test", "setupStatus": "workspace_started" },
+    "sessions": [],
+    "responses": [
+      { "path": "/global/config", "body": { "autoupdate": "notify" } },
+      { "path": "/file", "body": [] }
+    ]
+  },
+  "steps": [
+    { "action": "waitForText", "text": "Describe the task", "timeoutMs": 8000 },
+    { "action": "assert", "visible": ["Describe the task", "Import files"] },
+    { "action": "capture", "name": "empty-state" }
+  ]
+}

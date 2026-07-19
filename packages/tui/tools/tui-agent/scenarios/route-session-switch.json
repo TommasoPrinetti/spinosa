@@ -1,0 +1,39 @@
+{
+  "name": "route-session-switch",
+  "description": "Open workspace picker via /workspaces, click switch workspace, select an alternative workspace from the picker",
+  "adapter": "../adapters/spinosa.ts",
+  "terminal": { "width": 100, "height": 50 },
+  "fixture": {
+    "workspace": { "name": "switch-test-workspace", "setupStatus": "workspace_started" },
+    "sessions": [
+      { "id": "ses_switch_main", "title": "Switch test chat", "directory": "$WORKSPACE", "updated": 500 }
+    ],
+    "responses": [
+      { "path": "/global/config", "body": { "autoupdate": "notify" } },
+      { "path": "/file", "body": [] },
+      { "path": "/session/ses_switch_main/children", "body": [] },
+      { "path": "/session/ses_switch_main/diff", "body": [] },
+      { "path": "/session/ses_switch_main/todo", "body": [] },
+      { "path": "/session/ses_switch_main/permission", "body": [] },
+      { "path": "/session/ses_switch_main/question", "body": [] },
+      { "path": "/session/ses_switch_main/message", "body": [] },
+      { "path": "/session/ses_switch_main/part", "body": [] }
+    ]
+  },
+  "steps": [
+    { "action": "waitForText", "text": "Describe the task", "timeoutMs": 8000 },
+    { "action": "capture", "name": "home" },
+
+    { "action": "type", "text": "/workspaces" },
+    { "action": "key", "key": "RETURN" },
+    { "action": "waitForText", "text": "Switch workspace", "timeoutMs": 5000 },
+    { "action": "assert", "visible": ["Switch workspace"] },
+
+    { "action": "clickText", "text": "Switch workspace" },
+    { "action": "waitForText", "text": "Choose a workspace", "timeoutMs": 5000 },
+    { "action": "assert", "visible": ["Choose a workspace"] },
+    { "action": "capture", "name": "workspace-picker" },
+
+    { "action": "key", "key": "escape" }
+  ]
+}

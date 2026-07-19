@@ -1,0 +1,34 @@
+{
+  "name": "slash-workspaces",
+  "description": "/workspaces opens workspace dialog",
+  "adapter": "../adapters/spinosa.ts",
+  "terminal": { "width": 100, "height": 50 },
+  "fixture": {
+    "workspace": { "name": "workspace-cmd-test", "setupStatus": "workspace_started" },
+    "sessions": [
+      { "id": "ses_ws_cmd", "title": "Workspace cmd session", "directory": "$WORKSPACE", "updated": 500 }
+    ],
+    "responses": [
+      { "path": "/global/config", "body": { "autoupdate": "notify" } },
+      { "path": "/file", "body": [] },
+      { "path": "/session/ses_ws_cmd/children", "body": [] },
+      { "path": "/session/ses_ws_cmd/diff", "body": [] },
+      { "path": "/session/ses_ws_cmd/todo", "body": [] },
+      { "path": "/session/ses_ws_cmd/permission", "body": [] },
+      { "path": "/session/ses_ws_cmd/question", "body": [] },
+      { "path": "/session/ses_ws_cmd/message", "body": [] },
+      { "path": "/session/ses_ws_cmd/part", "body": [] }
+    ]
+  },
+  "steps": [
+    { "action": "waitForText", "text": "Describe the task", "timeoutMs": 8000 },
+    { "action": "capture", "name": "home" },
+
+    { "action": "type", "text": "/workspaces" },
+    { "action": "key", "key": "RETURN" },
+    { "action": "waitForText", "text": "Switch workspace", "timeoutMs": 5000 },
+    { "action": "assert", "visible": ["Switch workspace", "workspace-cmd-test"] },
+    { "action": "capture", "name": "workspaces-dialog" },
+    { "action": "key", "key": "escape" }
+  ]
+}
