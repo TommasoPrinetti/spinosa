@@ -6,7 +6,7 @@ Parts of this project are derived from [OpenCode](https://github.com/anomalyco/o
 
 OpenCode is distributed under the MIT License.
 
-Copyright (c) 2024-2025 anomalco development sp. z o.o. and contributors
+Copyright (c) 2025 opencode
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
