@@ -556,6 +556,8 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
     }
 
     onMount(() => {
+      let active = true
+      onCleanup(() => { active = false })
       void Promise.allSettled([
         result.location.refresh(),
         result.location.agent.refresh(),
@@ -566,6 +568,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         result.location.command.refresh(),
         result.location.skill.refresh(),
       ]).then((settled) => {
+        if (!active) return
         for (const failure of settled.filter((item) => item.status === "rejected"))
           console.error("Failed to refresh default location data", failure.reason)
       })
