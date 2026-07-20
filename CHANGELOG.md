@@ -6,6 +6,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 **Release policy:** versions are published only with explicit maintainer approval.
 
+## [0.9.0-beta.27] — 2026-07-20
+
+### Fixed
+
+- `spinosa upgrade` now prompts `[Y/n]` before proceeding. Use `--yes` to skip confirmation.
+
 ## [0.9.0-beta.26] — 2026-07-20
 
 ### Added
