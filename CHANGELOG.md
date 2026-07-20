@@ -6,6 +6,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 **Release policy:** versions are published only with explicit maintainer approval.
 
+## [0.9.0-beta.25] — 2026-07-20
+
+### Added
+
+- Spinosa now checks for updates on every start. "Checking for updates…" appears in the boot loading screen. If a newer version is available, a dialog prompts the user to run `spinosa upgrade`.
+
 ## [0.9.0-beta.24] — 2026-07-18
 
 ### Added

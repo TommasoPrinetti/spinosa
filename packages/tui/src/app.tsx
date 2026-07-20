@@ -1111,6 +1111,19 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     return render({ params: route.data.data })
   })
 
+  const [upgradePrompted, setUpgradePrompted] = createSignal(false)
+  createEffect(() => {
+    const health = spinosa.bootHealth
+    if (!health?.upgrade?.available || upgradePrompted()) return
+    setUpgradePrompted(true)
+    void DialogConfirm.show(
+      dialog,
+      "Update Available",
+      `Spinosa v${health.upgrade.latestVersion} is available (current: v${health.upgrade.currentVersion}). Run \`spinosa upgrade\` in your terminal to update.`,
+      { confirmLabel: "Got it", defaultChoice: "confirm" },
+    )
+  })
+
   return (
     <box
       width={dimensions().width}

@@ -6,11 +6,12 @@ import {
   setWorkspacePresence,
 } from "../workspace/registry"
 import { inspectWorkspacePresence, type WorkspacePresence } from "../workspace/presence"
+import { checkUpgradeAvailable, type AutoUpgradeResult } from "../commands/upgrade"
 
 export type SpinosaBootOperationStatus = "pending" | "running" | "complete" | "warning" | "error"
 
 export type SpinosaBootOperation = {
-  id: "workspace-index" | "maintenance" | "ready"
+  id: "workspace-index" | "maintenance" | "version-check" | "ready"
   label: string
   status: SpinosaBootOperationStatus
   detail?: string
@@ -19,12 +20,14 @@ export type SpinosaBootOperation = {
 export type SpinosaBootHealth = {
   workspaces: Array<WorkspacePresence & { name: string }>
   cleanup: SpinosaCleanupResult
+  upgrade?: AutoUpgradeResult
   error?: string
 }
 
 export const SPINOSA_BOOT_OPERATIONS: readonly SpinosaBootOperation[] = [
   { id: "maintenance", label: "Cleaning up startup files", status: "pending" },
   { id: "workspace-index", label: "Checking workspace IDs and locations", status: "pending" },
+  { id: "version-check", label: "Checking for updates", status: "pending" },
   { id: "ready", label: "Starting Spinosa TUI", status: "pending" },
 ]
 
@@ -127,9 +130,25 @@ export async function runSpinosaBootHealth(input: {
     `${entries.length} indexed workspace(s) checked; ${missing} NON EXISTENT${moved ? `; ${moved} moved path(s) recovered` : ""}${indexError ? `; ${indexError}` : ""}`,
   )
 
+  progress("version-check", "running")
+  const versionCheckStartedAt = Date.now()
+  let upgrade: AutoUpgradeResult | undefined
+  try {
+    upgrade = await checkUpgradeAvailable()
+  } catch {
+    upgrade = { available: false }
+  }
+  await holdOperation(versionCheckStartedAt)
+  if (upgrade?.available) {
+    progress("version-check", "warning", `v${upgrade.latestVersion} available`)
+  } else {
+    progress("version-check", "complete", "Up to date")
+  }
+
   progress("ready", "running")
   const readyStartedAt = Date.now()
   await holdOperation(readyStartedAt)
   progress("ready", indexError ? "warning" : "complete", indexError ? "Workspace index needs attention" : "Workspace checks complete")
-  return { workspaces, cleanup, ...(indexError ? { error: indexError } : {}) }
+
+  return { workspaces, cleanup, upgrade, ...(indexError ? { error: indexError } : {}) }
 }
