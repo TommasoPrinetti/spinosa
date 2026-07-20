@@ -1,1 +1,0 @@
-import{t as e}from"../chunks/DK3Fl9T5.js";import{a as t,i as n,n as r,r as i}from"../chunks/BOzshIre.js";var a=e({load:()=>o,prerender:()=>!0}),o=async()=>{let e;try{e=await r(fetch)}catch{throw n(502,`Could not reach GitHub releases API`)}let a=i(e);if(!a)throw n(404,`No dev (prerelease) release published yet`);t(302,a)};export{a as universal};

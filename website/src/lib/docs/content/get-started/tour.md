@@ -8,7 +8,7 @@ Spinosa needs the CLI and a folder of source documents.
 
 ```bash
 # One command installs everything
-curl -fsSL https://github.com/TommasoPrinetti/spinosa/releases/download/stable/install.sh | bash
+curl -fsSL https://github.com/medialab/spinosa/releases/download/stable/install.sh | bash
 
 # Create a workspace from your document folder
 spinosa new

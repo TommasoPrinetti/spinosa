@@ -68,7 +68,7 @@
 		{/if}
 	</div>
 	<a
-		href="https://github.com/TommasoPrinetti/spinosa"
+		href="https://github.com/medialab/spinosa"
 		target="_blank"
 		rel="noreferrer"
 		class="justify-self-end w-4 h-4"

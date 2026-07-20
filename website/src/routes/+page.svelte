@@ -79,7 +79,7 @@
 			style={entered ? '' : 'opacity: 0'}
 		>
 			<a
-				href="https://github.com/TommasoPrinetti/spinosa"
+				href="https://github.com/medialab/spinosa"
 				target="_blank"
 				rel="noreferrer"
 				class="mb-4 ml-[1px] block h-5 w-5"
@@ -116,7 +116,7 @@
 		</div>
 
 		<a
-			href="https://github.com/TommasoPrinetti/spinosa"
+			href="https://github.com/medialab/spinosa"
 			target="_blank"
 			rel="noreferrer"
 			class="absolute right-10 top-10 z-20 hidden h-6 w-6 md:block"
