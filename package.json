@@ -124,5 +124,6 @@
     "@typescript/native-preview": "catalog:",
     "@types/mime-types": "3.0.1",
     "typescript": "catalog:"
-  }
+  },
+  "license": "MIT"
 }
