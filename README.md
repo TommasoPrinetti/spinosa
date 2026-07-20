@@ -9,70 +9,36 @@
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-Spinosa is a **local research framework** for AI coding agents. Give it a folder of PDFs, notes, transcripts, images, CSVs. It builds a workspace where agents can search, analyse, synthesise, and verify evidence from those sources. Every claim traces back to a file you provided.
+Spinosa turns a folder of research documents into a local workspace you can chat with. Ask questions in plain language. AI agents search your files, draft answers, and verify every claim against the original text.
 
-**No cloud, no uploads.** All document processing happens on your machine.
+**No cloud, no uploads.** All processing happens on your machine.
 
 ---
 
-## Install
-
-### macOS / Linux (one-liner)
+## Cold start
 
 ```bash
+# 1. Install (macOS / Linux)
 curl -fsSL https://github.com/medialab/spinosa/releases/download/stable/install.sh | bash
+
+# 2. Launch the dashboard
+spinosa
 ```
 
-### Beta channel
-
-```bash
-curl -fsSL https://github.com/medialab/spinosa/releases/download/beta/install.sh | bash
-```
-
-### Specific version
-
-```bash
-curl -fsSL https://github.com/medialab/spinosa/releases/download/v0.9.0-beta.1/install.sh | bash
-```
-
-After install, restart your terminal or run:
-
-```bash
-source ~/.zshrc   # or ~/.bashrc
-```
-
-Verify:
-
-```bash
-spinosa --help
-```
+The first time you run `spinosa`, you'll see the workspace picker. Click **+ New workspace** and follow the wizard: pick your document folder, name the workspace, choose your AI coding tool, and start asking questions.
 
 ---
 
-## Quick start
+## Quick reference
 
-```bash
-# Create a workspace from a folder of documents
-spinosa create /path/to/your/documents
-
-# Or add files to an existing workspace
-spinosa add /path/to/new/files
-```
-
----
-
-## Upgrade
-
-```bash
-# Stable channel (default)
-spinosa upgrade
-
-# Beta channel
-spinosa upgrade --channel beta
-
-# Specific version
-spinosa upgrade --version 0.9.0-beta.1
-```
+| What you want | How |
+|---------------|-----|
+| Launch the TUI | `spinosa` |
+| Create a workspace from the terminal | `spinosa create ~/research/papers` |
+| Add more files | `spinosa add ~/research/more-papers` |
+| Update the framework | `spinosa upgrade` |
+| List workspaces | `spinosa list` |
+| Check system health | `spinosa doctor` |
 
 ---
 
@@ -80,30 +46,21 @@ spinosa upgrade --version 0.9.0-beta.1
 
 | You have... | Spinosa gives you... |
 |---|---|
-| 200 PDFs from field research | A searchable workspace where agents know every file |
-| A question like "what did participants say about X?" | A report with direct quotes, source links, and confidence levels |
-| Concerns about accuracy | Every claim checked against the original file by a dedicated verifier |
-| New files later | Add them with one command and update the workspace |
-
----
+| 200 PDFs from field research | A searchable workspace that knows every file |
+| "What did participants say about X?" | A report with quotes, source paths, and a verification badge |
+| Concerns about accuracy | Every claim checked against the original file |
+| New files later | Add them without starting over |
 
 ## Supported formats
 
-PDFs, Word docs, spreadsheets, presentations, EPUB, HTML, ZIP, Outlook messages, images (OCR), CSVs, Markdown — all converted to `.md` where possible.
-
----
+PDFs, Word docs, spreadsheets, presentations, EPUB, HTML, ZIP, Outlook messages, images (OCR), CSVs, Markdown — all converted to searchable text.
 
 ## Requirements
 
 - macOS or Linux
-- [Bash](https://www.gnu.org/software/bash/) (installed by default on most systems)
-- ~500 MB disk space for the framework + dependencies
-
----
+- ~500 MB disk space for the framework and dependencies
 
 ## Links
 
+- [Documentation](https://medialab.github.io/spinosa/)
 - [License (MIT)](LICENSE)
-- [Security policy](SECURITY.md)
-- [Contributing](CONTRIBUTING.md)
-- [Support](SUPPORT.md)
