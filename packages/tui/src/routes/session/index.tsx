@@ -2282,7 +2282,7 @@ export function buildToolCalloutSummary(
     return { tag: "EDIT", command: formatPath(stringValue(inputValue.filePath)) }
   }
   if (display === "task") {
-    return { tag: "TASK", command: cleanSystemReminderText(stringValue(inputValue.description)) ?? "Delegate task" }
+    return { tag: "SUB-AGENT", command: cleanSystemReminderText(stringValue(inputValue.description)) ?? "Delegate task" }
   }
   if (display === "apply_patch") {
     return { tag: "PATCH", command: "Apply patch" }
