@@ -65,3 +65,16 @@ framework/bin/lib/vendor/
 /.trash/
 /agent_reports/
 .tui-agent/
+
+# Personal editor config
+.obsidian/
+
+# OpenCode editor plans (tracked in docs/ instead)
+.opencode/plans/
+
+# Local audit scratchpads
+local:/
+
+# Runtime token metadata (already gitignored but was committed before)
+.tokensave/branch-meta.json
+.tokensave/config.json
