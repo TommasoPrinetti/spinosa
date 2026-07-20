@@ -1116,12 +1116,24 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     const health = spinosa.bootHealth
     if (!health?.upgrade?.available || upgradePrompted()) return
     setUpgradePrompted(true)
-    void DialogConfirm.show(
-      dialog,
-      "Update Available",
-      `Spinosa v${health.upgrade.latestVersion} is available (current: v${health.upgrade.currentVersion}). Run \`spinosa upgrade\` in your terminal to update.`,
-      { confirmLabel: "Got it", defaultChoice: "confirm" },
-    )
+    void (async () => {
+      const upg = health!.upgrade!
+      const choice = await DialogConfirm.show(
+        dialog,
+        "Update Available",
+        `Spinosa v${upg.latestVersion} is available (current: v${upg.currentVersion}). Update now?`,
+        { confirmLabel: "Yes", cancelLabel: "No", defaultChoice: "confirm" },
+      )
+      if (choice !== true) return
+      const { upgradeFramework } = await import("./spinosa-core/commands/upgrade")
+      const result = await upgradeFramework({ version: upg.latestVersion, yes: true, suppressInstallOutput: true })
+      if (result.success) {
+        console.log("Run spinosa")
+      } else {
+        console.log(`Upgrade failed. Run "spinosa upgrade" manually.`)
+      }
+      void exit()
+    })()
   })
 
   return (

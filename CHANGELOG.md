@@ -6,6 +6,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 **Release policy:** versions are published only with explicit maintainer approval.
 
+## [0.9.0-beta.26] — 2026-07-20
+
+### Added
+
+- Upgrade prompt now offers "Yes" to install the update immediately, then exits TUI with a message to re-run spinosa.
+
 ## [0.9.0-beta.25] — 2026-07-20
 
 ### Added
