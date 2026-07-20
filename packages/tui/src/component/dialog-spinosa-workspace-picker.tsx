@@ -4,6 +4,7 @@ import { useTerminalDimensions } from "@opentui/solid"
 import { dirname, join } from "node:path"
 import { statSync } from "node:fs"
 import { useDialog } from "../ui/dialog"
+import { DialogConfirm } from "../ui/dialog-confirm"
 import { useTheme } from "../context/theme"
 import { useRoute } from "../context/route"
 import { useOpencodeKeymap } from "../keymap"
@@ -11,6 +12,7 @@ import {
   listRegisteredWorkspaces,
   readBundledFrameworkVersion,
   readWorkspaceMeta,
+  unregisterWorkspace,
   workspaceNeedsFrameworkUpdate,
 } from "../spinosa/service"
 import { setupStatusLabel } from "../spinosa/status-labels"
@@ -92,6 +94,7 @@ export function DialogSpinosaWorkspacePicker(props: { onClose?: () => void } = {
   const [sortDir, setSortDir] = createSignal<SortDir>("asc")
   const [selected, setSelected] = createSignal(0)
   const [missingWorkspace, setMissingWorkspace] = createSignal<SelectWorkspaceRow>()
+  const [deletingStale, setDeletingStale] = createSignal(false)
 
   const toggleSort = (column: SortColumn) => {
     if (sortColumn() === column) {
@@ -150,6 +153,7 @@ export function DialogSpinosaWorkspacePicker(props: { onClose?: () => void } = {
   })
 
   const navCount = createMemo(() => sorted().length + 1) // rows + New workspace
+  const staleCount = createMemo(() => sorted().filter(w => w.presence && w.presence !== "present" && w.presence !== "legacy").length)
   const close = () => {
     dialog.clear()
     props.onClose?.()
@@ -181,6 +185,31 @@ export function DialogSpinosaWorkspacePicker(props: { onClose?: () => void } = {
       return
     }
     await openWorkspace(row.path)
+  }
+
+  async function deleteStaleHandler() {
+    if (deletingStale() || workspaces.loading) return
+    const stale = sorted().filter(w => w.presence && w.presence !== "present" && w.presence !== "legacy")
+    if (stale.length === 0) {
+      await DialogConfirm.show(dialog, "No stale workspaces", `All ${sorted().length} workspace(s) are valid.`, { confirmLabel: "Ok", defaultChoice: "confirm" })
+      return
+    }
+    const confirmed = await DialogConfirm.show(dialog, "Delete stale workspaces?", `${stale.length} workspace(s) will be removed from the index. No workspace files will be deleted.`, { confirmLabel: "Delete", defaultChoice: "cancel" })
+    if (!confirmed) return
+    setDeletingStale(true)
+    let removed = 0
+    let failed = 0
+    for (const w of stale) {
+      try {
+        await unregisterWorkspace(w.path)
+        removed++
+      } catch { failed++ }
+    }
+    setDeletingStale(false)
+    if (failed > 0) {
+      await DialogConfirm.show(dialog, "Cleanup complete", `${removed} workspace(s) removed, ${failed} failed.`, { confirmLabel: "Ok", defaultChoice: "confirm" })
+    }
+    dialog.replace(() => <DialogSpinosaWorkspacePicker onClose={props.onClose} />)
   }
 
   onMount(() => {
@@ -237,19 +266,32 @@ export function DialogSpinosaWorkspacePicker(props: { onClose?: () => void } = {
       <Show when={!missingWorkspace()}>
         <box flexDirection="column" paddingLeft={1} paddingRight={1} paddingBottom={1}>
       {/* ── back button ── */}
-      <box flexDirection="row" alignItems="center" gap={1}>
+      <box flexDirection="row" alignItems="center" justifyContent="space-between">
+        <box flexDirection="row" alignItems="center" gap={1}>
+          <box
+            paddingLeft={2}
+            paddingRight={2}
+            paddingTop={1}
+            paddingBottom={1}
+            onMouseDown={close}
+          >
+            <text fg={theme.textMuted}>← Back</text>
+          </box>
+          <text fg={theme.text}>
+            <span style={{ bold: true }}>Choose a workspace</span>
+          </text>
+        </box>
         <box
           paddingLeft={2}
           paddingRight={2}
           paddingTop={1}
           paddingBottom={1}
-          onMouseDown={close}
+          onMouseDown={deletingStale() || workspaces.loading || staleCount() === 0 ? undefined : deleteStaleHandler}
         >
-          <text fg={theme.textMuted}>← Back</text>
+          <text fg={deletingStale() ? theme.textMuted : staleCount() > 0 ? theme.error : theme.textMuted}>
+            {deletingStale() ? "Deleting…" : staleCount() > 0 ? `Delete ${staleCount()} stale` : "No stale"}
+          </text>
         </box>
-        <text fg={theme.text}>
-          <span style={{ bold: true }}>Choose a workspace</span>
-        </text>
       </box>
       <box height={1} />
 
