@@ -1,0 +1,219 @@
+{
+  ".svelte-kit/generated/client-optimized/app.js": {
+    "file": "_app/immutable/entry/app.DE3wEOA5.js",
+    "name": "entry/app",
+    "src": ".svelte-kit/generated/client-optimized/app.js",
+    "isEntry": true,
+    "imports": [
+      "_kNaey6uv.js",
+      "_B0JiTRQd.js",
+      "_xihTtKlq.js"
+    ],
+    "dynamicImports": [
+      ".svelte-kit/generated/client-optimized/nodes/0.js",
+      ".svelte-kit/generated/client-optimized/nodes/1.js",
+      ".svelte-kit/generated/client-optimized/nodes/2.js",
+      ".svelte-kit/generated/client-optimized/nodes/3.js",
+      ".svelte-kit/generated/client-optimized/nodes/4.js",
+      ".svelte-kit/generated/client-optimized/nodes/5.js",
+      ".svelte-kit/generated/client-optimized/nodes/6.js",
+      ".svelte-kit/generated/client-optimized/nodes/7.js",
+      ".svelte-kit/generated/client-optimized/nodes/8.js"
+    ]
+  },
+  ".svelte-kit/generated/client-optimized/nodes/0.js": {
+    "file": "_app/immutable/nodes/0.BqiqVJ2y.js",
+    "name": "nodes/0",
+    "src": ".svelte-kit/generated/client-optimized/nodes/0.js",
+    "isEntry": true,
+    "imports": [
+      "_DK3Fl9T5.js",
+      "_B0JiTRQd.js",
+      "_xihTtKlq.js"
+    ],
+    "css": [
+      "_app/immutable/assets/0.TiWg-79i.css"
+    ]
+  },
+  ".svelte-kit/generated/client-optimized/nodes/1.js": {
+    "file": "_app/immutable/nodes/1.BlajtWHW.js",
+    "name": "nodes/1",
+    "src": ".svelte-kit/generated/client-optimized/nodes/1.js",
+    "isEntry": true,
+    "imports": [
+      "_CwF_PFZf.js",
+      "_B0JiTRQd.js",
+      "_xihTtKlq.js"
+    ]
+  },
+  ".svelte-kit/generated/client-optimized/nodes/2.js": {
+    "file": "_app/immutable/nodes/2.Cqv5k_44.js",
+    "name": "nodes/2",
+    "src": ".svelte-kit/generated/client-optimized/nodes/2.js",
+    "isEntry": true,
+    "imports": [
+      "_CwF_PFZf.js",
+      "_BdrQAJEj.js",
+      "_B0JiTRQd.js",
+      "_xihTtKlq.js",
+      "_BRTK3DVu.js"
+    ],
+    "assets": [
+      "_app/immutable/assets/docs_footer.CYeMGm3a.png"
+    ]
+  },
+  ".svelte-kit/generated/client-optimized/nodes/3.js": {
+    "file": "_app/immutable/nodes/3.Dv-u3mvs.js",
+    "name": "nodes/3",
+    "src": ".svelte-kit/generated/client-optimized/nodes/3.js",
+    "isEntry": true,
+    "imports": [
+      "_CwF_PFZf.js",
+      "_BdrQAJEj.js",
+      "_B0JiTRQd.js",
+      "_xihTtKlq.js",
+      "_BRTK3DVu.js"
+    ],
+    "css": [
+      "_app/immutable/assets/3.Bss5yYK7.css"
+    ]
+  },
+  ".svelte-kit/generated/client-optimized/nodes/4.js": {
+    "file": "_app/immutable/nodes/4.Cs8XVVpk.js",
+    "name": "nodes/4",
+    "src": ".svelte-kit/generated/client-optimized/nodes/4.js",
+    "isEntry": true,
+    "imports": [
+      "_B0JiTRQd.js",
+      "_xihTtKlq.js"
+    ],
+    "assets": [
+      "_app/immutable/assets/Spinosa_Visuals_02.DFgp7j-f.png",
+      "_app/immutable/assets/Spinosa_Visuals_04.rtD2YOqe.png"
+    ]
+  },
+  ".svelte-kit/generated/client-optimized/nodes/5.js": {
+    "file": "_app/immutable/nodes/5.DF1rv9xI.js",
+    "name": "nodes/5",
+    "src": ".svelte-kit/generated/client-optimized/nodes/5.js",
+    "isEntry": true,
+    "imports": [
+      "_BdrQAJEj.js",
+      "_B0JiTRQd.js",
+      "_xihTtKlq.js",
+      "_CneMPOx_.js"
+    ]
+  },
+  ".svelte-kit/generated/client-optimized/nodes/6.js": {
+    "file": "_app/immutable/nodes/6.DF1rv9xI.js",
+    "name": "nodes/6",
+    "src": ".svelte-kit/generated/client-optimized/nodes/6.js",
+    "isEntry": true,
+    "imports": [
+      "_BdrQAJEj.js",
+      "_B0JiTRQd.js",
+      "_xihTtKlq.js",
+      "_CneMPOx_.js"
+    ]
+  },
+  ".svelte-kit/generated/client-optimized/nodes/7.js": {
+    "file": "_app/immutable/nodes/7.CUnPrdiw.js",
+    "name": "nodes/7",
+    "src": ".svelte-kit/generated/client-optimized/nodes/7.js",
+    "isEntry": true,
+    "imports": [
+      "_DK3Fl9T5.js",
+      "_BOzshIre.js"
+    ]
+  },
+  ".svelte-kit/generated/client-optimized/nodes/8.js": {
+    "file": "_app/immutable/nodes/8.C4XMjl8y.js",
+    "name": "nodes/8",
+    "src": ".svelte-kit/generated/client-optimized/nodes/8.js",
+    "isEntry": true,
+    "imports": [
+      "_DK3Fl9T5.js",
+      "_BOzshIre.js"
+    ]
+  },
+  "_B0JiTRQd.js": {
+    "file": "_app/immutable/chunks/B0JiTRQd.js",
+    "name": "index-client",
+    "imports": [
+      "_DK3Fl9T5.js"
+    ]
+  },
+  "_BOzshIre.js": {
+    "file": "_app/immutable/chunks/BOzshIre.js",
+    "name": "github-releases",
+    "imports": [
+      "_CymRgjIC.js"
+    ]
+  },
+  "_BRTK3DVu.js": {
+    "file": "_app/immutable/chunks/BRTK3DVu.js",
+    "name": "github"
+  },
+  "_BdrQAJEj.js": {
+    "file": "_app/immutable/chunks/BdrQAJEj.js",
+    "name": "stores",
+    "imports": [
+      "_CwF_PFZf.js",
+      "_B0JiTRQd.js"
+    ]
+  },
+  "_CneMPOx_.js": {
+    "file": "_app/immutable/chunks/CneMPOx_.js",
+    "name": "DocArticle",
+    "imports": [
+      "_CwF_PFZf.js",
+      "_B0JiTRQd.js",
+      "_xihTtKlq.js"
+    ]
+  },
+  "_CwF_PFZf.js": {
+    "file": "_app/immutable/chunks/CwF_PFZf.js",
+    "name": "client",
+    "imports": [
+      "_CymRgjIC.js",
+      "_B0JiTRQd.js"
+    ]
+  },
+  "_CymRgjIC.js": {
+    "file": "_app/immutable/chunks/CymRgjIC.js",
+    "name": "pathname"
+  },
+  "_DK3Fl9T5.js": {
+    "file": "_app/immutable/chunks/DK3Fl9T5.js",
+    "name": "chunk"
+  },
+  "_kNaey6uv.js": {
+    "file": "_app/immutable/chunks/kNaey6uv.js",
+    "name": "preload-helper"
+  },
+  "_xihTtKlq.js": {
+    "file": "_app/immutable/chunks/xihTtKlq.js",
+    "name": "disclose-version"
+  },
+  "node_modules/@sveltejs/kit/src/runtime/client/entry.js": {
+    "file": "_app/immutable/entry/start.DzzqHN9m.js",
+    "name": "entry/start",
+    "src": "node_modules/@sveltejs/kit/src/runtime/client/entry.js",
+    "isEntry": true,
+    "imports": [
+      "_CwF_PFZf.js"
+    ]
+  },
+  "src/lib/assets/Spinosa/Spinosa_Visuals_02.png": {
+    "file": "_app/immutable/assets/Spinosa_Visuals_02.DFgp7j-f.png",
+    "src": "src/lib/assets/Spinosa/Spinosa_Visuals_02.png"
+  },
+  "src/lib/assets/Spinosa/Spinosa_Visuals_04.png": {
+    "file": "_app/immutable/assets/Spinosa_Visuals_04.rtD2YOqe.png",
+    "src": "src/lib/assets/Spinosa/Spinosa_Visuals_04.png"
+  },
+  "src/lib/assets/docs_footer.png": {
+    "file": "_app/immutable/assets/docs_footer.CYeMGm3a.png",
+    "src": "src/lib/assets/docs_footer.png"
+  }
+}

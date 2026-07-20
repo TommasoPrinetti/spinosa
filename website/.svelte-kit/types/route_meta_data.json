@@ -1,0 +1,26 @@
+{
+	"/": [
+		"src/routes/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/casestudies": [
+		"src/routes/+layout.ts"
+	],
+	"/docs": [
+		"src/routes/docs/+page.server.ts",
+		"src/routes/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/docs/[slug]": [
+		"src/routes/docs/[slug]/+page.server.ts",
+		"src/routes/+layout.ts"
+	],
+	"/install": [
+		"src/routes/install/+page.ts",
+		"src/routes/+layout.ts"
+	],
+	"/install/dev": [
+		"src/routes/install/dev/+page.ts",
+		"src/routes/+layout.ts"
+	]
+}

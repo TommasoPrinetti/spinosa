@@ -1,0 +1,289 @@
+{
+  ".svelte-kit/generated/server/internal.js": {
+    "file": "internal.js",
+    "name": "internal",
+    "src": ".svelte-kit/generated/server/internal.js",
+    "isEntry": true,
+    "imports": [
+      "_internal.js",
+      "_internal2.js"
+    ]
+  },
+  "_DocArticle.js": {
+    "file": "chunks/DocArticle.js",
+    "name": "DocArticle",
+    "imports": [
+      "_internal.js",
+      "_paths.js",
+      "_dev.js"
+    ]
+  },
+  "_client.js": {
+    "file": "chunks/client.js",
+    "name": "client",
+    "imports": [
+      "_internal.js",
+      "_paths.js",
+      "_exports.js",
+      "_shared.js",
+      "_routing.js",
+      "_dev.js"
+    ]
+  },
+  "_dev.js": {
+    "file": "chunks/dev.js",
+    "name": "dev"
+  },
+  "_docs.js": {
+    "file": "chunks/docs.js",
+    "name": "docs"
+  },
+  "_exports.js": {
+    "file": "chunks/exports.js",
+    "name": "exports",
+    "imports": [
+      "_dev.js"
+    ]
+  },
+  "_github-releases.js": {
+    "file": "chunks/github-releases.js",
+    "name": "github-releases"
+  },
+  "_github.js": {
+    "file": "chunks/github.js",
+    "name": "github"
+  },
+  "_internal.js": {
+    "file": "chunks/internal.js",
+    "name": "internal",
+    "imports": [
+      "_dev.js"
+    ]
+  },
+  "_internal2.js": {
+    "file": "chunks/internal2.js",
+    "name": "internal",
+    "imports": [
+      "_internal.js",
+      "_dev.js"
+    ]
+  },
+  "_loader.js": {
+    "file": "chunks/loader.js",
+    "name": "loader"
+  },
+  "_paths.js": {
+    "file": "chunks/paths.js",
+    "name": "paths",
+    "imports": [
+      "_internal.js",
+      "_internal2.js",
+      "_routing.js"
+    ]
+  },
+  "_routing.js": {
+    "file": "chunks/routing.js",
+    "name": "routing"
+  },
+  "_shared.js": {
+    "file": "chunks/shared.js",
+    "name": "shared",
+    "imports": [
+      "_internal.js"
+    ]
+  },
+  "_stores.js": {
+    "file": "chunks/stores.js",
+    "name": "stores",
+    "imports": [
+      "_internal.js",
+      "_client.js",
+      "_dev.js"
+    ]
+  },
+  "_utils.js": {
+    "file": "chunks/utils.js",
+    "name": "utils",
+    "imports": [
+      "_shared.js"
+    ]
+  },
+  "node_modules/@sveltejs/kit/src/runtime/app/server/remote/index.js": {
+    "file": "remote-entry.js",
+    "name": "remote-entry",
+    "src": "node_modules/@sveltejs/kit/src/runtime/app/server/remote/index.js",
+    "isEntry": true,
+    "imports": [
+      "_internal.js",
+      "_utils.js",
+      "_shared.js"
+    ]
+  },
+  "node_modules/@sveltejs/kit/src/runtime/components/svelte-5/error.svelte": {
+    "file": "entries/fallbacks/error.svelte.js",
+    "name": "entries/fallbacks/error.svelte",
+    "src": "node_modules/@sveltejs/kit/src/runtime/components/svelte-5/error.svelte",
+    "isEntry": true,
+    "imports": [
+      "_internal.js",
+      "_client.js",
+      "_dev.js"
+    ]
+  },
+  "node_modules/@sveltejs/kit/src/runtime/server/index.js": {
+    "file": "index.js",
+    "name": "index",
+    "src": "node_modules/@sveltejs/kit/src/runtime/server/index.js",
+    "isEntry": true,
+    "imports": [
+      "_internal.js",
+      "_internal2.js",
+      "_utils.js",
+      "_exports.js",
+      "_shared.js",
+      "_routing.js",
+      "_dev.js"
+    ]
+  },
+  "src/lib/assets/Spinosa/Spinosa_Visuals_02.png": {
+    "file": "_app/immutable/assets/Spinosa_Visuals_02.DFgp7j-f.png",
+    "src": "src/lib/assets/Spinosa/Spinosa_Visuals_02.png"
+  },
+  "src/lib/assets/Spinosa/Spinosa_Visuals_04.png": {
+    "file": "_app/immutable/assets/Spinosa_Visuals_04.rtD2YOqe.png",
+    "src": "src/lib/assets/Spinosa/Spinosa_Visuals_04.png"
+  },
+  "src/lib/assets/docs_footer.png": {
+    "file": "_app/immutable/assets/docs_footer.CYeMGm3a.png",
+    "src": "src/lib/assets/docs_footer.png"
+  },
+  "src/routes/+layout.svelte": {
+    "file": "entries/pages/_layout.svelte.js",
+    "name": "entries/pages/_layout.svelte",
+    "src": "src/routes/+layout.svelte",
+    "isEntry": true,
+    "imports": [
+      "_dev.js"
+    ],
+    "css": [
+      "_app/immutable/assets/_layout.zlkIvE7K.css"
+    ]
+  },
+  "src/routes/+layout.ts": {
+    "file": "entries/pages/_layout.ts.js",
+    "name": "entries/pages/_layout.ts",
+    "src": "src/routes/+layout.ts",
+    "isEntry": true
+  },
+  "src/routes/+page.svelte": {
+    "file": "entries/pages/_page.svelte.js",
+    "name": "entries/pages/_page.svelte",
+    "src": "src/routes/+page.svelte",
+    "isEntry": true,
+    "imports": [
+      "_internal.js",
+      "_paths.js",
+      "_stores.js",
+      "_dev.js",
+      "_github.js"
+    ],
+    "css": [
+      "_app/immutable/assets/_page.Bss5yYK7.css"
+    ]
+  },
+  "src/routes/casestudies/+page.svelte": {
+    "file": "entries/pages/casestudies/_page.svelte.js",
+    "name": "entries/pages/casestudies/_page.svelte",
+    "src": "src/routes/casestudies/+page.svelte",
+    "isEntry": true,
+    "imports": [
+      "_dev.js"
+    ],
+    "assets": [
+      "_app/immutable/assets/Spinosa_Visuals_02.DFgp7j-f.png",
+      "_app/immutable/assets/Spinosa_Visuals_04.rtD2YOqe.png"
+    ]
+  },
+  "src/routes/docs/+layout.svelte": {
+    "file": "entries/pages/docs/_layout.svelte.js",
+    "name": "entries/pages/docs/_layout.svelte",
+    "src": "src/routes/docs/+layout.svelte",
+    "isEntry": true,
+    "imports": [
+      "_internal.js",
+      "_paths.js",
+      "_stores.js",
+      "_client.js",
+      "_dev.js",
+      "_github.js",
+      "_docs.js"
+    ],
+    "assets": [
+      "_app/immutable/assets/docs_footer.CYeMGm3a.png"
+    ]
+  },
+  "src/routes/docs/+page.server.ts": {
+    "file": "entries/pages/docs/_page.server.ts.js",
+    "name": "entries/pages/docs/_page.server.ts",
+    "src": "src/routes/docs/+page.server.ts",
+    "isEntry": true,
+    "imports": [
+      "_internal.js",
+      "_paths.js",
+      "_loader.js",
+      "_docs.js"
+    ]
+  },
+  "src/routes/docs/+page.svelte": {
+    "file": "entries/pages/docs/_page.svelte.js",
+    "name": "entries/pages/docs/_page.svelte",
+    "src": "src/routes/docs/+page.svelte",
+    "isEntry": true,
+    "imports": [
+      "_stores.js",
+      "_dev.js",
+      "_DocArticle.js"
+    ]
+  },
+  "src/routes/docs/[slug]/+page.server.ts": {
+    "file": "entries/pages/docs/_slug_/_page.server.ts.js",
+    "name": "entries/pages/docs/_slug_/_page.server.ts",
+    "src": "src/routes/docs/[slug]/+page.server.ts",
+    "isEntry": true,
+    "imports": [
+      "_internal.js",
+      "_paths.js",
+      "_loader.js",
+      "_docs.js"
+    ]
+  },
+  "src/routes/docs/[slug]/+page.svelte": {
+    "file": "entries/pages/docs/_slug_/_page.svelte.js",
+    "name": "entries/pages/docs/_slug_/_page.svelte",
+    "src": "src/routes/docs/[slug]/+page.svelte",
+    "isEntry": true,
+    "imports": [
+      "_stores.js",
+      "_dev.js",
+      "_DocArticle.js"
+    ]
+  },
+  "src/routes/install/+page.ts": {
+    "file": "entries/pages/install/_page.ts.js",
+    "name": "entries/pages/install/_page.ts",
+    "src": "src/routes/install/+page.ts",
+    "isEntry": true,
+    "imports": [
+      "_github-releases.js"
+    ]
+  },
+  "src/routes/install/dev/+page.ts": {
+    "file": "entries/pages/install/dev/_page.ts.js",
+    "name": "entries/pages/install/dev/_page.ts",
+    "src": "src/routes/install/dev/+page.ts",
+    "isEntry": true,
+    "imports": [
+      "_github-releases.js"
+    ]
+  }
+}

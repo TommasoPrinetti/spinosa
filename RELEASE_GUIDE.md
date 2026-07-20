@@ -137,7 +137,7 @@ gh release edit "$CHANNEL" \
 ### 8. Verify
 
 ```bash
-curl -fsSL "https://github.com/TommasoPrinetti/spinosa/releases/download/${CHANNEL}/install.sh" | grep PINNED_VERSION
+curl -fsSL "https://github.com/medialab/spinosa/releases/download/${CHANNEL}/install.sh" | grep PINNED_VERSION
 # Must show the version you just published
 ```
 
@@ -149,7 +149,7 @@ Run on a **fresh Linux VM** (Ubuntu 22.04+, amd64 or arm64) before a **stable** 
 
 ```bash
 # Inside the VM
-curl -fsSL https://github.com/TommasoPrinetti/spinosa/releases/download/beta/install.sh | bash
+curl -fsSL https://github.com/medialab/spinosa/releases/download/beta/install.sh | bash
 source ~/.bashrc
 spinosa version
 ```

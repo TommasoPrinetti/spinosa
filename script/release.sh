@@ -92,4 +92,4 @@ echo "→ Rolling ${CHANNEL} channel synced"
 
 echo ""
 echo "✓ Released Spinosa v${VERSION} on ${CHANNEL} channel"
-curl -fsSL "https://github.com/TommasoPrinetti/spinosa/releases/download/${CHANNEL}/install.sh" | grep PINNED_VERSION
+curl -fsSL "https://github.com/medialab/spinosa/releases/download/${CHANNEL}/install.sh" | grep PINNED_VERSION

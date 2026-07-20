@@ -2,7 +2,7 @@
 # shellcheck shell=bash
 # ── install.sh — Spinosa Framework Installer (auto-re-execs with bash) ──────
 
-PINNED_VERSION="0.9.0-beta.28"
+PINNED_VERSION="1.0.0"
 PINNED_TAG="beta"
 BUNDLED_BUN_VERSION="1.3.14"
 DEFAULT_DEPS_TIMEOUT_SECONDS="600"
@@ -19,8 +19,8 @@ if [ -z "${BASH_VERSION-}" ]; then
     echo "" >&2
     echo "  This installer must be run under bash." >&2
     echo "  Please use one of the following:" >&2
-    echo "    curl -fsSL https://github.com/TommasoPrinetti/spinosa/releases/download/stable/install.sh | bash" >&2
-    echo "    bash <(curl -fsSL https://github.com/TommasoPrinetti/spinosa/releases/download/stable/install.sh)" >&2
+    echo "    curl -fsSL https://github.com/medialab/spinosa/releases/download/stable/install.sh | bash" >&2
+    echo "    bash <(curl -fsSL https://github.com/medialab/spinosa/releases/download/stable/install.sh)" >&2
     echo "    curl -fsSL ... -o install.sh && bash install.sh" >&2
     echo "" >&2
     exit 1
@@ -129,7 +129,7 @@ SPINOSA_HOME="${SPINOSA_HOME:-$HOME/.spinosa}"
 SPINOSA_METADATA_DIR="${SPINOSA_HOME}/metadata"
 SPINOSA_BIN_DIR="${SPINOSA_BIN_DIR:-$HOME/.local/bin}"
 NO_MODIFY_PATH=false
-REPO="TommasoPrinetti/spinosa"
+REPO="medialab/spinosa"
 
 # ══════════════════════════════════════════════════════════════════════════════
 # UI HELPERS
@@ -1171,7 +1171,7 @@ fi
 if [ ! -f "\$target" ]; then
   echo "spinosa: installation broken — missing \${target}" >&2
   echo "spinosa: repair with a reinstall, e.g.:" >&2
-  echo "  curl -fsSL https://github.com/TommasoPrinetti/spinosa/releases/download/beta/install.sh | bash -s -- --yes --reinstall" >&2
+  echo "  curl -fsSL https://github.com/medialab/spinosa/releases/download/beta/install.sh | bash -s -- --yes --reinstall" >&2
   exit 1
 fi
 exec bash "\$target" "\$@"

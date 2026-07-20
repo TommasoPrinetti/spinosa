@@ -20,19 +20,19 @@ Spinosa is a **local research framework** for AI coding agents. Give it a folder
 ### macOS / Linux (one-liner)
 
 ```bash
-curl -fsSL https://github.com/TommasoPrinetti/spinosa/releases/download/stable/install.sh | bash
+curl -fsSL https://github.com/medialab/spinosa/releases/download/stable/install.sh | bash
 ```
 
 ### Beta channel
 
 ```bash
-curl -fsSL https://github.com/TommasoPrinetti/spinosa/releases/download/beta/install.sh | bash
+curl -fsSL https://github.com/medialab/spinosa/releases/download/beta/install.sh | bash
 ```
 
 ### Specific version
 
 ```bash
-curl -fsSL https://github.com/TommasoPrinetti/spinosa/releases/download/v0.9.0-beta.1/install.sh | bash
+curl -fsSL https://github.com/medialab/spinosa/releases/download/v0.9.0-beta.1/install.sh | bash
 ```
 
 After install, restart your terminal or run:

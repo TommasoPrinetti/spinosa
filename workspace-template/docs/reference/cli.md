@@ -58,9 +58,9 @@ spinosa upgrade --channel beta --yes     # beta latest
 spinosa upgrade --version 0.8.0-beta.1   # pin a specific tag
 ```
 
-Stable install URL: `https://github.com/TommasoPrinetti/spinosa/releases/download/stable/install.sh`
-Beta install URL: `https://github.com/TommasoPrinetti/spinosa/releases/download/beta/install.sh`
-Exact install URL: `https://github.com/TommasoPrinetti/spinosa/releases/download/vX.Y.Z/install.sh`
+Stable install URL: `https://github.com/medialab/spinosa/releases/download/stable/install.sh`
+Beta install URL: `https://github.com/medialab/spinosa/releases/download/beta/install.sh`
+Exact install URL: `https://github.com/medialab/spinosa/releases/download/vX.Y.Z/install.sh`
 
 Set the channel for channel-less upgrade tooling in `~/.spinosa/metadata/config.yaml`: `beta: true` tracks beta prereleases, `beta: false` tracks stable releases. `SPINOSA_RELEASE_CHANNEL=beta|stable` remains an environment override.
 

@@ -34,7 +34,7 @@ describe("install and release flow", () => {
 
     const output = `${result.stdout.toString()}\n${result.stderr.toString()}`
     expect(result.exitCode).toBe(0)
-    expect(output).toContain("https://github.com/TommasoPrinetti/spinosa/archive/refs/tags/v0.8.0-beta.16.tar.gz")
+    expect(output).toContain("https://github.com/medialab/spinosa/archive/refs/tags/v0.8.0-beta.16.tar.gz")
     expect(output).toContain(`/versions/0.8.0-beta.16/`)
     expect(output).not.toContain("spinosa-framework-")
   })

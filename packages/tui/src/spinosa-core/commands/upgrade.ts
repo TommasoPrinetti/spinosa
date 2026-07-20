@@ -58,7 +58,7 @@ export function verifyInstallerChecksum(installerScript: string, checksums: stri
 }
 
 const SPINOSA_RELEASE_REPO: string =
-  process.env.SPINOSA_RELEASE_REPO ?? "TommasoPrinetti/spinosa"
+  process.env.SPINOSA_RELEASE_REPO ?? "medialab/spinosa"
 
 function spinosaHome(): string {
   return process.env.SPINOSA_HOME ?? `${homedir()}/.spinosa`
