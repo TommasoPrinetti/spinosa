@@ -99,7 +99,15 @@ const adapter: TuiAgentAdapter = {
     let api: TuiPluginApi | undefined;
     let disposeSlots: (() => void) | undefined;
     let markReady!: () => void;
-    const ready = new Promise<void>((resolve) => (markReady = resolve));
+    const ready = new Promise<void>((resolve, reject) => {
+      markReady = resolve;
+      setTimeout(() => reject(new Error(
+        "TUI launch timed out after 15s.\n" +
+        "The server at " + OPENCODE_URL + " is responding, but the TUI couldn't boot.\n" +
+        "This typically means a fetch to the server returned unexpected data.\n" +
+        "Check the server logs or try running with OPENCODE_FAST_BOOT=1"
+      )), 15000);
+    });
 
     const { run } = await import("../../../src/app");
     const fiber = Effect.runFork(
@@ -108,7 +116,13 @@ const adapter: TuiAgentAdapter = {
         directory: context.preparation.cwd ?? context.fixtureRoot,
         fetch,
         events: {
-          subscribe: async () => () => {},
+          subscribe: async (handler: (event: any) => void) => {
+            const es = new EventSource(OPENCODE_URL + "/api/event?stream=true");
+            es.onmessage = (msg) => {
+              try { handler(JSON.parse(msg.data)); } catch {}
+            };
+            return () => es.close();
+          },
         },
         args: {},
         config: {
