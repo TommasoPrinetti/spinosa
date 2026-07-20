@@ -1,7 +1,12 @@
-MIT License
+# Third Party Notices
 
-Copyright (c) 2025-2026 Tommaso Prinetti
-Copyright (c) 2026 médialab Sciences Po
+## OpenCode
+
+Parts of this project are derived from [OpenCode](https://github.com/anomalyco/opencode).
+
+OpenCode is distributed under the MIT License.
+
+Copyright (c) 2024-2025 anomalco development sp. z o.o. and contributors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

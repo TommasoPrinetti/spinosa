@@ -3,6 +3,7 @@ name: Deploy website to GitHub Pages
 on:
   push:
     branches:
+      - beta
       - main
     paths:
       - 'website/**'

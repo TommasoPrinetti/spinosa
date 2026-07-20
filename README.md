@@ -7,7 +7,7 @@
 
 # Spinosa
 
-[![License: PolyForm Noncommercial](https://img.shields.io/badge/license-PolyForm%20Noncommercial-blue)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 Spinosa is a **local research framework** for AI coding agents. Give it a folder of PDFs, notes, transcripts, images, CSVs. It builds a workspace where agents can search, analyse, synthesise, and verify evidence from those sources. Every claim traces back to a file you provided.
 
@@ -103,7 +103,7 @@ PDFs, Word docs, spreadsheets, presentations, EPUB, HTML, ZIP, Outlook messages,
 
 ## Links
 
-- [License (PolyForm Noncommercial)](LICENSE)
+- [License (MIT)](LICENSE)
 - [Security policy](SECURITY.md)
 - [Contributing](CONTRIBUTING.md)
 - [Support](SUPPORT.md)

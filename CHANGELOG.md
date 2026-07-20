@@ -6,6 +6,25 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 **Release policy:** versions are published only with explicit maintainer approval.
 
+## [1.0.0] — 2026-07-20
+
+### Added
+
+- First stable release. All changes from the beta series are now promoted to stable.
+- Spinosa checks for updates on every start and prompts to upgrade when a newer version is available.
+- Workspace picker "Delete stale" button removes non‑existent workspace index entries.
+- `spinosa upgrade` now prompts for confirmation before installing.
+- Website moved into repo at `website/` — deployed to GitHub Pages on push to `main`.
+
+### Changed
+
+- Repository migrated from `TommasoPrinetti/spinosa` to `medialab/spinosa`.
+
+### Fixed
+
+- `bun run dev` from outside a workspace no longer auto‑opens the last saved workspace.
+- Workspace index cleaned of 108 stale e2e test entries.
+
 ## [0.9.0-beta.27] — 2026-07-20
 
 ### Fixed

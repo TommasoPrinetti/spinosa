@@ -1,49 +1,56 @@
 # Glossary
 
-Plain-English definitions of the terms you see most often. This page stays short on purpose. For full explanations, follow the linked canonical pages.
-
 ## Core terms
 
-| Term             | Meaning                                                                                                                                              |
-| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Corpus**       | Your source collection: PDFs, transcripts, notes, images, and related research files. See [Corpus Structure](/docs/corpus).                          |
-| **Workspace**    | The local folder Spinosa creates from your corpus, including `raw/`, `maps/`, `system/`, and `agent_reports/`. See [Corpus Structure](/docs/corpus). |
-| **Orchestrator** | The top-level coordinator that decides which agents should run for a request. See [Agents & Pipeline](/docs/agents).                                 |
-| **Pipeline**     | The sequence of agent steps used to answer a given request. See [Agents & Pipeline](/docs/agents).                                                   |
-| **Sub-agent**    | A specialized helper such as Searcher, Analyst, Writer, or Verifier. See [Agents & Pipeline](/docs/agents).                                          |
+| Term | Meaning |
+|------|---------|
+| **Corpus** | Your collection of source documents (PDFs, transcripts, notes, images) |
+| **Workspace** | The folder Spinosa creates from your corpus, with `raw/`, `maps/`, `system/`, `agent_reports/` |
+| **Orchestrator** | The coordinator that decides which agents to run for your question |
+| **Pipeline** | The sequence of agent steps used to answer a request |
+| **Sub-agent** | A specialized helper (Searcher, Analyst, Writer, Verifier, etc.) |
+
+## TUI terms
+
+| Term | Meaning |
+|------|---------|
+| **TUI** | Terminal User Interface — the dashboard launched by `spinosa` |
+| **Home** | Main screen with recent workspaces, chat prompt, and boot health |
+| **Workspace picker** | Dialog showing all registered workspaces, press `W` to open |
+| **Onboarding wizard** | Step-by-step flow to create a workspace from documents |
+| **Visualizer** | Tool for exploring conversation flow, file access, and activity |
+| **Command palette** | Quick command menu, press `Ctrl+P` or `/` |
 
 ## Workspace terms
 
-| Term              | Meaning                                                                                                                     |
-| ----------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| **raw/**          | Converted local copies of your source documents. This is the evidence layer agents search and cite.                         |
-| **maps/**         | Navigation maps that help agents find clusters of relevant files and themes.                                                |
-| **system/**       | Settings and index files such as `configuration.md`, `context.md`, `dictionary.md`, and `workspace_index.md`.               |
-| **Dictionary**    | The vocabulary list Spinosa builds from the corpus: names, places, organizations, concepts, aliases, and uncertain terms.   |
-| **YAML header**   | The metadata block at the top of a `raw/` file describing source type, language, dates, people, topics, and related fields. |
-| **Source intake** | The workflow for adding new material to an existing workspace without rebuilding everything from scratch.                   |
+| Term | Meaning |
+|------|---------|
+| **raw/** | Converted source documents, the evidence layer agents search and cite |
+| **maps/** | Navigation maps for finding relevant files and themes |
+| **system/** | Settings and index files (configuration, context, dictionary, index) |
+| **Dictionary** | Vocabulary extracted from the corpus: names, places, concepts |
+| **agent_reports/** | Reports produced by agents (answers, startup reports) |
+| **YAML header** | Metadata block at the top of each `raw/` file describing its source |
 
 ## Report terms
 
-| Term                    | Meaning                                                                                                                   |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| **agent_reports/**      | The folder where startup reports, answers, and other report artifacts are written.                                        |
-| **Evidence packet**     | An intermediate file that packages candidate quotes and source paths for report drafting.                                 |
-| **Confidence level**    | A signal of how directly a passage supports a point: typically high, medium, or low.                                      |
-| **Verification status** | The report outcome after source checking: pending, verified, corrected, or failed. See [Reports & Charts](/docs/reports). |
+| Term | Meaning |
+|------|---------|
+| **Verification status** | Result after source checking: pending, verified, corrected, or failed |
+| **Evidence** | Quoted passages with source paths and confidence labels |
+| **Confidence level** | How directly a passage supports a point (high, medium, low) |
 
 ## Conversion terms
 
-| Term                   | Meaning                                                                                                |
-| ---------------------- | ------------------------------------------------------------------------------------------------------ |
-| **OCR**                | Optical Character Recognition: turning scanned or image-based text into searchable text.               |
-| **MarkItDown**         | The converter used for many office, EPUB, HTML, and text-based PDF formats.                            |
-| **RapidOCR**           | The local OCR engine used for scanned PDFs and image-heavy files.                                      |
-| **Obsidian wikilinks** | Double-bracket links like `[[filename]]` used in navigation maps for graph-style browsing in Obsidian. |
+| Term | Meaning |
+|------|---------|
+| **OCR** | Optical Character Recognition — turning scanned images into searchable text |
+| **MarkItDown** | Converter for Office docs, EPUB, HTML, and text-based PDFs |
+| **RapidOCR** | Local OCR engine for scanned PDFs and images |
 
-## Next reads
+## Related
 
-- [Corpus Structure](/docs/corpus) for workspace layout and file roles
-- [Agents & Pipeline](/docs/agents) for agent names and responsibilities
-- [Reports & Charts](/docs/reports) for report anatomy and statuses
-- [FAQ](/docs/faq) if you came here because something is confusing or broken
+- [Workspace Structure](/spinosa/docs/workspace) — file layout
+- [Agents](/spinosa/docs/agents) — agent names and responsibilities
+- [Reports](/spinosa/docs/reports) — report anatomy and statuses
+- [FAQ](/spinosa/docs/faq) — troubleshooting

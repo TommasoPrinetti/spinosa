@@ -45,12 +45,22 @@ const docRegistry: DocPage[] = [
 		title: 'Tour',
 		slug: 'tour',
 		description:
-			'A 10-minute walkthrough from install to your first verified report. No technical background needed.',
+			'A 10-minute walkthrough from install to your first verified report.',
 		sourcePath: 'get-started/tour.md',
 		groupId: 'get-started',
 		groupTitle: 'Get Started',
 		groupOrder: 10,
 		pageOrder: 20
+	},
+	{
+		title: 'TUI Guide',
+		slug: 'tui',
+		description: 'How to navigate the Spinosa dashboard, keyboard shortcuts, and all available screens.',
+		sourcePath: 'tui.md',
+		groupId: 'get-started',
+		groupTitle: 'Get Started',
+		groupOrder: 10,
+		pageOrder: 30
 	},
 	{
 		title: 'Agents & Pipeline',
@@ -63,10 +73,10 @@ const docRegistry: DocPage[] = [
 		pageOrder: 10
 	},
 	{
-		title: 'Corpus Structure',
-		slug: 'corpus',
-		description: 'Workspace layout, configuration settings, and the startup protocol.',
-		sourcePath: 'concepts/corpus.md',
+		title: 'Workspace Structure',
+		slug: 'workspace',
+		description: 'Workspace layout, folders, key files, and how to work with the corpus safely.',
+		sourcePath: 'concepts/workspace.md',
 		groupId: 'concepts',
 		groupTitle: 'Concepts',
 		groupOrder: 20,

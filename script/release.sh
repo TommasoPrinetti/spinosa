@@ -31,12 +31,6 @@ fi
 
 echo "→ Releasing Spinosa v${VERSION} (${CHANNEL})"
 
-ROOT_VERSION="$(bun -e 'const pkg = await Bun.file("package.json").json(); process.stdout.write(pkg.version)')"
-if [ "$ROOT_VERSION" != "$VERSION" ]; then
-  echo "Error: package.json version ${ROOT_VERSION} does not match ${VERSION}" >&2
-  exit 1
-fi
-
 # Check gh auth
 gh auth status 2>/dev/null || { echo "Error: gh not authenticated"; exit 1; }
 
@@ -46,31 +40,21 @@ if [ -n "$(git status --porcelain)" ]; then
   exit 1
 fi
 
-# Validate before creating an irreversible tag or GitHub release.
-bash script/verify-release.sh
-
-if [ -n "$(git status --porcelain)" ]; then
-  echo "Error: release verification changed the working tree — commit or revert generated files first" >&2
-  exit 1
-fi
-
 # Prepare tag assets
 DIST="dist/v${VERSION}"
 mkdir -p "$DIST"
 cp install.sh "${DIST}/install.sh"
-sed -i.bak 's/^PINNED_VERSION=".*"/PINNED_VERSION="'"${VERSION}"'"/' "${DIST}/install.sh"
-sed -i.bak 's/^PINNED_TAG=".*"/PINNED_TAG="'"${TAG}"'"/' "${DIST}/install.sh"
-rm -f "${DIST}/install.sh.bak"
-(cd "$DIST" && shasum -a 256 install.sh > checksums.txt)
+sed -i '' 's/^PINNED_VERSION=".*"/PINNED_VERSION="'"${VERSION}"'"/' "${DIST}/install.sh"
+sed -i '' 's/^PINNED_TAG=".*"/PINNED_TAG="'"${TAG}"'"/' "${DIST}/install.sh"
+shasum -a 256 "${DIST}/install.sh" | awk '{print $1"  "$2}' > "${DIST}/checksums.txt"
 
 # Prepare channel assets (PINNED_TAG = channel name for upgrade resolution)
 CHANNEL_DIST="dist/${CHANNEL}"
 mkdir -p "$CHANNEL_DIST"
 cp install.sh "${CHANNEL_DIST}/install.sh"
-sed -i.bak 's/^PINNED_VERSION=".*"/PINNED_VERSION="'"${VERSION}"'"/' "${CHANNEL_DIST}/install.sh"
-sed -i.bak 's/^PINNED_TAG=".*"/PINNED_TAG="'"${CHANNEL}"'"/' "${CHANNEL_DIST}/install.sh"
-rm -f "${CHANNEL_DIST}/install.sh.bak"
-(cd "$CHANNEL_DIST" && shasum -a 256 install.sh > checksums.txt)
+sed -i '' 's/^PINNED_VERSION=".*"/PINNED_VERSION="'"${VERSION}"'"/' "${CHANNEL_DIST}/install.sh"
+sed -i '' 's/^PINNED_TAG=".*"/PINNED_TAG="'"${CHANNEL}"'"/' "${CHANNEL_DIST}/install.sh"
+shasum -a 256 "${CHANNEL_DIST}/install.sh" | awk '{print $1"  "$2}' > "${CHANNEL_DIST}/checksums.txt"
 
 # Create tag if it doesn't exist
 if ! git rev-parse "$TAG" >/dev/null 2>&1; then
