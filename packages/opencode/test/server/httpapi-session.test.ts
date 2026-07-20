@@ -387,6 +387,40 @@ describe("session HttpApi", () => {
     { git: true, config: { formatter: false, lsp: false } },
   )
 
+  it.instance(
+    "lists sessions for the selected workspace",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = true
+        const project = yield* Project.use.fromDirectory(test.directory)
+        const firstWorkspace = yield* createLocalWorkspace({
+          projectID: project.project.id,
+          type: "session-list-first",
+          directory: path.join(test.directory, ".workspace-first"),
+        })
+        const secondWorkspace = yield* createLocalWorkspace({
+          projectID: project.project.id,
+          type: "session-list-second",
+          directory: path.join(test.directory, ".workspace-second"),
+        })
+        const first = yield* createSession({ title: "first workspace", workspaceID: firstWorkspace.id })
+        const second = yield* createSession({ title: "second workspace", workspaceID: secondWorkspace.id })
+        const unassigned = yield* createSession({ title: "unassigned" })
+
+        const listed = yield* requestJson<Session.Info[]>(
+          `${SessionPaths.list}?workspace=${firstWorkspace.id}&roots=true`,
+          { headers: { "x-opencode-directory": test.directory } },
+        )
+        const ids = listed.map((item) => item.id)
+
+        expect(ids).toContain(first.id)
+        expect(ids).not.toContain(second.id)
+        expect(ids).not.toContain(unassigned.id)
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
   it.live("uses the persisted session directory for prompt requests", () =>
     Effect.gen(function* () {
       const llm = yield* TestLLMServer

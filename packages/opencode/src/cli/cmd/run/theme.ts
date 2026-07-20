@@ -87,6 +87,8 @@ type ThemeJson = {
 
 type SharedSyntaxTheme = TuiThemeCurrent & {
   _hasSelectedListItemText: boolean
+  spinnerColor: RGBA
+  inactiveFactor: number
 }
 
 export const transparent = RGBA.fromValues(0, 0, 0, 0)
@@ -675,6 +677,8 @@ export async function resolveRunTheme(renderer: CliRenderer): Promise<RunTheme> 
     const syntaxTheme: SharedSyntaxTheme = {
       ...scrollbackTheme,
       _hasSelectedListItemText: true,
+      spinnerColor: scrollbackTheme.accent,
+      inactiveFactor: 0.2,
     }
     const syntax = shared.generateSyntax(syntaxTheme)
     return map(

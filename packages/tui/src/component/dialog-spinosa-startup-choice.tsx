@@ -3,6 +3,7 @@ import { createMemo, createSignal, For } from "solid-js"
 import { useTheme } from "../context/theme"
 import { useRoute } from "../context/route"
 import { useSpinosaWorkspace } from "../context/spinosa-workspace"
+import { buildStartupChatPrompt } from "../spinosa-core/commands/startup"
 import { useDialog } from "../ui/dialog"
 import { useBindings } from "../keymap"
 import { buttonBackground, buttonBorder, buttonText } from "../util/button"
@@ -21,35 +22,29 @@ export function DialogSpinosaStartupChoice(props: {
 
   const launchStartupInChat = async () => {
     dialog.clear()
-    spinosa.queuePrompt({ input: props.prompt, parts: [], autoSubmit: true })
+    spinosa.queuePrompt(buildStartupChatPrompt(props.prompt), props.workspacePath)
     await spinosa.openWorkspace(props.workspacePath)
-    route.navigate({ type: "workspace" })
+    route.navigate({ type: "global" })
   }
 
   const openChatDirectly = async () => {
     dialog.clear()
     await spinosa.openWorkspace(props.workspacePath)
-    route.navigate({ type: "workspace" })
+    route.navigate({ type: "global" })
   }
 
   const options = createMemo(() => [
     {
-      title: "Run startup-prompt in chat",
-      description: "Load `startup-prompt.md` and submit it automatically.",
+      title: "Open setup brief in Chat",
+      description: "Review or edit the setup brief, then press Enter to run it.",
       primary: true,
       run: () => void launchStartupInChat(),
     },
     {
-      title: "Open normal chat",
-      description: "Skip startup for now and enter the workspace chat.",
+      title: "Open workspace",
+      description: "Skip the setup brief for now and start a regular chat.",
       primary: false,
       run: () => void openChatDirectly(),
-    },
-    {
-      title: "Back",
-      description: "Return to the workspace list.",
-      primary: false,
-      run: () => props.onBack?.(),
     },
   ] as const)
 
@@ -63,6 +58,8 @@ export function DialogSpinosaStartupChoice(props: {
     if (!option) return
     option.run()
   }
+
+  const back = () => props.onBack ? props.onBack() : dialog.clear()
 
   useBindings(() => ({
     bindings: [
@@ -82,13 +79,12 @@ export function DialogSpinosaStartupChoice(props: {
         <text fg={theme.text} attributes={TextAttributes.BOLD}>
           {props.workspaceName}
         </text>
-        <text fg={theme.textMuted} onMouseUp={() => dialog.clear()}>
+        <text fg={theme.textMuted} onMouseUp={back}>
           esc
         </text>
       </box>
       <text fg={theme.textMuted}>
-        This workspace is at the `cli_started` stage. Choose whether to resume startup indexing or enter chat
-        normally.
+        Startup the workspace with prompt, or open workspace chat without it.
       </text>
       <box height={1} />
       <For each={options()}>

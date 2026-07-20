@@ -1,5 +1,5 @@
 import { createMemo, createSignal, Show } from "solid-js"
-import { useLegacySessionRoute } from "../../context/route"
+import { useSessionRoute } from "../../context/route"
 import { useSync } from "../../context/sync"
 import { useTheme } from "../../context/theme"
 import { SplitBorder } from "../../ui/border"
@@ -10,7 +10,7 @@ import { agentDisplayName } from "../../util/agent"
 import { buttonBackground, buttonText } from "../../util/button"
 
 export function SubagentFooter() {
-  const route = useLegacySessionRoute()
+  const route = useSessionRoute()
   const sync = useSync()
   const session = createMemo(() => sync.session.get(route.sessionID))
 

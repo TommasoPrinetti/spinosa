@@ -217,17 +217,17 @@ export function Prompt(props: PromptProps) {
   const hasRightContent = createMemo(() => Boolean(props.right))
   const workspaceStatus = createMemo(() => {
     const connected = Boolean(spinosa.activePath && !spinosa.genericMode)
-    if (!connected) return { ok: false, label: "No workspace selected" }
+    if (!connected) return { ok: false, label: "Choose a workspace to begin" }
     return {
       ok: true,
-      label: `Current workspace: ${spinosa.meta?.projectName ?? path.basename(spinosa.activePath!)}`,
+      label: `Workspace: ${spinosa.meta?.projectName ?? path.basename(spinosa.activePath!)}`,
     }
   })
 
   function promptModelWarning() {
     toast.show({
       variant: "warning",
-      message: "Connect a provider to send prompts",
+      message: "Connect a provider to start chatting.",
       duration: 3000,
     })
     if (sync.data.provider.length === 0) {
@@ -255,20 +255,19 @@ export function Prompt(props: PromptProps) {
   const pasteStyleId = syntax().getStyleId("extmark.paste")!
   let promptPartTypeId = 0
   const event = useEvent()
-
-  event.on("tui.prompt.append", (evt, { workspace }) => {
+  const unsubPromptAppend = event.on("tui.prompt.append", (evt, { workspace }) => {
     if (workspace !== project.workspace.current()) return
     if (!input || input.isDestroyed) return
     input.insertText(evt.properties.text)
-    setTimeout(() => {
-      // setTimeout is a workaround and needs to be addressed properly
+    const timer = setTimeout(() => {
       if (!input || input.isDestroyed) return
       input.getLayoutNode().markDirty()
       input.gotoBufferEnd()
       renderer.requestRender()
     }, 0)
+    onCleanup(() => clearTimeout(timer))
   })
-
+  onCleanup(() => unsubPromptAppend?.())
   createEffect(() => {
     if (!input || input.isDestroyed) return
     if (props.disabled) input.cursorColor = theme.backgroundElement
@@ -554,7 +553,7 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
-        title: "Warp",
+        title: "Move session",
         desc: "Change the workspace for the session",
         name: "workspace.set",
         category: "Session",
@@ -575,8 +574,8 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
-        title: "Run startup prompt",
-        desc: "Load and submit startup-prompt.md for the active Spinosa workspace",
+        title: "Run setup brief",
+        desc: "Load and submit the setup brief for the active workspace",
         name: "spinosa.startup",
         category: "Session",
         slashName: "startup",
@@ -587,7 +586,7 @@ export function Prompt(props: PromptProps) {
           if (!workspacePath || spinosa.genericMode) {
             toast.show({
               variant: "warning",
-              message: "Select a Spinosa workspace before running /startup",
+              message: "Choose a workspace before running /startup.",
               duration: 4000,
             })
             spinosa.showPicker()
@@ -1062,7 +1061,7 @@ export function Prompt(props: PromptProps) {
         console.log("Creating a session failed:", res.error)
 
         toast.show({
-          message: "Creating a session failed. Open console for more details.",
+          message: "Couldn’t start a session. Open the console for details.",
           variant: "error",
         })
 
@@ -1093,8 +1092,8 @@ export function Prompt(props: PromptProps) {
       } catch (error) {
         console.log("Spinosa submit preparation failed:", error)
         toast.show({
-          title: "Route framing failed",
-          message: error instanceof Error ? error.message : "Could not write goal artifact",
+          title: "Couldn’t prepare your request",
+          message: error instanceof Error ? error.message : "Couldn’t save the task context",
           variant: "error",
         })
       }
@@ -1179,7 +1178,7 @@ export function Prompt(props: PromptProps) {
         )
         .catch((error) => {
           toast.show({
-            title: "Failed to send prompt",
+            title: "Couldn’t send prompt",
             message: errorMessage(error),
             variant: "error",
           })
@@ -1203,7 +1202,7 @@ export function Prompt(props: PromptProps) {
       if (editorParts.length > 0) editor.preserveSelectionFromNewSession()
       setTimeout(() => {
         route.navigate({
-          type: "session",
+          type: "workspace",
           sessionID,
         })
       }, 50)
@@ -1380,10 +1379,10 @@ export function Prompt(props: PromptProps) {
     if (store.mode === "shell") {
       if (!shell().length) return undefined
       const example = shell()[store.placeholder % shell().length]
-      return `Run a command... "${example}"`
+      return `Enter a shell command… "${example}"`
     }
     if (!list().length) return undefined
-    return `Ask anything... "${list()[store.placeholder % list().length]}"`
+    return `Describe the task… "${list()[store.placeholder % list().length]}"`
   })
 
   const spinnerDef = createMemo(() => {
@@ -1624,7 +1623,7 @@ export function Prompt(props: PromptProps) {
                         const r = retry()
                         if (!r) return
                         if (isTruncated()) {
-                          void DialogAlert.show(dialog, "Retry Error", r.message)
+                          void DialogAlert.show(dialog, "Retry failed", r.message)
                         }
                       }
 
@@ -1709,9 +1708,13 @@ export function Prompt(props: PromptProps) {
             <Match when={true}>{props.hint ?? <text />}</Match>
           </Switch>
           <Show when={status().type !== "retry"}>
-            <box gap={2} flexDirection="row" flexGrow={1} justifyContent="space-between">
-              <box gap={2} flexDirection="row" flexGrow={1}>
-                <text fg={workspaceStatus().ok ? theme.text : theme.textMuted} wrapMode="none">
+            <box gap={2} flexDirection="row" width="100%" minWidth={0} justifyContent="space-between">
+              <box gap={2} flexDirection="row" flexGrow={1} flexShrink={1} minWidth={0}>
+                <text
+                  fg={workspaceStatus().ok ? theme.text : theme.textMuted}
+                  wrapMode="none"
+                  overflow="hidden"
+                >
                   <span style={{ fg: workspaceStatus().ok ? theme.success : theme.error }}>● </span>
                   {workspaceStatus().label}
                 </text>
@@ -1722,6 +1725,9 @@ export function Prompt(props: PromptProps) {
                 </Show>
               </box>
               <box gap={2} flexDirection="row" flexShrink={0}>
+                <Show when={dimensions().width < 80}>
+                  <text fg={theme.textMuted}>│</text>
+                </Show>
                 <Switch>
                   <Match when={store.mode === "normal"}>
                     <Switch>

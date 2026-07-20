@@ -2,12 +2,13 @@
   "$schema": "https://json.schemastore.org/package.json",
   "name": "spinosa-main",
   "private": true,
+  "version": "0.9.0-beta.28",
   "type": "module",
   "packageManager": "bun@1.3.14",
   "scripts": {
-    "dev": "bun run --cwd packages/opencode --conditions=browser src/index.ts",
+    "dev": "bun run --cwd packages/opencode src/index.ts",
     "postinstall": "bun run --cwd packages/core fix-node-pty",
-    "typecheck": "bun run --cwd packages/core typecheck && bun run --cwd packages/sdk/js typecheck && bun run --cwd packages/tui typecheck && bun run --cwd packages/opencode typecheck"
+    "typecheck": "bun run --cwd packages/core typecheck && bun run --cwd packages/sdk typecheck && bun run --cwd packages/tui typecheck && bun run --cwd packages/opencode typecheck"
   },
   "workspaces": {
     "packages": [
@@ -21,9 +22,8 @@
       "packages/protocol",
       "packages/schema",
       "packages/script",
-      "packages/sdk/js",
+      "packages/sdk",
       "packages/server",
-      "packages/spinosa-core",
       "packages/tui",
       "packages/ui"
     ],
@@ -94,10 +94,6 @@
     "esbuild",
     "node-pty",
     "protobufjs",
-    "tree-sitter",
-    "tree-sitter-bash",
-    "tree-sitter-powershell",
-    "web-tree-sitter",
     "electron"
   ],
   "overrides": {
@@ -109,7 +105,7 @@
     "@napi-rs/canvas": "1.0.2"
   },
   "patchedDependencies": {
-    "@ff-labs/fff-bun@0.9.3": "patches/@ff-labs%2Ffff-bun@0.9.3.patch",
+    "@opentui/solid@0.3.4": "patches/@opentui%2Fsolid@0.3.4.patch",
     "@npmcli/agent@4.0.2": "patches/@npmcli%2Fagent@4.0.2.patch",
     "@silvia-odwyer/photon-node@0.3.4": "patches/@silvia-odwyer%2Fphoton-node@0.3.4.patch",
     "@standard-community/standard-openapi@0.2.9": "patches/@standard-community%2Fstandard-openapi@0.2.9.patch",
@@ -125,11 +121,8 @@
     "effect@4.0.0-beta.83": "patches/effect@4.0.0-beta.83.patch"
   },
   "devDependencies": {
-    "@types/mime-types": "3.0.1"
-  },
-  "dependencies": {
-    "@ff-labs/fff-bun": "0.9.4",
-    "@opentui/core": "catalog:",
-    "@parcel/watcher": "2.5.1"
+    "@typescript/native-preview": "catalog:",
+    "@types/mime-types": "3.0.1",
+    "typescript": "catalog:"
   }
 }

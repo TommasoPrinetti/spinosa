@@ -57,7 +57,7 @@ export const {
   provider: SyncProvider,
 } = createSimpleContext({
   name: "Sync",
-  init: () => {
+  init: (props: { sessionDirectory?: () => string | undefined }) => {
     const startup = useTuiStartup()
     const kv = useKV()
     const permission = usePermission()
@@ -151,14 +151,15 @@ export const {
       hydratingSessions.get(sessionID)?.parts.add(partID)
     }
 
-    function sessionListQuery(): { scope?: "project"; path?: string } {
-      if (!kv.get("session_directory_filter_enabled", true)) return { scope: "project" }
-      if (!project.data.instance.path.worktree || !project.data.instance.path.directory) return { scope: "project" }
-      return {
-        path: path
-          .relative(path.resolve(project.data.instance.path.worktree), project.data.instance.path.directory)
-          .replaceAll("\\", "/"),
+    function sessionListQuery() {
+      const directory = props.sessionDirectory?.()
+      const workspace = project.workspace.current()
+      if (!kv.get("session_directory_filter_enabled", true)) {
+        return { scope: "project" as const, workspace: directory ? undefined : workspace }
       }
+      if (directory) return { directory }
+      if (!project.data.instance.path.worktree || !project.data.instance.path.directory) return { scope: "project" as const, workspace }
+      return { directory: project.data.instance.path.directory, workspace }
     }
 
     function listSessions() {

@@ -4,6 +4,7 @@ import { setupStatusLabel, setupStatusThemeKey } from "../../src/spinosa/status-
 describe("setupStatusLabel", () => {
   test("maps known statuses", () => {
     expect(setupStatusLabel("not_started")).toBe("Setup needed")
+    expect(setupStatusLabel("importing")).toBe("Import incomplete")
     expect(setupStatusLabel("cli_started")).toBe("Ready to index")
     expect(setupStatusLabel("workspace_started")).toBe("Ready")
     expect(setupStatusLabel("unknown")).toBe("Unknown")
@@ -15,5 +16,6 @@ describe("setupStatusThemeKey", () => {
     expect(setupStatusThemeKey("workspace_started")).toBe("success")
     expect(setupStatusThemeKey("cli_started")).toBe("info")
     expect(setupStatusThemeKey("not_started")).toBe("warning")
+    expect(setupStatusThemeKey("importing")).toBe("warning")
   })
 })

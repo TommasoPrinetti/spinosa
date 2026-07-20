@@ -4,13 +4,10 @@
   "workspaces": {
     "": {
       "name": "spinosa-main",
-      "dependencies": {
-        "@ff-labs/fff-bun": "0.9.4",
-        "@opentui/core": "catalog:",
-        "@parcel/watcher": "2.5.1",
-      },
       "devDependencies": {
         "@types/mime-types": "3.0.1",
+        "@typescript/native-preview": "catalog:",
+        "typescript": "catalog:",
       },
     },
     "packages/core": {
@@ -106,6 +103,7 @@
         "@types/turndown": "5.0.5",
         "@types/which": "3.0.4",
         "drizzle-kit": "catalog:",
+        "prettier": "3.6.2",
       },
     },
     "packages/effect-drizzle-sqlite": {
@@ -364,7 +362,7 @@
         "@types/semver": "^7.5.8",
       },
     },
-    "packages/sdk/js": {
+    "packages/sdk": {
       "name": "@opencode-ai/sdk",
       "version": "1.17.12",
       "dependencies": {
@@ -394,20 +392,35 @@
         "@typescript/native-preview": "catalog:",
       },
     },
-    "packages/spinosa-core": {
-      "name": "@opencode-ai/spinosa-core",
+    "packages/tui": {
+      "name": "@opencode-ai/tui",
       "version": "1.17.12",
-      "bin": {
-        "spinosa": "./bin/spinosa.ts",
-      },
       "dependencies": {
         "@napi-rs/canvas": "1.0.2",
+        "@opencode-ai/core": "workspace:*",
+        "@opencode-ai/plugin": "workspace:*",
+        "@opencode-ai/sdk": "workspace:*",
+        "@opencode-ai/ui": "workspace:*",
+        "@opentui/core": "catalog:",
+        "@opentui/keymap": "catalog:",
+        "@opentui/solid": "catalog:",
+        "clipboardy": "4.0.0",
+        "diff": "catalog:",
+        "effect": "catalog:",
+        "fuzzysort": "catalog:",
         "markitdown-ts": "0.0.10",
+        "open": "10.1.2",
+        "opentui-spinner": "catalog:",
+        "pdfjs-dist": "4.9.155",
         "ppu-paddle-ocr": "6.0.0",
+        "remeda": "catalog:",
+        "solid-js": "catalog:",
+        "strip-ansi": "7.1.2",
       },
       "devDependencies": {
         "@tsconfig/bun": "catalog:",
         "@types/bun": "catalog:",
+        "@typescript/native-preview": "catalog:",
       },
       "optionalDependencies": {
         "@napi-rs/canvas-darwin-arm64": "1.0.2",
@@ -420,34 +433,7 @@
         "@napi-rs/canvas-linux-x64-musl": "1.0.2",
         "@napi-rs/canvas-win32-arm64-msvc": "1.0.2",
         "@napi-rs/canvas-win32-x64-msvc": "1.0.2",
-      },
-    },
-    "packages/tui": {
-      "name": "@opencode-ai/tui",
-      "version": "1.17.12",
-      "dependencies": {
-        "@opencode-ai/core": "workspace:*",
-        "@opencode-ai/plugin": "workspace:*",
-        "@opencode-ai/sdk": "workspace:*",
-        "@opencode-ai/spinosa-core": "workspace:*",
-        "@opencode-ai/ui": "workspace:*",
-        "@opentui/core": "catalog:",
-        "@opentui/keymap": "catalog:",
-        "@opentui/solid": "catalog:",
-        "clipboardy": "4.0.0",
-        "diff": "catalog:",
-        "effect": "catalog:",
-        "fuzzysort": "catalog:",
-        "open": "10.1.2",
-        "opentui-spinner": "catalog:",
-        "remeda": "catalog:",
-        "solid-js": "catalog:",
-        "strip-ansi": "7.1.2",
-      },
-      "devDependencies": {
-        "@tsconfig/bun": "catalog:",
-        "@types/bun": "catalog:",
-        "@typescript/native-preview": "catalog:",
+        "tui-agent-use": "0.1.3",
       },
     },
     "packages/ui": {
@@ -481,6 +467,7 @@
         "strip-ansi": "7.1.2",
       },
       "devDependencies": {
+        "@opencode-ai/script": "workspace:*",
         "@solidjs/meta": "catalog:",
         "@tailwindcss/vite": "catalog:",
         "@tsconfig/node22": "catalog:",
@@ -504,13 +491,11 @@
   },
   "trustedDependencies": [
     "esbuild",
-    "tree-sitter-powershell",
     "protobufjs",
-    "web-tree-sitter",
-    "tree-sitter-bash",
   ],
   "patchedDependencies": {
     "@modelcontextprotocol/sdk@1.29.0": "patches/@modelcontextprotocol%2Fsdk@1.29.0.patch",
+    "@opentui/solid@0.3.4": "patches/@opentui%2Fsolid@0.3.4.patch",
     "effect@4.0.0-beta.83": "patches/effect@4.0.0-beta.83.patch",
     "@npmcli/agent@4.0.2": "patches/@npmcli%2Fagent@4.0.2.patch",
     "@silvia-odwyer/photon-node@0.3.4": "patches/@silvia-odwyer%2Fphoton-node@0.3.4.patch",
@@ -1069,11 +1054,9 @@
 
     "@opencode-ai/script": ["@opencode-ai/script@workspace:packages/script"],
 
-    "@opencode-ai/sdk": ["@opencode-ai/sdk@workspace:packages/sdk/js"],
+    "@opencode-ai/sdk": ["@opencode-ai/sdk@workspace:packages/sdk"],
 
     "@opencode-ai/server": ["@opencode-ai/server@workspace:packages/server"],
-
-    "@opencode-ai/spinosa-core": ["@opencode-ai/spinosa-core@workspace:packages/spinosa-core"],
 
     "@opencode-ai/tui": ["@opencode-ai/tui@workspace:packages/tui"],
 
@@ -2255,7 +2238,7 @@
 
     "pdf-parse": ["pdf-parse@2.4.5", "", { "dependencies": { "@napi-rs/canvas": "0.1.80", "pdfjs-dist": "5.4.296" }, "bin": { "pdf-parse": "bin/cli.mjs" } }, "sha512-mHU89HGh7v+4u2ubfnevJ03lmPgQ5WU4CxAVmTSh/sxVTEDYd1er/dKS/A6vg77NX47KTEoihq8jZBLr8Cxuwg=="],
 
-    "pdfjs-dist": ["pdfjs-dist@5.4.296", "", { "optionalDependencies": { "@napi-rs/canvas": "^0.1.80" } }, "sha512-DlOzet0HO7OEnmUmB6wWGJrrdvbyJKftI1bhMitK7O2N8W2gc757yyYBbINy9IDafXAV9wmKr9t7xsTaNKRG5Q=="],
+    "pdfjs-dist": ["pdfjs-dist@4.9.155", "", { "optionalDependencies": { "@napi-rs/canvas": "^0.1.64" } }, "sha512-epRZn6DQQKCOEqbmFsxkiMBm1MHaNrnr6T4VBNP0bsDvdJdmrWcZbS5cgJXW68P0d3uJTlFhF6Wms2tlSgPYig=="],
 
     "perfect-debounce": ["perfect-debounce@2.1.0", "", {}, "sha512-LjgdTytVFXeUgtHZr9WYViYSM/g8MkcTPYDlPa3cDqMirHjKiSZPYd6DoL7pK8AJQr+uWkQvCjHNdiMqsrJs+g=="],
 
@@ -2536,6 +2519,8 @@
     "tslib": ["tslib@2.8.1", "", {}, "sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w=="],
 
     "tuf-js": ["tuf-js@4.1.0", "", { "dependencies": { "@tufjs/models": "4.1.0", "debug": "^4.4.3", "make-fetch-happen": "^15.0.1" } }, "sha512-50QV99kCKH5P/Vs4E2Gzp7BopNV+KzTXqWeaxrfu5IQJBOULRsTIS9seSsOVT8ZnGXzCyx55nYWAi4qJzpZKEQ=="],
+
+    "tui-agent-use": ["tui-agent-use@0.1.3", "", { "dependencies": { "diff": "8.0.2" }, "peerDependencies": { "@opentui/core": ">=0.3.4 <1" }, "bin": { "tui-agent": "dist/cli.js" } }, "sha512-VOwOe7lg4mRfcpJF3l4Ln1Rvws0balXabvpLbCRM+C5skTVUZPWuwVzOfHcavo8LMZG9Lo0yELCueM9BOYV9/A=="],
 
     "tunnel": ["tunnel@0.0.6", "", {}, "sha512-1h/Lnq9yajKY2PEbBadPXj3VxsDDu844OnaAo52UVmIzIvwwtBPIuNvkjuzBlTWpfJyUbG3ez0KSBibQkj4ojg=="],
 
@@ -2896,6 +2881,8 @@
     "opencode/minimatch": ["minimatch@10.0.3", "", { "dependencies": { "@isaacs/brace-expansion": "^5.0.0" } }, "sha512-IPZ167aShDZZUMdRk66cyQAW3qr0WzbHkPdMYa8bzZhlHhO3jALbKdxcaak7W9FfT2rZNpQuUu4Od7ILEpXSaw=="],
 
     "parse5/entities": ["entities@6.0.1", "", {}, "sha512-aN97NXWF6AWBTahfVOIrB/NShkzi5H7F9r1s9mD3cDj4Ko5f2qhhVoYMibXF7GlLveb/D2ioWay8lxI97Ven3g=="],
+
+    "pdf-parse/pdfjs-dist": ["pdfjs-dist@5.4.296", "", { "optionalDependencies": { "@napi-rs/canvas": "^0.1.80" } }, "sha512-DlOzet0HO7OEnmUmB6wWGJrrdvbyJKftI1bhMitK7O2N8W2gc757yyYBbINy9IDafXAV9wmKr9t7xsTaNKRG5Q=="],
 
     "proxy-addr/ipaddr.js": ["ipaddr.js@1.9.1", "", {}, "sha512-0KI/607xoxSToH7GjN1FfSbLoU0+btTicjsQSWQlh/hZykN8KpmMf7uYwPW3R+akZ6R/w18ZlXSHBYXiYUPO3g=="],
 

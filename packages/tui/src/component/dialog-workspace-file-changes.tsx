@@ -69,7 +69,7 @@ export function DialogWorkspaceFileChanges(props: {
     <box gap={1}>
       <box flexDirection="row" justifyContent="space-between" paddingLeft={2} paddingRight={2}>
         <text attributes={TextAttributes.BOLD} fg={theme.text}>
-          {props.title ?? "File Changes Found"}
+          {props.title ?? "Uncommitted changes"}
         </text>
         <text fg={theme.textMuted} onMouseUp={() => dialog.clear()}>
           esc

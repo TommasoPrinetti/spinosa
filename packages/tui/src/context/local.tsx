@@ -188,7 +188,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           if (typeof value.variant === "object" && value.variant !== null)
             setModelStore("variant", value.variant as Record<string, string | undefined>)
         })
-        .catch(() => {})
+        .catch((e) => { console.error("spinosa: failed to read model.json", e) })
         .finally(() => {
           setModelStore("ready", true)
           if (state.pending) save()
@@ -443,7 +443,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               pinned.filter((item): item is string => typeof item === "string"),
             )
         })
-        .catch(() => {})
+        .catch((error) => {
+          if (!error || typeof error !== "object" || !("code" in error) || error.code !== "ENOENT") {
+            console.error("spinosa: failed to read session.json", error)
+          }
+        })
         .finally(() => {
           setSessionStore("ready", true)
           if (state.pending) save()
@@ -495,7 +499,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           const target = slots()[slot - 1]
           if (!target) return
           if (route.data.type === "workspace" && route.data.sessionID === target) return
-          route.navigate({ type: "session", sessionID: target })
+          route.navigate({ type: "workspace", sessionID: target })
         },
       }
     }

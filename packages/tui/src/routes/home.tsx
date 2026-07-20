@@ -1,16 +1,16 @@
 import { Prompt, type PromptRef } from "../component/prompt"
-import { createEffect, createMemo, createResource, createSignal, onCleanup, onMount, Show } from "solid-js"
+import { For, createEffect, createMemo, createResource, createSignal, onCleanup, onMount, Show } from "solid-js"
 import { Logo } from "../component/logo"
 import { useSync } from "../context/sync"
 import { Toast, useToast } from "../ui/toast"
 import { useArgs } from "../context/args"
-import { useLegacyHomeRoute } from "../context/route"
-import { useExit } from "../context/exit"
+import { useGlobalRoute } from "../context/route"
 import { usePromptRef } from "../context/prompt"
 import { useLocal } from "../context/local"
 import { usePluginRuntime } from "../plugin/runtime"
 import { useEditorContext } from "../context/editor"
 import { useTerminalDimensions } from "@opentui/solid"
+import { TextAttributes } from "@opentui/core"
 import { useTuiConfig } from "../config"
 import { HomeSessionDestinationProvider } from "./home/session-destination"
 import { SpinosaPromptChips } from "./workspace/spinosa-prompt-chips"
@@ -18,33 +18,61 @@ import { MAIN_CONTENT_MAX_WIDTH } from "../util/layout"
 import { CenteredColumn } from "../component/centered-column"
 import { useSpinosaWorkspace } from "../context/spinosa-workspace"
 import { useTheme } from "../context/theme"
+import type { Theme } from "../context/theme"
 import { useDialog } from "../ui/dialog"
 import { DialogSpinosaWorkspacePicker } from "../component/dialog-spinosa-workspace-picker"
-import { OPENCODE_BASE_MODE, useOpencodeKeymap, useOpencodeModeStack } from "../keymap"
-import { readBundledFrameworkVersion, compareFrameworkVersions, isPrereleaseFrameworkVersion } from "../spinosa/service"
-import { workspaceAsciiBannerText } from "../spinosa/workspace-name"
-import { upgradeFramework } from "@opencode-ai/spinosa-core/commands/upgrade"
-import { buttonBackground, buttonText } from "../util/button"
+import { DialogSpinosaStartupChoice } from "../component/dialog-spinosa-startup-choice"
+import { DialogSpinosaMissingWorkspace } from "../component/dialog-spinosa-missing-workspace"
+import { getWorkspaceLaunchDecision } from "../spinosa/workspace-launch"
+import { setupStatusLabel, setupStatusThemeKey } from "../spinosa/status-labels"
+import { HomeFooter } from "../component/home-footer"
+import { buttonBackground, buttonBorder, buttonText } from "../util/button"
+import { countRawMarkdownFiles, listRegisteredWorkspaces, readBundledFrameworkVersion, isPrereleaseFrameworkVersion, readWorkspaceMeta } from "../spinosa/service"
+import { workspaceAsciiBannerText, resolveWorkspaceDisplayName } from "../spinosa/workspace-name"
+import { upgradeFramework } from "../spinosa-core/commands/upgrade"
+import { type ReleaseChannel } from "../spinosa-core/system/channels"
+import { cleanupStaleInstallDirectories, inspectSpinosaMaintenance } from "../spinosa-core/system/maintenance"
+import type { SpinosaSetupStatus } from "../spinosa/types"
+import { DialogConfirm } from "../ui/dialog-confirm"
+import { dirname, join } from "node:path"
+import { statSync } from "node:fs"
+import { useConnected } from "../component/use-connected"
+import { DialogProvider } from "../component/dialog-provider"
+import { inspectWorkspacePresence, isUsableWorkspaceStatus } from "../spinosa-core/workspace/presence"
+import type { SpinosaWorkspaceID } from "../spinosa-core/workspace/identity"
 
-let once = false
+const SHELL_PLACEHOLDER = ["ls -la", "git status", "pwd"]
 const defaultPlaceholder = {
   normal: ["Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests"],
-  shell: ["ls -la", "git status", "pwd"],
+  shell: SHELL_PLACEHOLDER,
 }
 const spinosaPlaceholder = {
   normal: [
-    "Find source-grounded evidence for…",
-    "Compare cohorts using approved corpus sources",
-    "Surface hidden connections across the corpus",
+    "Find evidence in my sources for…",
+    "Compare groups using my imported sources",
+    "Find unexpected links across my sources",
   ],
-  shell: ["ls -la", "git status", "pwd"],
+  shell: SHELL_PLACEHOLDER,
+}
+const MAINTENANCE_CHECK_DELAY_MS = 500
+const RECENT_WORKSPACE_COUNT = 4
+
+function getLastAccessed(workspacePath: string): number {
+  try {
+    return statSync(join(workspacePath, ".spinosa", "workspace")).mtimeMs
+  } catch {
+    return 0
+  }
+}
+
+function recentStatusColor(status: SpinosaSetupStatus, theme: Theme) {
+  return theme[setupStatusThemeKey(status)]
 }
 
 export function Home() {
   const pluginRuntime = usePluginRuntime()
-  const exit = useExit()
   const sync = useSync()
-  const route = useLegacyHomeRoute()
+  const route = useGlobalRoute()
   const dialog = useDialog()
   const promptRef = usePromptRef()
   const [ref, setRef] = createSignal<PromptRef | undefined>()
@@ -54,16 +82,58 @@ export function Home() {
   const dimensions = useTerminalDimensions()
   const tuiConfig = useTuiConfig()
   const spinosa = useSpinosaWorkspace()
+  const providerConnected = useConnected()
   const { theme } = useTheme()
   const workspaceReady = createMemo(() => Boolean(spinosa.activePath && !spinosa.genericMode))
+  const compactLayout = createMemo(() => dimensions().height < 24)
   const startupPrompt = createMemo(() => route.prompt ?? spinosa.pendingPrompt)
   const startupPromptIsQueued = createMemo(() => !route.prompt && Boolean(spinosa.pendingPrompt))
-  const [bundledVersion, { refetch: refetchBundled }] = createResource(readBundledFrameworkVersion)
+  const [bundledVersion] = createResource(readBundledFrameworkVersion)
+  type RecentWorkspace = {
+    path: string
+    name: string
+    workspaceID?: SpinosaWorkspaceID
+    status: SpinosaSetupStatus
+    fileCount: number
+  }
+  const [recentWorkspaces, setRecentWorkspaces] = createSignal<RecentWorkspace[]>([])
+  const [recentLoading, setRecentLoading] = createSignal(true)
+  const [selectedRecent, setSelectedRecent] = createSignal(0)
+  const loadRecentWorkspaces = async () => {
+    setRecentLoading(true)
+    try {
+      const workspaces = await listRegisteredWorkspaces()
+      const rows: (RecentWorkspace & { lastAccessed: number })[] = []
+      for (const ws of workspaces) {
+        if (!isUsableWorkspaceStatus(ws.presence)) continue
+        const meta = await readWorkspaceMeta(ws.path)
+        if (!meta) continue
+        rows.push({
+          path: ws.path,
+          name: resolveWorkspaceDisplayName(ws.path, meta?.projectName ?? ws.projectName),
+          workspaceID: ws.workspaceID,
+          status: meta?.setupStatus || "unknown",
+          fileCount: await countRawMarkdownFiles(join(ws.path, "raw")),
+          lastAccessed: getLastAccessed(ws.path),
+        })
+      }
+      rows.sort((a, b) => b.lastAccessed - a.lastAccessed)
+      setRecentWorkspaces(rows.slice(0, RECENT_WORKSPACE_COUNT))
+    } catch {
+      // ignore
+    } finally {
+      setRecentLoading(false)
+    }
+  }
   const wsVersion = createMemo(() => spinosa.meta?.frameworkVersion)
   const workspaceBannerText = createMemo(() => {
     const workspacePath = spinosa.activePath
     if (!workspacePath || spinosa.genericMode) return undefined
     return workspaceAsciiBannerText(workspacePath)
+  })
+  const workspaceBannerFits = createMemo(() => {
+    const banner = workspaceBannerText()
+    return Boolean(banner && banner.length * 9 <= dimensions().width - 4)
   })
   const versionLabel = createMemo(() => {
     const parts: string[] = []
@@ -71,90 +141,71 @@ export function Home() {
     if (wsVersion()) parts.push(`workspace v${wsVersion()}`)
     return parts.join(" · ")
   })
-  const [latestVersion] = createResource(async () => {
-    try {
-      const bv = bundledVersion()
-      if (!bv) return undefined
-      // Infer channel from the bundled version: prerelease → beta, otherwise → stable.
-      // This prevents offering stable upgrades when the user runs a beta build.
-      const inferredChannel: ReleaseChannel = isPrereleaseFrameworkVersion(bv) ? "beta" : "stable"
-      return await resolveReleaseVersionForChannel(inferredChannel)
-    } catch { return undefined }
-  })
-  const upgradeAvailable = createMemo(() => {
-    const bv = bundledVersion()
-    const lv = latestVersion()
-    if (!bv || !lv) return false
-    return compareFrameworkVersions(lv, bv) === 1
-  })
-  const [upgradeHover, setUpgradeHover] = createSignal(false)
-  const [upgrading, setUpgrading] = createSignal(false)
-  const modeStack = useOpencodeModeStack()
-  const keymap = useOpencodeKeymap()
-  const [keyboardFocus, setKeyboardFocus] = createSignal(-1)
+  const [maintenanceChecksStarted, setMaintenanceChecksStarted] = createSignal(false)
+  const [maintenance, { refetch: refetchMaintenance }] = createResource(
+    maintenanceChecksStarted,
+    async (started) => (started ? inspectSpinosaMaintenance() : undefined),
+  )
+  const [maintenanceAction, setMaintenanceAction] = createSignal<"idle" | "cleaning" | "repairing">("idle")
+  const maintenanceCleanupAvailable = createMemo(() => (maintenance()?.staleInstallDirectories.length ?? 0) > 0)
+  const maintenanceRepairRequired = createMemo(() => maintenance()?.dependencyRepairRequired === true)
 
   onMount(() => {
-    const off = keymap.intercept("key", ({ event, consume }) => {
-      if (modeStack.current() !== OPENCODE_BASE_MODE) return
-
-      if (event.name === "up" || event.name === "k") {
-        setKeyboardFocus((v) => Math.max(-1, v - 1))
-        consume(); return
-      }
-      if (event.name === "down" || event.name === "j") {
-        if (keyboardFocus() === -1 && upgradeAvailable()) {
-          setKeyboardFocus(0)
-          consume(); return
-        }
-        setKeyboardFocus((v) => Math.min(0, v + 1))
-        consume(); return
-      }
-      if (event.name === "return" && keyboardFocus() === 0) {
-        void doUpgrade()
-        consume(); return
-      }
-    })
-    onCleanup(off)
+    const timer = setTimeout(() => setMaintenanceChecksStarted(true), MAINTENANCE_CHECK_DELAY_MS)
+    onCleanup(() => clearTimeout(timer))
+    void loadRecentWorkspaces()
   })
 
   const toast = useToast()
-  const doUpgrade = async () => {
-    if (upgrading()) return
-    setUpgrading(true)
-    const bv = bundledVersion()
-    const channel: ReleaseChannel = bv && isPrereleaseFrameworkVersion(bv) ? "beta" : "stable"
-    const progressMsgs: string[] = []
+  const cleanStaleInstallerData = async () => {
+    if (maintenanceAction() !== "idle") return
+    const confirmed = await DialogConfirm.show(
+      dialog,
+      "Clean up leftover install files",
+      "Remove temporary files left by an interrupted install? Your installed Spinosa versions will stay.",
+    )
+    if (!confirmed) return
+
+    setMaintenanceAction("cleaning")
     try {
-      const result = await upgradeFramework({
-        channel,
-        yes: true,
-        onPhase: (_phase, msg) => {
-          toast.show({ variant: "info", message: msg, duration: 0 })
-        },
-      })
-      if (result.success) {
-        const wsList = result.workspaceUpgradeNeeded
-        if (wsList.length > 0) {
-          const wsNames = wsList.map((p) => p.split("/").pop() || p).join(", ")
-          toast.show({
-            variant: "success",
-            message: `Upgrade complete! ${wsList.length} workspace(s) need updating: ${wsNames}. Run 'spinosa update' to sync them.`,
-            duration: 5000,
-          })
-        } else {
-          toast.show({ variant: "success", message: "Upgrade complete!" })
-        }
-        // Give toast time to render, then restart the TUI
-        await new Promise((r) => setTimeout(r, 3000))
-        exit()
-      } else {
-        toast.show({ variant: "error", message: "Upgrade failed" })
+      const result = await cleanupStaleInstallDirectories()
+      if (result.installInProgress) {
+        toast.show({ variant: "info", message: "Cleanup skipped because a Spinosa install is in progress." })
+      } else if (result.removedDirectories.length > 0) {
+        toast.show({ variant: "success", message: "Removed stale Spinosa installer files." })
       }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      toast.show({ variant: "error", message: msg })
+      await refetchMaintenance()
+    } catch (error) {
+      toast.show({ variant: "error", message: error instanceof Error ? error.message : String(error) })
     } finally {
-      setUpgrading(false)
+      setMaintenanceAction("idle")
+    }
+  }
+  const repairDependencies = async () => {
+    if (maintenanceAction() !== "idle") return
+    const confirmed = await DialogConfirm.show(
+      dialog,
+      "Reinstall Spinosa runtime",
+      "Reinstall the files Spinosa needs to run? This can take a few minutes. Restart Spinosa when it finishes.",
+    )
+    if (!confirmed) return
+
+    const bundled = bundledVersion()
+    if (!bundled) return
+    setMaintenanceAction("repairing")
+    const channel: ReleaseChannel = isPrereleaseFrameworkVersion(bundled) ? "beta" : "stable"
+    try {
+      const result = await upgradeFramework({ channel, version: bundled, reinstall: true, yes: true, suppressInstallOutput: true })
+      if (!result.success) {
+        toast.show({ variant: "error", message: "Dependency repair failed." })
+        return
+      }
+      toast.show({ variant: "success", message: "Dependencies repaired. Restart Spinosa to use the repaired runtime." })
+      await refetchMaintenance()
+    } catch (error) {
+      toast.show({ variant: "error", message: error instanceof Error ? error.message : String(error) })
+    } finally {
+      setMaintenanceAction("idle")
     }
   }
   const placeholders = createMemo(() => {
@@ -171,7 +222,10 @@ export function Home() {
   })
 
   let sent = false
+  let once = false
   let lastRoutePromptKey: string | undefined
+  let lastStartupHintKey: string | undefined
+  let providerPromptRequested = false
 
   onMount(() => {
     editor.clearSelection()
@@ -193,6 +247,26 @@ export function Home() {
     const prompt = startupPrompt()
     if (!r || !prompt) return
     r.set(prompt)
+
+    if (!prompt.autoSubmit && startupPromptIsQueued()) {
+      const hintKey = JSON.stringify({ input: prompt.input, parts: prompt.parts })
+      if (lastStartupHintKey !== hintKey) {
+        lastStartupHintKey = hintKey
+        toast.show({
+          variant: "info",
+          message: "Your setup brief is ready. Press Enter to run it, or edit it first.",
+          duration: 4000,
+        })
+      }
+    }
+  })
+
+  // A queued workspace prompt always needs a usable model. Reuse the native
+  // connect → model flow, then leave the prompt in place for the user.
+  createEffect(() => {
+    if (!startupPrompt() || providerConnected() || providerPromptRequested) return
+    providerPromptRequested = true
+    dialog.replace(() => <DialogProvider />)
   })
 
   // Auto-submit route prompt once the prompt, sync, and model state are ready.
@@ -230,51 +304,185 @@ export function Home() {
   createEffect(() => {
     if (!spinosa.pickerRequested) return
     spinosa.clearPickerRequest()
-    dialog.replace(() => <DialogSpinosaWorkspacePicker />)
+    if (!providerConnected()) {
+      dialog.replace(() => <DialogProvider />)
+      return
+    }
+    dialog.replace(() => <DialogSpinosaWorkspacePicker onClose={() => spinosa.restorePickerRoute()} />)
   })
+
+  const launchRecentWorkspace = async (workspacePath: string) => {
+    const launch = await getWorkspaceLaunchDecision(workspacePath)
+    if (launch.type === "startup-choice") {
+      dialog.replace(() => (
+        <DialogSpinosaStartupChoice
+          workspacePath={launch.workspacePath}
+          workspaceName={launch.workspaceName}
+          prompt={launch.prompt}
+          onBack={() => dialog.clear()}
+        />
+      ))
+      return
+    }
+    await spinosa.openWorkspace(workspacePath)
+  }
+
+  const pickRecentWorkspace = async (workspace: RecentWorkspace) => {
+    if (!providerConnected()) {
+      dialog.replace(() => <DialogProvider />)
+      return
+    }
+    const presence = inspectWorkspacePresence({
+      workspacePath: workspace.path,
+      workspaceID: workspace.workspaceID,
+    })
+    if (!isUsableWorkspaceStatus(presence.status)) {
+      dialog.replace(() => (
+        <DialogSpinosaMissingWorkspace
+          workspacePath={workspace.path}
+          workspaceName={workspace.name}
+          workspaceID={workspace.workspaceID}
+          onBack={() => dialog.clear()}
+          onRemoved={async () => {
+            dialog.clear()
+            await loadRecentWorkspaces()
+          }}
+          onRecovered={async (workspacePath) => {
+            dialog.clear()
+            await launchRecentWorkspace(workspacePath)
+          }}
+        />
+      ))
+      return
+    }
+    await launchRecentWorkspace(workspace.path)
+  }
 
   return (
     <HomeSessionDestinationProvider>
       <CenteredColumn>
-        <box flexGrow={1} alignItems="center" paddingLeft={2} paddingRight={2}>
+        <box flexGrow={1} height="100%" minHeight={0} flexDirection="column" alignItems="center" paddingLeft={2} paddingRight={2}>
           <box flexGrow={1} minHeight={0} />
-          <box height={4} minHeight={0} flexShrink={1} />
+          <Show when={!compactLayout()}>
+            <box height={4} minHeight={0} flexShrink={1} />
+          </Show>
+          <Show when={!compactLayout()}>
           <box flexShrink={0} alignItems="center" flexDirection="column">
             <Show when={versionLabel()}>
               <text fg={theme.textMuted}>{versionLabel()}</text>
               <box height={1} />
-              <Show when={upgradeAvailable()}>
+            </Show>
+            <Show when={maintenance()?.installInProgress}>
+              <text fg={theme.textMuted}>Maintenance checks will resume when this installation finishes.</text>
+              <box height={1} />
+            </Show>
+            <Show when={maintenanceCleanupAvailable()}>
+              <box flexDirection="row" alignItems="center" gap={1}>
+                <text fg={theme.warning}>
+                  Spinosa found {maintenance()?.staleInstallDirectories.length} leftover install file{maintenance()?.staleInstallDirectories.length === 1 ? "" : "s"}.
+                </text>
                 <box
                   paddingX={1}
-                  backgroundColor={upgradeHover() || keyboardFocus() === 0 ? theme.text : undefined}
-                  onMouseDown={doUpgrade}
-                  onMouseOver={() => !upgrading() && setUpgradeHover(true)}
-                  onMouseOut={() => setUpgradeHover(false)}
+                  backgroundColor={theme.backgroundElement}
+                  onMouseDown={() => void cleanStaleInstallerData()}
                 >
-                  <text fg={buttonText(theme, upgradeHover() || keyboardFocus() === 0, theme.primary)}>
-                    {upgrading() ? "Upgrading…" : "Upgrade available"}
-                  </text>
+                  <text fg={theme.primary}>{maintenanceAction() === "cleaning" ? "Cleaning…" : "Clean up"}</text>
                 </box>
-                <box height={1} />
-              </Show>
+              </box>
+              <box height={1} />
+            </Show>
+            <Show when={maintenanceRepairRequired()}>
+              <box flexDirection="row" alignItems="center" gap={1}>
+                <text fg={theme.warning}>Spinosa’s runtime is incomplete or damaged.</text>
+                <box
+                  paddingX={1}
+                  backgroundColor={theme.backgroundElement}
+                  onMouseDown={() => void repairDependencies()}
+                >
+                  <text fg={theme.primary}>{maintenanceAction() === "repairing" ? "Reinstalling…" : "Reinstall runtime"}</text>
+                </box>
+              </box>
+              <box height={1} />
+            </Show>
+            <Show when={maintenance.error}>
+              <text fg={theme.textMuted}>Couldn’t check Spinosa’s health. Try again later.</text>
+              <box height={1} />
             </Show>
             <pluginRuntime.Slot name="home_logo" mode="replace">
               <Show when={workspaceBannerText()} fallback={<Logo />}>
                 {(banner) => (
-                  <ascii_font
-                    text={banner()}
-                    font="block"
-                    color={theme.text}
-                    selectable={false}
-                  />
+                  <Show
+                    when={workspaceBannerFits()}
+                    fallback={
+                      <text
+                        width="100%"
+                        fg={theme.text}
+                        attributes={TextAttributes.BOLD}
+                        wrapMode="none"
+                        overflow="hidden"
+                      >
+                        {banner()}
+                      </text>
+                    }
+                  >
+                    <ascii_font
+                      text={banner()}
+                      font="block"
+                      color={theme.text}
+                      selectable={false}
+                    />
+                  </Show>
                 )}
               </Show>
             </pluginRuntime.Slot>
           </box>
           <box height={1} minHeight={0} flexShrink={1} />
+          </Show>
+
+          {/* recent workspaces (global home only) */}
+          <Show when={providerConnected() && !workspaceReady() && recentLoading()}>
+            <text fg={theme.textMuted}>Loading recent workspaces…</text>
+            <box height={1} />
+          </Show>
+          <Show when={providerConnected() && !workspaceReady() && !recentLoading() && recentWorkspaces().length > 0}>
+            <box width="100%" maxWidth={promptMaxWidth()} flexDirection="column" flexShrink={0}>
+              <text fg={theme.textMuted}>Recent workspaces</text>
+              <box height={1} />
+              <For each={recentWorkspaces().slice(0, compactLayout() ? 1 : RECENT_WORKSPACE_COUNT)}>
+                {(ws, i) => {
+                  const idx = i()
+                  const active = () => selectedRecent() === idx
+                  return (
+                    <box
+                      paddingLeft={2}
+                      paddingRight={2}
+                      paddingTop={1}
+                      paddingBottom={1}
+                      backgroundColor={buttonBackground(theme, active())}
+                      border={["left"]}
+                      borderColor={buttonBorder(theme, active(), theme.borderActive)}
+                      flexDirection="row"
+                      gap={1}
+                      onMouseOver={() => setSelectedRecent(idx)}
+                      onMouseDown={() => { setSelectedRecent(idx); void pickRecentWorkspace(ws) }}
+                    >
+                      <text fg={theme.success}>●</text>
+                      <text fg={buttonText(theme, active(), theme.text)}>
+                        <span style={{ bold: active() }}>{ws.name}</span>
+                      </text>
+                      <text fg={buttonText(theme, active(), theme.textMuted)}>{ws.fileCount} files</text>
+                      <text fg={recentStatusColor(ws.status, theme)}>{setupStatusLabel(ws.status)}</text>
+                    </box>
+                  )
+                }}
+              </For>
+            </box>
+            <box height={1} />
+          </Show>
+
           <box width="100%" maxWidth={promptMaxWidth()} zIndex={1000} paddingTop={1} flexShrink={0}>
             <SpinosaPromptChips />
-            <Show when={workspaceReady()}>
+            <Show when={providerConnected() && workspaceReady()}>
               <box>
                 <pluginRuntime.Slot name="home_prompt" mode="replace" ref={bind}>
                   <Prompt
@@ -289,6 +497,10 @@ export function Home() {
           </box>
           <pluginRuntime.Slot name="home_bottom" />
           <box flexGrow={1} minHeight={0} />
+          <box height={1} />
+          <box width="100%" maxWidth={promptMaxWidth()}>
+            <HomeFooter />
+          </box>
           <Toast />
         </box>
       </CenteredColumn>

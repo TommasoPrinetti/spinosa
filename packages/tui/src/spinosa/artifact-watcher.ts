@@ -1,65 +1,64 @@
-import { existsSync, readdirSync, statSync } from "node:fs"
+import { readFile, stat } from "node:fs/promises"
 import path from "node:path"
-import { onCleanup } from "solid-js"
+import { getOwner, onCleanup } from "solid-js"
+import { createHash } from "node:crypto"
 
-function snapshotAgentReports(workspacePath: string) {
-  const dir = path.join(workspacePath, "agent_reports")
-  if (!existsSync(dir)) return ""
-  const parts: string[] = []
-  for (const name of readdirSync(dir)) {
-    const full = path.join(dir, name)
-    const stat = statSync(full)
-    if (!stat.isFile()) continue
-    parts.push(`${name}:${stat.mtimeMs}:${stat.size}`)
-  }
-  return parts.sort().join("|")
-}
-
-export function createAgentReportsWatcher(
-  workspacePath: () => string | undefined,
-  onChange: () => void,
-  intervalMs = 2000,
+function createSerializedWatcher(
+  snapshot: () => Promise<string | undefined>,
+  onChange: () => void | Promise<void>,
+  intervalMs: number,
 ) {
-  let last = ""
-  const timer = setInterval(() => {
-    const pathValue = workspacePath()
-    if (!pathValue) return
-    const next = snapshotAgentReports(pathValue)
-    if (next !== last) {
+  let last: string | undefined
+  let running = false
+  const tick = async () => {
+    if (running) return
+    running = true
+    try {
+      const next = await snapshot()
+      if (next === undefined || next === last) return
+      await onChange()
       last = next
-      onChange()
+    } catch {
+      // Keep the previous snapshot so the next tick retries the refresh.
+    } finally {
+      running = false
     }
-  }, intervalMs)
-
-  onCleanup(() => clearInterval(timer))
+  }
+  const timer = setInterval(() => void tick(), intervalMs)
+  const dispose = () => clearInterval(timer)
+  if (getOwner()) onCleanup(dispose)
+  return dispose
 }
 
 export function createWorkspaceFileWatcher(
   workspacePath: () => string | undefined,
   relativePaths: string[],
-  onChange: () => void,
+  onChange: () => void | Promise<void>,
   intervalMs = 3000,
 ) {
-  let last = ""
-  const timer = setInterval(() => {
+  return createSerializedWatcher(async () => {
     const root = workspacePath()
-    if (!root) return
-    const parts: string[] = []
-    for (const relative of relativePaths) {
-      const full = path.join(root, relative)
-      if (!existsSync(full)) {
-        parts.push(`${relative}:missing`)
-        continue
+    if (!root) return ""
+    try {
+      const parts: string[] = []
+      for (const relative of relativePaths) {
+        const full = path.join(root, relative)
+        let fileStat: Awaited<ReturnType<typeof stat>>
+        try {
+          fileStat = await stat(full)
+        } catch (error) {
+          if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+            parts.push(`${relative}:missing`)
+            continue
+          }
+          throw error
+        }
+        const digest = fileStat.isFile() ? createHash("sha256").update(await readFile(full)).digest("hex") : "directory"
+        parts.push(`${relative}:${fileStat.mtimeMs}:${fileStat.size}:${digest}`)
       }
-      const stat = statSync(full)
-      parts.push(`${relative}:${stat.mtimeMs}:${stat.size}`)
+      return parts.join("|")
+    } catch {
+      return undefined
     }
-    const next = parts.join("|")
-    if (next !== last) {
-      last = next
-      onChange()
-    }
-  }, intervalMs)
-
-  onCleanup(() => clearInterval(timer))
+  }, onChange, intervalMs)
 }

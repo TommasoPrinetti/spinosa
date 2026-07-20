@@ -1,0 +1,38 @@
+{
+  "name": "slash-new",
+  "description": "Create a new chat from within a session",
+  "adapter": "../adapters/spinosa.ts",
+  "terminal": { "width": 100, "height": 50 },
+  "fixture": {
+    "workspace": { "name": "toggles-test-workspace", "setupStatus": "workspace_started" },
+    "sessions": [
+      { "id": "ses_toggles", "title": "Toggle test session", "directory": "$WORKSPACE", "updated": 500 }
+    ],
+    "responses": [
+      { "path": "/global/config", "body": { "autoupdate": "notify" } },
+      { "path": "/file", "body": [] },
+      { "path": "/session/ses_toggles/children", "body": [] },
+      { "path": "/session/ses_toggles/diff", "body": [] },
+      { "path": "/session/ses_toggles/todo", "body": [] },
+      { "path": "/session/ses_toggles/permission", "body": [] },
+      { "path": "/session/ses_toggles/question", "body": [] },
+      { "path": "/session/ses_toggles/message", "body": [] },
+      { "path": "/session/ses_toggles/part", "body": [] }
+    ]
+  },
+  "steps": [
+    { "action": "waitForText", "text": "Describe the task", "timeoutMs": 8000 },
+    { "action": "capture", "name": "home" },
+
+    { "action": "type", "text": "/session" },
+    { "action": "key", "key": "RETURN" },
+    { "action": "waitForText", "text": "Toggle test session", "timeoutMs": 5000 },
+    { "action": "clickText", "text": "Toggle test session" },
+    { "action": "waitForText", "text": "Export", "timeoutMs": 5000 },
+
+    { "action": "type", "text": "/new" },
+    { "action": "key", "key": "RETURN" },
+    { "action": "waitForText", "text": "Describe the task", "timeoutMs": 5000 },
+    { "action": "assert", "visible": ["Describe the task"] }
+  ]
+}

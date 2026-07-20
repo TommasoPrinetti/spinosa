@@ -1,0 +1,35 @@
+{
+  "name": "dialog-mcps",
+  "description": "Open dialog via /mcps, verify MCP servers dialog renders, then close with escape",
+  "adapter": "../adapters/spinosa.ts",
+  "terminal": { "width": 100, "height": 50 },
+  "fixture": {
+    "workspace": { "name": "mcps-dialog-test", "setupStatus": "workspace_started" },
+    "sessions": [
+      { "id": "ses_mcps", "title": "MCP dialog session", "directory": "$WORKSPACE", "updated": 100 }
+    ],
+    "responses": [
+      { "path": "/global/config", "body": { "autoupdate": "notify" } },
+      { "path": "/file", "body": [] },
+      { "path": "/session/ses_mcps/children", "body": [] },
+      { "path": "/session/ses_mcps/diff", "body": [] },
+      { "path": "/session/ses_mcps/todo", "body": [] },
+      { "path": "/session/ses_mcps/permission", "body": [] },
+      { "path": "/session/ses_mcps/question", "body": [] },
+      { "path": "/session/ses_mcps/message", "body": [] },
+      { "path": "/session/ses_mcps/part", "body": [] }
+    ]
+  },
+  "steps": [
+    { "action": "waitForText", "text": "Describe the task", "timeoutMs": 8000 },
+    { "action": "capture", "name": "home" },
+
+    { "action": "type", "text": "/mcps" },
+    { "action": "key", "key": "RETURN" },
+    { "action": "waitForText", "text": "MCPs", "timeoutMs": 5000 },
+    { "action": "assert", "visible": ["MCPs"] },
+    { "action": "capture", "name": "mcps-dialog" },
+
+    { "action": "clickText", "text": "esc" }
+  ]
+}

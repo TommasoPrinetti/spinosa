@@ -39,7 +39,6 @@ import { internalTuiPlugins, type InternalTuiPlugin } from "./internal"
 import type { HostPluginApi, HostSlots } from "@opencode-ai/tui/plugin/slots"
 import { ConfigPlugin } from "@/config/plugin"
 import { ConfigPluginV1 } from "@opencode-ai/core/v1/config/plugin"
-import { createCommandShim } from "@opencode-ai/tui/plugin/command-shim"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Effect } from "effect"
 import { createPluginRuntime, type PluginRuntime, type TuiPluginHost } from "@opencode-ai/tui/plugin/runtime"
@@ -612,8 +611,6 @@ function pluginApi(runtime: RuntimeState, plugin: PluginEntry, scope: PluginScop
   return {
     app: api.app,
     attention: createScopedAttention(api.attention, scope, load.plugin_root),
-    // Keep deprecated `api.command` working for v1 plugins; remove in v2.
-    command: createCommandShim(keymap, api.ui.dialog, api.tuiConfig.keybinds),
     keys: api.keys,
     keymap,
     mode: createScopedMode(api.mode, scope),

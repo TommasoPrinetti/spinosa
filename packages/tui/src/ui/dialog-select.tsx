@@ -271,10 +271,12 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     visibilityGeneration++
   })
 
+  let filterTimer: ReturnType<typeof setTimeout> | undefined
   createEffect(
     on([() => store.filter, () => props.current], ([filter, current]) => {
+      clearTimeout(filterTimer)
       if (filter.length > 0) resetSelection = true
-      setTimeout(() => {
+      filterTimer = setTimeout(() => {
         if (filter.length > 0) {
           moveTo(0, true, false)
         } else if (current) {
@@ -286,6 +288,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
       }, 0)
     }),
   )
+  onCleanup(() => clearTimeout(filterTimer))
 
   function move(direction: number) {
     if (props.locked) return
@@ -555,7 +558,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   }
 
   return (
-    <box gap={1} paddingBottom={1} flexGrow={1}>
+    <box gap={1} paddingBottom={1} flexGrow={1} minHeight={0} flexDirection="column">
       <box paddingLeft={4} paddingRight={4}>
         <box flexDirection="row" justifyContent="space-between">
           {props.titleView ?? (
@@ -595,7 +598,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           </box>
         </Show>
       </box>
-      <box flexGrow={1} flexShrink={1}>
+      <box flexGrow={1} flexShrink={1} minHeight={0}>
         <Show
           when={grouped().length > 0}
           fallback={
@@ -665,7 +668,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                         >
                           <box
                             flexDirection="row"
-                            paddingLeft={current() || option.gutter ? 1 : 3}
+                            paddingLeft={option.gutter ? 1 : 3}
                             paddingRight={3}
                             gap={1}
                             backgroundColor={
@@ -742,9 +745,9 @@ function Option(props: {
   onMouseOver?: () => void
 }) {
   const { theme } = useTheme()
-  const fg = selectedForeground(theme)
+  const fg = () => selectedForeground(theme)
   const text = createMemo(() => {
-    if (props.active && !props.muted) return fg
+    if (props.active && !props.muted) return fg()
     if (props.muted && (props.active || props.current)) return theme.textMuted
     if (props.current) return theme.primary
     return theme.text
@@ -753,7 +756,7 @@ function Option(props: {
   return (
     <>
       <Show when={props.current && !props.gutter}>
-        <text flexShrink={0} fg={text()} marginRight={0}>
+        <text flexShrink={0} fg={text()} marginRight={1}>
           ●
         </text>
       </Show>
@@ -777,12 +780,12 @@ function Option(props: {
               ? Locale.truncateLeft(props.title, props.titleWidth ?? 61)
               : Locale.truncate(props.title, props.titleWidth ?? 61))}
         <Show when={props.description}>
-          <span style={{ fg: props.active && !props.muted ? fg : theme.textMuted }}> {props.description}</span>
+          <span style={{ fg: props.active && !props.muted ? fg() : theme.textMuted }}> {props.description}</span>
         </Show>
       </text>
       <Show when={props.footer}>
         <box flexShrink={0}>
-          <text fg={props.active && !props.muted ? fg : theme.textMuted}>{props.footer}</text>
+          <text fg={props.active && !props.muted ? fg() : theme.textMuted}>{props.footer}</text>
         </box>
       </Show>
     </>

@@ -20,18 +20,26 @@ export function Dialog(
   const renderer = useRenderer()
 
   let dismiss = false
+  let backdropPressed = false
   const width = () => {
     if (props.size === "xlarge") return 116
     if (props.size === "large") return 88
     return 60
   }
+  const maxHeight = () =>
+    dimensions().height < 30
+      ? Math.max(1, dimensions().height - 2)
+      : Math.floor(dimensions().height * 0.6)
 
   return (
     <box
       onMouseDown={() => {
+        backdropPressed = true
         dismiss = !!renderer.getSelection()
       }}
       onMouseUp={() => {
+        if (!backdropPressed) return
+        backdropPressed = false
         if (dismiss) {
           dismiss = false
           return
@@ -49,13 +57,21 @@ export function Dialog(
       backgroundColor={RGBA.fromInts(0, 0, 0, 150)}
     >
       <box
+        onMouseDown={(e: { stopPropagation(): void }) => {
+          backdropPressed = false
+          e.stopPropagation()
+        }}
         onMouseUp={(e: { stopPropagation(): void }) => {
+          backdropPressed = false
           dismiss = false
           e.stopPropagation()
         }}
         width={width()}
         maxWidth={dimensions().width - 2}
-        maxHeight={Math.floor(dimensions().height * 0.6)}
+        maxHeight={maxHeight()}
+        flexShrink={1}
+        flexDirection="column"
+        overflow="hidden"
         backgroundColor={theme.backgroundPanel}
         paddingTop={1}
       >
@@ -70,6 +86,7 @@ function init() {
     stack: [] as {
       element: JSX.Element
       onClose?: () => void
+      onEscape?: () => void
     }[],
     size: "medium" as "medium" | "large" | "xlarge",
   })
@@ -114,6 +131,11 @@ function init() {
             renderer.clearSelection()
           }
           const current = store.stack.at(-1)
+          if (current?.onEscape) {
+            current.onEscape()
+            refocus()
+            return
+          }
           current?.onClose?.()
           setStore("stack", store.stack.slice(0, -1))
           refocus()
@@ -141,7 +163,7 @@ function init() {
       })
       refocus()
     },
-    replace(input: any, onClose?: () => void) {
+    replace(input: any, onClose?: () => void, onEscape?: () => void) {
       if (store.stack.length === 0) {
         focus = renderer.currentFocusedRenderable
         focus?.blur()
@@ -154,6 +176,7 @@ function init() {
         {
           element: input,
           onClose,
+          onEscape,
         },
       ])
     },
@@ -193,25 +216,29 @@ export function DialogProvider(props: ParentProps) {
   return (
     <ctx.Provider value={value}>
       {props.children}
-      <box
-        position="absolute"
-        zIndex={3000}
-        onMouseDown={(evt: { button: number; preventDefault(): void; stopPropagation(): void }) => {
-          if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
-          if (evt.button !== MouseButton.RIGHT) return
+      <Show when={value.stack.length}>
+        <box
+          position="absolute"
+          left={0}
+          top={0}
+          width="100%"
+          height="100%"
+          zIndex={3000}
+          onMouseDown={(evt: { button: number; preventDefault(): void; stopPropagation(): void }) => {
+            if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
+            if (evt.button !== MouseButton.RIGHT) return
 
-          if (!copySelection()) return
-          evt.preventDefault()
-          evt.stopPropagation()
-        }}
-        onMouseUp={!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT ? copySelection : undefined}
-      >
-        <Show when={value.stack.length}>
+            if (!copySelection()) return
+            evt.preventDefault()
+            evt.stopPropagation()
+          }}
+          onMouseUp={!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT ? copySelection : undefined}
+        >
           <Dialog onClose={() => value.clear()} size={value.size}>
             {value.stack.at(-1)!.element}
           </Dialog>
-        </Show>
-      </box>
+        </box>
+      </Show>
     </ctx.Provider>
   )
 }

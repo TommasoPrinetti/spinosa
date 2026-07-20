@@ -21,7 +21,8 @@ const skipInstall = process.argv.includes("--skip-install")
 const sourcemapsFlag = process.argv.includes("--sourcemaps")
 const plugin = createSolidTransformPlugin()
 
-const TUI_VERSION = "0.8.0-beta.12"
+const rootPkg = await Bun.file(path.join(repoRoot, "package.json")).json()
+const TUI_VERSION: string = rootPkg.version
 
 const allTargets: {
   os: string
@@ -59,6 +60,7 @@ if (!skipInstall) {
 }
 
 // ── Build each platform target ──────────────────────────────────────────────
+const buildErrors: string[] = []
 for (const item of targets) {
   const name = [
     "@spinosa/tui",
@@ -90,41 +92,54 @@ for (const item of targets) {
   console.log(`  parserWorker: ${parserWorker}`)
   console.log(`  workerPath: ${workerPath}`)
 
+  let result
+  try {
+    result = await Bun.build({
+      conditions: ["bun", "node"],
+      tsconfig: path.join(opencodeDir, "tsconfig.json"),
+      plugins: [plugin],
+      external: ["node-gyp", "youtube-transcript", "unzipper"],
+      format: "esm",
+      minify: true,
+      sourcemap: sourcemapsFlag ? "linked" : "none",
+      splitting: true,
+      compile: {
+        autoloadBunfig: false,
+        autoloadDotenv: false,
+        autoloadTsconfig: true,
+        autoloadPackageJson: true,
+        target: name.replace("@spinosa/tui", "bun") as any,
+        outfile: `dist/${name}/bin/${binaryName}`,
+        execArgv: [`--user-agent=spinosa-tui/${TUI_VERSION}`, "--use-system-ca", "--"],
+        windows: {},
+      },
+      entrypoints: [
+        path.join(opencodeDir, "src/index.ts"),
+        parserWorker,
+        path.join(opencodeDir, "src/cli/tui/worker.ts"),
+      ],
+      define: {
+        FFF_LIBC: JSON.stringify(item.abi === "musl" ? "musl" : "gnu"),
+        OPENCODE_VERSION: `'${TUI_VERSION}'`,
+        OPENCODE_CHANNEL: "'beta'",
+        OTUI_TREE_SITTER_WORKER_PATH: bunfsRoot + parserWorkerRelativePath,
+        OPENCODE_WORKER_PATH: workerPath,
+        OPENCODE_LIBC: item.os === "linux" ? `'${item.abi ?? "glibc"}'` : "",
+        ...(item.os === "linux" ? { "process.env.OPENTUI_LIBC": JSON.stringify(item.abi ?? "glibc") } : {}),
+      },
+    })
+  } catch (err) {
+    buildErrors.push(`${name}: ${err instanceof Error ? err.message : String(err)}`)
+    console.error(`  Build failed for ${name}, continuing with remaining targets.`)
+    continue
+  }
 
-  await Bun.build({
-    conditions: ["bun", "node"],
-    tsconfig: path.join(opencodeDir, "tsconfig.json"),
-    plugins: [plugin],
-    external: ["node-gyp", "youtube-transcript", "unzipper"],
-    format: "esm",
-    minify: true,
-    sourcemap: sourcemapsFlag ? "linked" : "none",
-    splitting: true,
-    compile: {
-      autoloadBunfig: false,
-      autoloadDotenv: false,
-      autoloadTsconfig: true,
-      autoloadPackageJson: true,
-      target: name.replace("@spinosa/tui", "bun") as any,
-      outfile: `dist/${name}/bin/${binaryName}`,
-      execArgv: [`--user-agent=spinosa-tui/${TUI_VERSION}`, "--use-system-ca", "--"],
-      windows: {},
-    },
-    entrypoints: [
-      path.join(opencodeDir, "src/index.ts"),
-      parserWorker,
-      path.join(opencodeDir, "src/cli/tui/worker.ts"),
-    ],
-    define: {
-      FFF_LIBC: JSON.stringify(item.abi === "musl" ? "musl" : "gnu"),
-      OPENCODE_VERSION: `'${TUI_VERSION}'`,
-      OPENCODE_CHANNEL: "'beta'",
-      OTUI_TREE_SITTER_WORKER_PATH: bunfsRoot + parserWorkerRelativePath,
-      OPENCODE_WORKER_PATH: workerPath,
-      OPENCODE_LIBC: item.os === "linux" ? `'${item.abi ?? "glibc"}'` : "",
-      ...(item.os === "linux" ? { "process.env.OPENTUI_LIBC": JSON.stringify(item.abi ?? "glibc") } : {}),
-    },
-  })
+  if (!result.success) {
+    const logs = result.logs?.map((l) => l.message).join("; ") ?? "unknown error"
+    buildErrors.push(`${name}: ${logs}`)
+    console.error(`  Build failed for ${name}: ${logs}`)
+    continue
+  }
 
   // Smoke test: run --version on current platform
   if (item.os === process.platform && item.arch === process.arch && !item.abi) {
@@ -134,7 +149,7 @@ for (const item of targets) {
       console.log(`  Version: ${versionOutput.trim()}`)
     } catch (e) {
       console.error(`  Smoke test failed for ${name}:`, e)
-      process.exit(1)
+      buildErrors.push(`${name}: smoke test failed`)
     }
   }
 
@@ -153,6 +168,12 @@ for (const item of targets) {
       2,
     ),
   )
+}
+
+if (buildErrors.length > 0) {
+  console.error(`\n${buildErrors.length} build target(s) failed:`)
+  for (const err of buildErrors) console.error(`  - ${err}`)
+  process.exit(1)
 }
 
 console.log("\nBuild complete. Platform binaries in dist/")

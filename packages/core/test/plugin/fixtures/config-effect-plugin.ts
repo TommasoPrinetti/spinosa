@@ -7,7 +7,7 @@ export default define({
     ctx.agent
       .transform((agents) => {
         agents.update("effect-configured", (agent) => {
-          agent.description = ctx.options.description
+          agent.description = ctx.options.description as string | undefined
           agent.mode = "subagent"
         })
       })

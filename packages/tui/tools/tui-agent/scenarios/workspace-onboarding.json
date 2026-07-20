@@ -1,0 +1,25 @@
+{
+  
+  "name": "workspace-onboarding",
+  "description": "Exercise workspace onboarding wizard for a not_started workspace: source folder step, back to picker, workspace selection resumes wizard.",
+  "adapter": "../adapters/spinosa.ts",
+  "terminal": { "width": 100, "height": 50 },
+  "fixture": {
+    "workspace": { "name": "onboarding-workspace", "setupStatus": "not_started" },
+    "sessions": [],
+    "responses": [
+      { "path": "/global/config", "body": { "autoupdate": "notify" } },
+      { "path": "/file", "body": [] }
+    ]
+  },
+  "steps": [
+    { "action": "waitForText", "text": "Resume Spinosa workspace", "timeoutMs": 8000 },
+    { "action": "assert", "visible": ["Resume Spinosa workspace", "Source folders", "Back"] },
+    { "action": "capture", "name": "onboarding-source-folders" },
+
+    { "action": "clickText", "text": "Back" },
+    { "action": "waitForText", "text": "Choose a workspace", "timeoutMs": 5000 },
+    { "action": "assert", "visible": ["Choose a workspace", "onboarding-workspace"] },
+    { "action": "capture", "name": "picker-after-onboarding" }
+  ]
+}

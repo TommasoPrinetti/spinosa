@@ -1,0 +1,44 @@
+{
+  "name": "slash-multi-step",
+  "description": "Chain multiple slash commands: /session to select session, then /rename to type a new name and confirm",
+  "adapter": "../adapters/spinosa.ts",
+  "terminal": { "width": 100, "height": 50 },
+  "fixture": {
+    "workspace": { "name": "multi-step-test", "setupStatus": "workspace_started" },
+    "sessions": [
+      { "id": "ses_multi", "title": "Original session name", "directory": "$WORKSPACE", "updated": 500 }
+    ],
+    "responses": [
+      { "path": "/global/config", "body": { "autoupdate": "notify" } },
+      { "path": "/file", "body": [] },
+      { "path": "/session/ses_multi/children", "body": [] },
+      { "path": "/session/ses_multi/diff", "body": [] },
+      { "path": "/session/ses_multi/todo", "body": [] },
+      { "path": "/session/ses_multi/permission", "body": [] },
+      { "path": "/session/ses_multi/question", "body": [] },
+      { "path": "/session/ses_multi/message", "body": [] },
+      { "path": "/session/ses_multi/part", "body": [] }
+    ]
+  },
+  "steps": [
+    { "action": "waitForText", "text": "Describe the task", "timeoutMs": 8000 },
+    { "action": "capture", "name": "home" },
+
+    { "action": "type", "text": "/session" },
+    { "action": "key", "key": "RETURN" },
+    { "action": "waitForText", "text": "Original session name", "timeoutMs": 5000 },
+    { "action": "clickText", "text": "Original session name" },
+    { "action": "waitForText", "text": "Export", "timeoutMs": 5000 },
+    { "action": "capture", "name": "in-session" },
+
+    { "action": "type", "text": "/rename" },
+    { "action": "key", "key": "RETURN" },
+    { "action": "waitForText", "text": "Rename Session", "timeoutMs": 5000 },
+    { "action": "assert", "visible": ["Rename Session"] },
+
+    { "action": "type", "text": "Renamed chat" },
+    { "action": "key", "key": "RETURN" },
+    { "action": "waitForText", "text": "Export", "timeoutMs": 5000 },
+    { "action": "capture", "name": "after-rename" }
+  ]
+}

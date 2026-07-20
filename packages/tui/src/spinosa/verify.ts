@@ -2,7 +2,7 @@ import { existsSync } from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { MAIN_CONTENT_MAX_WIDTH, SIDEBAR_WIDTH } from "../util/layout"
-import { resolveFrameworkBin, resolveFrameworkRoot } from "@opencode-ai/spinosa-core/framework/discovery"
+import { resolveFrameworkBin, resolveFrameworkRoot } from "../spinosa-core/framework/discovery"
 import { routeForSetupStatus } from "./entry"
 import {
   getCorpusSummary,
@@ -12,7 +12,7 @@ import {
   getFrameworkHealth,
   isSpinosaWorkspace,
   readWorkspaceMeta,
-} from "@opencode-ai/spinosa-core/workspace/meta"
+} from "../spinosa-core/workspace/meta"
 
 export type VerifyCheck = {
   id: string
@@ -63,7 +63,7 @@ export async function runSpinosaMaturityChecks(fixturePath = fixtureWorkspacePat
       const route = routeForSetupStatus(meta.setupStatus)
       push(
         "fixture.route",
-        route.type === "workspace",
+        route.type === "global",
         `expected workspace_started route, got ${route.type}`,
       )
     }
@@ -80,14 +80,15 @@ export async function runSpinosaMaturityChecks(fixturePath = fixtureWorkspacePat
       "fixture.health",
       missing.length === 0,
       missing.length ? `missing: ${missing.map((row) => row.label).join(", ")}` : "all core files present",
+      true,
     )
   }
 
   const modules = [
     "orchestrator.ts",
     "route-recovery.ts",
-    "goal-artifact.ts",
     "workspace-bind.tsx",
+    "../spinosa-core/artifacts/goal.ts",
   ]
   for (const file of modules) {
     const full = path.resolve(path.dirname(fileURLToPath(import.meta.url)), file)

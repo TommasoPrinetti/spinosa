@@ -19,7 +19,7 @@ import { DialogSessionDeleteFailed } from "./dialog-session-delete-failed"
 import { useCommandShortcut } from "../keymap"
 import { useEvent } from "../context/event"
 
-type SessionListFilter = { scope?: "project"; path?: string }
+type SessionListFilter = { scope?: "project"; directory?: string; path?: string; workspace?: string }
 
 export function createDialogSessionListQuery(input: { search?: string; filter: SessionListFilter }) {
   const search = input.search?.trim()
@@ -166,7 +166,7 @@ export function DialogSessionList() {
           await refetchBrowse()
           if (search()) await refetch()
           if (info?.workspaceID === session.workspaceID) {
-            route.navigate({ type: "home" })
+            route.navigate({ type: "global" })
           }
           return true
         }}
@@ -284,7 +284,7 @@ export function DialogSessionList() {
       }}
       onSelect={(option) => {
         route.navigate({
-          type: "session",
+          type: "workspace",
           sessionID: option.value,
         })
         dialog.clear()

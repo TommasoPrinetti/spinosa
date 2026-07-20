@@ -23,13 +23,15 @@ function wordmark(pad = "") {
   })
 }
 
-export function sessionEpilogue(input: { title: string; sessionID?: string }) {
+export function sessionEpilogue(input: { title: string; sessionID?: string; spinosa?: boolean; projectDir?: string }) {
   const weak = (text: string) => `${dim}${text.padEnd(10, " ")}${reset}`
+  const brand = input.spinosa ? "spinosa" : "opencode"
+  const projectArg = input.projectDir ? ` --project ${input.projectDir}` : ""
   return [
     ...wordmark("  "),
     "",
     `  ${weak("Session")}${bold}${input.title}${reset}`,
-    `  ${weak("Continue")}${bold}opencode -s ${input.sessionID ?? ""}${reset}`,
+    `  ${weak("Continue")}${bold}${brand} -s ${input.sessionID ?? ""}${projectArg}${reset}`,
     "",
   ].join("\n")
 }

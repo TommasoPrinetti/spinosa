@@ -6,6 +6,171 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 **Release policy:** versions are published only with explicit maintainer approval.
 
+## [0.9.0-beta.27] — 2026-07-20
+
+### Fixed
+
+- `spinosa upgrade` now prompts `[Y/n]` before proceeding. Use `--yes` to skip confirmation.
+
+## [0.9.0-beta.26] — 2026-07-20
+
+### Added
+
+- Upgrade prompt now offers "Yes" to install the update immediately, then exits TUI with a message to re-run spinosa.
+
+## [0.9.0-beta.25] — 2026-07-20
+
+### Added
+
+- Spinosa now checks for updates on every start. "Checking for updates…" appears in the boot loading screen. If a newer version is available, a dialog prompts the user to run `spinosa upgrade`.
+
+## [0.9.0-beta.24] — 2026-07-18
+
+### Added
+
+- `@spinosa/tui-agent` — deterministic OpenTUI driver for agent-operated TUI debugging. Ships as a npm-packable package with a CLI (`tui-agent run`, `interact`, `list`, `show`, `diff`, `doctor`), JSON scenario DSL, JSONL agent control loop, artifact output (text, SVG, spans, tree, state), and a Spinosa adapter example. See `packages/tui/tools/tui-agent/README.md`.
+- `/session` command alias for `/sessions` in the TUI command palette.
+- HomeFooter keyboard labels (Shift+S/A/K/W/M) are now wired to actual key bindings via `useBindings`.
+- Workspace picker: "Delete stale" button removes all non‑existent workspace index entries in one click, with confirmation dialog.
+
+### Changed
+
+- `/session` command now scopes to the active Spinosa workspace path instead of the TUI host directory. Sessions created in workspace B from a TUI launched in workspace A are visible when switching to workspace B.
+- HTTP API `session.list` now accepts a `workspaceID` filter parameter.
+
+### Fixed
+
+- HomeFooter `onMouseDown` changed to `onMouseUp` so click-outside-to-dismiss on dialogs does not also fire footer actions.
+- Dialog backdrop now correctly distinguishes backdrop clicks from inner-dialog clicks via a `backdropPressed` flag and `stopPropagation`.
+- Dialog max height is now responsive to terminal height: smaller than 30 rows gets `height - 2`, otherwise 60% of terminal height.
+- Dialog, dialog-select, and dialog-export-options use `flexDirection="column"` and `minHeight={0}` so content shrinks inside small modals.
+- Session list scrolls inside small modals (`minHeight={0}` boundary before prompt/footer).
+- Export options layout is columnar on narrow terminals; labels and options no longer render across one row.
+- Workspace picker columns (Name, Parent, Status, Version, Accessed) are now responsive — hide Version below 72 columns, hide Accessed below 94 columns.
+- Workspace picker adds a `›` selection indicator, uses `compactColumns()` for narrower terminal widths.
+- Home reduces decorative chrome below 24 terminal rows (hides spacer, version label, ASCII banner, limits recent cards to 1).
+- ASCII banner falls back to bold plain text when the terminal is too narrow for the `block` font rendering.
+- Visualizer hides the stacked inspector when terminal height is below 28 rows.
+- Visualizer hides keyboard shortcut hint bar below 28 rows.
+- Prompt workspace status bar uses `overflow="hidden"` and shows a separator pipe below 80 columns.
+- Session transcript scroll container has `minHeight={0}` to prevent overflow in constrained layouts.
+- DialogProvider wraps dialog overlay with a positioned `box` instead of layering the overlay over the entire screen, preventing obscure mouse-targeting issues.
+- `bun run dev` from outside a Spinosa workspace no longer auto‑opens the last saved workspace. Shows global home instead.
+- Cleaned 108 stale e2e‑test workspace entries from the global registry.
+
+## [0.9.0-beta.22] — 2026-07-17
+
+### Fixed
+
+- TUI now lands on the global homepage (workspace picker) instead of auto-opening the last-used workspace
+- Resolved 14 pre-existing TypeScript errors: missing `inspectWorkspacePresence` import, `createResource` type inference in `dialog-move-session`, and read-only `Breakpoints` mutation in `anthropic-messages`
+- Framework root resolution now prefers the installed release over the dev repo (`spinosa-main`) so workspace creation doesn't stamp with the wrong version
+- Removed stale serena MCP plugin config
+
+## [0.9.0-beta.21] — 2026-07-17
+
+### Fixed
+
+- macOS 26.5 security scanning (XProtect/Gatekeeper) would SIGKILL the bun process on first `spinosa` invocation after install because native `.node`/`.dylib` addons carry a kernel-protected `com.apple.provenance` xattr. The installer now runs a warm-up `bun run ... version` (with retries) after dependency install to let the scanner complete before the verify step, and the verify step itself retries up to 3 times with a 2-second pause. Spurious `Killed: 9` should no longer appear.
+
+- The `spinosa: true` marker is now written to `metadata/config.yaml`, fixing the uninstall command's "marker missing" error.
+
+- Cleaned up duplicate Spinosa PATH entries in `.zshrc` and removed a stale `/tmp/spinosa-test-*` reference.
+
+## [0.9.0-beta.20] — 2026-07-17
+
+### Fixed
+
+- Installer no longer auto-launches the Spinosa dashboard. Auto-launching an interactive TUI from a `curl | bash` pipe is unreliable (no controlling TTY, orphaned background jobs killed with SIGKILL), which caused the installer to report a spurious `Killed: 9` and left `spinosa` dead on subsequent runs. The installer now only installs and prints `→ Run Spinosa with: spinosa`; the user launches the dashboard themselves in a fresh terminal. The runnability probe now uses the non-TUI `spinosa version` instead of `help`.
+
+## [0.9.0-beta.19] — 2026-07-17
+
+### Fixed
+
+- Installer now terminates after a successful install instead of hanging: the Spinosa dashboard is launched detached in the background (`nohup ... &`), so the installer process exits cleanly while the dashboard keeps running.
+
+### Changed
+
+- Installer output is now grouped into labelled sections (System check, Download & extract, Dependencies, Install & configure, Verify) and every user-visible line carries a consistent status glyph (`→` step, `✦` success, `⚠` warning, `↳` note, `✗` error, `?` prompt), making progress easier to follow at a glance.
+
+## [0.9.0-beta.18] — 2026-07-17
+
+### Fixed
+
+- Installer no longer fails with "Dependency timeout runner not found" during `bun install`. The dependency watchdog (`run-with-timeout.ts`) was previously excluded from the GitHub source tarball by a `.gitattributes` `export-ignore` rule on `script/`. It now ships under `workspace-template/.bin/` so fresh installs and upgrades can run `bun i` correctly.
+
+## [0.9.0-beta.17] — 2026-07-17
+
+### Fixed
+
+- Installer now shows progress spinners and status messages for every long-running step (download, extraction, bundled Bun fetch/extract, staging, promotion) so the user is never left staring at a silent terminal.
+- Installer no longer appends a duplicate PATH block to shell config files on re-run; it detects the existing Spinosa marker correctly.
+- Archive safety check no longer mis-computes symlink traversal depth, so legitimate nested symlinks are accepted while escaping symlinks are still rejected.
+- Repair of a broken global `~/.spinosa` home is guarded so a missing/empty `SPINOSA_HOME` can never resolve a destructive `rm -rf` to `/bin` or `/lib`.
+- Dashboard launch failure is reported with a hint to run `spinosa` manually instead of silently exiting.
+
+### Changed
+
+- Version comparison during upgrade detection uses an explicit exit-status capture, avoiding a stale comparison result on equal versions.
+
+## [0.9.0-beta.16] — 2026-07-17
+
+### Added
+
+- Workspaces now have persistent unique IDs and richer global registry metadata for presence, setup state, recovery, and moved-folder detection.
+- Startup now performs visible cleanup, identity, and workspace-presence checks before opening the TUI.
+- Missing workspaces can be relocated manually, found by scanning for their ID, or removed from the registry directly from the picker.
+- Interrupted workspace imports can resume from their saved source and workspace metadata.
+
+### Changed
+
+- Recent workspaces exclude missing entries, label incomplete imports, and route incomplete workspaces back into onboarding at the appropriate step.
+- Back navigation during copy, OCR, MarkItDown, and other active import work now confirms cancellation and stops the process before navigating.
+- Installer maintenance repairs damaged runtime dependencies while preserving central Spinosa metadata.
+
+### Fixed
+
+- WASM-only shell parser dependencies no longer invoke native `node-gyp`/Python builds during installation; dependency attempts now stream output and time out cleanly before repair.
+- Linux terminals no longer retain stale bold styling when reactive text attributes change.
+- TypeScript CLI commands such as uninstall preserve interactive terminal input.
+- Global-home workspace actions render after leaving an incomplete import.
+- Removing a missing workspace now refreshes the open picker before returning to its workspace list.
+
+## [0.9.0-beta.13] — 2026-07-14
+
+### Added
+
+- The first-run global home now requires provider selection before creating or opening a workspace.
+- The visualizer now supports session and workspace selection, multiple visualization modes, clickable tool details, and copyable tool commands.
+
+### Changed
+
+- Visualizer controls, hover states, scrolling, spacing, tool colors, and canvas top alignment now follow the TUI layout conventions.
+
+### Fixed
+
+- TUI release tests now track current home navigation, routing, versioning, and update-lock behavior without leaking module mocks across test files.
+
+## [0.9.0-beta.9] — 2026-07-12
+
+### Changed
+
+- Upgrade checks now run in the CLI before the TUI starts. Successful upgrades optionally update every registered workspace, then request a fresh `spinosa` launch so the new runtime is loaded.
+- Removed upgrade networking and installer ownership from the TUI home screen.
+
+### Fixed
+
+- Global output flags now work before commands, for example `spinosa --json status`.
+- `spinosa status [workspace]` now honors positional workspace paths and rejects explicitly invalid workspaces.
+- Human CLI summaries now use the configured output channel instead of leaking directly to process stdout.
+
+## [0.9.0-beta.8] — 2026-07-12
+
+### Fixed
+
+- `spinosa upgrade` now verifies the newly installed target release instead of the still-running previous release, preventing successful upgrades from being reported as failures.
+- Maintenance checks now import the Node `Dirent` type from its correct module, restoring clean Spinosa typechecks.
+
 ## [0.8.0-beta.16] — 2026-07-08
 
 ### Fixed

@@ -15,7 +15,6 @@ import { DialogSelect, type DialogSelectOption as SelectOption } from "../ui/dia
 import { Prompt } from "../component/prompt"
 import type { useToast } from "../ui/toast"
 import * as Keymap from "../keymap"
-import { createCommandShim } from "./command-shim"
 import type { PluginRoutes } from "./api"
 export type { RouteMap } from "./api"
 export { createPluginRoutes, createTuiApi } from "./api"
@@ -40,7 +39,7 @@ type Input = {
 
 function routeNavigate(route: ReturnType<typeof useRoute>, name: string, params?: Record<string, unknown>) {
   if (name === "home") {
-    route.navigate({ type: "workspace" })
+    route.navigate({ type: "global" })
     return
   }
 
@@ -55,8 +54,8 @@ function routeNavigate(route: ReturnType<typeof useRoute>, name: string, params?
 }
 
 function routeCurrent(route: ReturnType<typeof useRoute>): TuiPluginApi["route"]["current"] {
-  if (route.data.type === "workspace" && !route.data.sessionID) return { name: "home" }
-  if (route.data.type === "workspace" && route.data.sessionID) {
+  if (route.data.type === "global") return { name: "home" }
+  if (route.data.type === "workspace") {
     return {
       name: "session",
       params: {
@@ -66,8 +65,6 @@ function routeCurrent(route: ReturnType<typeof useRoute>): TuiPluginApi["route"]
     }
   }
   if (
-    route.data.type === "workspace-picker" ||
-    route.data.type === "startup-hub" ||
     route.data.type === "onboarding" ||
     route.data.type === "add-files"
   ) {
@@ -183,8 +180,6 @@ export function createTuiApiAdapters(input: Input): Omit<TuiPluginApi, "lifecycl
   return {
     app: appApi(input.version),
     attention: input.attention,
-    // Keep deprecated `api.command` working for v1 plugins; remove in v2.
-    command: createCommandShim(input.keymap, input.dialog, input.tuiConfig.keybinds),
     keys: {
       formatSequence(parts) {
         return Keymap.formatKeySequence(parts, input.tuiConfig)

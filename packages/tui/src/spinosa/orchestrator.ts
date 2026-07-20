@@ -1,6 +1,6 @@
-import { classifyPrompt, isNonFastPath, type RouteClass } from "@opencode-ai/spinosa-core/classify/route"
-import { orchestratorPreamble, writeGoalArtifact } from "@opencode-ai/spinosa-core/artifacts/goal"
-import { isSpinosaWorkspace } from "@opencode-ai/spinosa-core/workspace/meta"
+import { classifyPrompt, isNonFastPath, type RouteClass } from "../spinosa-core/classify/route"
+import { orchestratorPreamble, writeGoalArtifact } from "../spinosa-core/artifacts/goal"
+import { isSpinosaWorkspace } from "../spinosa-core/workspace/meta"
 
 export type PreparedSubmit = {
   text: string
@@ -36,5 +36,6 @@ export async function prepareSpinosaSubmit(workspacePath: string, promptText: st
 }
 
 function stripExistingPreamble(text: string) {
+  if (typeof text !== "string") throw new TypeError("Spinosa prompt must be a string")
   return text.replace(/<system-reminder>[\s\S]*?<\/system-reminder>\s*/g, "").trim()
 }

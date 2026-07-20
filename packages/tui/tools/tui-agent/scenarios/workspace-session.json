@@ -1,0 +1,42 @@
+{
+  "name": "workspace-session",
+  "description": "Open /session from a Spinosa workspace and prove that only that workspace's chats are rendered.",
+  "adapter": "../adapters/spinosa.ts",
+  "terminal": { "width": 100, "height": 50 },
+  "fixture": {
+    "workspace": { "name": "session-evidence-workspace", "setupStatus": "workspace_started" },
+    "sessions": [
+      { "id": "ses_workspace_current", "title": "Workspace evidence chat", "directory": "$WORKSPACE", "updated": 200 },
+      { "id": "ses_workspace_older", "title": "Older workspace chat", "directory": "$WORKSPACE", "updated": 100 },
+      { "id": "ses_outside", "title": "UNRELATED directory chat", "directory": "$FIXTURE_ROOT/other-project", "updated": 300 }
+    ],
+    "responses": [
+      { "path": "/global/config", "body": { "autoupdate": "notify" } },
+      { "path": "/file", "body": [] },
+      { "path": "/session/ses_workspace_current/children", "body": [] },
+      { "path": "/session/ses_workspace_current/diff", "body": [] },
+      { "path": "/session/ses_workspace_current/todo", "body": [] },
+      { "path": "/session/ses_workspace_current/permission", "body": [] },
+      { "path": "/session/ses_workspace_current/question", "body": [] },
+      { "path": "/session/ses_workspace_current/message", "body": [] },
+      { "path": "/session/ses_workspace_current/part", "body": [] },
+      { "path": "/session/ses_workspace_older/children", "body": [] },
+      { "path": "/session/ses_workspace_older/diff", "body": [] },
+      { "path": "/session/ses_workspace_older/todo", "body": [] },
+      { "path": "/session/ses_workspace_older/permission", "body": [] },
+      { "path": "/session/ses_workspace_older/question", "body": [] },
+      { "path": "/session/ses_workspace_older/message", "body": [] },
+      { "path": "/session/ses_workspace_older/part", "body": [] }
+    ]
+  },
+  "steps": [
+    { "action": "waitForText", "text": "workspace v0.1.0", "timeoutMs": 5000 },
+    { "action": "waitForText", "text": "Describe the task", "timeoutMs": 5000 },
+    { "action": "waitForFocus", "type": "TextareaRenderable", "timeoutMs": 5000 },
+    { "action": "type", "text": "/session" },
+    { "action": "key", "key": "RETURN" },
+    { "action": "waitForText", "text": "Workspace evidence chat", "timeoutMs": 5000 },
+    { "action": "capture", "name": "session-dialog" },
+    { "action": "assert", "visible": ["Sessions", "Workspace evidence chat", "Older workspace chat"], "absent": ["UNRELATED directory chat"], "requests": [{ "path": "/session", "method": "GET", "query": { "directory": "$WORKSPACE" } }], "focus": { "type": "InputRenderable" }, "route": "home", "dialog": { "open": true, "depth": 1, "size": "large" }, "state": { "ready": true, "sessionCount": 2 } }
+  ]
+}

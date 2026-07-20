@@ -16,7 +16,8 @@ import {
 import { Dynamic } from "solid-js/web"
 import path from "node:path"
 import { mkdir, writeFile } from "node:fs/promises"
-import { useRoute, useLegacySessionRoute } from "../../context/route"
+import { useRoute, useSessionRoute } from "../../context/route"
+import { useArgs } from "../../context/args"
 import { useProject } from "../../context/project"
 import { useSync } from "../../context/sync"
 import { useEvent } from "../../context/event"
@@ -207,8 +208,50 @@ export function Session() {
     await mkdir(path.dirname(file), { recursive: true })
     await writeFile(file, content)
   }
+  const openExportDialog = async () => {
+    try {
+      const sessionData = session()
+      if (!sessionData) return
+      const sessionMessages = messages()
+      const defaultFilename = `session-${sessionData.id.slice(0, 8)}.md`
+      const options = await DialogExportOptions.show(
+        dialog, defaultFilename,
+        showThinking(), showDetails(), showAssistantMetadata(), false,
+      )
+      if (options === null) return
+      const transcript = formatTranscript(
+        sessionData,
+        sessionMessages.map((msg) => ({ info: msg, parts: sync.data.part[msg.id] ?? [] })),
+        {
+          thinking: options.thinking,
+          toolDetails: options.toolDetails,
+          assistantMetadata: options.assistantMetadata,
+          providers: sync.data.provider,
+        },
+      )
+      if (options.openWithoutSaving) {
+        await openEditor({
+          renderer, value: transcript,
+          cwd: (project.instance.path().worktree === "/" ? undefined : project.instance.path().worktree) || project.instance.directory() || paths.cwd,
+        })
+      } else {
+        const exportDir = paths.cwd
+        const filepath = path.join(exportDir, options.filename.trim())
+        await writeExport(filepath, transcript)
+        const result = await openEditor({
+          renderer, value: transcript,
+          cwd: (project.instance.path().worktree === "/" ? undefined : project.instance.path().worktree) || project.instance.directory() || paths.cwd,
+        })
+        if (result !== undefined) await writeExport(filepath, result)
+        toast.show({ message: `Session exported to ${options.filename.trim()}`, variant: "success" })
+      }
+    } catch {
+      toast.show({ message: "Failed to export session", variant: "error" })
+    }
+    dialog.clear()
+  }
   const pluginRuntime = usePluginRuntime()
-  const route = useLegacySessionRoute()
+  const route = useSessionRoute()
   const { navigate } = useRoute()
   const sync = useSync()
   const event = useEvent()
@@ -219,6 +262,7 @@ export function Session() {
   const { theme } = useTheme()
   const promptRef = usePromptRef()
   const [backHover, setBackHover] = createSignal(false)
+  const [exportHover, setExportHover] = createSignal(false)
   const session = createMemo(() => sync.session.get(route.sessionID))
   const location = createMemo(() => {
     const current = session()
@@ -227,9 +271,16 @@ export function Session() {
 
   createEffect(() => {
     const title = Locale.truncate(session()?.title ?? "", 50)
-    setEpilogue(sessionEpilogue({ title, sessionID: session()?.id }))
+    setEpilogue(
+      sessionEpilogue({
+        title,
+        sessionID: session()?.id,
+        spinosa: useArgs().spinosa,
+        projectDir: session()?.directory,
+      }),
+    )
   })
-  onCleanup(() => setEpilogue())
+  onCleanup(() => { setEpilogue(); clearTimeout(toBottomTimer) })
   const children = createMemo(() => {
     const parentID = session()?.parentID ?? session()?.id
     return sync.data.session
@@ -350,7 +401,7 @@ export function Session() {
       )
       const tag = count > 1 ? `${summary.tag} x${count}` : summary.tag
       const groupSummary: ToolCalloutSummary = { tag, command: summary.command }
-      const side = ["todowrite", "task"].includes(group.display) ? "right" : "left"
+      const side = ["bash", "read", "grep", "glob", "webfetch", "websearch"].includes(group.display) ? "left" : "right"
       const offsetTop = side === "left" ? leftHeight : rightHeight
       sides.set(first.callID, { side, offsetTop, summary: groupSummary })
       const height = estimateToolCalloutHeight(groupSummary, layout.railWidth, first.tool, first.state.status === "pending" ? {} : (first.state.metadata ?? {}), first.state.input ?? {})
@@ -379,7 +430,7 @@ export function Session() {
           variant: "error",
           duration: 5000,
         })
-        navigate({ type: "home" })
+        navigate({ type: "global" })
         return
       }
 
@@ -404,7 +455,7 @@ export function Session() {
         variant: "error",
         duration: 5000,
       })
-      navigate({ type: "home" })
+      navigate({ type: "global" })
     })
   })
 
@@ -505,8 +556,10 @@ export function Session() {
     dialog.clear()
   }
 
+  let toBottomTimer: ReturnType<typeof setTimeout> | undefined
   function toBottom() {
-    setTimeout(() => {
+    clearTimeout(toBottomTimer)
+    toBottomTimer = setTimeout(() => {
       if (!scroll || scroll.isDestroyed) return
       scroll.scrollTo(scroll.scrollHeight)
     }, 50)
@@ -516,7 +569,7 @@ export function Session() {
 
   function enterChild(sessionID: string) {
     navigate({
-      type: "session",
+      type: "workspace",
       sessionID,
     })
     const status = sync.data.session_status[sessionID]
@@ -551,7 +604,7 @@ export function Session() {
     {
       title: session()?.share?.url ? "Copy share link" : "Share session",
       value: "session.share",
-      suggested: route.type === "session",
+      suggested: route.type === "workspace",
       category: "Session",
       enabled: sync.data.config.share !== "disabled",
       slash: {
@@ -1128,7 +1181,7 @@ export function Session() {
         const parentID = session()?.parentID
         if (parentID) {
           navigate({
-            type: "session",
+            type: "workspace",
             sessionID: parentID,
           })
         }
@@ -1252,7 +1305,7 @@ export function Session() {
               zIndex={10}
               onMouseOver={() => setBackHover(true)}
               onMouseOut={() => setBackHover(false)}
-              onMouseUp={() => navigate({ type: "workspace" })}
+              onMouseUp={() => navigate({ type: "global" })}
               paddingLeft={2}
               paddingRight={2}
               paddingTop={1}
@@ -1263,6 +1316,25 @@ export function Session() {
               width={11}
             >
               <text fg={buttonText(theme, backHover())}>{"< Back"}</text>
+            </box>
+            <box
+              position="absolute"
+              top={0}
+              right={2}
+              zIndex={10}
+              onMouseOver={() => setExportHover(true)}
+              onMouseOut={() => setExportHover(false)}
+              onMouseUp={openExportDialog}
+              paddingLeft={2}
+              paddingRight={2}
+              paddingTop={1}
+              paddingBottom={1}
+              backgroundColor={buttonBackground(theme, exportHover())}
+              flexDirection="row"
+              alignItems="center"
+              width={10}
+            >
+              <text fg={buttonText(theme, exportHover())}>Export</text>
             </box>
           </Show>
           <box flexGrow={1} minHeight={0}>
@@ -1292,6 +1364,7 @@ export function Session() {
                 stickyScroll={true}
                 stickyStart="bottom"
                 flexGrow={1}
+                minHeight={0}
                 scrollAcceleration={scrollAcceleration()}
               >
                 <box height={1} />
@@ -1558,11 +1631,14 @@ function ToolRailCallout(props: {
     props.callout.part.state.input ?? {},
   )))
 
+  let copyTimer: ReturnType<typeof setTimeout> | undefined
   const handleCopy = () => {
     if (!props.callout.summary) return
     const text = buildCopyCommand(props.callout.part.tool, props.callout.part.state.input ?? {}, props.callout.summary)
     void clipboard.write?.(text).then(() => setCopied(true))
-    setTimeout(() => setCopied(false), 3000)
+    clearTimeout(copyTimer)
+    copyTimer = setTimeout(() => setCopied(false), 3000)
+    onCleanup(() => clearTimeout(copyTimer))
   }
 
   const stem = createMemo(() => (props.side === "left" ? "  │" : "│  "))
@@ -1587,12 +1663,18 @@ function ToolRailCallout(props: {
         <Show when={props.side === "right"}>
           <text width={3} fg={color()}>├──</text>
         </Show>
-        <box onMouseUp={handleCopy}>
+        <Show when={props.side === "right"} fallback={
+          <box onMouseUp={handleCopy}>
+            <text fg={theme.textMuted} wrapMode="none">
+              <span style={{ bg: color(), fg: selectedForeground(theme, color()), bold: true }}> {props.callout.summary!.tag} </span>
+              <span style={{ bg: theme.backgroundElement, fg: theme.textMuted }}>{copied() ? " ✓ " : " copy "}</span>
+            </text>
+          </box>
+        }>
           <text fg={theme.textMuted} wrapMode="none">
             <span style={{ bg: color(), fg: selectedForeground(theme, color()), bold: true }}> {props.callout.summary!.tag} </span>
-            <span style={{ bg: theme.backgroundElement, fg: theme.textMuted }}>{copied() ? " ✓ " : " copy "}</span>
           </text>
-        </box>
+        </Show>
         <Show when={props.side === "left"}>
           <text width={3} fg={color()}>──┤</text>
         </Show>
@@ -2807,7 +2889,7 @@ function Task(props: ToolProps) {
       part={props.part}
       onClick={() => {
         if (sessionID()) {
-          navigate({ type: "session", sessionID: sessionID()! })
+          navigate({ type: "workspace", sessionID: sessionID()! })
         }
         const status = retry()
         if (status) void DialogAlert.show(dialog, "Retry Error", status.message)

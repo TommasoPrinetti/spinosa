@@ -29,7 +29,7 @@ describe("legacy public event schemas", () => {
     expect([
       SessionV1.PartDelta.type,
       SessionV1.Diff.type,
-      SessionV1.Error.type,
+      SessionV1.Event.Error.type,
       PermissionV1.Event.Asked.type,
       PermissionV1.Event.Replied.type,
       QuestionV1.Event.Asked.type,

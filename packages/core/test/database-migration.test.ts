@@ -3,7 +3,7 @@ import { $ } from "bun"
 import { fileURLToPath } from "url"
 import path from "path"
 import { SqliteClient } from "@effect/sql-sqlite-bun"
-import { EffectDrizzleSqlite } from "@opencode-ai/effect-drizzle-sqlite"
+import { makeWithDefaults } from "@opencode-ai/effect-drizzle-sqlite"
 import { Effect, Layer } from "effect"
 import { eq, inArray, sql } from "drizzle-orm"
 import { DatabaseMigration } from "@opencode-ai/core/database/migration"
@@ -35,7 +35,7 @@ const run = <A, E>(effect: Effect.Effect<A, E, SqlClientService>) =>
     effect.pipe(Effect.provide(SqliteClient.layer({ filename: ":memory:", disableWAL: true })), Effect.scoped),
   )
 
-const makeDb = EffectDrizzleSqlite.makeWithDefaults()
+const makeDb = makeWithDefaults()
 
 describe("DatabaseMigration", () => {
   test("serializes concurrent embedded initialization for one database path", async () => {
@@ -156,7 +156,7 @@ describe("DatabaseMigration", () => {
     )
   })
 
-  test("resets beta history and rebuilds event-sourced Session input storage", async () => {
+  test("preserves beta history while rebuilding event-sourced Session input storage", async () => {
     await run(
       Effect.gen(function* () {
         const db = yield* makeDb
@@ -198,15 +198,15 @@ describe("DatabaseMigration", () => {
         yield* DatabaseMigration.applyOnly(db, [eventSourcedSessionInputMigration])
 
         expect(yield* db.all(sql`SELECT id, workspace_id FROM session`)).toEqual([
-          { id: "session", workspace_id: null },
+          { id: "session", workspace_id: "wrk_old" },
         ])
-        expect(yield* db.all(sql`SELECT id FROM workspace`)).toEqual([])
+        expect(yield* db.all(sql`SELECT id FROM workspace`)).toEqual([{ id: "wrk_old" }])
         expect(yield* db.all(sql`SELECT id FROM message`)).toEqual([{ id: "message" }])
         expect(yield* db.all(sql`SELECT id FROM part`)).toEqual([{ id: "part" }])
-        expect(yield* db.all(sql`SELECT id FROM event`)).toEqual([])
-        expect(yield* db.all(sql`SELECT aggregate_id FROM event_sequence`)).toEqual([])
-        expect(yield* db.all(sql`SELECT id FROM session_message`)).toEqual([])
-        expect(yield* db.all(sql`SELECT id FROM session_input`)).toEqual([])
+        expect(yield* db.all(sql`SELECT id FROM event`)).toEqual([{ id: "evt_old" }])
+        expect(yield* db.all(sql`SELECT aggregate_id FROM event_sequence`)).toEqual([{ aggregate_id: "session" }])
+        expect(yield* db.all(sql`SELECT id FROM session_message`)).toEqual([{ id: "msg_old" }])
+        expect(yield* db.all(sql`SELECT id FROM session_input`)).toEqual([{ id: "msg_pending" }])
         expect(
           (yield* db.all<{ name: string }>(sql`PRAGMA table_info(session_input)`)).map((column) => column.name),
         ).toEqual(["id", "session_id", "prompt", "delivery", "admitted_seq", "promoted_seq", "time_created"])
@@ -232,7 +232,7 @@ describe("DatabaseMigration", () => {
     )
   })
 
-  test("preserves canonical V1 state and restarts its event stream", async () => {
+  test("preserves canonical V1 and V2 state when simplifying Session input", async () => {
     await run(
       Effect.gen(function* () {
         const db = yield* makeDb
@@ -268,6 +268,9 @@ describe("DatabaseMigration", () => {
         )
         yield* db.run(sql`DELETE FROM migration WHERE id = ${simplifySessionInputMigration.id}`)
         yield* DatabaseMigration.applyOnly(db, [simplifySessionInputMigration])
+        expect(
+          yield* db.get(sql`SELECT workspace_id FROM session WHERE id = 'session'`),
+        ).toEqual({ workspace_id: "workspace" })
 
         const database = Layer.succeed(Database.Service, { db })
         yield* EventV2.Service.use((service) =>
@@ -308,11 +311,11 @@ describe("DatabaseMigration", () => {
           workspaceID: null,
           messages: 1,
           parts: 1,
-          workspaces: 0,
-          sessionInputs: 0,
-          sessionMessages: 0,
-          contextEpochs: 0,
-          seq: 0,
+          workspaces: 1,
+          sessionInputs: 1,
+          sessionMessages: 1,
+          contextEpochs: 1,
+          seq: 10,
           eventType: "session.updated.1",
         })
       }),

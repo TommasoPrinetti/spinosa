@@ -1,0 +1,44 @@
+{
+  "name": "visualizer-graphs",
+  "description": "Open the Visualizer panel and cycle through all three graph modes: 1 Files, 2 Flow, 3 Activity",
+  "adapter": "../adapters/spinosa.ts",
+  "terminal": { "width": 100, "height": 50 },
+  "fixture": {
+    "workspace": { "name": "visualizer-test-ws", "setupStatus": "workspace_started" },
+    "sessions": [
+      { "id": "ses_viz", "title": "Visualizer session", "directory": "$WORKSPACE", "updated": 500 }
+    ],
+    "responses": [
+      { "path": "/global/config", "body": { "autoupdate": "notify" } },
+      { "path": "/file", "body": [] },
+      { "path": "/session/ses_viz/children", "body": [] },
+      { "path": "/session/ses_viz/diff", "body": [] },
+      { "path": "/session/ses_viz/todo", "body": [] },
+      { "path": "/session/ses_viz/permission", "body": [] },
+      { "path": "/session/ses_viz/question", "body": [] },
+      { "path": "/session/ses_viz/message", "body": [] },
+      { "path": "/session/ses_viz/part", "body": [] }
+    ]
+  },
+  "steps": [
+    { "action": "waitForText", "text": "Describe the task", "timeoutMs": 8000 },
+    { "action": "capture", "name": "home" },
+
+    { "action": "clickText", "text": "Visualizer" },
+    { "action": "waitForText", "text": "1 Files", "timeoutMs": 5000 },
+    { "action": "assert", "visible": ["1 Files", "2 Flow", "3 Activity"] },
+    { "action": "capture", "name": "mode-files" },
+
+    { "action": "clickText", "text": "2 Flow" },
+    { "action": "waitForText", "text": "Flow", "timeoutMs": 5000 },
+    { "action": "capture", "name": "mode-flow" },
+
+    { "action": "clickText", "text": "3 Activity" },
+    { "action": "waitForText", "text": "Activity", "timeoutMs": 5000 },
+    { "action": "capture", "name": "mode-activity" },
+
+    { "action": "clickText", "text": "1 Files" },
+    { "action": "waitForText", "text": "Files", "timeoutMs": 5000 },
+    { "action": "capture", "name": "mode-files-again" }
+  ]
+}

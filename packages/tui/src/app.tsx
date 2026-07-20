@@ -20,6 +20,7 @@ import {
   batch,
   Show,
   on,
+  type ParentProps,
 } from "solid-js"
 import { TuiPathsProvider, TuiStartupProvider, TuiTerminalEnvironmentProvider, useTuiStartup } from "./context/runtime"
 import { DialogProvider, useDialog } from "./ui/dialog"
@@ -47,9 +48,10 @@ import { DialogSessionList } from "./component/dialog-session-list"
 import { DialogWorkspaceList } from "./component/dialog-workspace-list"
 import { DialogConsoleOrg } from "./component/dialog-console-org"
 import { ThemeProvider, useTheme } from "./context/theme"
-import { Workspace } from "./routes/workspace"
-import { workspaceHasSession } from "./context/route"
-import { SpinosaWorkspaceProvider } from "./context/spinosa-workspace"
+import { Home } from "./routes/home"
+import { Session } from "./routes/session"
+
+import { SpinosaWorkspaceProvider, useSpinosaWorkspace } from "./context/spinosa-workspace"
 import { PromptHistoryProvider } from "./component/prompt/history"
 import { FrecencyProvider } from "./component/prompt/frecency"
 import { PromptStashProvider } from "./component/prompt/stash"
@@ -57,6 +59,7 @@ import { DialogAlert } from "./ui/dialog-alert"
 import { DialogConfirm } from "./ui/dialog-confirm"
 import { ToastProvider, useToast } from "./ui/toast"
 import { isDefaultTitle } from "./util/session"
+import { setToastError } from "./spinosa/log"
 import { KVProvider, useKV } from "./context/kv"
 import * as Model from "./util/model"
 import { ArgsProvider, useArgs, type Args } from "./context/args"
@@ -80,12 +83,11 @@ import type { EventSource } from "./context/sdk"
 import { DialogVariant } from "./component/dialog-variant"
 import { createTuiAttention } from "./attention"
 import * as TuiAudio from "./audio"
-import { win32DisableProcessedInput, win32FlushInputBuffer } from "./terminal-win32"
 import { destroyRenderer } from "./util/renderer"
 import { cliErrorMessage, errorFormat } from "./util/error"
 import { AddFiles } from "./routes/spinosa/add-files"
 import { Onboarding } from "./routes/spinosa/onboarding"
-import { StartupHub } from "./routes/spinosa/startup-hub"
+import { Visualizer } from "./routes/spinosa/visualizer"
 
 const appGlobalBindingCommands = [
   "session.list",
@@ -148,6 +150,15 @@ export type TuiInput = {
   pluginHost: TuiPluginHost
 }
 
+function SpinosaSyncProvider(props: ParentProps) {
+  const spinosa = useSpinosaWorkspace()
+  return (
+    <SyncProvider sessionDirectory={() => (spinosa.genericMode ? undefined : spinosa.activePath)}>
+      {props.children}
+    </SyncProvider>
+  )
+}
+
 function errorMessage(error: unknown) {
   if (
     typeof error === "object" &&
@@ -208,7 +219,11 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
             destroyRenderer(renderer)
           }),
       )
-      win32DisableProcessedInput()
+      yield* Effect.promise(async () => {
+        // Platform-specific: Bun FFI to kernel32.dll (Windows only).
+        const { win32DisableProcessedInput } = await import("./terminal-win32")
+        win32DisableProcessedInput()
+      })
       const keymap = createDefaultOpenTuiKeymap(renderer)
       yield* Effect.acquireRelease(
         Effect.sync(() => registerOpencodeKeymap(keymap, renderer, input.config)),
@@ -253,7 +268,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
               }}
             >
               <EpilogueProvider set={(value) => (exit.epilogue = value)}>
-                <ErrorBoundary fallback={(error, reset) => <ErrorComponent error={error} reset={reset} mode={mode} />}>
+                <>
                   <TuiPathsProvider
                     value={{
                       cwd: process.cwd(),
@@ -288,17 +303,17 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                     initialRoute={
                                       input.args.continue
                                         ? {
-                                            type: "session",
+                                            type: "workspace",
                                             sessionID: "dummy",
                                           }
                                         : input.args.sessionID
                                           ? {
-                                              type: "session",
+                                              type: "workspace",
                                               sessionID: input.args.sessionID,
                                             }
-                                          : input.args.prompt
-                                            ? { type: "workspace" }
-                                            : { type: "workspace" }
+        : input.args.prompt
+          ? { type: "global", prompt: { input: input.args.prompt, parts: [] } }
+                                            : undefined
                                     }
                                   >
                                     <SpinosaWorkspaceProvider>
@@ -313,7 +328,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                         >
                                           <PermissionProvider>
                                             <ProjectProvider>
-                                              <SyncProvider>
+                                              <SpinosaSyncProvider>
                                                 <DataProvider>
                                                   <ThemeProvider mode={mode}>
                                                     <LocalProvider>
@@ -324,10 +339,16 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                                               <PromptRefProvider>
                                                                 <EditorContextProvider>
                                                                   <LocationProvider>
-                                                                    <App
-                                                                      onSnapshot={input.onSnapshot}
-                                                                      pluginHost={input.pluginHost}
-                                                                    />
+                                                                    <ErrorBoundary
+                                                                      fallback={(error, reset) => (
+                                                                        <ErrorComponent error={error} reset={reset} mode={mode} />
+                                                                      )}
+                                                                    >
+                                                                      <App
+                                                                        onSnapshot={input.onSnapshot}
+                                                                        pluginHost={input.pluginHost}
+                                                                      />
+                                                                    </ErrorBoundary>
                                                                   </LocationProvider>
                                                                 </EditorContextProvider>
                                                               </PromptRefProvider>
@@ -338,7 +359,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                                     </LocalProvider>
                                                   </ThemeProvider>
                                                 </DataProvider>
-                                              </SyncProvider>
+                                              </SpinosaSyncProvider>
                                             </ProjectProvider>
                                           </PermissionProvider>
                                         </SDKProvider>
@@ -354,7 +375,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                       </TuiStartupProvider>
                     </TuiTerminalEnvironmentProvider>
                   </TuiPathsProvider>
-                </ErrorBoundary>
+                </>
               </EpilogueProvider>
             </ExitProvider>
           )
@@ -364,8 +385,12 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
       return { epilogue: exit.epilogue, reason: exit.reason }
     }),
   )
-  yield* Effect.sync(() => {
+  yield* Effect.promise(async () => {
+    // Platform-specific: Bun FFI to kernel32.dll (Windows only).
+    const { win32FlushInputBuffer } = await import("./terminal-win32")
     win32FlushInputBuffer()
+  })
+  yield* Effect.sync(() => {
     if (result.reason !== undefined)
       process.stderr.write((cliErrorMessage(result.reason) ?? errorFormat(result.reason)) + "\n")
     if (result.epilogue) process.stdout.write(result.epilogue + "\n")
@@ -385,6 +410,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
   const event = useEvent()
   const sdk = useSDK()
   const toast = useToast()
+  setToastError((err) => toast.error(err))
   const themeState = useTheme()
   const { theme, mode, setMode, locked, lock, unlock } = themeState
   const sync = useSync()
@@ -394,6 +420,10 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
   const pluginRuntime = usePluginRuntime()
   const attention = createTuiAttention({ renderer, config: tuiConfig, kv })
   const clipboard = useClipboard()
+  const spinosa = useSpinosaWorkspace()
+  const [startupLoadingComplete, setStartupLoadingComplete] = createSignal(startup.skipInitialLoading)
+  const appReady = () => ready() && (startup.skipInitialLoading || spinosa.bootReady)
+  const tuiReady = () => appReady() && (startup.skipInitialLoading || startupLoadingComplete())
 
   const api = createTuiApi(
     createTuiApiAdapters({
@@ -463,7 +493,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
   createEffect(() => {
     if (!terminalTitleEnabled() || Flag.OPENCODE_DISABLE_TERMINAL_TITLE) return
 
-    if (workspaceHasSession(route.data)) {
+    if (route.data.type === "workspace") {
       const session = sync.session.get(route.data.sessionID)
       if (!session || isDefaultTitle(session.title)) {
         renderer.setTerminalTitle("OpenCode")
@@ -472,11 +502,6 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
 
       const title = session.title.length > 40 ? session.title.slice(0, 37) + "..." : session.title
       renderer.setTerminalTitle(`OC | ${title}`)
-      return
-    }
-
-    if (route.data.type === "workspace") {
-      renderer.setTerminalTitle("OpenCode")
       return
     }
 
@@ -501,7 +526,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       }
       if (args.sessionID && !args.fork) {
         route.navigate({
-          type: "session",
+          type: "workspace",
           sessionID: args.sessionID,
         })
       }
@@ -520,13 +545,13 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       if (args.fork) {
         void sdk.client.session.fork({ sessionID: match }).then((result) => {
           if (result.data?.id) {
-            route.navigate({ type: "session", sessionID: result.data.id })
+            route.navigate({ type: "workspace", sessionID: result.data.id })
           } else {
             toast.show({ message: "Failed to fork session", variant: "error" })
           }
         })
       } else {
-        route.navigate({ type: "session", sessionID: match })
+        route.navigate({ type: "workspace", sessionID: match })
       }
     }
   })
@@ -540,25 +565,26 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     forked = true
     void sdk.client.session.fork({ sessionID: args.sessionID }).then((result) => {
       if (result.data?.id) {
-        route.navigate({ type: "session", sessionID: result.data.id })
+        route.navigate({ type: "workspace", sessionID: result.data.id })
       } else {
         toast.show({ message: "Failed to fork session", variant: "error" })
       }
     })
   })
 
+  const connected = useConnected()
+
   createEffect(
     on(
-      () => sync.status === "complete" && sync.data.provider.length === 0,
-      (isEmpty, wasEmpty) => {
-        // only trigger when we transition into an empty-provider state
-        if (!isEmpty || wasEmpty) return
+      () => sync.status === "complete" && !connected(),
+      (needsProvider, neededProvider) => {
+        // Open once when bootstrap confirms there is no usable provider.
+        if (!needsProvider || neededProvider) return
         dialog.replace(() => <DialogProviderList />)
       },
     ),
   )
 
-  const connected = useConnected()
   const currentWorktreeWorkspace = createMemo(() => {
     const workspaceID = project.workspace.current()
     if (!workspaceID) return
@@ -583,7 +609,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         category: "Session",
         suggested: sync.data.session.length > 0,
         slashName: "sessions",
-        slashAliases: ["resume", "continue"],
+        slashAliases: ["session", "resume", "continue"],
         run: () => {
           dialog.replace(() => <DialogSessionList />)
         },
@@ -591,13 +617,13 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       {
         name: "session.new",
         title: "New session",
-        suggested: workspaceHasSession(route.data),
+        suggested: route.data.type === "workspace",
         category: "Session",
         slashName: "new",
         slashAliases: ["clear"],
         run: () => {
           route.navigate({
-            type: "home",
+            type: "global",
           })
           dialog.clear()
         },
@@ -1001,14 +1027,14 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
   event.on("tui.session.select", (evt, { workspace }) => {
     if (workspace !== project.workspace.current()) return
     route.navigate({
-      type: "session",
+      type: "workspace",
       sessionID: evt.properties.sessionID,
     })
   })
 
   event.on("session.deleted", (evt) => {
-    if (workspaceHasSession(route.data) && route.data.sessionID === evt.properties.info.id) {
-      route.navigate({ type: "home" })
+    if (route.data.type === "workspace" && route.data.sessionID === evt.properties.info.id) {
+      route.navigate({ type: "global" })
       toast.show({
         variant: "info",
         message: "The current session was deleted",
@@ -1081,8 +1107,33 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     if (!ready()) return
     if (route.data.type !== "plugin") return
     const render = pluginRuntime.routes.get(route.data.id)
-    if (!render) return <PluginRouteMissing id={route.data.id} onHome={() => route.navigate({ type: "home" })} />
+    if (!render) return <PluginRouteMissing id={route.data.id} onHome={() => route.navigate({ type: "global" })} />
     return render({ params: route.data.data })
+  })
+
+  const [upgradePrompted, setUpgradePrompted] = createSignal(false)
+  createEffect(() => {
+    const health = spinosa.bootHealth
+    if (!health?.upgrade?.available || upgradePrompted()) return
+    setUpgradePrompted(true)
+    void (async () => {
+      const upg = health!.upgrade!
+      const choice = await DialogConfirm.show(
+        dialog,
+        "Update Available",
+        `Spinosa v${upg.latestVersion} is available (current: v${upg.currentVersion}). Update now?`,
+        { confirmLabel: "Yes", cancelLabel: "No", defaultChoice: "confirm" },
+      )
+      if (choice !== true) return
+      const { upgradeFramework } = await import("./spinosa-core/commands/upgrade")
+      const result = await upgradeFramework({ version: upg.latestVersion, yes: true, suppressInstallOutput: true })
+      if (result.success) {
+        console.log("Run spinosa")
+      } else {
+        console.log(`Upgrade failed. Run "spinosa upgrade" manually.`)
+      }
+      void exit()
+    })()
   })
 
   return (
@@ -1108,13 +1159,13 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       <Show when={Flag.OPENCODE_SHOW_TTFD}>
         <TimeToFirstDraw />
       </Show>
-      <Show when={ready()}>
+      <Show when={tuiReady()}>
         <box flexGrow={1} minHeight={0} flexDirection="column">
           <Show when={route.data.type === "workspace"}>
-            <Workspace />
+            <Session />
           </Show>
-          <Show when={route.data.type === "startup-hub"}>
-            <StartupHub />
+          <Show when={route.data.type === "global"}>
+            <Home />
           </Show>
           <Show when={route.data.type === "onboarding"}>
             <Onboarding />
@@ -1122,15 +1173,20 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
           <Show when={route.data.type === "add-files"}>
             <AddFiles />
           </Show>
+          <Show when={route.data.type === "visualizer"}>
+            <Visualizer />
+          </Show>
           {plugin()}
         </box>
-        <box flexShrink={0}>
-          <pluginRuntime.Slot name="app_bottom" />
-        </box>
+        <pluginRuntime.Slot name="app_bottom" />
         <pluginRuntime.Slot name="app" />
       </Show>
       <Show when={!startup.skipInitialLoading}>
-        <StartupLoading ready={ready} />
+        <StartupLoading
+          ready={appReady}
+          operations={() => spinosa.bootOperations}
+          onComplete={() => setStartupLoadingComplete(true)}
+        />
       </Show>
     </box>
   )

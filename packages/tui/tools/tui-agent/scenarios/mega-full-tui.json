@@ -1,0 +1,114 @@
+{
+  "name": "mega-full-tui",
+  "description": "50-step full-TUI smoke: visualizer, all 5 footer dialogs, session list, import, picker, /help, /status, /themes, chat typing, export, resize, asserts.",
+  "adapter": "../adapters/spinosa.ts",
+  "terminal": { "width": 100, "height": 50 },
+  "fixture": {
+    "workspace": { "name": "mega-workspace", "setupStatus": "workspace_started" },
+    "sessions": [
+      { "id": "ses_mega", "title": "Mega test session", "directory": "$WORKSPACE", "updated": 500 }
+    ],
+    "responses": [
+      { "path": "/global/config", "body": { "autoupdate": "notify" } },
+      { "path": "/file", "body": [] },
+      { "path": "/session/ses_mega/children", "body": [] },
+      { "path": "/session/ses_mega/diff", "body": [] },
+      { "path": "/session/ses_mega/todo", "body": [] },
+      { "path": "/session/ses_mega/permission", "body": [] },
+      { "path": "/session/ses_mega/question", "body": [] },
+      { "path": "/session/ses_mega/message", "body": [] },
+      { "path": "/session/ses_mega/part", "body": [] }
+    ]
+  },
+  "steps": [
+    { "action": "waitForText", "text": "Describe the task", "timeoutMs": 8000 },
+    { "action": "capture", "name": "boot" },
+    { "action": "assert", "visible": ["Switch workspace", "Import files", "Visualizer", "Settings", "Agents", "Keys"] },
+
+    { "action": "clickText", "text": "Visualizer" },
+    { "action": "waitForText", "text": "Conversation graphs", "timeoutMs": 8000 },
+    { "action": "assert", "visible": ["Conversation graphs", "Workspace:", "Session:"] },
+    { "action": "capture", "name": "visualizer" },
+
+    { "action": "clickText", "text": "2 Flow" },
+    { "action": "waitForText", "text": "Flow", "timeoutMs": 5000 },
+    { "action": "clickText", "text": "3 Activity" },
+    { "action": "waitForText", "text": "Activity", "timeoutMs": 5000 },
+    { "action": "clickText", "text": "1 Files" },
+    { "action": "waitForText", "text": "Files", "timeoutMs": 5000 },
+    { "action": "clickText", "text": "< Back" },
+
+    { "action": "clickText", "text": "Switch workspace" },
+    { "action": "waitForText", "text": "Choose a workspace", "timeoutMs": 5000 },
+    { "action": "capture", "name": "picker" },
+    { "action": "clickText", "text": "Back" },
+
+    { "action": "clickText", "text": "Import files" },
+    { "action": "waitForText", "text": "Import files into workspace", "timeoutMs": 5000 },
+    { "action": "capture", "name": "import" },
+    { "action": "clickText", "text": "Back" },
+
+    { "action": "type", "text": "/sessions" },
+    { "action": "key", "key": "RETURN" },
+    { "action": "waitForText", "text": "Mega test session", "timeoutMs": 5000 },
+    { "action": "capture", "name": "sessions" },
+    { "action": "clickText", "text": "esc" },
+
+    { "action": "clickText", "text": "Settings" },
+    { "action": "waitForText", "text": "Updates", "timeoutMs": 5000 },
+    { "action": "capture", "name": "settings" },
+    { "action": "key", "key": "escape" },
+
+    { "action": "key", "key": "s", "modifiers": { "shift": true } },
+    { "action": "waitForText", "text": "Updates", "timeoutMs": 5000 },
+    { "action": "key", "key": "escape" },
+
+    { "action": "clickText", "text": "Keys" },
+    { "action": "waitForText", "text": "Keyboard shortcuts", "timeoutMs": 5000 },
+    { "action": "capture", "name": "keys" },
+    { "action": "key", "key": "escape" },
+
+    { "action": "clickText", "text": "Workspaces" },
+    { "action": "waitForText", "text": "Coming soon.", "timeoutMs": 5000 },
+    { "action": "key", "key": "escape" },
+
+    { "action": "clickText", "text": "Models" },
+    { "action": "waitForText", "text": "Coming soon.", "timeoutMs": 5000 },
+    { "action": "key", "key": "escape" },
+
+    { "action": "type", "text": "/help" },
+    { "action": "key", "key": "RETURN" },
+    { "action": "waitForText", "text": "Help", "timeoutMs": 5000 },
+    { "action": "capture", "name": "help" },
+    { "action": "clickText", "text": "ok" },
+
+    { "action": "type", "text": "/status" },
+    { "action": "key", "key": "RETURN" },
+    { "action": "waitForText", "text": "OpenCode Status", "timeoutMs": 5000 },
+    { "action": "capture", "name": "status" },
+    { "action": "clickText", "text": "esc" },
+
+    { "action": "type", "text": "/themes" },
+    { "action": "key", "key": "RETURN" },
+    { "action": "waitForText", "text": "Themes", "timeoutMs": 5000 },
+    { "action": "capture", "name": "themes" },
+    { "action": "clickText", "text": "esc" },
+
+    { "action": "resize", "width": 100, "height": 20 },
+    { "action": "waitForText", "text": "Describe the task", "timeoutMs": 5000 },
+    { "action": "capture", "name": "compact" },
+
+    { "action": "resize", "width": 68, "height": 50 },
+    { "action": "waitForText", "text": "Describe the task", "timeoutMs": 5000 },
+    { "action": "capture", "name": "narrow" },
+
+    { "action": "resize", "width": 100, "height": 20 },
+    { "action": "waitForText", "text": "Describe the task", "timeoutMs": 5000 },
+    { "action": "capture", "name": "compact2" },
+
+    { "action": "resize", "width": 100, "height": 50 },
+    { "action": "waitForText", "text": "Describe the task", "timeoutMs": 5000 },
+    { "action": "capture", "name": "final" },
+    { "action": "assert", "visible": ["Switch workspace", "Visualizer"] }
+  ]
+}

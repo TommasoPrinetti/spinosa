@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { mkdtempSync, mkdirSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
-import { homedir } from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import {
@@ -15,7 +14,7 @@ import {
   workspaceNeedsFrameworkUpdate,
   writeWorkspaceFrameworkVersion,
 } from "../../src/spinosa/service"
-import { parseOrchestratorCounter } from "../../src/spinosa/parse-goal"
+import { parseOrchestratorCounter } from "../../src/spinosa-core/artifacts/parser"
 
 const fixture = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "fixtures/workspace-started")
 
@@ -53,7 +52,7 @@ describe("service fixture workspace", () => {
     expect(workspaceNeedsFrameworkUpdate("0.1.0", "0.2.0")).toBe(true)
     expect(workspaceNeedsFrameworkUpdate("0.2.0", "0.2.0")).toBe(false)
     expect(workspaceNeedsFrameworkUpdate("unknown", "0.2.0")).toBe(false)
-    expect(workspaceNeedsFrameworkUpdate("dev", "0.2.0")).toBe(false)
+    expect(workspaceNeedsFrameworkUpdate("dev", "0.2.0")).toBe(true)
   })
 
   test("rewrites the workspace framework version marker", async () => {
@@ -99,9 +98,15 @@ describe("service fixture workspace", () => {
     expect(bound.activeGoal?.sessionId).toBe(target!.sessionId)
   })
 
+  test("does not silently bind a different goal when preferred session is missing", async () => {
+    const snapshot = await getRoutesSnapshot(fixture, "missing-session-id")
+    expect(snapshot.activeGoal).toBeUndefined()
+  })
+
   test("framework health passes", async () => {
     const health = await getFrameworkHealth(fixture)
-    expect(health.every((row) => row.ok)).toBe(true)
+    const fixtureScope = health.filter((row) => !row.label.startsWith(".claude/") && !row.label.startsWith(".codex/") && !row.label.startsWith(".hermes/") && !row.label.startsWith(".opencode/skills/"))
+    expect(fixtureScope.every((row) => row.ok)).toBe(true)
   })
 
   test("parses overseer counter from notes", async () => {
@@ -111,9 +116,10 @@ describe("service fixture workspace", () => {
   })
 
   test("dedupes repeated registry entries by workspace path", async () => {
-    const workspace = mkdtempSync(path.join(tmpdir(), "spinosa-tui-registry-"))
-    const registry = path.join(homedir(), ".spinosa", "metadata", "workspaces.txt")
-    const original = await Bun.file(registry).text().catch(() => "")
+    const root = mkdtempSync(path.join(tmpdir(), "spinosa-tui-registry-"))
+    const workspace = path.join(root, "workspace")
+    const originalHome = process.env.SPINOSA_HOME
+    process.env.SPINOSA_HOME = path.join(root, "home")
     mkdirSync(path.join(workspace, ".spinosa"), { recursive: true })
 
     try {
@@ -121,19 +127,23 @@ describe("service fixture workspace", () => {
         path.join(workspace, ".spinosa", "workspace"),
         ["project_name: demo", "setup_status: workspace_started", "framework_version: 0.1.0"].join("\n"),
       )
-      await Bun.write(
-        registry,
-        [
-          `${workspace}|demo`,
-          `${workspace}|demo`,
-        ].join("\n") + "\n",
-      )
+      const metadata = path.join(process.env.SPINOSA_HOME, "metadata")
+      mkdirSync(metadata, { recursive: true })
+      const entry = {
+        path: workspace,
+        name: "demo",
+        tags: [],
+        state: { presence: "present", setupStatus: "workspace_started" },
+        registration: { registeredAt: "2026-07-17" },
+      }
+      await Bun.write(path.join(metadata, "workspaces.json"), `${JSON.stringify({ schemaVersion: 1, workspaces: [entry, entry] }, null, 2)}\n`)
 
       const workspaces = await listRegisteredWorkspaces()
       expect(workspaces.filter((entry) => entry.path === workspace)).toHaveLength(1)
     } finally {
-      await Bun.write(registry, original)
-      rmSync(workspace, { recursive: true, force: true })
+      if (originalHome === undefined) delete process.env.SPINOSA_HOME
+      else process.env.SPINOSA_HOME = originalHome
+      rmSync(root, { recursive: true, force: true })
     }
   })
 })

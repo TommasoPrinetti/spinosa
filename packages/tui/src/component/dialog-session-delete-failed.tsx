@@ -54,7 +54,7 @@ export function DialogSessionDeleteFailed(props: {
     <box paddingLeft={2} paddingRight={2} gap={1}>
       <box flexDirection="row" justifyContent="space-between">
         <text attributes={TextAttributes.BOLD} fg={theme.text}>
-          Failed to Delete Session
+          Couldn’t delete session
         </text>
         <text fg={theme.textMuted} onMouseUp={() => dialog.clear()}>
           esc

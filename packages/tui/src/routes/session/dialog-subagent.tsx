@@ -6,7 +6,7 @@ export function DialogSubagent(props: { sessionID: string }) {
 
   return (
     <DialogSelect
-      title="Subagent Actions"
+      title="Subagent actions"
       options={[
         {
           title: "Open",
@@ -14,7 +14,7 @@ export function DialogSubagent(props: { sessionID: string }) {
           description: "the subagent's session",
           onSelect: (dialog) => {
             route.navigate({
-              type: "session",
+              type: "workspace",
               sessionID: props.sessionID,
             })
             dialog.clear()

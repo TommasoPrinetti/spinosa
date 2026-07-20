@@ -288,6 +288,7 @@ export const TuiThreadCommand = cmd({
               prompt,
               fork: args.fork,
               auto: args.auto || args.yolo || args["dangerously-skip-permissions"],
+              spinosa: !!process.env.SPINOSA_TEMPLATE_ROOT,
             },
           }),
         )

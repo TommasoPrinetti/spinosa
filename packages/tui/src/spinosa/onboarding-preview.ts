@@ -1,13 +1,16 @@
-import { existsSync, readdirSync, statSync } from "node:fs"
+import { existsSync } from "node:fs"
+import { lstat, readdir } from "node:fs/promises"
 import path from "node:path"
-import { detectLlmTools as coreDetectLlmTools } from "@opencode-ai/spinosa-core/tools/detection"
-import { resolveUserPath } from "@opencode-ai/spinosa-core/utils/path"
-import { pluralCount } from "@opencode-ai/spinosa-core/utils/string"
-import { fileExt } from "@opencode-ai/spinosa-core/constants"
-import { shouldSkipSourceFile, classifySourceFile } from "@opencode-ai/spinosa-core/extension/classifier"
-import { suggestWorkspacePath as coreSuggestWorkspacePath } from "@opencode-ai/spinosa-core/scan/scanner"
-import { detectDocumentTools as coreDetectDocumentTools } from "@opencode-ai/spinosa-core/scan/scanner"
-import type { ToolStatus as CoreToolStatus } from "@opencode-ai/spinosa-core/scan/scanner"
+import { detectLlmTools as coreDetectLlmTools } from "../spinosa-core/tools/detection"
+import { resolveUserPath } from "../spinosa-core/utils/path"
+import { pluralCount } from "../spinosa-core/utils/string"
+import { fileExt } from "../spinosa-core/constants"
+import { shouldSkipSourceFile, classifySourceFile, scanClassifySourceFile } from "../spinosa-core/extension/classifier"
+import type { FileClass } from "../spinosa-core/extension/types"
+import { suggestWorkspacePath as coreSuggestWorkspacePath } from "../spinosa-core/scan/scanner"
+import { resolveWorkspacePath as resolveCoreWorkspacePath } from "../spinosa-core/commands/create"
+import { detectDocumentTools as coreDetectDocumentTools } from "../spinosa-core/scan/scanner"
+import type { ToolStatus as CoreToolStatus } from "../spinosa-core/scan/scanner"
 
 export type OnboardingImportOption = {
   ext: string
@@ -46,34 +49,62 @@ export type ToolStatus = CoreToolStatus
 type ExtEntry = { ext: string; count: number; bytes: number }
 
 function shouldSkipScanDir(name: string) {
-  return name === ".git" || name === "node_modules" || name === "__MACOSX" || name === ".trash" || name.endsWith(".app") || name.endsWith(".photoslibrary")
+  return name === ".git" || name === ".spinosa" || name === "node_modules" || name === "__MACOSX" || name === ".trash" || name.endsWith(".app") || name.endsWith(".photoslibrary")
 }
 
-async function scanByExtension(sourcePath: string): Promise<{
+// Bound a filesystem op so a stuck/unresponsive mount (e.g. cloud FUSE) cannot
+// hang the scan forever.
+function withFsTimeout<T>(p: Promise<T>, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(`${label} timed out`)), 10_000)
+    p.then(
+      (v) => { clearTimeout(t); resolve(v) },
+      (e) => { clearTimeout(t); reject(e) },
+    )
+  })
+}
+
+async function scanByExtension(
+  sourcePath: string,
+  classify: (filePath: string) => Promise<FileClass> = scanClassifySourceFile,
+  onFile?: (relativePath: string, isFile: boolean, discovered: number) => void,
+  shouldAbort?: () => boolean,
+): Promise<{
   extMap: Map<string, ExtEntry>
   totals: { markdown: number; markitdown: number; native: number; ocr: number; video: number; audio: number; unknown: number; ignored: number; total: number }
 }> {
   const extMap = new Map<string, ExtEntry>()
   const totals = { markdown: 0, markitdown: 0, native: 0, ocr: 0, video: 0, audio: 0, unknown: 0, ignored: 0, total: 0 }
+  let discovered = 0
 
-  async function walk(dir: string) {
+  const stack = [sourcePath]
+  while (stack.length > 0) {
+    if (shouldAbort?.()) break
+    const dir = stack.pop()
+    if (!dir) continue
     let entries: string[]
-    try { entries = readdirSync(dir) } catch { return }
+    try { entries = await withFsTimeout(readdir(dir), `readdir ${dir}`) } catch { continue }
     for (const entry of entries) {
+      if (shouldAbort?.()) break
       if (entry.startsWith(".") && entry !== "." && entry !== "..") continue
       const fullPath = path.join(dir, entry)
-      let st: ReturnType<typeof statSync>
-      try { st = statSync(fullPath) } catch { continue }
+      if (onFile) onFile(path.relative(sourcePath, fullPath) || entry, false, discovered)
+      let st
+      try { st = await withFsTimeout(lstat(fullPath), `lstat ${fullPath}`) } catch { continue }
+      if (st.isSymbolicLink()) continue
       if (st.isDirectory()) {
         if (shouldSkipScanDir(entry)) continue
-        await walk(fullPath)
+        stack.push(fullPath)
         continue
       }
       if (!st.isFile()) continue
-      if (shouldSkipSourceFile(fullPath)) { totals.ignored++; continue }
-      const ext = fileExt(fullPath)
+      discovered++
+      if (onFile) onFile(path.relative(sourcePath, fullPath) || entry, true, discovered)
       try {
-        const cls = await classifySourceFile(fullPath)
+        totals.total++
+        if (shouldSkipSourceFile(fullPath)) { totals.ignored++; continue }
+        const ext = fileExt(fullPath)
+        const cls = await classify(fullPath)
         switch (cls) {
           case "markdown": totals.markdown++; break
           case "markitdown": totals.markitdown++; break
@@ -83,24 +114,23 @@ async function scanByExtension(sourcePath: string): Promise<{
           case "audio": totals.audio++; break
           default: totals.unknown++; break
         }
+        if (!ext) continue
+        const existing = extMap.get(ext)
+        if (existing) { existing.count++; existing.bytes += st.size }
+        else { extMap.set(ext, { ext, count: 1, bytes: st.size }) }
       } catch {
-        // ignored — classifySourceFile may throw on unreadable files
         totals.unknown++; continue
       }
-      const existing = extMap.get(ext)
-      if (existing) { existing.count++ }
-      else { extMap.set(ext, { ext, count: 1, bytes: st.size }) }
     }
   }
-
-  await walk(sourcePath)
   return { extMap, totals }
 }
 
 // ── Build scan rows (for display) ────────────────────────────────────
 
-function buildScanRows(totals: { markdown: number; markitdown: number; native: number; ocr: number; video: number; audio: number; unknown: number; ignored: number }): OnboardingPreviewRow[] {
+function buildScanRows(totals: { markdown: number; markitdown: number; native: number; ocr: number; video: number; audio: number; unknown: number; ignored: number; total: number }): OnboardingPreviewRow[] {
   const rows: OnboardingPreviewRow[] = []
+  if (totals.total > 0) rows.push({ label: "Source scan", status: `${totals.total} file${totals.total === 1 ? "" : "s"}` })
   const push = (count: number, label: string) => {
     if (count > 0) rows.push({ label, status: `${count} file${count === 1 ? "" : "s"}` })
   }
@@ -141,8 +171,7 @@ function buildPreflightRows(workspacePath: string, toolStatus: ToolStatus): Onbo
   rows.push({ label: "Workspace", status: "writable", detail: path.basename(workspacePath), tone: "success" })
   rows.push({ label: "PPU PaddleOCR", status: "available", tone: "success" })
   rows.push({ label: "MarkItDown", status: toolStatus.markitdown ? "available" : "missing", tone: toolStatus.markitdown ? "success" : "error" })
-  rows.push({ label: "pdftoppm", status: toolStatus.pypdfium2 ? "available" : "missing", tone: toolStatus.pypdfium2 ? "success" : "error" })
-  rows.push({ label: "pdftotext", status: toolStatus.pypdf ? "available" : "missing", tone: toolStatus.pypdf ? "success" : "error" })
+  rows.push({ label: "PDF.js", status: toolStatus.pdfjs ? "available" : "missing", tone: toolStatus.pdfjs ? "success" : "error" })
   return rows
 }
 
@@ -154,16 +183,17 @@ export function detectLlmTools(): string[] {
   return coreDetectLlmTools()
 }
 
-function resolveWorkspacePath(projectName: string): string {
-  const cwd = process.cwd()
-  return coreSuggestWorkspacePath(cwd) ?? path.join(path.dirname(cwd), `${projectName}-spinosa`)
+function resolveWorkspacePath(sourcePath: string, workspaceName?: string): string {
+  const resolved = resolveUserPath(sourcePath)
+  if (!resolved) return ""
+  return resolveCoreWorkspacePath(resolved, workspaceName)
 }
 
-export async function buildNewWorkspacePreview(sourcePath: string): Promise<NewWorkspacePreview> {
-  const projectName = path.basename(sourcePath)
-  const workspacePath = resolveWorkspacePath(projectName)
+export async function buildNewWorkspacePreview(sourcePath: string, workspaceName?: string, onFile?: (relativePath: string, isFile: boolean, discovered: number) => void, shouldAbort?: () => boolean): Promise<NewWorkspacePreview> {
+  const projectName = workspaceName?.trim() || path.basename(sourcePath)
+  const workspacePath = resolveWorkspacePath(sourcePath, workspaceName)
   const toolStatus = await detectDocumentTools()
-  const { extMap, totals } = await scanByExtension(sourcePath)
+  const { extMap, totals } = await scanByExtension(sourcePath, scanClassifySourceFile, onFile, shouldAbort)
 
   return {
     projectName,
@@ -175,10 +205,12 @@ export async function buildNewWorkspacePreview(sourcePath: string): Promise<NewW
   }
 }
 
-export async function buildImportScanPreview(sourcePath: string): Promise<ImportScanPreview> {
+export async function buildImportScanPreview(
+  sourcePath: string,
+  options?: { classify?: (filePath: string) => Promise<FileClass>; onFile?: (relativePath: string, isFile: boolean, discovered: number) => void; shouldAbort?: () => boolean },
+): Promise<ImportScanPreview> {
   const projectName = path.basename(sourcePath)
-  const workspacePath = resolveWorkspacePath(projectName)
-  const { extMap, totals } = await scanByExtension(sourcePath)
+  const { extMap, totals } = await scanByExtension(sourcePath, options?.classify, options?.onFile, options?.shouldAbort)
 
   return {
     projectName,
@@ -188,5 +220,5 @@ export async function buildImportScanPreview(sourcePath: string): Promise<Import
   }
 }
 
-export { resolveUserPath } from "@opencode-ai/spinosa-core/utils/path"
-export { suggestWorkspacePath } from "@opencode-ai/spinosa-core/scan/scanner"
+export { resolveUserPath } from "../spinosa-core/utils/path"
+export { suggestWorkspacePath } from "../spinosa-core/scan/scanner"

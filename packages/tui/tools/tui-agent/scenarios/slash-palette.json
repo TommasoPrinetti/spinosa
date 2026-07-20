@@ -1,0 +1,40 @@
+{
+  "name": "slash-palette",
+  "description": "Open command palette with ctrl+p, type to filter commands, select a command and confirm",
+  "adapter": "../adapters/spinosa.ts",
+  "terminal": { "width": 100, "height": 50 },
+  "fixture": {
+    "workspace": { "name": "palette-test-workspace", "setupStatus": "workspace_started" },
+    "sessions": [
+      { "id": "ses_palette", "title": "Palette test", "directory": "$WORKSPACE", "updated": 500 }
+    ],
+    "responses": [
+      { "path": "/global/config", "body": { "autoupdate": "notify" } },
+      { "path": "/file", "body": [] },
+      { "path": "/session/ses_palette/children", "body": [] },
+      { "path": "/session/ses_palette/diff", "body": [] },
+      { "path": "/session/ses_palette/todo", "body": [] },
+      { "path": "/session/ses_palette/permission", "body": [] },
+      { "path": "/session/ses_palette/question", "body": [] },
+      { "path": "/session/ses_palette/message", "body": [] },
+      { "path": "/session/ses_palette/part", "body": [] }
+    ]
+  },
+  "steps": [
+    { "action": "waitForText", "text": "Describe the task", "timeoutMs": 8000 },
+    { "action": "capture", "name": "home" },
+
+    { "action": "key", "key": "p", "modifiers": { "ctrl": true } },
+    { "action": "waitForText", "text": "Commands", "timeoutMs": 5000 },
+    { "action": "assert", "visible": ["Commands"] },
+    { "action": "capture", "name": "palette-open" },
+
+    { "action": "type", "text": "model" },
+    { "action": "key", "key": "RETURN" },
+    { "action": "waitForText", "text": "Select model", "timeoutMs": 5000 },
+    { "action": "assert", "visible": ["Select model"] },
+    { "action": "capture", "name": "palette-selected" },
+
+    { "action": "key", "key": "escape" }
+  ]
+}

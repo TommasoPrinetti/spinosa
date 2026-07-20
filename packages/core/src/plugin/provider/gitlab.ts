@@ -21,12 +21,12 @@ export const GitLabPlugin = define({
           aiGatewayHeaders: {
             "User-Agent": `opencode/${InstallationVersion} gitlab-ai-provider/${mod.VERSION} (${os.platform()} ${os.release()}; ${os.arch()})`,
             "anthropic-beta": "context-1m-2025-08-07",
-            ...evt.options.aiGatewayHeaders,
+            ...(evt.options as any).aiGatewayHeaders,
           },
           featureFlags: {
             duo_agent_platform_agentic_chat: true,
             duo_agent_platform: true,
-            ...evt.options.featureFlags,
+            ...(evt.options as any).featureFlags,
           },
         })
       }),
@@ -34,6 +34,7 @@ export const GitLabPlugin = define({
     yield* ctx.aisdk.language(
       Effect.fn(function* (evt) {
         if (evt.model.providerID !== ProviderV2.ID.gitlab) return
+        const sdk = evt.sdk as any
         const featureFlags =
           typeof evt.options.featureFlags === "object" && evt.options.featureFlags ? evt.options.featureFlags : {}
         if (evt.model.api.id.startsWith("duo-workflow-")) {
@@ -44,7 +45,7 @@ export const GitLabPlugin = define({
             typeof evt.model.request.body.workflowDefinition === "string"
               ? evt.model.request.body.workflowDefinition
               : undefined
-          const language = evt.sdk.workflowChat(
+          const language = sdk.workflowChat(
             gitlab.isWorkflowModel(evt.model.api.id) ? evt.model.api.id : "duo-workflow",
             {
               featureFlags,
@@ -55,7 +56,7 @@ export const GitLabPlugin = define({
           evt.language = language
           return
         }
-        evt.language = evt.sdk.agenticChat(evt.model.api.id, {
+        evt.language = sdk.agenticChat(evt.model.api.id, {
           aiGatewayHeaders: evt.options.aiGatewayHeaders,
           featureFlags,
         })

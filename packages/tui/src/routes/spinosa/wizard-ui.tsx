@@ -1,10 +1,12 @@
-import { createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
-import { TextAttributes } from "@opentui/core"
+import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
+import { ScrollBoxRenderable, TextAttributes } from "@opentui/core"
 import type { Theme } from "../../context/theme"
 import { SplitBorder } from "../../ui/border"
 import { buttonBackground, buttonBorder, buttonText } from "../../util/button"
 import { Locale } from "../../util/locale"
 import type { ImportScanPreview, NewWorkspacePreview } from "../../spinosa/onboarding-preview"
+import type { DialogContext } from "../../ui/dialog"
+import { DialogConfirm } from "../../ui/dialog-confirm"
 
 export type ImportOption = {
   ext: string
@@ -16,6 +18,14 @@ export type ImportOption = {
 /** Defer press handlers so route changes do not unmount the tree mid-mousedown. */
 export function deferPress(action: () => void) {
   setTimeout(() => action(), 0)
+}
+
+export function nextFocusedSourceIndexForAppend(
+  currentFocusedIndex: number,
+  nextIndex: number,
+  options?: { focusNewInput?: boolean },
+) {
+  return options?.focusNewInput === false ? currentFocusedIndex : nextIndex
 }
 
 /** Blur a focused input so mouse-driven controls can receive hover and click. */
@@ -32,8 +42,78 @@ export function createWorkflowGuard() {
   }
 }
 
+/** Tracks one wizard operation so cancellation can settle before navigation. */
+export function createActiveWorkTracker() {
+  let active: Promise<void> | undefined
+  return {
+    run(work: () => Promise<void>) {
+      if (active) return active
+      const current = work()
+      active = current
+      void current.then(
+        () => { if (active === current) active = undefined },
+        () => { if (active === current) active = undefined },
+      )
+      return current
+    },
+    async wait() {
+      await active?.then(() => undefined, () => undefined)
+    },
+  }
+}
+
+export function shouldConfirmSpinosaBack(props: {
+  step: string
+  busy: boolean
+  waitingForGate: boolean
+  cancellableSteps: readonly string[]
+}) {
+  return props.cancellableSteps.includes(props.step) && (props.busy || props.waitingForGate)
+}
+
+export async function confirmSpinosaBack(dialog: DialogContext, step: string) {
+  const operation = step === "direct"
+    ? "the current file copy"
+    : step === "markitdown"
+      ? "the current MarkItDown conversion"
+      : step === "ocr"
+        ? "the current OCR operation"
+        : step === "verification"
+          ? "the current verification"
+          : "the current workspace setup"
+  return (await DialogConfirm.show(
+    dialog,
+    "Stop current operation?",
+    `Going back will stop ${operation}. Files already imported will remain.`,
+    { cancelLabel: "Stay", confirmLabel: "Stop and go back", defaultChoice: "cancel" },
+  )) === true
+}
+
+export async function runGuardedBackNavigation(input: {
+  shouldConfirm: boolean
+  confirm: () => Promise<boolean>
+  stop: () => void
+  waitForStop: () => Promise<void>
+  navigate: () => void
+}): Promise<"stayed" | "navigated"> {
+  if (input.shouldConfirm && !(await input.confirm())) return "stayed"
+  input.stop()
+  await input.waitForStop()
+  input.navigate()
+  return "navigated"
+}
+
 export function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+export function shouldCancelSpinosaWorkOnCtrlC(props: {
+  step: string
+  busy: boolean
+  waitingForGate: boolean
+  cancellableSteps: readonly string[]
+}) {
+  return props.busy || props.cancellableSteps.includes(props.step) || (props.waitingForGate && props.cancellableSteps.includes(props.step))
 }
 
 export function yieldToEventLoop() {
@@ -46,7 +126,7 @@ export function stripAnsi(text: string): string {
 
 export function generateScanLines(preview: NewWorkspacePreview | ImportScanPreview): string[] {
   const lines: string[] = []
-  lines.push("Scanning source folder...")
+  lines.push("Scanning source files...")
   if ("preflightRows" in preview) {
     lines.push("")
     for (const row of preview.preflightRows) {
@@ -186,9 +266,121 @@ export function ToggleLine(props: {
   )
 }
 
-export function LogScrollbox(props: { theme: Theme; lines: string[] }) {
+export function wizardScrollboxMaxHeight(
+  viewportHeight: number,
+  options?: { min?: number; ratio?: number; max?: number },
+): number {
+  const min = options?.min ?? 4
+  const ratio = options?.ratio ?? 0.6
+  const max = options?.max
+  const resolved = Math.max(min, Math.floor(viewportHeight * ratio))
+  return max === undefined ? resolved : Math.min(resolved, max)
+}
+
+export function scanOptionListMaxHeight(viewportHeight: number): number {
+  return wizardScrollboxMaxHeight(viewportHeight)
+}
+
+function scrollSelectedImportOptionIntoView(scroll: ScrollBoxRenderable | undefined, selectedIndex: number) {
+  if (!scroll || selectedIndex <= 0) return
+  const target = scroll.getChildren()[selectedIndex - 1]
+  if (!target) return
+
+  const y = target.y - scroll.y
+  if (y >= scroll.height) {
+    scroll.scrollBy(y - scroll.height + 1)
+  } else if (y < 0) {
+    scroll.scrollBy(y)
+    if (selectedIndex === 1) scroll.scrollTo(0)
+  }
+}
+
+export function ImportOptionsSelector(props: {
+  theme: Theme
+  options: ImportOption[]
+  selectedIndex: number
+  viewportHeight: number
+  formatCount?: (item: ImportOption) => string
+  formatDetail?: (item: ImportOption) => string
+  onSelectIndex: (index: number) => void
+  onToggleAll: () => void
+  onToggleItem: (index: number) => void
+}) {
+  let scroll: ScrollBoxRenderable | undefined
+  const totalFiles = createMemo(() => props.options.reduce((sum, item) => sum + item.count, 0))
+
+  createEffect(() => {
+    const selectedIndex = props.selectedIndex
+    queueMicrotask(() => scrollSelectedImportOptionIntoView(scroll, selectedIndex))
+  })
+
   return (
-    <scrollbox maxHeight={14} stickyScroll={true} stickyStart="bottom">
+    <box flexDirection="column" gap={1} paddingTop={1}>
+      <box
+        paddingLeft={1}
+        paddingRight={1}
+        paddingTop={1}
+        paddingBottom={1}
+        backgroundColor={buttonBackground(props.theme, props.selectedIndex === 0)}
+        onMouseOver={() => props.onSelectIndex(0)}
+        onMouseDown={() => deferPress(props.onToggleAll)}
+      >
+        <ToggleLine
+          theme={props.theme}
+          selected={props.selectedIndex === 0}
+          enabled={props.options.every((item) => item.selected)}
+          label="All supported files"
+          count={totalFiles()}
+        />
+      </box>
+      <scrollbox
+        ref={(element: ScrollBoxRenderable) => (scroll = element)}
+        maxHeight={scanOptionListMaxHeight(props.viewportHeight)}
+        scrollbarOptions={{ visible: false }}
+      >
+        <For each={props.options}>
+          {(item, index) => {
+            const active = createMemo(() => props.selectedIndex === index() + 1)
+            return (
+              <box
+                paddingLeft={1}
+                paddingRight={1}
+                paddingTop={1}
+                paddingBottom={1}
+                backgroundColor={buttonBackground(props.theme, active())}
+                onMouseOver={() => props.onSelectIndex(index() + 1)}
+                onMouseDown={() => deferPress(() => props.onToggleItem(index()))}
+              >
+                <box flexDirection="row" gap={1} alignItems="center">
+                  <text fg={buttonText(props.theme, active(), props.theme.primary)} width={2}>
+                    {item.selected ? "●" : "○"}
+                  </text>
+                  <text fg={buttonText(props.theme, active(), props.theme.text)} width={10}>
+                    .{item.ext}
+                  </text>
+                  <text fg={buttonText(props.theme, active(), props.theme.textMuted)} width={10}>
+                    {props.formatCount?.(item) ?? `${item.count} file${item.count === 1 ? "" : "s"}`}
+                  </text>
+                  <text fg={buttonText(props.theme, active(), props.theme.textMuted)}>
+                    {props.formatDetail?.(item) ?? `${item.bytes} B`}
+                  </text>
+                </box>
+              </box>
+            )
+          }}
+        </For>
+      </scrollbox>
+    </box>
+  )
+}
+
+export function LogScrollbox(props: { theme: Theme; lines: string[]; viewportHeight: number }) {
+  return (
+    <scrollbox
+      maxHeight={wizardScrollboxMaxHeight(props.viewportHeight, { min: 4, ratio: 0.45, max: 14 })}
+      stickyScroll={true}
+      stickyStart="bottom"
+    >
       <For each={props.lines}>
         {(line) => <text fg={props.theme.textMuted}>{line || " "}</text>}
       </For>

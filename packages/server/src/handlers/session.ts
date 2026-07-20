@@ -270,6 +270,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                 }),
             ),
             Effect.catchTag("Snapshot.Error", (error) => {
+              const ref = `err_${crypto.randomUUID().slice(0, 8)}`
               return Effect.logError("failed to clear session revert").pipe(
                 Effect.annotateLogs({ cause: error }),
                 Effect.andThen(

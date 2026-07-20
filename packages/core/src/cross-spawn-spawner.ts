@@ -1,6 +1,7 @@
 import type * as Arr from "effect/Array"
 import { NodeFileSystem, NodeSink, NodeStream } from "@effect/platform-node"
 import * as NodePath from "@effect/platform-node/NodePath"
+import * as Cause from "effect/Cause"
 import * as Deferred from "effect/Deferred"
 import * as Effect from "effect/Effect"
 import * as Exit from "effect/Exit"
@@ -229,7 +230,7 @@ export const make = Effect.gen(function* () {
       let sink: Sink.Sink<void, unknown, never, PlatformError.PlatformError> = Sink.drain
       if (Predicate.isNotNull(proc.stdin)) {
         sink = NodeSink.fromWritable({
-          evaluate: () => proc.stdin,
+          evaluate: () => proc.stdin!,
           onError: (err) => toPlatformError("fromWritable(stdin)", toError(err), command),
           endOnDone: cfg.endOnDone,
           encoding: cfg.encoding,
@@ -247,19 +248,19 @@ export const make = Effect.gen(function* () {
   ) => {
     let stdout = proc.stdout
       ? NodeStream.fromReadable({
-          evaluate: () => proc.stdout,
-          onError: (cause) => toPlatformError("fromReadable(stdout)", toError(cause), command),
-        })
+          evaluate: () => proc.stdout!,
+          onError: (cause) => toPlatformError("fromReadable(stdout)", toError(cause), command) as unknown as Cause.UnknownError,
+        }) as unknown as Stream.Stream<Uint8Array, PlatformError.PlatformError>
       : Stream.empty
     let stderr = proc.stderr
       ? NodeStream.fromReadable({
-          evaluate: () => proc.stderr,
-          onError: (cause) => toPlatformError("fromReadable(stderr)", toError(cause), command),
-        })
+          evaluate: () => proc.stderr!,
+          onError: (cause) => toPlatformError("fromReadable(stderr)", toError(cause), command) as unknown as Cause.UnknownError,
+        }) as unknown as Stream.Stream<Uint8Array, PlatformError.PlatformError>
       : Stream.empty
 
-    if (Sink.isSink(out.stream)) stdout = Stream.transduce(stdout, out.stream)
-    if (Sink.isSink(err.stream)) stderr = Stream.transduce(stderr, err.stream)
+    if (Sink.isSink(out.stream)) stdout = Stream.transduce(stdout, out.stream) as Stream.Stream<Uint8Array, PlatformError.PlatformError>
+    if (Sink.isSink(err.stream)) stderr = Stream.transduce(stderr, err.stream) as Stream.Stream<Uint8Array, PlatformError.PlatformError>
 
     return { stdout, stderr, all: Stream.merge(stdout, stderr) }
   }
@@ -411,9 +412,9 @@ export const make = Effect.gen(function* () {
           return makeHandle({
             pid: ProcessId(pid),
             stdin: yield* setupStdin(command, proc, sin),
-            stdout: out.stdout,
-            stderr: out.stderr,
-            all: out.all,
+            stdout: out.stdout as Stream.Stream<Uint8Array, PlatformError.PlatformError>,
+            stderr: out.stderr as Stream.Stream<Uint8Array, PlatformError.PlatformError>,
+            all: out.all as Stream.Stream<Uint8Array, PlatformError.PlatformError>,
             getInputFd: fd.getInputFd,
             getOutputFd: fd.getOutputFd,
             isRunning: Effect.map(Deferred.isDone(signal), (done) => !done),

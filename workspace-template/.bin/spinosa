@@ -1,0 +1,122 @@
+#!/usr/bin/env bash
+# ── spinosa — Bootstrap launcher ────────────────────────────────────────────
+# Resolves Spinosa root and Bun runtime, then dispatches to TypeScript CLI
+# or TUI. All command logic lives in packages/tui/src/spinosa-cli.ts.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+RESOLVED_ROOT=""
+if [[ -z "${SPINOSA_HOME:-}" && -d "${SCRIPT_DIR}/../versions" && -d "${SCRIPT_DIR}/../metadata" ]]; then
+  SPINOSA_HOME="$(cd "${SCRIPT_DIR}/.." && pwd)"
+else
+  SPINOSA_HOME="${SPINOSA_HOME:-$HOME/.spinosa}"
+fi
+export SPINOSA_HOME
+
+# Resolve system root (3 tiers)
+candidate="${SCRIPT_DIR}/.."
+if [[ -f "${candidate}/.spinosa/workspace-files.tsv" ]]; then
+  RESOLVED_ROOT="$(cd "$candidate/.." && pwd)"
+else
+  candidate2="${SCRIPT_DIR}/../.."
+  if [[ -f "${candidate2}/workspace-template/.spinosa/workspace-files.tsv" ]]; then
+    RESOLVED_ROOT="$candidate2"
+  fi
+fi
+if [[ -z "$RESOLVED_ROOT" && -d "${SPINOSA_HOME}/versions" ]]; then
+  while IFS= read -r candidate3; do
+    v="$(basename "$candidate3")"
+    [[ "$v" =~ ^[0-9] ]] || continue
+    if [[ -f "${candidate3}/workspace-template/.spinosa/workspace-files.tsv" ]]; then
+      RESOLVED_ROOT="$candidate3"
+      break
+    fi
+  done < <(find "${SPINOSA_HOME}/versions" -mindepth 1 -maxdepth 1 -type d -print 2>/dev/null | sort -V -r)
+fi
+
+# Find bun — bundled install first, then system
+BUN=""
+[[ -x "${SPINOSA_HOME:-$HOME/.spinosa}/bin/bun" ]] && BUN="${SPINOSA_HOME:-$HOME/.spinosa}/bin/bun"
+if [[ -z "$BUN" ]] && command -v bun >/dev/null 2>&1; then
+  BUN="$(command -v bun)"
+fi
+
+# Installed releases validate their runtime before dispatch. If node_modules or
+# Bun are damaged, rebuild that release while preserving ~/.spinosa/metadata,
+# then re-run the exact original command once.
+installed_release=false
+case "$RESOLVED_ROOT" in
+  "${SPINOSA_HOME}/versions/"*) installed_release=true ;;
+esac
+
+runtime_healthy() {
+  [[ -n "$RESOLVED_ROOT" && -n "$BUN" ]] || return 1
+  SPINOSA_TEMPLATE_ROOT="$RESOLVED_ROOT" \
+    "$BUN" run "${RESOLVED_ROOT}/packages/tui/src/spinosa-cli.ts" version >/dev/null 2>&1
+}
+
+repair_and_restart() {
+  [[ "${SPINOSA_REPAIR_ATTEMPT:-0}" != "1" ]] || return 1
+  local installer="${RESOLVED_ROOT}/install.sh"
+  local version
+  version="$(tr -d '[:space:]' < "${RESOLVED_ROOT}/metadata/version" 2>/dev/null || true)"
+  [[ -n "$version" ]] || version="$(basename "$RESOLVED_ROOT")"
+  [[ -f "$installer" && -n "$version" ]] || return 1
+
+  printf 'Spinosa runtime corruption detected. Repairing v%s while preserving metadata...\n' "$version" >&2
+  if bash "$installer" --version "$version" --yes --reinstall --no-launch --no-modify-path; then
+    export SPINOSA_REPAIR_ATTEMPT=1
+    exec "${SPINOSA_HOME}/bin/spinosa" "$@"
+  fi
+  return 1
+}
+
+if [[ "$installed_release" == "true" ]] && ! runtime_healthy; then
+  if ! repair_and_restart "$@"; then
+    echo "Error: Spinosa runtime repair failed. Metadata was preserved." >&2
+    echo "Re-run the installer with --yes --reinstall for details." >&2
+    exit 1
+  fi
+fi
+
+# Dispatch to TS CLI for all non-interactive commands.
+# new/create without a source argument still launches the TUI dashboard.
+launcher_args=("$@")
+command_index=0
+while [[ "${launcher_args[$command_index]:-}" == "--json" || "${launcher_args[$command_index]:-}" == "--quiet" || "${launcher_args[$command_index]:-}" == "--no-color" ]]; do
+  command_index=$((command_index + 1))
+done
+launcher_command="${launcher_args[$command_index]:-}"
+dispatch=false
+case "$launcher_command" in
+  help|--help|-h|version|--version|add|update|doctor|upgrade|uninstall|status|list|startup-autoclean|autoclean) dispatch=true ;;
+  new|create) [[ $(( $# - command_index )) -gt 1 ]] && dispatch=true ;;
+esac
+if [[ "$dispatch" == "true" ]]; then
+  [[ -z "$RESOLVED_ROOT" || -z "$BUN" ]] && { echo "Error: Spinosa runtime not found. Reinstall Spinosa." >&2; exit 1; }
+  export SPINOSA_TEMPLATE_ROOT="$RESOLVED_ROOT"
+  exec "$BUN" run "${RESOLVED_ROOT}/packages/tui/src/spinosa-cli.ts" "$@"
+fi
+
+# Unknown command — reject instead of silently falling through to TUI
+if [[ -n "$launcher_command" && "$launcher_command" != "new" && "$launcher_command" != "create" ]]; then
+  echo "Error: Unknown Spinosa command: ${launcher_command}" >&2
+  echo "Run 'spinosa help' for usage." >&2
+  exit 1
+fi
+
+# No-args or new/create without source → launch TUI
+if [[ -d "${RESOLVED_ROOT}/packages/opencode" && -n "$BUN" ]]; then
+  export SPINOSA_TEMPLATE_ROOT="$RESOLVED_ROOT"
+  if "$BUN" run "${RESOLVED_ROOT}/packages/tui/src/spinosa-cli.ts" preflight; then
+    :
+  else
+    preflight_status=$?
+    [[ "$preflight_status" -eq 10 ]] && exit 0
+    exit "$preflight_status"
+  fi
+  exec "$BUN" run --cwd "${RESOLVED_ROOT}/packages/opencode" --conditions=browser src/index.ts "$@"
+fi
+
+echo "Error: Spinosa not found. Run the installer or re-install dependencies." >&2
+exit 1

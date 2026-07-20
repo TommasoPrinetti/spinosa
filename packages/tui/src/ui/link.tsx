@@ -16,7 +16,7 @@ export interface LinkProps {
  * Clicking anywhere on the link text opens the URL in the default browser.
  */
 export function Link(props: LinkProps) {
-  const displayText = props.children ?? props.href
+  const displayText = () => props.children ?? props.href
 
   return (
     <text
@@ -28,7 +28,7 @@ export function Link(props: LinkProps) {
         open(props.href).catch(() => {})
       }}
     >
-      {displayText}
+      {displayText()}
     </text>
   )
 }

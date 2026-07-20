@@ -7,9 +7,11 @@
   "license": "MIT",
   "scripts": {
     "test": "bun test --timeout 30000 --only-failures",
-    "test:spinosa": "bun test test/spinosa/",
-    "verify:spinosa": "bun run scripts/verify-spinosa.ts",
-    "check:imports": "bun run scripts/check-imports.ts",
+    "test:spinosa": "bun test --isolate test/spinosa/",
+    "tui:agent": "bun x tui-agent-use",
+    "typecheck": "tsc --noEmit",
+    "typecheck:spinosa": "tsc --noEmit -p tsconfig.spinosa.json",
+    "verify:spinosa": "bun run scripts/verify-spinosa.ts"
   },
   "exports": {
     ".": "./src/index.tsx",
@@ -36,7 +38,6 @@
     "./prompt/display": "./src/prompt/display.ts",
     "./plugin/runtime": "./src/plugin/runtime.tsx",
     "./plugin/slots": "./src/plugin/slots.tsx",
-    "./plugin/command-shim": "./src/plugin/command-shim.ts",
     "./parsers-config": "./src/parsers-config.ts",
     "./util/error": "./src/util/error.ts",
     "./util/locale": "./src/util/locale.ts",
@@ -49,10 +50,10 @@
     "./component/spinner": "./src/component/spinner.tsx"
   },
   "dependencies": {
+    "@napi-rs/canvas": "1.0.2",
     "@opencode-ai/core": "workspace:*",
     "@opencode-ai/plugin": "workspace:*",
     "@opencode-ai/sdk": "workspace:*",
-    "@opencode-ai/spinosa-core": "workspace:*",
     "@opencode-ai/ui": "workspace:*",
     "@opentui/core": "catalog:",
     "@opentui/keymap": "catalog:",
@@ -61,15 +62,31 @@
     "diff": "catalog:",
     "effect": "catalog:",
     "fuzzysort": "catalog:",
+    "markitdown-ts": "0.0.10",
     "open": "10.1.2",
     "opentui-spinner": "catalog:",
+    "pdfjs-dist": "4.9.155",
+    "ppu-paddle-ocr": "6.0.0",
     "remeda": "catalog:",
-    "strip-ansi": "7.1.2",
-    "solid-js": "catalog:"
+    "solid-js": "catalog:",
+    "strip-ansi": "7.1.2"
   },
   "devDependencies": {
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",
     "@typescript/native-preview": "catalog:"
+  },
+  "optionalDependencies": {
+    "@napi-rs/canvas-darwin-arm64": "1.0.2",
+    "@napi-rs/canvas-darwin-x64": "1.0.2",
+    "@napi-rs/canvas-linux-x64-gnu": "1.0.2",
+    "@napi-rs/canvas-linux-x64-musl": "1.0.2",
+    "@napi-rs/canvas-linux-arm64-gnu": "1.0.2",
+    "@napi-rs/canvas-linux-arm64-musl": "1.0.2",
+    "@napi-rs/canvas-linux-arm-gnueabihf": "1.0.2",
+    "@napi-rs/canvas-linux-riscv64-gnu": "1.0.2",
+    "@napi-rs/canvas-win32-x64-msvc": "1.0.2",
+    "@napi-rs/canvas-win32-arm64-msvc": "1.0.2",
+    "tui-agent-use": "0.1.3"
   }
 }

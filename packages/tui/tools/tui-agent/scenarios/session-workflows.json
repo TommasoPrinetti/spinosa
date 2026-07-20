@@ -1,0 +1,41 @@
+{
+  
+  "name": "session-workflows",
+  "description": "Open /session from a workspace, select a session, use Export dialog.",
+  "adapter": "../adapters/spinosa.ts",
+  "terminal": { "width": 100, "height": 50 },
+  "fixture": {
+    "workspace": { "name": "workflows-workspace", "setupStatus": "workspace_started" },
+    "sessions": [
+      { "id": "ses_main", "title": "Main workflow session", "directory": "$WORKSPACE", "updated": 500 }
+    ],
+    "responses": [
+      { "path": "/global/config", "body": { "autoupdate": "notify" } },
+      { "path": "/file", "body": [] },
+      { "path": "/session/ses_main/children", "body": [] },
+      { "path": "/session/ses_main/diff", "body": [] },
+      { "path": "/session/ses_main/todo", "body": [] },
+      { "path": "/session/ses_main/permission", "body": [] },
+      { "path": "/session/ses_main/question", "body": [] },
+      { "path": "/session/ses_main/message", "body": [] },
+      { "path": "/session/ses_main/part", "body": [] }
+    ]
+  },
+  "steps": [
+    { "action": "waitForText", "text": "Describe the task", "timeoutMs": 8000 },
+
+    { "action": "type", "text": "/session" },
+    { "action": "key", "key": "RETURN" },
+    { "action": "waitForText", "text": "Main workflow session", "timeoutMs": 5000 },
+    { "action": "assert", "visible": ["Main workflow session"] },
+    { "action": "capture", "name": "session-list" },
+
+    { "action": "clickText", "text": "Main workflow session" },
+
+    { "action": "clickText", "text": "Export" },
+    { "action": "waitForText", "text": "Include thinking", "timeoutMs": 5000 },
+    { "action": "assert", "visible": ["Export Options", "Include thinking", "Include tool details", "Open without saving"] },
+    { "action": "capture", "name": "export-options" },
+    { "action": "key", "key": "escape" }
+  ]
+}

@@ -35,13 +35,14 @@ export const GithubCopilotPlugin = define({
     yield* ctx.aisdk.language(
       Effect.fn(function* (evt) {
         if (evt.model.providerID !== ProviderV2.ID.githubCopilot) return
-        if (evt.sdk.responses === undefined && evt.sdk.chat === undefined) {
-          evt.language = evt.sdk.languageModel(evt.model.api.id)
+        const sdk = evt.sdk as any
+        if (sdk.responses === undefined && sdk.chat === undefined) {
+          evt.language = sdk.languageModel(evt.model.api.id)
           return
         }
         evt.language = shouldUseResponses(evt.model.api.id)
-          ? evt.sdk.responses(evt.model.api.id)
-          : evt.sdk.chat(evt.model.api.id)
+          ? sdk.responses(evt.model.api.id)
+          : sdk.chat(evt.model.api.id)
       }),
     )
   }),

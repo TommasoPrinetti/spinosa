@@ -6,9 +6,9 @@ export function resolveWorkspaceDisplayName(workspacePath: string, projectName?:
   return path.basename(workspacePath) || workspacePath
 }
 
-/** Show the full workspace name including `-spinosa` suffix so the user identifies it as the Spinosa version of the original folder. */
+/** Show the source-like workspace name by removing the generated `-spinosa` suffix. */
 export function workspaceAsciiBannerText(workspacePath: string) {
   const name = path.basename(workspacePath) || workspacePath
-  const trimmed = name.trim()
+  const trimmed = name.trim().replace(/-spinosa$/i, "")
   return trimmed?.toUpperCase() ?? undefined
 }

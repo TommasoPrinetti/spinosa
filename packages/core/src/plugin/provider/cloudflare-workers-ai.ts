@@ -40,7 +40,7 @@ export const CloudflareWorkersAIPlugin = define({
     yield* ctx.aisdk.language(
       Effect.fn(function* (evt) {
         if (evt.model.providerID !== providerID) return
-        evt.language = evt.sdk.languageModel(evt.model.api.id)
+        evt.language = (evt.sdk as any).languageModel(evt.model.api.id)
       }),
     )
   }),

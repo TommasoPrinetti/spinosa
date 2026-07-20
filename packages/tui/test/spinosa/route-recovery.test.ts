@@ -1,18 +1,25 @@
-import { describe, expect, test } from "bun:test"
+import { expect, test } from "bun:test"
 import path from "node:path"
-import { fileURLToPath } from "node:url"
-import { parseGoalArtifact } from "../../src/spinosa/parse-goal"
+import { mkdir } from "node:fs/promises"
+import { tmpdir } from "../fixture/fixture"
 import { analyzeRouteRecovery } from "../../src/spinosa/route-recovery"
+import type { GoalArtifactSummary } from "../../src/spinosa-core/types"
 
-const fixture = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "fixtures/workspace-started")
+test("route recovery requires the goal artifact and tolerates corrupt artifact arrays", async () => {
+  await using tmp = await tmpdir()
+  await mkdir(path.join(tmp.path, "agent_reports"), { recursive: true })
+  const goal = {
+    sessionId: "session",
+    goalPath: "agent_reports/g_session.md",
+    filename: "g_session.md",
+    routeDecisions: [],
+    subagents: [],
+    artifactPaths: null,
+    phases: null,
+  } as unknown as GoalArtifactSummary
 
-describe("analyzeRouteRecovery", () => {
-  test("detects missing report artifact", async () => {
-    const text = await Bun.file(path.join(fixture, "agent_reports/g_20260701-fixture.md")).text()
-    const goal = parseGoalArtifact(text, "agent_reports/g_20260701-fixture.md")
-    const recovery = await analyzeRouteRecovery(fixture, goal)
-    expect(recovery.sessionId).toBe("20260701-fixture")
-    expect(recovery.missing.some((gap) => gap.path.includes("01_fixture-report"))).toBe(false)
-    expect(recovery.missing.some((gap) => gap.path.includes("analysis_"))).toBe(true)
-  })
+  const result = await analyzeRouteRecovery(tmp.path, goal)
+
+  expect(result.complete).toBe(false)
+  expect(result.missing).toEqual([{ role: "Goal", path: goal.goalPath, exists: false }])
 })

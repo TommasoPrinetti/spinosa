@@ -56,8 +56,8 @@ const decodeAndExecute = (
           if (tool._legacyResult && ToolResultValue.is(encoded))
             return { result: encoded, output: ToolOutput.fromResultValue(encoded) }
           if (ToolResultValue.is(encoded))
-            return { result: encoded, output: ToolOutput.fromResultValue(encoded), ...encoded }
-          return { result: new ToolResultValue({ type: "success", value: encoded }) }
+            return { result: encoded, output: ToolOutput.fromResultValue(encoded), ...(encoded as Record<string, unknown>) }
+          return { result: ToolResultValue.make(encoded) }
         }),
       ),
     ),

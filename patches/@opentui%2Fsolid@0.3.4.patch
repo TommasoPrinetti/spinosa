@@ -1,0 +1,14 @@
+diff --git a/index.js b/index.js
+--- a/index.js
++++ b/index.js
+@@ -577,7 +577,9 @@ var {
+         return;
+       }
+       if (name === "style") {
+-        node.attributes |= createTextAttributes(value);
++        // Style updates replace the previous flags so reactive false values
++        // remove stale attributes instead of accumulating them forever.
++        node.attributes = createTextAttributes(value);
+         node.fg = value.fg ? parseColor(value.fg) : node.fg;
+         node.bg = value.bg ? parseColor(value.bg) : node.bg;
+         return;

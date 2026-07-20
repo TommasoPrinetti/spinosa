@@ -5,13 +5,6 @@ import { testRender } from "@opentui/solid"
 async function renderWorkspaceForRoute(input: {
   sessionID?: string
 }) {
-  mock.module("../../src/context/route", () => ({
-    useRouteData: () => ({ type: "workspace", sessionID: input.sessionID }),
-    useRoute: () => ({ navigate() {} }),
-  }))
-  mock.module("../../src/spinosa/workspace-bind", () => ({
-    SpinosaWorkspaceBinder: () => <text>binder</text>,
-  }))
   mock.module("../../src/routes/home", () => ({
     Home: () => <text>home-pane</text>,
   }))
@@ -19,8 +12,10 @@ async function renderWorkspaceForRoute(input: {
     Session: () => <text>session-pane</text>,
   }))
 
-  const { Workspace } = await import("../../src/routes/workspace")
-  const app = await testRender(() => <Workspace />, { width: 60, height: 6 })
+  const Component = input.sessionID
+    ? (await import("../../src/routes/session")).Session
+    : (await import("../../src/routes/home")).Home
+  const app = await testRender(() => <Component />, { width: 60, height: 6 })
   await app.renderOnce()
   const frame = app.captureCharFrame()
   app.renderer.destroy()

@@ -1,25 +1,36 @@
 import path from "node:path"
 import { existsSync, readdirSync, statSync } from "node:fs"
 import { TextareaRenderable, TextAttributes } from "@opentui/core"
+import { useTerminalDimensions } from "@opentui/solid"
 import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useTheme } from "../../context/theme"
 import { useRoute } from "../../context/route"
 import { useSpinosaWorkspace } from "../../context/spinosa-workspace"
 import { Toast } from "../../ui/toast"
-import { ProgressEmitter } from "@opencode-ai/spinosa-core/progress/progress"
-import { createWorkspace } from "@opencode-ai/spinosa-core/commands/create"
-import { prepareOnboarding, completeOnboarding } from "@opencode-ai/spinosa-core/commands/onboard"
-import type { OnboardingContext, PhaseAccumulator, OnboardingResult } from "@opencode-ai/spinosa-core/commands/onboard"
-import { scanAndClassifySource, processDirectCopy, processMarkitdown, processOcr, type PhaseResult } from "@opencode-ai/spinosa-core/import/pipeline"
-import { addFiles } from "@opencode-ai/spinosa-core/commands/add"
-import { runStartup as tsRunStartup } from "@opencode-ai/spinosa-core/commands/startup"
-import { resolveFrameworkRoot } from "@opencode-ai/spinosa-core/framework/discovery"
+import { ProgressEmitter } from "../../spinosa-core/progress/progress"
+import { createWorkspace, resolveWorkspacePath } from "../../spinosa-core/commands/create"
+import { prepareOnboarding, completeOnboarding } from "../../spinosa-core/commands/onboard"
+import type { OnboardingContext, PhaseAccumulator, OnboardingResult } from "../../spinosa-core/commands/onboard"
+import { scanAndClassifySource, processDirectCopy, processMarkitdown, processOcr, type PhaseResult } from "../../spinosa-core/import/pipeline"
+import { isSpinosaCancellationError } from "../../spinosa-core/import/cancellation"
+import { addFiles } from "../../spinosa-core/commands/add"
+import {
+  buildStartupChatPrompt,
+  formatStartupProgressMessage,
+  STARTUP_PROGRESS_INTERVAL_MS,
+  STARTUP_PROGRESS_THRESHOLD_MS,
+  runStartup as tsRunStartup,
+} from "../../spinosa-core/commands/startup"
+import { resolveFrameworkRoot } from "../../spinosa-core/framework/discovery"
 import { spawn } from "node:child_process"
 import { tuiLog, logStep, logAction, logPhase, logTool, logResult, logError, logGate } from "../../spinosa/log"
 import { useExit } from "../../context/exit"
+import { useDialog } from "../../ui/dialog"
 import type { CliRunResult } from "../../spinosa/types"
 import { readBundledFrameworkVersion, isPrereleaseFrameworkVersion, readStartupPrompt, writePreferredCli } from "../../spinosa/service"
+import { writeWorkspaceStatus } from "../../spinosa-core/workspace/meta"
+import { normalizePathInput, resolveExistingUserPaths, isCloudStoragePath } from "../../spinosa-core/utils/path"
 import { CenteredColumn } from "../../component/centered-column"
 import { OPENCODE_BASE_MODE, useOpencodeKeymap, useOpencodeModeStack } from "../../keymap"
 import { buttonBackground, buttonBorder, buttonText } from "../../util/button"
@@ -33,24 +44,31 @@ import {
 } from "../../spinosa/onboarding-preview"
 import {
   blurIfFocused,
+  confirmSpinosaBack,
+  createActiveWorkTracker,
   createWorkflowGuard,
   deferPress,
   delay,
   generateScanLines,
+  ImportOptionsSelector,
+  nextFocusedSourceIndexForAppend,
+  runGuardedBackNavigation,
+  shouldCancelSpinosaWorkOnCtrlC,
+  shouldConfirmSpinosaBack,
   type ImportOption,
   LogScrollbox,
   LogoSummary,
   ProgressBar,
   stripAnsi,
-  ToggleLine,
   WizardActionButton,
   WizardActionRow,
   WizardGateButton,
   WizardPanel,
+  wizardScrollboxMaxHeight,
   yieldToEventLoop,
 } from "./wizard-ui"
 
-type WizardStep = "path" | "name" | "tools" | "scan" | "imports" | "setup" | "direct" | "markitdown" | "ocr" | "verification" | "provider" | "done" | "error"
+type WizardStep = "path" | "name" | "tools" | "scan" | "imports" | "setup" | "direct" | "markitdown" | "ocr" | "verification" | "provider" | "startup" | "done" | "error"
 
 type ToolCheckResult = {
   label: string
@@ -67,6 +85,8 @@ type CliOption = {
 type SourcePathEntry = {
   id: number
 }
+
+const CANCELABLE_STEPS = ["setup", "direct", "markitdown", "ocr", "verification"] as const
 
 let nextSourceId = 1
 
@@ -93,6 +113,18 @@ function launchForCli(cliValue: string): string {
   if (cliValue === "other") return "copy"
   if (cliValue.endsWith("_desktop") || cliValue === "codex_app") return "desktop"
   return "run"
+}
+
+function validateSinglePath(p: string): "valid" | "invalid" {
+  try {
+    if (!existsSync(p)) return "invalid"
+    const st = statSync(p)
+    if (st.isFile()) return "valid"
+    if (st.isDirectory()) return readdirSync(p).length > 0 ? "valid" : "invalid"
+    return "invalid"
+  } catch {
+    return "invalid"
+  }
 }
 
 
@@ -179,16 +211,25 @@ async function runReinstall(input?: {
 
 export function Onboarding() {
   const { theme } = useTheme()
-  const { navigate } = useRoute()
+  const route = useRoute()
+  const { navigate } = route
   const spinosa = useSpinosaWorkspace()
+  const dimensions = useTerminalDimensions()
   const keymap = useOpencodeKeymap()
   const modeStack = useOpencodeModeStack()
   const exit = useExit()
+  const dialog = useDialog()
+  const onboardingRoute = route.data.type === "onboarding" ? route.data : undefined
+  const resumeWorkspacePath = onboardingRoute?.workspacePath
+  const resumeSourceLocation = onboardingRoute?.sourceLocation
+  const resumeWorkspaceName = onboardingRoute?.workspaceName
+  const resumeSourcePath = resumeSourceLocation ? resolveExistingUserPaths([resumeSourceLocation])[0] : undefined
+  const resumeSourceAccepted = Boolean(resumeSourcePath && validateSinglePath(resumeSourcePath) === "valid")
 
-  const [step, setStep] = createSignal<WizardStep>("path")
+  const [step, setStep] = createSignal<WizardStep>(resumeSourceAccepted ? "name" : "path")
   const [sourcePaths, setSourcePaths] = createSignal<SourcePathEntry[]>([{ id: 0 }])
   const [logLines, setLogLines] = createSignal<string[]>([])
-  const [createdWorkspace, setCreatedWorkspace] = createSignal<string | undefined>()
+  const [createdWorkspace, setCreatedWorkspace] = createSignal<string | undefined>(resumeWorkspacePath)
   const [busy, setBusy] = createSignal(false)
   const [importOptions, setImportOptions] = createSignal<ImportOption[]>([])
   const [selectedImport, setSelectedImport] = createSignal(0)
@@ -200,8 +241,8 @@ export function Onboarding() {
     const checks = toolChecks()
     if (checks.length === 0) return ""
     if (checks.some((t) => t.status === "checking")) return "Checking..."
-    if (checks.some((t) => t.status === "missing")) return "Repair tools"
-    return "Start scanning"
+    if (checks.some((t) => t.status === "missing")) return "Reinstall missing tools"
+    return "Scan source folders"
   })
   const toolAllReady = createMemo(() => {
     const checks = toolChecks()
@@ -216,6 +257,8 @@ export function Onboarding() {
   const [failedCount, setFailedCount] = createSignal(0)
   const [processingFile, setProcessingFile] = createSignal("")
   const [scanDone, setScanDone] = createSignal(false)
+  const [scanningFile, setScanningFile] = createSignal("")
+  const [scanCount, setScanCount] = createSignal(0)
   function formatBytes(b: number): string {
     if (b >= 1_000_000_000) return `${(b / 1_000_000_000).toFixed(1)} GB`
     if (b >= 1_000_000) return `${(b / 1_000_000).toFixed(1)} MB`
@@ -223,13 +266,20 @@ export function Onboarding() {
     return `${b} B`
   }
   const [processingStatus, setProcessingStatus] = createSignal("")
+  const [sourceIsCloud, setSourceIsCloud] = createSignal(Boolean(resumeSourcePath && isCloudStoragePath(resumeSourcePath)))
   const [importSummary, setImportSummary] = createSignal("")
-  const [workspaceName, setWorkspaceName] = createSignal("")
+  const [workspaceName, setWorkspaceName] = createSignal(resumeWorkspaceName ?? "")
+  const [startupMessage, setStartupMessage] = createSignal("")
+  const [startupElapsedMs, setStartupElapsedMs] = createSignal(0)
+  const [startupError, setStartupError] = createSignal<string | undefined>()
   const [pathValidities, setPathValidities] = createStore<Record<number, "unchecked" | "valid" | "invalid">>({})
-  const SPINNER_FRAMES = ["|", "/", "—", "\\"]
+  const WAVE = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"]
+  const waveString = (f: number) => { let r = ""; for (let i = 0; i < 6; i++) { const p = (i + f) % 14, l = p <= 6 ? p : 13 - p; r += WAVE[l] }; return r }
+  const wavePulse = (f: number) => { const p = f % 14; return WAVE[p <= 6 ? p : 13 - p] }
+  const waveRow = (f: number, width: number) => { let r = ""; for (let i = 0; i < width; i++) { const angle = (i * Math.PI) / 7 + f * Math.PI / 7; const l = Math.max(0, Math.min(7, Math.round(3.5 + 3.5 * Math.sin(angle)))); r += WAVE[l] }; return r }
   const [spinIdx, setSpinIdx] = createSignal(0)
   let spinTimer: ReturnType<typeof setInterval> | undefined
-  const spinOn = () => { if (!spinTimer) spinTimer = setInterval(() => setSpinIdx((i) => (i + 1) % 4), 200) }
+  const spinOn = () => { if (!spinTimer) spinTimer = setInterval(() => setSpinIdx((i) => (i + 1) % 14), 200) }
   const spinOff = () => { if (spinTimer) { clearInterval(spinTimer); spinTimer = undefined; setSpinIdx(0) } }
   const [gateLabel, setGateLabel] = createSignal("")
   const [gateAction, setGateAction] = createSignal<() => void>(() => {})
@@ -237,8 +287,9 @@ export function Onboarding() {
   let abortProcessing = false
   let gateResolve: (() => void) | undefined
   let sourceInput: TextareaRenderable | undefined
-  let pendingPaths: string[] | undefined
+  let pendingPaths: string[] | undefined = resumeSourcePath && resumeSourceAccepted ? [resumeSourcePath] : undefined
 let nameInput: TextareaRenderable | undefined
+  let startupTimer: ReturnType<typeof setInterval> | undefined
 
   const selectedExtensions = createMemo(() =>
     importOptions()
@@ -259,6 +310,7 @@ let nameInput: TextareaRenderable | undefined
     if (step() === "ocr") return 9
     if (step() === "verification") return 10
     if (step() === "provider") return 11
+    if (step() === "startup") return 11
     if (step() === "done") return totalSteps
     return totalSteps
   })
@@ -298,11 +350,12 @@ let nameInput: TextareaRenderable | undefined
     })
   }
 
-  const addSourcePath = () => {
+  const addSourcePath = (options?: { focusNewInput?: boolean }) => {
     const id = nextSourceId++
     const nextIndex = sourcePaths().length
     setSourcePaths((prev) => [...prev, { id }])
-    setFocusedSource(nextIndex)
+    setFocusedSource((current) => nextFocusedSourceIndexForAppend(current, nextIndex, options))
+    if (options?.focusNewInput === false) return
     focusSourceEntry(id)
   }
 
@@ -316,7 +369,8 @@ let nameInput: TextareaRenderable | undefined
   }
 
   const workflow = createWorkflowGuard()
-  const pathSnapshot = new Map<number, string>()
+  const activeWork = createActiveWorkTracker()
+  const pathSnapshot = new Map<number, string>(resumeSourceLocation ? [[0, resumeSourceLocation]] : [])
   const sourceInputs = new Map<number, TextareaRenderable>()
 
   const readPathText = (id: number) => {
@@ -337,7 +391,10 @@ let nameInput: TextareaRenderable | undefined
     blurIfFocused(sourceInput)
   }
 
-  onCleanup(() => {})
+  onCleanup(() => {
+    clearInterval(startupTimer)
+    clearInterval(spinTimer)
+  })
 
   const sourceInputFocused = () => focusedSourceIndex() >= 0
 
@@ -361,23 +418,9 @@ let nameInput: TextareaRenderable | undefined
   }
 
   const allPathsResolved = () =>
-    sourcePaths()
-      .map((e) => readPathText(e.id))
-      .filter(Boolean)
-      .map((p) => resolveUserPath(p))
-      .filter((p): p is string => Boolean(p))
+    resolveExistingUserPaths(sourcePaths().map((entry) => readPathText(entry.id)))
 
-  const validateSinglePath = (p: string): "valid" | "invalid" => {
-    try {
-      if (!existsSync(p)) return "invalid"
-      const st = statSync(p)
-      if (st.isFile()) return "valid"
-      if (st.isDirectory()) return readdirSync(p).length > 0 ? "valid" : "invalid"
-      return "invalid"
-    } catch {
-      return "invalid"
-    }
-  }
+  if (resumeSourceLocation) setPathValidities(0, validateSinglePath(resumeSourceLocation))
 
   const defaultWorkspaceName = createMemo(() => {
     const resolved = allPathsResolved()
@@ -392,31 +435,32 @@ let nameInput: TextareaRenderable | undefined
     return entries.some((e) => pathValidities[e.id] === "valid")
   })
 
-  const goHome = () => navigate({ type: "home" })
-  const leavePathStep = () => {
-    goHome()
-  }
-
-  const handleBackPress = () => {
-    if (step() === "path") leavePathStep()
-    else moveBack()
-  }
-
   const stopActiveWork = () => {
+    if (CANCELABLE_STEPS.some((candidate) => candidate === step())) {
+      setProcessingStatus("Stopping current operation...")
+    }
     if (gateResolve) { gateResolve(); gateResolve = undefined }
+    workflow.bump()
     abortProcessing = true
     setBusy(false)
     setWaitingForGate(false)
   }
 
-  const moveBack = () => {
-    const from = step()
-    stopActiveWork()
-    if (step() === "name") { logAction("back", `from ${step()} to path`); setStep("path"); return }
-    if (step() === "tools") { logAction("back", `from ${step()} to name`); setStep("name"); return }
-    if (step() === "scan") { logAction("back", `from ${step()} to path`); setStep("path"); return }
-    if (step() === "setup" || step() === "direct" || step() === "markitdown" || step() === "ocr" || step() === "verification") { logAction("back", `from ${step()} to imports`); setStep("imports"); return }
-    if (step() === "provider") {
+  const goHome = () => {
+    if (resumeWorkspacePath) {
+      spinosa.useGenericMode()
+      return
+    }
+    navigate({ type: "global" })
+  }
+  const navigateBackFrom = (from: WizardStep) => {
+    if (from === "path") { goHome(); return }
+    if (from === "name" && resumeSourceAccepted) { logAction("back", `from ${from} to global`); goHome(); return }
+    if (from === "name") { logAction("back", `from ${from} to path`); setStep("path"); return }
+    if (from === "tools") { logAction("back", `from ${from} to name`); setStep("name"); return }
+    if (from === "scan") { logAction("back", `from ${from} to path`); setStep("path"); return }
+    if (from === "setup" || from === "direct" || from === "markitdown" || from === "ocr" || from === "verification") { logAction("back", `from ${from} to scan`); setStep("scan"); return }
+    if (from === "provider") {
       setGateLabel("Choose provider")
       setGateAction(() => () => {
         setWaitingForGate(false)
@@ -426,9 +470,47 @@ let nameInput: TextareaRenderable | undefined
       setStep("verification")
       return
     }
-    if (step() === "error") {
+    if (from === "startup") { setStep("provider"); return }
+    if (from === "error") {
       setStep(importOptions().length > 0 ? "imports" : "path")
     }
+  }
+
+  let backNavigationPending = false
+  const requestBack = (confirmIfActive = true) => {
+    if (backNavigationPending) return
+    const from = step()
+    backNavigationPending = true
+    void runGuardedBackNavigation({
+      shouldConfirm: confirmIfActive && shouldConfirmSpinosaBack({
+        step: from,
+        busy: busy(),
+        waitingForGate: waitingForGate(),
+        cancellableSteps: CANCELABLE_STEPS,
+      }),
+      confirm: () => confirmSpinosaBack(dialog, from),
+      stop: stopActiveWork,
+      waitForStop: () => activeWork.wait(),
+      navigate: () => navigateBackFrom(from),
+    }).finally(() => { backNavigationPending = false })
+  }
+
+  const handleBackPress = () => requestBack(true)
+  const leavePathStep = handleBackPress
+
+  const handleInterrupt = () => {
+    if (!shouldCancelSpinosaWorkOnCtrlC({
+      step: step(),
+      busy: busy(),
+      waitingForGate: waitingForGate(),
+      cancellableSteps: CANCELABLE_STEPS,
+    })) {
+      exit()
+      return
+    }
+
+    appendLogLine("Cancellation requested. Stopping current Spinosa operation...")
+    requestBack(false)
   }
 
   const renderToolSummaryLine = (check: ToolCheckResult): string => {
@@ -440,8 +522,7 @@ let nameInput: TextareaRenderable | undefined
   const generateToolCheckLines = (): ToolCheckResult[] => [
     { label: "PPU PaddleOCR", status: "checking", detail: "scanned PDFs and images" },
     { label: "MarkItDown", status: "checking", detail: "Office docs, EPUB, HTML, text PDFs" },
-    { label: "pdftoppm", status: "checking", detail: "scanned PDF page rendering" },
-    { label: "pdftotext", status: "checking", detail: "text PDF splitting" },
+    { label: "PDF.js", status: "checking", detail: "PDF text extraction and page rendering" },
   ]
 
   const runToolCheck = async () => {
@@ -449,22 +530,22 @@ let nameInput: TextareaRenderable | undefined
     const checks: ToolCheckResult[] = [
       { label: "PPU PaddleOCR", status: "checking", detail: "scanned PDFs and images" },
       { label: "MarkItDown", status: "checking", detail: "Office docs, EPUB, HTML, text PDFs" },
-      { label: "pdftoppm", status: "checking", detail: "scanned PDF page rendering" },
-      { label: "pdftotext", status: "checking", detail: "text PDF splitting" },
+      { label: "PDF.js", status: "checking", detail: "PDF text extraction and page rendering" },
     ]
     setToolChecks(checks)
     setStep("tools")
+    spinOn()
 
     await delay(80)
     const toolStatus = await detectDocumentTools()
     const results: ToolCheckResult[] = [
       { label: "PPU PaddleOCR", status: toolStatus.ocr ? "available" : "missing", detail: "scanned PDFs and images" },
       { label: "MarkItDown", status: toolStatus.markitdown ? "available" : "missing", detail: "Office docs, EPUB, HTML, text PDFs" },
-      { label: "pdftoppm", status: toolStatus.pypdfium2 ? "available" : "missing", detail: "scanned PDF page rendering" },
-      { label: "pdftotext", status: toolStatus.pypdf ? "available" : "missing", detail: "text PDF splitting" },
+      { label: "PDF.js", status: toolStatus.pdfjs ? "available" : "missing", detail: "PDF text extraction and page rendering" },
     ]
     setToolChecks(results)
     for (const r of results) logTool(r.label, r.status, r.detail)
+    spinOff()
   }
 
   const runToolRepair = async () => {
@@ -491,8 +572,7 @@ let nameInput: TextareaRenderable | undefined
     const results = [
       { label: "PPU PaddleOCR", status: toolStatus.ocr ? "available" : "missing", detail: "scanned PDFs and images" },
       { label: "MarkItDown", status: toolStatus.markitdown ? "available" : "missing", detail: "Office docs, EPUB, HTML, text PDFs" },
-      { label: "pdftoppm", status: toolStatus.pypdfium2 ? "available" : "missing", detail: "scanned PDF page rendering" },
-      { label: "pdftotext", status: toolStatus.pypdf ? "available" : "missing", detail: "text PDF splitting" },
+      { label: "PDF.js", status: toolStatus.pdfjs ? "available" : "missing", detail: "PDF text extraction and page rendering" },
     ] as ToolCheckResult[]
     setToolChecks(results)
     for (const r of results) logTool(r.label, r.status, r.detail)
@@ -500,11 +580,15 @@ let nameInput: TextareaRenderable | undefined
   }
 
   const handleToolAction = () => {
+    if (busy()) return
     const checks = toolChecks()
     const needsRepair = checks.some((t) => t.status === "missing")
     if (needsRepair) {
       logAction("repair-tools", `${checks.filter(t => t.status === "missing").length} tools missing`)
-      void runToolRepair()
+      void runToolRepair().catch((err) => {
+        logError("runToolRepair", err)
+        appendLogLine(`Tool repair failed: ${err instanceof Error ? err.message : String(err)}`)
+      })
     } else if (checks.every((t) => t.status === "available")) {
       logAction("start-scan", "All tools ready")
       void startScan()
@@ -514,17 +598,30 @@ let nameInput: TextareaRenderable | undefined
   const startScan = async () => {
     const resolved = pendingPaths
     if (!resolved || resolved.length === 0) { logError("startScan", "No pending paths"); setStep("error"); return }
+    setSourceIsCloud(resolved.some((p) => isCloudStoragePath(p)))
+    const shouldAbort = () => abortProcessing
     logStep("scan", "Scanning source folder")
     clearLog()
     setScanDone(false)
+    setScanningFile("")
+    setScanCount(0)
     setStep("scan")
-    await yieldToEventLoop()
+    await delay(100)
+    spinOn()
 
     try {
+      console.error("[scan] startScan begin", resolved)
       let mergedOptions: ImportOption[] = []
       for (const src of resolved) {
         appendLogLine(`Scanning: ${src}`)
-        const scanPreview = await buildNewWorkspacePreview(src)
+        let scanned = 0
+        console.error("[scan] buildNewWorkspacePreview ->", src)
+        const scanPreview = await buildNewWorkspacePreview(src, workspaceName() || defaultWorkspaceName(), (rel, isFile, discovered) => {
+          setScanningFile(rel)
+          setScanTotal((t) => t + discovered)
+          if (isFile) { scanned++; setScanCount((c) => c + 1) }
+        }, shouldAbort)
+        console.error("[scan] buildNewWorkspacePreview done ->", src, "options:", scanPreview.importOptions.length)
         setPreview(scanPreview)
         for (const opt of scanPreview.importOptions) {
           const existing = mergedOptions.find((m) => m.ext === opt.ext)
@@ -532,11 +629,15 @@ let nameInput: TextareaRenderable | undefined
           else { mergedOptions.push({ ...opt }) }
         }
       }
+      console.error("[scan] merged options:", mergedOptions.length)
       setImportOptions(mergedOptions)
       clearLog()
+      spinOff()
       setScanDone(true)
+      console.error("[scan] scanDone=true")
       logAction("scan-done", `${mergedOptions.length} file types found`)
     } catch (err) {
+      console.error("[scan] startScan threw", err)
       logError("startScan", err)
       appendLogLine(`Scan failed: ${err instanceof Error ? err.message : String(err)}`)
       setStep("error")
@@ -568,6 +669,9 @@ let nameInput: TextareaRenderable | undefined
   }
 
   const continueFromName = () => {
+    const primarySource = pendingPaths?.[0]
+    const nextWorkspaceName = workspaceName().trim() || defaultWorkspaceName()
+    if (primarySource) setCreatedWorkspace(resumeWorkspacePath ?? resolveWorkspacePath(primarySource, nextWorkspaceName))
     logAction("continue", "Name step → Tools step")
     void runToolCheck()
   }
@@ -580,7 +684,7 @@ let nameInput: TextareaRenderable | undefined
       return
     }
     logAction("continue", `Imports → Processing (${selectedExtensions().length} types: ${selectedExtensions().join(",")})`)
-    startProcessing()
+    void activeWork.run(startProcessing)
   }
 
 
@@ -609,14 +713,17 @@ let nameInput: TextareaRenderable | undefined
     setProcessingFile("")
     setProcessingStatus("Starting...")
     abortProcessing = false
+    const generation = workflow.bump()
+    const shouldAbort = () => abortProcessing || !workflow.active(generation)
     gateResolve = undefined
     spinOn()
     await delay(200)
     const extensions = selectedExtensions().join(",")
     const primarySource = resolved[0]!
-    const plannedWorkspace = preview()?.workspacePath ?? suggestWorkspacePath(primarySource)
+    const plannedWorkspace = resumeWorkspacePath ?? preview()?.workspacePath ?? suggestWorkspacePath(primarySource)
     if (plannedWorkspace) setCreatedWorkspace(plannedWorkspace)
     let totalFailed = 0
+    let totalRenamed = 0
 
     const sharedProg = new ProgressEmitter()
     sharedProg.on((e) => {
@@ -639,34 +746,73 @@ let nameInput: TextareaRenderable | undefined
     }
 
     try {
-      // Phase A: Create workspace + scan + classify
+      setStep("setup")
       setProcessingStatus("Creating workspace...")
+      // Drive the progress bar off the setup sub-steps emitted by createWorkspace
+      // so the bar is truthful (0% → 100%) instead of a frozen placeholder.
+      const setupSteps = [
+        "Creating workspace directory",
+        "Resuming interrupted workspace",
+        "Copying workspace template",
+        "Creating user-state directories",
+        "Writing workspace metadata",
+        "Registering in global registry",
+        "Writing setup files",
+      ]
+      let setupDone = 0
+      setProgTotal(setupSteps.length)
+      setProgCurrent(0)
+      const setupProgress = (msg: string) => {
+        appendLogLine(msg)
+        setProcessingStatus(msg)
+        if (setupSteps.some((s) => msg.startsWith(s))) {
+          setupDone = Math.min(setupSteps.length, setupDone + 1)
+          setProgCurrent(setupDone)
+        }
+      }
+      await yieldToEventLoop()
       const frameworkRoot = resolveFrameworkRoot()
-      if (!frameworkRoot) { setStep("error"); return }
+      if (!frameworkRoot) {
+        appendLogLine("Framework root not found — cannot create workspace.")
+        spinOff()
+        setBusy(false)
+        setStep("error")
+        return
+      }
       const wsResult = await createWorkspace({
         corpusPath: primarySource,
         frameworkRoot,
-        extensions,
-        preferredCli: "opencode",
-        launch: "copy",
-        onProgress: (msg) => { appendLogLine(msg) },
+        workspaceName: workspaceName() || defaultWorkspaceName(),
+        resumeWorkspacePath,
+        onProgress: setupProgress,
+        onRecover: (msg) => appendLogLine(`Note: ${msg}`),
+        shouldAbort,
       })
+      if (shouldAbort()) return
       if (!wsResult.success) { setStep("error"); return }
+      // Registration / status writes are non-essential: a wedged registry lock
+      // or missing marker must not abort an otherwise-good workspace.
+      const statusOk = await writeWorkspaceStatus(wsResult.workspacePath, "importing")
+      if (!statusOk) appendLogLine("Warning: could not write workspace status marker (non-fatal).")
       const ctx: OnboardingContext = await prepareOnboarding({
         workspacePath: wsResult.workspacePath,
         frameworkRoot,
         sourcePath: primarySource,
-        projectTitle: path.basename(primarySource),
+        projectTitle: workspaceName() || path.basename(primarySource),
         flagExtensions: extensions,
       }) as OnboardingContext
       if ("success" in ctx && !ctx.success) { setStep("error"); return }
       setCreatedWorkspace(ctx.workspacePath)
 
-      const classified = await scanAndClassifySource(ctx.sourcePath, ctx.rawDir, ctx.batches)
+      setProcessingStatus("Preparing import plan...")
+      const classified = await scanAndClassifySource(ctx.sourcePath, ctx.rawDir, ctx.batches, undefined, shouldAbort)
       if (!classified) { setStep("error"); return }
-      let mr: PhaseResult = { converted: 0, skipped: 0, failed: 0, recoverable: [] }
-      let or: PhaseResult = { converted: 0, skipped: 0, failed: 0, recoverable: [] }
+      let mr: PhaseResult = { converted: 0, skipped: 0, failed: 0, renamed: 0, recoverable: [] }
+      let or: PhaseResult = { converted: 0, skipped: 0, failed: 0, renamed: 0, recoverable: [] }
+      const totalMd = classified.markitdownFiles.length
+      const totalOcr = classified.ocrFiles.length
       // Phase B1: Direct copy
+      setStep("direct")
       const totalDirect = classified.directFiles.length
       appendLogLine(`[diag] direct=${totalDirect} markitdown=${classified.markitdownFiles.length} ocr=${classified.ocrFiles.length}`)
       // Seed the denominator; the progress listener also drives it from emitter events.
@@ -674,22 +820,28 @@ let nameInput: TextareaRenderable | undefined
       setProgCurrent(0)
       setProcessingStatus("Preparing direct copy...")
       await delay(1000)
-      const dr = await processDirectCopy(classified.directFiles, sharedProg, onPhaseLog)
+      const dr = await processDirectCopy(classified.directFiles, sharedProg, onPhaseLog, undefined, shouldAbort, (attempt, reason) => {
+        setProcessingStatus(`Retrying file (attempt ${attempt}): ${reason}`)
+      }, (original, renamed) => { totalRenamed++; appendLogLine(`  renamed (name too long): ${original} → ${renamed}`) })
       if (dr.failed > 0) totalFailed += dr.failed
-      if (abortProcessing) { spinOff(); setBusy(false); return }
+      if (dr.renamed > 0) totalRenamed += dr.renamed
+      if (shouldAbort()) { spinOff(); setBusy(false); return }
       setProcessingStatus(`Direct copy complete — ${totalDirect} files`)
       await delay(1000)
       if (classified.markitdownFiles.length > 0) {
-        await gate("Continue to MarkItDown")
+        setBusy(false)
+        await gate("Process text files")
+        if (shouldAbort()) { spinOff(); setBusy(false); return }
+        setBusy(true)
         setStep("markitdown")
-        const totalMd = classified.markitdownFiles.length
         setProgTotal(totalMd)
         setProgCurrent(0)
         setProcessingStatus("Preparing MarkItDown conversion...")
         await delay(1000)
-        const mr = await processMarkitdown(classified.markitdownFiles, classified.logsDir, sharedProg, onPhaseLog)
+        mr = await processMarkitdown(classified.markitdownFiles, classified.logsDir, sharedProg, onPhaseLog, shouldAbort)
         if (mr.failed > 0) totalFailed += mr.failed
-        if (abortProcessing) { spinOff(); setBusy(false); return }
+        if (mr.renamed > 0) totalRenamed += mr.renamed
+        if (shouldAbort()) { spinOff(); setBusy(false); return }
         setProcessingStatus(`MarkItDown complete — ${totalMd} files`)
         await delay(1000)
       } else {
@@ -697,16 +849,19 @@ let nameInput: TextareaRenderable | undefined
       }
 
       if (classified.ocrFiles.length > 0) {
-        await gate("Continue to OCR")
+        setBusy(false)
+        await gate("Process images and PDFs")
+        if (shouldAbort()) { spinOff(); setBusy(false); return }
+        setBusy(true)
         setStep("ocr")
-        const totalOcr = classified.ocrFiles.length
         setProgTotal(totalOcr)
         setProgCurrent(0)
         setProcessingStatus("Preparing OCR...")
         await delay(1000)
-        const or = await processOcr(classified.ocrFiles, classified.logsDir, sharedProg, onPhaseLog)
+        or = await processOcr(classified.ocrFiles, classified.logsDir, sharedProg, onPhaseLog, shouldAbort)
         if (or.failed > 0) totalFailed += or.failed
-        if (abortProcessing) { spinOff(); setBusy(false); return }
+        if (or.renamed > 0) totalRenamed += or.renamed
+        if (shouldAbort()) { spinOff(); setBusy(false); return }
       } else {
         appendLogLine("OCR: 0 files to convert — skipping")
       }
@@ -722,10 +877,13 @@ let nameInput: TextareaRenderable | undefined
           setProcessingStatus(msg)
           appendLogLine(msg)
         },
+        shouldAbort,
       })
+      if (shouldAbort()) return
 
       if (result.success) {
         // Import additional source paths
+        let extraCopied = 0, extraMd = 0, extraOcr = 0, extraDirect = 0, extraMdTotal = 0, extraOcrTotal = 0, extraFailed = 0
         for (let i = 1; i < resolved.length; i++) {
           const extra = resolved[i]!
           setProcessingStatus(`Importing: ${extra}`)
@@ -733,27 +891,48 @@ let nameInput: TextareaRenderable | undefined
             workspacePath: ctx.workspacePath,
             sourcePath: extra,
             sourceIsDir: true,
+            extensions,
             onProgress: (msg) => appendLogLine(msg),
+            shouldAbort,
           })
+          // Fold the extra-source results into the summary totals so a
+          // multi-source import is reported accurately.
+          extraCopied += addFileResult.copied
+          extraMd += addFileResult.mdConverted
+          extraOcr += addFileResult.ocrConverted
+          extraDirect += addFileResult.copied + addFileResult.skipped
+          extraMdTotal += addFileResult.mdConverted + addFileResult.mdSkipped
+          extraOcrTotal += addFileResult.ocrConverted + addFileResult.ocrSkipped
+          extraFailed += addFileResult.failed + addFileResult.mdFailed + addFileResult.ocrFailed
           if (!addFileResult.success) {
             appendLogLine(`  ⚠ Partial import for ${extra}`)
           }
         }
+        dr.converted += extraCopied
+        mr.converted += extraMd
+        or.converted += extraOcr
+        totalFailed += extraFailed
 
         setFailedCount(totalFailed)
         setImportSummary(
-          `${dr.converted}/${totalDirect} copied · ${mr.converted}/${totalMd} markitdown · ${or.converted}/${totalOcr} ocr` +
+          `${dr.converted}/${totalDirect + extraDirect} copied · ${mr.converted}/${totalMd + extraMdTotal} markitdown · ${or.converted}/${totalOcr + extraOcrTotal} ocr` +
+          (totalRenamed > 0 ? ` · ${totalRenamed} renamed` : "") +
           (totalFailed > 0 ? ` · ${totalFailed} failed` : ""),
         )
         setProcessingDone(true)
         setProcessingStatus("All done")
-        setGateLabel("PROCEED")
-        setGateAction(() => () => { setWaitingForGate(false); setStep("provider") })
+        setGateLabel("Go to the workspace")
+        setGateAction(() => () => { setWaitingForGate(false); void finishProvider("spinosa") })
         setWaitingForGate(true)
       } else {
         setStep("error")
       }
     } catch (err) {
+      if (isSpinosaCancellationError(err) || shouldAbort()) {
+        appendLogLine("Spinosa import cancelled.")
+        setProcessingStatus("Cancelled.")
+        return
+      }
       appendLogLine(`Error: ${err instanceof Error ? err.message : String(err)}`)
       setStep("error")
     } finally {
@@ -763,9 +942,31 @@ let nameInput: TextareaRenderable | undefined
   }
 
 
+  const stopStartupProgress = () => {
+    if (startupTimer) {
+      clearInterval(startupTimer)
+      startupTimer = undefined
+    }
+  }
+
+  const startStartupProgress = () => {
+    const startedAt = Date.now()
+    setStartupElapsedMs(0)
+    setStartupError(undefined)
+    setStartupMessage(formatStartupProgressMessage(0))
+    stopStartupProgress()
+    startupTimer = setInterval(() => {
+      const elapsed = Date.now() - startedAt
+      setStartupElapsedMs(elapsed)
+      setStartupMessage(formatStartupProgressMessage(elapsed))
+    }, STARTUP_PROGRESS_INTERVAL_MS)
+  }
+
   const finishProvider = async (cliValue: string) => {
     logAction("finish-provider", `CLI: ${cliValue}`)
     try {
+      setStep("startup")
+      startStartupProgress()
       const workspacePath = createdWorkspace()
       if (workspacePath) {
         await writePreferredCli(workspacePath, cliValue)
@@ -775,26 +976,35 @@ let nameInput: TextareaRenderable | undefined
       if (cliValue === "spinosa") {
         if (workspacePath) {
           const prompt = await readStartupPrompt(workspacePath)
-          spinosa.queuePrompt({
-            input: prompt ?? "Error: startup-prompt.md not found. Run the startup indexing workflow manually.",
-            parts: [],
-            autoSubmit: true,
-          })
-          await spinosa.openWorkspace(workspacePath)
-          navigate({ type: "workspace" })
+          spinosa.queuePrompt(
+            buildStartupChatPrompt(
+              prompt ?? "Error: startup-prompt.md not found. Run the startup indexing workflow manually.",
+            ),
+            workspacePath,
+          )
+          setStartupMessage("Startup complete")
+          stopStartupProgress()
+          await delay(300)
+          await spinosa.openWorkspace(workspacePath, { route: { type: "global" } })
         }
       } else {
         if (workspacePath) {
           await tsRunStartup({ workspacePath, frameworkRoot: resolveFrameworkRoot() ?? "", preferredCli: cliValue })
         }
+        setStartupMessage("Startup complete")
+        stopStartupProgress()
+        await delay(300)
         goHome()
       }
       logAction("finish-done", `Workspace: ${workspacePath}, CLI: ${cliValue}`)
     } catch (err) {
+      stopStartupProgress()
       logError("finishProvider", err)
       const msg = err instanceof Error ? err.message : String(err)
+      setStartupError(msg)
+      setStartupMessage(formatStartupProgressMessage(Math.max(startupElapsedMs(), STARTUP_PROGRESS_THRESHOLD_MS)))
       appendLogLine(`Failed to launch ${cliValue}: ${msg}`)
-      setStep("error")
+      setStep("startup")
     }
   }
   const finish = async () => {
@@ -817,7 +1027,15 @@ let nameInput: TextareaRenderable | undefined
   }
 
   onMount(() => {
-    focusSourceInput()
+    if (step() === "name") {
+      queueMicrotask(() => {
+        if (!nameInput || nameInput.isDestroyed) return
+        nameInput.focus()
+        nameInput.gotoLineEnd()
+      })
+    } else {
+      focusSourceInput()
+    }
 
     // Auto-add new path input when last input has content
     const autoAddTimer = setInterval(() => {
@@ -828,7 +1046,7 @@ let nameInput: TextareaRenderable | undefined
       const input = sourceInputs.get(last.id)
       if (!input || input.isDestroyed) return
       if (input.plainText?.trim()?.length > 0) {
-        addSourcePath()
+        addSourcePath({ focusNewInput: false })
       }
     }, 300)
 
@@ -836,7 +1054,7 @@ let nameInput: TextareaRenderable | undefined
     const validateTimer = setInterval(() => {
       if (step() !== "path") return
       for (const entry of sourcePaths()) {
-        const text = readPathText(entry.id)
+        const text = normalizePathInput(readPathText(entry.id))
         if (!text) {
           setPathValidities(entry.id, "unchecked")
           continue
@@ -864,12 +1082,11 @@ let nameInput: TextareaRenderable | undefined
       setHoveredButton(null)
 
       if (event.ctrl && event.name === "c") {
-        exit()
+        handleInterrupt()
         consume(); return
       }
       if (event.name === "escape") {
-        if (step() === "path") leavePathStep()
-        else moveBack()
+        handleBackPress()
         consume(); return
       }
 
@@ -925,7 +1142,7 @@ let nameInput: TextareaRenderable | undefined
           consume(); return
         }
         if (event.name === "escape") {
-          moveBack()
+          handleBackPress()
           consume(); return
         }
       }
@@ -979,12 +1196,14 @@ let nameInput: TextareaRenderable | undefined
       }
 
       if (step() === "error" && event.name === "return") {
-        moveBack()
+        handleBackPress()
         consume(); return
       }
     })
     onCleanup(() => {
       clearInterval(autoAddTimer)
+      clearInterval(validateTimer)
+      clearInterval(nameSyncTimer)
       stopActiveWork()
       off()
     })
@@ -1026,29 +1245,33 @@ let nameInput: TextareaRenderable | undefined
               onMouseOut={() => setHoveredButton(null)}
               onMouseDown={() => deferPress(handleBackPress)}
             >
-              <text fg={buttonText(theme, hoveredButton() === "back", theme.text)}>← Back</text>
+              <text fg={buttonText(theme, hoveredButton() === "back", theme.text)}>←</text>
             </box>
             <text fg={theme.text}>
-              <span style={{ bold: true }}>Create Spinosa workspace</span>
+              <span style={{ bold: true }}>{busy() ? `${waveString(spinIdx())} ` : ""}{resumeWorkspacePath ? "Resume Spinosa workspace" : "Create Spinosa workspace"}</span>
             </text>
           </box>
           <text fg={theme.textMuted}>
             Step {stepIndex()} of {totalSteps}
-            {step() === "name" ? " — name your workspace" : ""}
-            {step() === "tools" ? " — checking document tools" : ""}
-            {step() === "scan" ? " — scanning source" : ""}
-            {step() === "imports" ? " — choose file types to import" : ""}
-            {step() === "setup" ? " — setting up workspace" : step() === "direct" ? " — direct copy" : step() === "markitdown" ? " — MarkItDown" : step() === "ocr" ? " — OCR" : step() === "verification" ? " — verification" : ""}
-            {step() === "provider" ? " — choose LLM provider" : ""}
-            {step() === "done" ? " — workspace ready" : ""}
-            {step() === "error" ? " — fix the issue and retry" : ""}
+            {step() === "name" ? " — naming your workspace" : ""}
+            {step() === "tools" ? " — checking your document tools" : ""}
+            {step() === "scan" ? " — scanning your source" : ""}
+            {step() === "imports" ? " — selecting file types to import" : ""}
+            {step() === "setup" ? " — creating your workspace" : step() === "direct" ? " — copying files into raw/" : step() === "markitdown" ? " — converting documents with MarkItDown" : step() === "ocr" ? " — running OCR on images and PDFs" : step() === "verification" ? " — verifying the import" : ""}
+            {step() === "provider" ? " — choosing your LLM provider" : ""}
+            {step() === "startup" ? " — preparing your startup" : ""}
+            {step() === "done" ? " — your workspace is ready" : ""}
+            {step() === "error" ? " — fixing the issue and retrying" : ""}
           </text>
+          <Show when={sourceIsCloud() && (step() === "scan" || step() === "setup" || step() === "direct" || step() === "markitdown" || step() === "ocr" || step() === "verification")}>
+            <text fg={theme.error}>  ⚠ cloud folder — scans & copies can be slow due to sync latency</text>
+          </Show>
 
           <Show when={step() === "path"}>
             <WizardPanel theme={theme} accent>
-              <text fg={theme.textMuted}>Corpus folder</text>
+              <text fg={theme.textMuted}>Source folders</text>
               <text fg={theme.textMuted}>
-                Paste the folder path. Spinosa will inspect the corpus, let you choose file types, then create a sibling `-spinosa` workspace.
+                Add one or more source folders. Spinosa scans them, lets you choose file types, then creates a workspace beside the first folder and imports the selected files.
               </text>
               <box flexDirection="column" gap={1} paddingTop={1}>
                 <For each={sourcePaths()}>
@@ -1153,7 +1376,7 @@ let nameInput: TextareaRenderable | undefined
             <WizardPanel theme={theme} accent>
               <text fg={theme.textMuted}>Workspace name</text>
               <text fg={theme.textMuted}>
-                The folder will be created as a sibling of the source with `-spinosa` appended.
+                The workspace folder is created beside the first source folder using this name.
               </text>
               <box paddingTop={1} alignItems="stretch">
                 <textarea
@@ -1177,7 +1400,7 @@ let nameInput: TextareaRenderable | undefined
               <WizardActionButton
                 theme={theme}
                 label="Back"
-                onPress={moveBack}
+                onPress={handleBackPress}
               />
               <box flexGrow={1} />
               <WizardActionButton
@@ -1195,7 +1418,7 @@ let nameInput: TextareaRenderable | undefined
                 <box flexDirection="column" gap={1} paddingTop={1}>
                   <For each={toolChecks()}>
                     {(check) => {
-                      const icon = check.status === "available" ? "●" : check.status === "missing" ? "●" : SPINNER_FRAMES[spinIdx()]
+                      const icon = check.status === "available" ? "●" : check.status === "missing" ? "●" : wavePulse(spinIdx())
                       const color = check.status === "available" ? theme.success : check.status === "missing" ? theme.error : theme.textMuted
                       return (
                         <box flexDirection="row" gap={1} alignItems="center" paddingLeft={1} paddingRight={1}>
@@ -1209,76 +1432,31 @@ let nameInput: TextareaRenderable | undefined
                 </box>
                 <Show when={logLines().length > 0}>
                   <box height={1} />
-                  <LogScrollbox theme={theme} lines={logLines()} />
+                  <LogScrollbox theme={theme} lines={logLines()} viewportHeight={dimensions().height} />
                 </Show>
               </Show>
               <Show when={step() === "scan"}>
                 <Show when={!scanDone()}>
-                  <text fg={theme.textMuted}>Scanning source folder...</text>
+                  <text fg={theme.text}>{waveString(spinIdx())}</text>
+                  <text fg={theme.textMuted}>{scanningFile() || "…"}</text>
+                  <text fg={theme.textMuted}>Scanning {scanCount()} / {scanTotal()}</text>
                   <Show when={logLines().length > 0}>
                     <box height={1} />
-                    <LogScrollbox theme={theme} lines={logLines()} />
+                    <LogScrollbox theme={theme} lines={logLines()} viewportHeight={dimensions().height} />
                   </Show>
                 </Show>
                 <Show when={scanDone()}>
                   <text fg={theme.textMuted}>Select file types to import</text>
-                  <box flexDirection="column" gap={1} paddingTop={1}>
-                    <box
-                      paddingLeft={1}
-                      paddingRight={1}
-                      paddingTop={1}
-                      paddingBottom={1}
-                      backgroundColor={buttonBackground(theme, selectedImport() === 0)}
-                      onMouseOver={() => setSelectedImport(0)}
-                      onMouseDown={() => deferPress(toggleAllImports)}
-                    >
-                      <box flexDirection="row" gap={1} alignItems="center">
-                        <text fg={buttonText(theme, selectedImport() === 0, theme.primary)}>
-                          {importOptions().every((item) => item.selected) ? "◎" : "○"}
-                        </text>
-                        <text fg={buttonText(theme, selectedImport() === 0, theme.text)}>
-                          <span style={{ bold: selectedImport() === 0 }}>All supported files</span>
-                        </text>
-                        <text fg={buttonText(theme, selectedImport() === 0, theme.textMuted)}>
-                          {importOptions().reduce((sum, item) => sum + item.count, 0)} files
-                        </text>
-                      </box>
-                    </box>
-                    <box flexDirection="column" gap={1}>
-                      <For each={importOptions()}>
-                        {(item, index) => {
-                          const i = index() + 1
-                          const active = () => selectedImport() === i
-                          return (
-                            <box
-                              paddingLeft={1}
-                              paddingRight={1}
-                              paddingTop={1}
-                              paddingBottom={1}
-                              backgroundColor={buttonBackground(theme, active())}
-                              onMouseOver={() => setSelectedImport(i)}
-                              onMouseDown={() => deferPress(() => toggleImport(index()))}
-                            >
-                              <box flexDirection="row" gap={1} alignItems="center">
-                                <text fg={buttonText(theme, active(), theme.primary)} width={2}>
-                                  {item.selected ? "●" : "○"}
-                                </text>
-                                <text fg={buttonText(theme, active(), theme.text)} width={10}>
-                                  .{item.ext}
-                                </text>
-                                <text fg={buttonText(theme, active(), theme.textMuted)} width={10}>
-                                  {item.count} file{item.count === 1 ? "" : "s"}
-                                </text>
-                                <text fg={buttonText(theme, active(), theme.textMuted)}>
-                                  {formatBytes(item.bytes)}
-                                </text>
-                              </box>
-                            </box>
-                          )
-                        }}
-                      </For>
-                    </box>
-                  </box>
+                  <ImportOptionsSelector
+                    theme={theme}
+                    options={importOptions()}
+                    selectedIndex={selectedImport()}
+                    viewportHeight={dimensions().height}
+                    formatDetail={(item) => formatBytes(item.bytes)}
+                    onSelectIndex={setSelectedImport}
+                    onToggleAll={toggleAllImports}
+                    onToggleItem={toggleImport}
+                  />
                   <text fg={theme.textMuted}>↑↓ move · space toggle · a toggle all · enter continue</text>
                 </Show>
               </Show>
@@ -1309,7 +1487,7 @@ let nameInput: TextareaRenderable | undefined
               </Show>
             </WizardPanel>
             <WizardActionRow>
-              <WizardActionButton theme={theme} label="Back" onPress={moveBack} />
+              <WizardActionButton theme={theme} label="Back" onPress={handleBackPress} />
               <box flexGrow={1} />
               <Show when={step() === "tools" && toolActionLabel() !== "" && !toolChecks().some((t) => t.status === "checking")}>
                 <WizardActionButton
@@ -1335,11 +1513,11 @@ let nameInput: TextareaRenderable | undefined
 
           <Show when={step() === "provider"}>
             <WizardPanel theme={theme}>
-              <text fg={theme.textMuted}>Preferred LLM CLI</text>
+              <text fg={theme.textMuted}>Choose how to launch startup</text>
               <text fg={theme.textMuted}>
-                Choose which tool to use for running the startup indexing prompt in this workspace.
+                Choose the tool Spinosa will use after import. Spinosa opens Chat with the setup brief ready; other tools launch with the prompt.
               </text>
-               <scrollbox maxHeight={12}>
+               <scrollbox maxHeight={wizardScrollboxMaxHeight(dimensions().height, { min: 4, ratio: 0.5, max: 12 })}>
                 <For each={CLI_OPTIONS}>
                   {(item, index) => (
                     <box
@@ -1363,13 +1541,44 @@ let nameInput: TextareaRenderable | undefined
             </WizardPanel>
           </Show>
 
+          <Show when={step() === "startup"}>
+            <WizardPanel theme={theme}>
+              <text fg={theme.textMuted}>Launching startup</text>
+              <text fg={startupError() ? theme.error : theme.text}>
+                <span style={{ bold: true }}>{startupError() ? "Startup failed" : startupMessage()}</span>
+              </text>
+              <Show when={!startupError()}>
+                <text fg={theme.textMuted}>
+                  {startupElapsedMs() >= STARTUP_PROGRESS_THRESHOLD_MS
+                    ? `Elapsed ${Math.round(startupElapsedMs() / 100) / 10}s`
+                    : "Preparing the setup brief…"}
+                </text>
+              </Show>
+              <Show when={startupError()}>
+                <text fg={theme.textMuted}>{startupError()}</text>
+              </Show>
+            </WizardPanel>
+            <WizardActionRow>
+              <Show when={startupError()}>
+                <WizardActionButton theme={theme} label="Back" onPress={handleBackPress} />
+                <box flexGrow={1} />
+                <WizardActionButton
+                  theme={theme}
+                  label="Retry"
+                  primary
+                  onPress={() => void finishProvider(CLI_OPTIONS[selectedCli()]?.value ?? "spinosa")}
+                />
+              </Show>
+            </WizardActionRow>
+          </Show>
+
           <Show when={step() === "done" || step() === "error"}>
             <WizardPanel theme={theme}>
               <Show when={step() === "done"}>
                 <box gap={1}>
                   <LogoSummary theme={theme} label="Workspace created." />
                   <text fg={theme.textMuted}>
-                    Spinosa workspace is ready. Open it to begin working with your corpus.
+                    Your files are imported. Open the workspace to continue with the setup brief.
                   </text>
                 </box>
               </Show>
@@ -1378,7 +1587,7 @@ let nameInput: TextareaRenderable | undefined
                   <span style={{ bold: true }}>Spinosa could not complete this step.</span>
                 </text>
                 <Show when={logLines().length > 0}>
-                  <LogScrollbox theme={theme} lines={logLines()} />
+                  <LogScrollbox theme={theme} lines={logLines()} viewportHeight={dimensions().height} />
                 </Show>
               </Show>
             </WizardPanel>
@@ -1392,7 +1601,7 @@ let nameInput: TextareaRenderable | undefined
                 />
               </Show>
               <Show when={step() === "error"}>
-                <WizardActionButton theme={theme} label="Back" onPress={moveBack} />
+                <WizardActionButton theme={theme} label="Back" onPress={handleBackPress} />
                 <box flexGrow={1} />
                 <WizardActionButton theme={theme} label="Retry" primary onPress={() => void continueFromPath()} />
               </Show>

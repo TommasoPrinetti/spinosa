@@ -5,7 +5,7 @@ export default define({
   setup: async (ctx) => {
     await ctx.agent.transform((agents) => {
       agents.update("configured", (agent) => {
-        agent.description = ctx.options.description
+        agent.description = ctx.options.description as string | undefined
         agent.mode = "subagent"
       })
     })

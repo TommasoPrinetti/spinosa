@@ -20,7 +20,7 @@ export function DialogMessage(props: {
 
   return (
     <DialogSelect
-      title="Message Actions"
+      title="Message actions"
       options={[
         {
           title: "Revert",
@@ -97,7 +97,7 @@ export function DialogMessage(props: {
               : undefined
             route.navigate({
               sessionID: result.data!.id,
-              type: "session",
+              type: "workspace",
               prompt,
             })
             dialog.clear()

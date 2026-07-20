@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import path from "node:path"
+import { symlinkSync } from "node:fs"
 import { mkdir } from "node:fs/promises"
 import { tmpdir } from "../fixture/fixture"
 import { buildImportScanPreview, buildNewWorkspacePreview, suggestWorkspacePath } from "../../src/spinosa/onboarding-preview"
@@ -50,6 +51,21 @@ describe("onboarding preview", () => {
     expect(preview.scanRows.some((row) => row.label === "Source scan")).toBe(true)
     expect(preview.importOptions).toEqual([
       { ext: "docx", count: 1, bytes: expect.any(Number), selected: true },
+      { ext: "md", count: 1, bytes: expect.any(Number), selected: true },
+    ])
+  })
+
+  test("ignores symlink loops while scanning previews", async () => {
+    await using tmp = await tmpdir()
+    const corpus = path.join(tmp.path, "looped")
+    const nested = path.join(corpus, "nested")
+    await mkdir(nested, { recursive: true })
+    await Bun.write(path.join(nested, "notes.md"), "# Notes")
+    symlinkSync(corpus, path.join(nested, "loop"))
+
+    const preview = await buildImportScanPreview(corpus)
+
+    expect(preview.importOptions).toEqual([
       { ext: "md", count: 1, bytes: expect.any(Number), selected: true },
     ])
   })

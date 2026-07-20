@@ -20,6 +20,7 @@ import type { ProjectDirectories } from "@opencode-ai/sdk/v2"
 import { useRoute } from "../context/route"
 
 export type MoveSessionSelection = { type: "directory"; directory: string; subdirectory: boolean } | { type: "new" }
+/** Selection result for a move-session target */
 type ProjectDirectory = ProjectDirectories[number]
 
 type DialogMoveSessionProps = {
@@ -32,6 +33,7 @@ type DialogMoveSessionProps = {
 }
 
 export function DialogMoveSession(props: DialogMoveSessionProps) {
+  /** Dialog to move a session to a different directory/project */
   const dialog = useDialog()
   const sdk = useSDK()
   const dimensions = useTerminalDimensions()
@@ -70,9 +72,10 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
     return loadedProject()
   })
 
-  const [directories, { refetch }] = createResource(
+  const [directories, { refetch }] = createResource<ProjectDirectory[] | undefined, string | undefined>(
     () => (props.initialRemoving ? undefined : props.projectID),
-    async (projectID, info): Promise<ProjectDirectory[] | undefined> => {
+    async (projectID, info) => {
+      if (!projectID) return
       try {
         await sdk.client.v2.projectCopy.refresh(
           { projectID, location: { directory: sdk.directory } },
@@ -83,14 +86,12 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
         return directories.data ?? []
       } catch (error) {
         setLoadError(error)
-        // An initial load with no data surfaces the inline error view below. A
-        // failed refresh intentionally stays quiet and keeps the already-shown
-        // list interactive; reopening the dialog retries the load.
-        return info.value
+        // info.value is shared across resource runs — cast to our expected type
+        return info.value as ProjectDirectory[] | undefined
       }
     },
   )
-  const directoryData = createMemo(() => directories() ?? props.initialDirectories)
+  const directoryData = createMemo<ProjectDirectory[] | undefined>(() => directories() ?? props.initialDirectories)
   // Show the locked error view only when we have nothing to display. A refresh
   // that fails after the list rendered keeps the list and its actions.
   const showError = createMemo(() => Boolean(loadError()) && !directoryData())
@@ -113,7 +114,7 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
     if (showError()) return []
     const data = directoryData()
     const current = currentRoot()?.directory
-    if (directories.loading && !data && !current) return [{ title: "Loading project directories...", value: undefined }]
+    if (directories.loading && !data && !current) return [{ title: "Loading project folders…", value: undefined }]
     const roots = [...(data ?? [])]
     if (current && !roots.some((item) => item.directory === current)) roots.unshift({ directory: current })
     roots.sort((a, b) => {
@@ -194,8 +195,8 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
     if (!current) return false
     const fallback = projectContext.data.project.mainDir
     if (fallback) setReplacementCurrent(fallback)
-    if (route.data.type === "workspace" && route.data.sessionID) {
-      route.navigate({ type: "home" })
+    if (route.data.type === "workspace") {
+      route.navigate({ type: "global" })
       dialog.clear()
       return true
     }
@@ -235,8 +236,8 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
       if ("data" in result.error && result.error.data.forceRequired) {
         const status = await sdk.client.vcs.status({ directory: selected.directory }).catch(() => undefined)
         const choice = await DialogWorkspaceFileChanges.show(dialog, status?.data ?? [], {
-          title: "Delete working copy?",
-          message: "This working copy has file changes. Do you want to delete it anyway?",
+          title: "Delete project copy?",
+          message: "This project copy has file changes. Delete it anyway?",
         })
         if (choice !== "yes") {
           reopen()

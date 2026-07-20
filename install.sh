@@ -2,9 +2,10 @@
 # shellcheck shell=bash
 # ── install.sh — Spinosa Framework Installer (auto-re-execs with bash) ──────
 
-PINNED_VERSION="0.8.0-beta.16"
+PINNED_VERSION="0.9.0-beta.28"
 PINNED_TAG="beta"
 BUNDLED_BUN_VERSION="1.3.14"
+DEFAULT_DEPS_TIMEOUT_SECONDS="600"
 
 if [ -z "${BASH_VERSION-}" ]; then
   if command -v bash >/dev/null 2>&1; then
@@ -85,6 +86,14 @@ _spinosa_install_err_trap() {
   local exit_code=$? line=$1
   spinner_stop 2>/dev/null || true
   spinosa_log ERROR "aborted line=${line} exit=${exit_code} cmd=${BASH_COMMAND:-}"
+  if [ -n "${INSTALL_BACKUP_DIR:-}" ] && [ -d "${INSTALL_BACKUP_DIR}" ]; then
+    spinosa_log WARN "restoring previous installation from ${INSTALL_BACKUP_DIR}"
+    rm -rf "${SPINOSA_HOME}/versions/${VERSION}" 2>/dev/null || true
+    mv "${INSTALL_BACKUP_DIR}" "${SPINOSA_HOME}/versions/${VERSION}" 2>/dev/null || true
+  fi
+  if [ -n "${INSTALL_STAGE_DIR:-}" ]; then
+    rm -rf "${INSTALL_STAGE_DIR}" 2>/dev/null || true
+  fi
   if [ "${INSTALL_COMPLETED:-0}" -eq 0 ] && [ -n "${VERSION:-}" ]; then
     if [ -d "${SPINOSA_HOME}/versions/${VERSION}" ] && ! version_install_complete "$VERSION"; then
       spinosa_log WARN "ERR trap removing incomplete versions/${VERSION}"
@@ -115,6 +124,7 @@ MIN_DAYS=""
 YES=0
 LAUNCH_DASHBOARD="auto"
 PREFIX_MODE=0
+DEV_MODE=0
 SPINOSA_HOME="${SPINOSA_HOME:-$HOME/.spinosa}"
 SPINOSA_METADATA_DIR="${SPINOSA_HOME}/metadata"
 SPINOSA_BIN_DIR="${SPINOSA_BIN_DIR:-$HOME/.local/bin}"
@@ -126,19 +136,33 @@ REPO="TommasoPrinetti/spinosa"
 # ══════════════════════════════════════════════════════════════════════════════
 
 if [ -t 2 ] && [ "${NO_COLOR:-}" != "1" ]; then
-  G=$'\033[32m' Y=$'\033[33m' R=$'\033[31m'
-  DIM=$'\033[2m' BOLD=$'\033[1m' U=$'\033[4m' RESET=$'\033[0m'
+  G=$'\033[32m' Y=$'\033[33m' R=$'\033[31m' C=$'\033[36m'
+  DIM=$'\033[2m' BOLD=$'\033[1m' RESET=$'\033[0m'
 else
-  G='' Y='' R='' DIM='' BOLD='' U='' RESET=''
+  G='' Y='' R='' C='' DIM='' BOLD='' RESET=''
 fi
 
 info()  { spinosa_log INFO "$1"; printf '  %s %s\n' "${DIM}→${RESET}" "$1"; }
 ok()    { spinosa_log INFO "$1"; printf '  %s %s\n' "${G}✦${RESET}" "$1"; }
 warn()  { spinosa_log WARN "$1"; printf '  %s %s\n' "${Y}⚠${RESET}" "$1" >&2; }
 note()  { spinosa_log INFO "$1"; printf '  %s↳%s %s\n' "${DIM}" "${RESET}" "$1"; }
-fail()  { spinosa_log ERROR "$1"; printf '  %s%s✗%s %s%s\n' "${R}${BOLD}" "${U}" "$(printf '\033[24m')" "$1" "${RESET}" >&2; }
 die()   { spinosa_log ERROR "$1"; printf '\n  %s %s\n\n' "${R}✗${RESET}" "$1" >&2; exit 1; }
 divider() { printf '%s\n' "${DIM}$(printf '%.0s─' {1..78})${RESET}"; }
+
+# Section header — groups the install into clear phases so the user can
+# follow progress at a glance. Prints a divider, a numbered/labeled title,
+# then another divider.
+section() {
+  local title="$1" bar
+  spinosa_log INFO "section=${title}"
+  bar="$(printf '%.0s─' $(seq 1 $((${#title} + 4))))"
+  if [ -t 2 ]; then
+    printf '\n  %s%s%s\n' "${BOLD}${C}" "$title" "${RESET}"
+    printf '  %s%s%s\n' "${DIM}" "$bar" "${RESET}"
+  else
+    printf '\n  %s\n' "$title"
+  fi
+}
 
 read_from_tty() {
   if [ -t 0 ]; then
@@ -181,30 +205,16 @@ read_tty_or_die() {
 
 spinner_start() {
   local msg="$1"
-  SPINNER_PID=""
   [ -t 2 ] || return 0
-  (
-    local frames=("▁" "▃" "▄" "▅" "▆" "▇" "█" "▇" "▆" "▅" "▄" "▃")
-    local i=0
-    while true; do
-      printf '\r\033[2K  %s%s%s %s' "${G}" "${frames[$((i % 12))]}" "${RESET}" "$msg" >&2
-      i=$((i + 1))
-      sleep 0.1
-    done
-  ) &
-  SPINNER_PID=$!
+  printf '  %s' "$msg" >&2
 }
-
 spinner_stop() {
-  [ -n "${SPINNER_PID:-}" ] || return 0
-  kill "$SPINNER_PID" 2>/dev/null || true
-  wait "$SPINNER_PID" 2>/dev/null || true
-  SPINNER_PID=""
   printf '\r\033[2K' >&2
   if [ -n "${1:-}" ]; then
-    printf '  %s %s\n' "${G}✦${RESET}" "$1"
+    printf '  %s %s\n' "${G}✦${RESET}" "$1" >&2
   fi
 }
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # FLAG PARSING
@@ -238,6 +248,7 @@ while [ $# -gt 0 ]; do
     --bin-dir)
       [ $# -ge 2 ] || die "--bin-dir requires a directory path"
       SPINOSA_BIN_DIR="$2"; shift 2 ;;
+    --dev)        DEV_MODE=1; shift ;;
     --yes|-y)     YES=1; shift ;;
     --)           shift; break ;;
     --help|-h)
@@ -253,6 +264,7 @@ while [ $# -gt 0 ]; do
       echo "  --yes             Skip all confirmation prompts (for automation)"
       echo "  --launch          Launch the dashboard after install"
       echo "  --no-launch       Do not launch the dashboard after install"
+      echo "  --dev             Install full source tree for local development"
       echo ""
       echo "Security:"
       echo "  --min-days N      Reject releases newer than N days old"
@@ -294,21 +306,6 @@ detect_platform() {
   info "Platform: ${PLATFORM}"
 }
 
-detect_platform_suffix() {
-  local os arch
-  case "$(uname -s)" in
-    Darwin) os="darwin" ;;
-    Linux)  os="linux" ;;
-    *)      die "Unsupported OS for platform suffix: $(uname -s)" ;;
-  esac
-  case "$(uname -m)" in
-    arm64|aarch64) arch="arm64" ;;
-    x86_64|amd64)  arch="amd64" ;;
-    i386|i686)     arch="i386" ;;
-    *)             die "Unsupported architecture for platform suffix: $(uname -m)" ;;
-  esac
-  printf '%s-%s' "$os" "$arch"
-}
 
 download() {
   local url="$1" dest="$2"
@@ -345,6 +342,11 @@ bun_asset_name() {
 install_bundled_bun() {
   local tmpdir="$1"
   local asset bun_zip bun_extract bun_src
+  if [ "${SKIP_BUNDLED_TOOLS:-0}" -eq 1 ]; then
+    command -v bun >/dev/null 2>&1 || die "--no-bundled-tools requires a system Bun installation"
+    ok "Using system Bun: $(command -v bun)"
+    return 0
+  fi
   asset="$(bun_asset_name)" || die "Unsupported platform for bundled Bun: $(uname -s) $(uname -m)"
   bun_zip="${tmpdir}/${asset}.zip"
   bun_extract="${tmpdir}/bun-runtime"
@@ -355,11 +357,16 @@ install_bundled_bun() {
   fi
 
   command -v unzip >/dev/null 2>&1 || die "unzip is required to install bundled Bun"
+  spinner_start "Downloading bundled Bun ${BUNDLED_BUN_VERSION}"
   download "https://github.com/oven-sh/bun/releases/download/bun-v${BUNDLED_BUN_VERSION}/${asset}.zip" "$bun_zip" \
-    || die "Failed to download Bun ${BUNDLED_BUN_VERSION}"
+    || { spinner_stop; die "Failed to download Bun ${BUNDLED_BUN_VERSION}"; }
+  spinner_stop
+  ok "Downloaded bundled Bun ${BUNDLED_BUN_VERSION}"
   rm -rf "$bun_extract"
   mkdir -p "$bun_extract"
-  unzip -q "$bun_zip" -d "$bun_extract" || die "Failed to extract Bun — download may be corrupted. Try again."
+  spinner_start "Extracting bundled Bun"
+  unzip -q "$bun_zip" -d "$bun_extract" || { spinner_stop; die "Failed to extract Bun — download may be corrupted. Try again."; }
+  spinner_stop
   bun_src="$(find "$bun_extract" -type f -name bun -perm -111 | head -1)"
   [[ -n "$bun_src" ]] || die "Downloaded Bun archive did not contain executable bun"
   mkdir -p "${SPINOSA_HOME}/bin"
@@ -369,10 +376,33 @@ install_bundled_bun() {
   ok "Installed bundled Bun ${BUNDLED_BUN_VERSION}"
 }
 
+ensure_workspace_links() {
+  local fw_root="$1"
+  local nm="${fw_root}/node_modules/@opencode-ai"
+  mkdir -p "$nm"
+  for pkg_dir in "${fw_root}/packages"/*/ "${fw_root}/packages/sdk/js"; do
+    local pkg_json="${pkg_dir}package.json"
+    [[ -f "$pkg_json" ]] || continue
+    local pkg_name
+    pkg_name="$(grep '"name"' "$pkg_json" | head -1 | sed 's/.*"name": *"\(.*\)".*/\1/')"
+    [[ -n "$pkg_name" && "$pkg_name" == @opencode-ai/* ]] || continue
+    local link="$nm/${pkg_name#@opencode-ai/}"
+    [[ -L "$link" ]] || ln -sf "$pkg_dir" "$link" 2>/dev/null || true
+  done
+}
+
 install_bun_dependencies() {
   local fw_root="$1"
   local bun_bin="${SPINOSA_HOME}/bin/bun"
-  [[ -x "$bun_bin" ]] || die "Bundled Bun missing at ${bun_bin}"
+  local timeout_seconds="${SPINOSA_DEPS_TIMEOUT_SECONDS:-$DEFAULT_DEPS_TIMEOUT_SECONDS}"
+  local timeout_runner="${fw_root}/workspace-template/.bin/run-with-timeout.ts"
+  if [[ ! -x "$bun_bin" ]]; then
+    bun_bin="$(command -v bun 2>/dev/null || true)"
+  fi
+  [[ -n "$bun_bin" && -x "$bun_bin" ]] || die "Bun runtime not found"
+  [[ "$timeout_seconds" =~ ^[1-9][0-9]*$ ]] \
+    || die "SPINOSA_DEPS_TIMEOUT_SECONDS must be a positive integer"
+  [[ -f "$timeout_runner" ]] || die "Dependency timeout runner not found: ${timeout_runner}"
 
   # Allow skipping npm dependency install entirely (CI / air-gapped)
   if [ "${SPINOSA_SKIP_DEPS:-}" = "1" ]; then
@@ -385,33 +415,46 @@ install_bun_dependencies() {
   if [ ! -d "${fw_root}/node_modules" ]; then
     note "Downloading npm packages — this may take 2-3 minutes on first install"
   fi
-
-  spinner_start "Installing dependencies"
-  if (cd "$fw_root" && PATH="$(dirname "$bun_bin"):$PATH" "$bun_bin" install --production >/dev/null 2>&1); then
-    spinner_stop "Dependencies installed"
-  else
-    spinner_stop
-    die "Dependency install failed. See ${SPINOSA_HOME}/logs/spinosa.log for details. If the network is unreliable, set SPINOSA_SKIP_DEPS=1 to skip this step and manage dependencies separately."
-  fi
-
-  # Ensure all workspace packages are resolvable as @opencode-ai/* symlinks.
-  # `bun install --production` from the framework root sometimes skips symlinks
-  # for packages with complex native dep chains (core, spinosa-core, etc.).
-  local nm="${fw_root}/node_modules/@opencode-ai"
-  mkdir -p "$nm"
-  for pkg_dir in "${fw_root}/packages"/*/ "${fw_root}/packages/sdk/js"; do
-    local pkg_json="${pkg_dir}package.json"
-    [[ -f "$pkg_json" ]] || continue
-    local pkg_name
-    pkg_name="$(grep '"name"' "$pkg_json" | head -1 | sed 's/.*"name": *"\(.*\)".*/\1/')"
-    [[ -n "$pkg_name" && "$pkg_name" == @opencode-ai/* ]] || continue
-    local link="$nm/${pkg_name#@opencode-ai/}"
-    [[ -L "$link" ]] || ln -sf "$pkg_dir" "$link" 2>/dev/null || true
+  local bun_out
+  bun_out="$(mktemp "${TMPDIR:-/tmp}/spinosa-bun-install.XXXXXX")"
+  local bun_ok=0
+  : > "$bun_out"
+  for attempt in 1 2; do
+    local install_args=(install)
+    if [[ $attempt -eq 2 ]]; then
+      info "Repairing dependency tree after failed validation (attempt 2/2, timeout ${timeout_seconds}s)"
+      rm -rf "${fw_root}/node_modules"
+      install_args+=(--force)
+    else
+      info "Installing dependencies (attempt 1/2, timeout ${timeout_seconds}s)"
+    fi
+    if (cd "$fw_root" && PATH="$(dirname "$bun_bin"):$PATH" \
+      "$bun_bin" run "$timeout_runner" "$timeout_seconds" "$bun_bin" "${install_args[@]}" 2>&1 | tee -a "$bun_out"); then
+      ensure_workspace_links "$fw_root"
+      if SPINOSA_HOME="$SPINOSA_HOME" SPINOSA_TEMPLATE_ROOT="$fw_root" \
+        "$bun_bin" run "${fw_root}/packages/tui/src/spinosa-cli.ts" version >> "$bun_out" 2>&1; then
+        bun_ok=1
+        break
+      fi
+    fi
+    if [[ $attempt -eq 1 ]]; then
+      spinosa_log WARN "bun install failed (attempt 1/2), retrying..."
+      sleep 2
+    fi
   done
-
-  if ! command -v pdftoppm >/dev/null 2>&1 || ! command -v pdftotext >/dev/null 2>&1 || ! command -v pdfinfo >/dev/null 2>&1; then
-    warn "Poppler tools not found — image OCR works, but PDF page splitting needs pdftoppm, pdftotext, and pdfinfo"
+  if [[ $bun_ok -eq 0 ]]; then
+    spinosa_log ERROR "bun install failed after 2 attempts. Output:"
+    while IFS= read -r line; do spinosa_log ERROR "$line"; done < "$bun_out"
+    rm -f "$bun_out"
+    die "Dependency repair failed. Metadata was preserved; check ${SPINOSA_HOME}/logs/spinosa.log and re-run the installer."
   fi
+  rm -f "$bun_out"
+  ok "Dependencies installed"
+  [ -d "${fw_root}/node_modules" ] \
+    || die "Dependencies missing after repair. Metadata was preserved; check ${SPINOSA_HOME}/logs/spinosa.log"
+  # Warm up macOS security scanning on native addons before the verify step
+  # so a transient SIGKILL doesn't make the install look broken.
+  warmup_macos_security "$bun_bin" "$fw_root"
 }
 
 available_disk_bytes() {
@@ -441,18 +484,9 @@ check_download_disk_space() {
   done
 }
 
-_realpath() {
-  local path="$1"
-  if [[ -d "$path" ]]; then
-    (cd "$path" 2>/dev/null && pwd -P) 2>/dev/null || printf '%s\n' "$path"
-  else
-    local dir base
-    dir="$(dirname "$path")"
-    base="$(basename "$path")"
-    (cd "$dir" 2>/dev/null && printf '%s/%s\n' "$(pwd -P)" "$base") 2>/dev/null || printf '%s\n' "$path"
-  fi
-}
 
+# SECURITY: Keep archive safety checks centralized here unless a new runtime
+# extraction path is introduced; if so, keep both implementations in parity.
 safe_untar() {
   local archive="$1" dest="$2"
   shift 2
@@ -498,14 +532,20 @@ safe_untar() {
       if [[ "$_target" == /* ]]; then
         die "Archive contains unsafe symlinks — aborting for safety"
       fi
-      # Count path components in symlink directory (depth from archive root)
+      # Extract symlink path: the token immediately before " -> ".
+      # tar verbose entries look like: lrwxrwxrwx ... linkname -> target
+      # so the path is everything before " -> " (NOT the last awk field,
+      # which would be the target).
       _file_path="${_entry%% -> *}"
-      _file_path="$(echo "$_file_path" | awk '{print $NF}')"
+      _file_path="${_file_path##* }"
       local _dir="${_file_path%/*}"
+      [[ "$_dir" == "$_file_path" ]] && _dir=""
       # Strip archive root from dir to get relative depth
-      _dir="${_dir#$archive_root/}"
+      _dir="${_dir#"$archive_root"/}"
       local _depth=0 _i
-      for _i in $(echo "$_dir" | tr '/' ' '); do _depth=$((_depth + 1)); done
+      if [[ -n "$_dir" ]]; then
+        for _i in $(echo "$_dir" | tr '/' ' '); do _depth=$((_depth + 1)); done
+      fi
       # Count ../ traversals in target
       local _traversals=0
       local _part
@@ -568,10 +608,31 @@ clean_macos_metadata() {
   find "$dir" -name "._*" -delete 2>/dev/null || true
 }
 
+# macOS 15+ tags files created by pipe-installed processes with
+# `com.apple.provenance`.  On macOS 26+ this attribute is kernel-protected
+# (APFS `protect` mount) and cannot be removed from userspace.  Loading
+# provenance-tagged native `.node` / `.dylib` addons through a JIT-entitled
+# runtime (bun) can trigger a transient SIGKILL from the security scanner.
+# The workaround is a warm-up run that lets the scanner complete before the
+# user invokes `spinosa`.
+warmup_macos_security() {
+  local bun_bin="$1" fw_root="$2"
+  local i
+  for i in 1 2 3; do
+    if SPINOSA_TEMPLATE_ROOT="$fw_root" \
+      "$bun_bin" run "${fw_root}/packages/tui/src/spinosa-cli.ts" version >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 2
+  done
+  # Non-fatal; the verify step also retries.
+  return 0
+}
+
 init_global_metadata() {
   mkdir -p "$SPINOSA_METADATA_DIR"
   local name legacy current
-  for name in config.yaml workspace_cache.txt workspaces.txt version_check_cache; do
+  for name in config.yaml workspace_cache.txt workspaces.json workspaces.txt; do
     legacy="${SPINOSA_HOME}/${name}"
     current="${SPINOSA_METADATA_DIR}/${name}"
     if [ -f "$legacy" ] && [ ! -f "$current" ]; then
@@ -664,11 +725,14 @@ EOF
   local config="${SPINOSA_METADATA_DIR}/config.yaml"
   if [ ! -f "$config" ]; then
     cat > "$config" << CONFIG_EOF
+# Spinosa installation marker — do not remove
+spinosa: true
 beta: $(installer_beta_toggle)
 auto_upgrade: true
 last_installed_version: "${VERSION}"
 CONFIG_EOF
   else
+    config_set_key "$config" "spinosa" "true"
     config_set_key "$config" "beta" "$(installer_beta_toggle)"
     config_delete_key "$config" "release_channel"
     config_set_key "$config" "last_installed_version" "\"${VERSION}\""
@@ -685,7 +749,19 @@ version_dir_has_framework() {
   local version="$1"
   local fw_dir="${SPINOSA_HOME}/versions/${version}"
   [ -d "$fw_dir" ] || return 1
-  find "$fw_dir" -maxdepth 1 -type d -name 'spinosa-framework-*' 2>/dev/null | grep -q .
+  [ -f "${fw_dir}/workspace-template/.spinosa/workspace-files.tsv" ] || return 1
+  [ -f "${fw_dir}/workspace-template/.bin/spinosa" ] || return 1
+  [ -d "${fw_dir}/packages/opencode" ] || return 1
+}
+
+# Runtime deps required for the TUI. Incomplete bun installs (half-failed or
+# half-uninstalled homes) often leave a version tree without node_modules.
+version_dir_has_runtime_deps() {
+  local version="$1"
+  local fw_dir="${SPINOSA_HOME}/versions/${version}"
+  [ -d "${fw_dir}/node_modules" ] || return 1
+  # bun install layout; empty or non-bun trees are treated as incomplete
+  [ -d "${fw_dir}/node_modules/.bun" ] || [ -d "${fw_dir}/node_modules/@opencode-ai" ] || return 1
 }
 
 version_install_complete() {
@@ -695,139 +771,182 @@ version_install_complete() {
     .*|*/*) return 1 ;;
   esac
   version_dir_has_framework "$version" || return 1
+  # When SPINOSA_SKIP_DEPS=1 for this run, skip node_modules check. Broken
+  # previously-stamped trees still fail completeness so repair can reinstall.
+  if [ "${SPINOSA_SKIP_DEPS:-}" != "1" ]; then
+    version_dir_has_runtime_deps "$version" || return 1
+  fi
   if [ -f "${SPINOSA_HOME}/versions/${version}/${SPINOSA_INSTALL_COMPLETE_STAMP}" ]; then
     return 0
   fi
   local last
   last="$(read_last_installed_version 2>/dev/null || true)"
+  # Strip optional quotes from yaml values
+  last="${last%\"}"
+  last="${last#\"}"
   [ -n "$last" ] && [ "$last" = "$version" ]
 }
 
-list_complete_versions() {
-  local entry version
-  [ -d "${SPINOSA_HOME}/versions" ] || return 0
-  for entry in "${SPINOSA_HOME}/versions"/*; do
-    [ -e "$entry" ] || continue
-    version="$(basename "$entry")"
-    version_install_complete "$version" && printf '%s\n' "$version"
-  done | sort -V
-}
+# Detect half-uninstalled / half-installed ~/.spinosa and clean debris so a
+# normal install can repair rather than crash (missing bin, incomplete deps,
+# orphan staging dirs, metadata-only homes after uninstall, etc.).
+repair_spinosa_home() {
+  local repaired=0
+  local entry version base complete has_versions
 
-reclaim_incomplete_version() {
-  local version="$1"
-  if [ -d "${SPINOSA_HOME}/versions/${version}" ] && ! version_install_complete "$version"; then
-    warn "Removing incomplete v${version} from a previous install attempt"
-    spinosa_log WARN "reclaim incomplete versions/${version}"
-    rm -rf "${SPINOSA_HOME}/versions/${version}"
+  mkdir -p "${SPINOSA_HOME}" "${SPINOSA_METADATA_DIR}"
+
+  # Stale lock / staging / backup trees left by interrupted installs
+  if [ -d "${SPINOSA_HOME}/versions" ]; then
+    for entry in "${SPINOSA_HOME}/versions"/* "${SPINOSA_HOME}/versions"/.[!.]* "${SPINOSA_HOME}/versions"/..?*; do
+      [ -e "$entry" ] || continue
+      base="$(basename "$entry")"
+      case "$base" in
+        .|..|.install.lock) continue ;;
+      esac
+      # Match .*.staging.* and .*.backup.* leftover dirs
+      case "$base" in
+        .*.staging.*|*.staging.*|.*.backup.*|*.backup.*)
+          info "Removing leftover install stage: versions/${base}"
+          rm -rf "$entry"
+          repaired=1
+          ;;
+      esac
+    done
+
+    # Incomplete version trees (missing stamp, framework files, or node_modules)
+    for entry in "${SPINOSA_HOME}/versions"/*; do
+      [ -e "$entry" ] || continue
+      [ -d "$entry" ] || continue
+      version="$(basename "$entry")"
+      case "$version" in
+        .*|*/*) continue ;;
+      esac
+      if ! version_install_complete "$version"; then
+        info "Removing incomplete install: versions/${version}"
+        rm -rf "$entry"
+        repaired=1
+      fi
+    done
   fi
-}
 
-reclaim_all_incomplete_versions() {
-  local entry version
-  [ -d "${SPINOSA_HOME}/versions" ] || return 0
-  for entry in "${SPINOSA_HOME}/versions"/*; do
-    [ -e "$entry" ] || continue
-    version="$(basename "$entry")"
-    reclaim_incomplete_version "$version"
-  done
+  complete="$(get_installed_version || true)"
+
+  if [ -z "$complete" ]; then
+    # Half-uninstall: metadata kept, runtime removed — or install never finished.
+    has_versions=0
+    if [ -d "${SPINOSA_HOME}/versions" ]; then
+      for entry in "${SPINOSA_HOME}/versions"/*; do
+        [ -e "$entry" ] || continue
+        has_versions=1
+        break
+      done
+    fi
+    if [ -d "${SPINOSA_HOME}/bin" ] || [ -f "${SPINOSA_HOME}/env.sh" ] || [ -d "${SPINOSA_HOME}/lib" ] \
+      || { [ -d "${SPINOSA_HOME}/versions" ] && [ "$has_versions" -eq 0 ]; }; then
+      info "Detected partial Spinosa home (no complete version) — cleaning runtime debris for repair"
+      [ -n "${SPINOSA_HOME:-}" ] || die "SPINOSA_HOME is unset — refusing to clean"
+      rm -rf "${SPINOSA_HOME:?}/bin" "${SPINOSA_HOME:?}/lib" 2>/dev/null || true
+      rm -f "${SPINOSA_HOME}/env.sh" 2>/dev/null || true
+      # Drop empty versions shell so install recreates a clean tree
+      if [ -d "${SPINOSA_HOME}/versions" ] && [ "$has_versions" -eq 0 ]; then
+        # keep directory for lock creation later; only remove empties via rmdir if possible
+        :
+      fi
+      repaired=1
+    fi
+  else
+    # Complete tree exists but launcher/runtime is missing or broken
+    if [ ! -x "${SPINOSA_HOME}/bin/spinosa" ] || [ ! -x "${SPINOSA_HOME}/bin/bun" ]; then
+      info "Detected broken runtime under ${SPINOSA_HOME}/bin — will reinstall"
+      REINSTALL=1
+      repaired=1
+    fi
+  fi
+
+  # Target version specifically incomplete → force clean reinstall of that tree
+  if [ -n "${VERSION:-}" ] && [ -d "${SPINOSA_HOME}/versions/${VERSION}" ] \
+    && ! version_install_complete "$VERSION"; then
+    info "Target v${VERSION} is incomplete — removing for clean reinstall"
+    rm -rf "${SPINOSA_HOME}/versions/${VERSION}"
+    REINSTALL=1
+    repaired=1
+  fi
+
+  if [ "$repaired" -eq 1 ]; then
+    ok "Spinosa home prepared for repair install (workspace metadata kept)"
+    spinosa_log INFO "repair_spinosa_home cleaned partial install home=${SPINOSA_HOME}"
+  fi
 }
 
 mark_version_install_complete() {
   local version="$1"
   local stamp="${SPINOSA_HOME}/versions/${version}/${SPINOSA_INSTALL_COMPLETE_STAMP}"
+  # Never stamp an incomplete tree as complete
+  if ! version_dir_has_framework "$version"; then
+    die "Refusing to mark incomplete v${version} as installed (missing framework files)"
+  fi
+  if [ "${SPINOSA_SKIP_DEPS:-}" != "1" ] && ! version_dir_has_runtime_deps "$version"; then
+    die "Refusing to mark incomplete v${version} as installed (missing node_modules — re-run install)"
+  fi
   printf '%s %s\n' "$version" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$stamp"
   write_install_metadata
+  ok "Marked v${version} as installed"
 }
 
-install_install_state_lib() {
-  local fw_root="$1"
-  local src="${fw_root}/.bin/lib/spinosa/install_state.sh"
-  local dest="${SPINOSA_HOME}/lib/install_state.sh"
-  [ -f "$src" ] || return 0
-  mkdir -p "${SPINOSA_HOME}/lib"
-  cp "$src" "$dest"
-}
 
 # ══════════════════════════════════════════════════════════════════════════════
 # VERSION & SECURITY
 # ══════════════════════════════════════════════════════════════════════════════
 
 compare_versions() {
-  local original_a="$1" original_b="$2"
-  local a="${original_a%%-*}" b="${original_b%%-*}"
-  a="${a%%+*}" b="${b%%+*}"
-  local IFS=.
-  set -f
-  # shellcheck disable=SC2086
-  set -- $a
-  set +f
-  local av=("$@")
-  set -f
-  # shellcheck disable=SC2086
-  set -- $b
-  set +f
-  local bv=("$@")
-  local i max
-  max=${#av[@]}
-  [ "${#bv[@]}" -gt "$max" ] && max="${#bv[@]}"
-  for ((i=0; i<max; i++)); do
-    local an="${av[$i]:-0}" bn="${bv[$i]:-0}"
-    an="${an//[^0-9]/}"; an="${an:-0}"
-    bn="${bn//[^0-9]/}"; bn="${bn:-0}"
-    if (( an > bn )); then
-      return 1
-    elif (( an < bn )); then
-      return 2
-    fi
-  done
+  if [ "$1" = "$2" ]; then
+    return 0
+  fi
+
+  # Strip prerelease and build metadata for base version comparison
+  local a_base="$1" b_base="$2"
+  a_base="${a_base%%-*}"; a_base="${a_base%%+*}"
+  b_base="${b_base%%-*}"; b_base="${b_base%%+*}"
+
+  if [ "$a_base" != "$b_base" ]; then
+    local sorted
+    sorted="$(printf '%s\n%s\n' "$a_base" "$b_base" | sort -V)"
+    [ "$(echo "$sorted" | head -1)" = "$a_base" ] && return 2  # $1 < $2
+    return 1  # $1 > $2
+  fi
+
+  # Same base version: compare prerelease tags (semver: prerelease < release)
   local apre="" bpre=""
-  if [[ "$original_a" == *-* ]]; then
-    apre="${original_a#*-}"
-    apre="${apre%%+*}"
-  fi
-  if [[ "$original_b" == *-* ]]; then
-    bpre="${original_b#*-}"
-    bpre="${bpre%%+*}"
-  fi
-  if [ -z "$apre" ] && [ -n "$bpre" ]; then return 1; fi
-  if [ -n "$apre" ] && [ -z "$bpre" ]; then return 2; fi
-  if [ -n "$apre" ] && [ -n "$bpre" ] && [ "$apre" != "$bpre" ]; then
-    set -f
-    # shellcheck disable=SC2086
-    set -- $apre
-    set +f
-    local ap=("$@")
-    set -f
-    # shellcheck disable=SC2086
-    set -- $bpre
-    set +f
-    local bp=("$@")
-    max=${#ap[@]}; [ "${#bp[@]}" -gt "$max" ] && max="${#bp[@]}"
-    for ((i=0; i<max; i++)); do
-      local ai="${ap[$i]:-}" bi="${bp[$i]:-}"
-      [ "$ai" = "$bi" ] && continue
-      [ -z "$ai" ] && return 2
-      [ -z "$bi" ] && return 1
-      if [[ "$ai" =~ ^[0-9]+$ && "$bi" =~ ^[0-9]+$ ]]; then
-        if [ "$ai" -gt "$bi" ]; then return 1; fi
-        if [ "$ai" -lt "$bi" ]; then return 2; fi
-      elif [[ "$ai" =~ ^[0-9]+$ ]]; then
-        return 2
-      elif [[ "$bi" =~ ^[0-9]+$ ]]; then
-        return 1
-      else
-        [ "$ai" '>' "$bi" ] && return 1
-        [ "$ai" '<' "$bi" ] && return 2
-      fi
-    done
-  fi
-  return 0
+  case "$1" in *-*) apre="${1#*-}"; apre="${apre%%+*}" ;; esac
+  case "$2" in *-*) bpre="${2#*-}"; bpre="${bpre%%+*}" ;; esac
+
+  [ -z "$apre" ] && return 1  # release > prerelease
+  [ -z "$bpre" ] && return 2  # prerelease < release
+
+  # Both have prerelease tags: sort -V handles numeric tokens correctly
+  sorted="$(printf '%s\n%s\n' "$apre" "$bpre" | sort -V)"
+  [ "$(echo "$sorted" | head -1)" = "$apre" ] && return 2
+  return 1
 }
 
 get_installed_version() {
-  list_complete_versions | tail -1
+  local entry version latest="" cmp=0
+  [ -d "${SPINOSA_HOME}/versions" ] || return 0
+  for entry in "${SPINOSA_HOME}/versions"/*; do
+    [ -e "$entry" ] || continue
+    version="$(basename "$entry")"
+    version_install_complete "$version" || continue
+    if [ -z "$latest" ]; then
+      latest="$version"
+    else
+      compare_versions "$version" "$latest"
+      cmp=$?
+      [ "$cmp" -eq 1 ] && latest="$version"
+    fi
+  done
+  [ -n "$latest" ] && printf '%s\n' "$latest"
 }
-
 resolve_version() {
   if [ "$VERSION" = "latest" ]; then
     local channel url
@@ -840,9 +959,8 @@ resolve_version() {
     RELEASE_DOWNLOAD_TAG="$channel"
     info "Latest ${channel} version: ${VERSION}"
   elif [ "$VERSION_EXPLICIT" -eq 1 ]; then
-    # Use channel tag (beta/stable) for the download URL — the release
-    # tag is a moving pointer, not per-version. Per-version tags
-    # (vX.Y.Z) exist for stable releases only.
+    # Explicit versions install from immutable vX.Y.Z source tags; keep the
+    # pinned installer tag for channel metadata and release-age checks.
     RELEASE_DOWNLOAD_TAG="$PINNED_TAG"
   else
     RELEASE_DOWNLOAD_TAG="$PINNED_TAG"
@@ -910,12 +1028,12 @@ prompt_upgrade() {
       info "Already on v${target}. No upgrade needed."
       return 1
     fi
-    printf '  %sSpinosa v%s is already installed.%s\n' "${Y}" "$installed" "${RESET}"
+    printf '  %s %sSpinosa v%s is already installed.%s\n' "${Y}⚠${RESET}" "${Y}" "$installed" "${RESET}"
     if [ "$YES" -eq 1 ]; then
       info "Skipping reinstall prompt (--yes)."
       return 1
     fi
-    printf '  %sReinstall?%s [y/N]: ' "${BOLD}" "${RESET}"
+    printf '  %s Reinstall?%s [y/N]: ' "${BOLD}?${RESET}" "${RESET}"
     local reply
     read_tty_or_die reply
     case "$reply" in
@@ -935,12 +1053,12 @@ prompt_upgrade() {
       info "Installing v${target} (over v${installed})..."
       return 0
     fi
-    printf '  %sSpinosa v%s is installed. v%s is available.%s\n' "${G}" "$installed" "$target" "${RESET}"
+    printf '  %s %sSpinosa v%s is installed. v%s is available.%s\n' "${G}✦${RESET}" "${G}" "$installed" "$target" "${RESET}"
     if [ "$YES" -eq 1 ]; then
       info "Auto-upgrading (--yes)."
       return 0
     fi
-    printf '  %sUpgrade?%s [Y/n]: ' "${BOLD}" "${RESET}"
+    printf '  %s Upgrade?%s [Y/n]: ' "${BOLD}?${RESET}" "${RESET}"
     local reply
     read_tty_or_die reply
     reply="${reply:-Y}"
@@ -961,12 +1079,12 @@ prompt_upgrade() {
       fi
       return 0
     fi
-    printf '  %sInstalled v%s is newer than target v%s.%s\n' "${Y}" "$installed" "$target" "${RESET}"
+    printf '  %s %sInstalled v%s is newer than target v%s.%s\n' "${Y}⚠${RESET}" "${Y}" "$installed" "$target" "${RESET}"
     if [ "$YES" -eq 1 ]; then
       info "Skipping downgrade (--yes)."
       return 1
     fi
-    printf '  %sDowngrade?%s [y/N]: ' "${BOLD}" "${RESET}"
+    printf '  %s Downgrade?%s [y/N]: ' "${BOLD}?${RESET}" "${RESET}"
     local reply
     read_tty_or_die reply
     case "$reply" in
@@ -981,7 +1099,7 @@ confirm_install() {
   if [ "$YES" -eq 1 ]; then
     return 0
   fi
-  printf '  %sInstall Spinosa v%s?%s [Y/n]: ' "${BOLD}" "$version" "${RESET}"
+  printf '  %s Install Spinosa v%s?%s [Y/n]: ' "${BOLD}?${RESET}" "$version" "${RESET}"
   local reply
   read_tty_or_die reply
   reply="${reply:-Y}"
@@ -1013,10 +1131,8 @@ handle_verify_only() {
     die "No Spinosa installation found at ${SPINOSA_HOME}"
   fi
   local fw_dir="${SPINOSA_HOME}/versions/${existing_version}"
-  local fw_subdir
-  fw_subdir="$(find "$fw_dir" -maxdepth 1 -type d -name 'spinosa-framework-*' 2>/dev/null | head -1)" || true
-  if [ -z "$fw_subdir" ]; then
-    die "Could not find installed framework"
+  if ! version_dir_has_framework "$existing_version"; then
+    die "Installed Spinosa v${existing_version} is missing workspace-template files"
   fi
   ok "Verification complete"
   return 0
@@ -1024,68 +1140,15 @@ handle_verify_only() {
 
 handle_dry_run() {
   [ "$DRY_RUN" -eq 1 ] || return 1
-  local base_url="$1"
+  local archive_url="$1"
   local archive_name="$2"
   info "Dry run — would download:"
-  info "  ${base_url}/${archive_name}"
-  info "  ${base_url}/checksums.txt"
+  info "  ${archive_url}"
   info "Would install to: ${SPINOSA_HOME}/versions/${VERSION}/"
   info "Would create shim: ${SPINOSA_BIN_DIR}/spinosa"
   echo ""
   return 0
 }
-
-download_and_verify() {
-  local url="$1" dest="$2" label="$3"
-  local checksums_file="${4:-}"
-  local archive_name="${5:-}"
-  local max_retries="${6:-1}"
-  local retry_delay="${7:-3}"
-
-  local retries=0 download_ok=false
-  while [ "$retries" -lt "$max_retries" ]; do
-    if [ "$max_retries" -gt 1 ]; then
-      spinner_start "Downloading ${label} (attempt $((retries + 1))/${max_retries})"
-    else
-      spinner_start "Downloading ${label}"
-    fi
-    if download "$url" "$dest"; then
-      spinner_stop
-      download_ok=true
-      break
-    fi
-    # Fallback: try GitHub API if direct download failed
-    if [ "$retries" -eq 0 ] && [ -n "${archive_name:-}" ]; then
-      spinner_stop
-      warn "Direct download failed — trying API fallback for ${archive_name}"
-      if download_github_release_asset "$REPO" "$RELEASE_DOWNLOAD_TAG" "$archive_name" "$dest"; then
-        download_ok=true
-        break
-      fi
-    fi
-    spinner_stop
-    retries=$((retries + 1))
-    if [ "$retries" -lt "$max_retries" ]; then
-      warn "Download failed — retrying (${retries}/${max_retries})"
-      sleep "$retry_delay"
-    fi
-  done
-
-  if ! $download_ok; then
-    die "Failed to download ${label}"
-  fi
-
-  if [ -n "$checksums_file" ] && [ -n "$archive_name" ]; then
-    local ck_url="${url%/*}/${checksums_file}"
-    local ck_dest
-    ck_dest="$(dirname "$dest")/${checksums_file}"
-    download "$ck_url" "$ck_dest" || die "Failed to download ${checksums_file} — cannot verify integrity"
-    verify_asset_checksum "$dest" "$archive_name" "$ck_dest" "$label"
-  fi
-}
-
-
-
 install_shims() {
   if [ "$PREFIX_MODE" -eq 1 ]; then
     info "Custom install root (--prefix) — skipping global shim."
@@ -1095,9 +1158,20 @@ install_shims() {
   local shim="${SPINOSA_BIN_DIR}/spinosa"
   cat > "$shim" << SHIM_EOF
 #!/bin/sh
-target="${SPINOSA_HOME}/bin/spinosa"
+home="${SPINOSA_HOME}"
+target="\${home}/bin/spinosa"
+if [ ! -f "\$target" ]; then
+  version=\$(awk '\$1 == "last_installed_version:" { print \$2; exit }' "\${home}/metadata/config.yaml" 2>/dev/null | tr -d '"[:space:]')
+  installer="\${home}/versions/\${version}/install.sh"
+  if [ -n "\$version" ] && [ -f "\$installer" ] && command -v bash >/dev/null 2>&1; then
+    echo "spinosa: launcher missing; repairing v\${version} while preserving metadata..." >&2
+    bash "\$installer" --version "\$version" --yes --reinstall --no-launch --no-modify-path || true
+  fi
+fi
 if [ ! -f "\$target" ]; then
   echo "spinosa: installation broken — missing \${target}" >&2
+  echo "spinosa: repair with a reinstall, e.g.:" >&2
+  echo "  curl -fsSL https://github.com/TommasoPrinetti/spinosa/releases/download/beta/install.sh | bash -s -- --yes --reinstall" >&2
   exit 1
 fi
 exec bash "\$target" "\$@"
@@ -1140,8 +1214,9 @@ shell_path_default_config() {
 spinosa_path_block_present() {
   local config_file="$1"
   [[ -f "$config_file" ]] || return 1
+  # Match the marker comment header we write, plus the source lines we emit.
   grep -q '# Spinosa' "$config_file" 2>/dev/null || return 1
-  grep -Eq '\.spinosa/env\.sh|fish_add_path|SPINOSA_BIN_DIR' "$config_file" 2>/dev/null
+  grep -Eq 'env\.sh|fish_add_path|SPINOSA_BIN_DIR|SPINOSA_HOME' "$config_file" 2>/dev/null
 }
 
 spinosa_path_source_line() {
@@ -1149,6 +1224,7 @@ spinosa_path_source_line() {
   case "$current_shell" in
     fish) printf 'fish_add_path %s\n' "$SPINOSA_BIN_DIR" ;;
     *)
+      # shellcheck disable=SC2016
       printf '[[ -f "${SPINOSA_HOME:-$HOME/.spinosa}/env.sh" ]] && . "${SPINOSA_HOME:-$HOME/.spinosa}/env.sh"\n'
       ;;
   esac
@@ -1257,6 +1333,7 @@ shell_reload_hint() {
   elif [[ -f "$env_file" ]]; then
     printf 'source %s' "$env_file"
   else
+    # shellcheck disable=SC2016
     printf 'export PATH="%s:$PATH"' "${SPINOSA_BIN_DIR}"
   fi
 }
@@ -1265,11 +1342,25 @@ print_path_instructions() {
   local fallback_bin="$SPINOSA_BIN_DIR" env_file="${SPINOSA_ENV_FILE:-${SPINOSA_HOME}/env.sh}"
   local reload_hint
   reload_hint="$(shell_reload_hint "$env_file")"
+  # shellcheck disable=SC2016
   [[ "$fallback_bin" == "$HOME/.local/bin" ]] && fallback_bin='$HOME/.local/bin'
 
   info "Run Spinosa with: spinosa"
 
-  if "${SPINOSA_BIN_DIR}/spinosa" help >/dev/null 2>&1; then
+  # The first `spinosa` invocation after install can be SIGKILLed by macOS
+  # security scanning a freshly loaded native addon. Retry a few times so a
+  # transient kill doesn't make the install look broken.
+  local spinosa_ready=0
+  local attempt
+  for attempt in 1 2 3; do
+    if "${SPINOSA_BIN_DIR}/spinosa" version >/dev/null 2>&1; then
+      spinosa_ready=1
+      break
+    fi
+    sleep 2
+  done
+
+  if [ "$spinosa_ready" -eq 1 ]; then
     ok "Command 'spinosa' is ready in this install session"
   elif command -v spinosa >/dev/null 2>&1; then
     warn "Command 'spinosa' is on PATH but not runnable — run: ${reload_hint}"
@@ -1302,32 +1393,60 @@ print_banner() {
 
 run_basic_test() {
   info "Running basic test..."
-  local test_err
-  test_err="$("${SPINOSA_BIN_DIR}/spinosa" help 2>&1 >/dev/null)" || true
-  if ! "${SPINOSA_BIN_DIR}/spinosa" help >/dev/null 2>&1; then
-    spinosa_log WARN "basic test stderr: ${test_err:-<empty>}"
-    warn "Basic test failed — shim at ${SPINOSA_BIN_DIR}/spinosa is not runnable."
-    return 1
-  fi
-  if command -v spinosa >/dev/null 2>&1; then
-    ok "Basic test passed (spinosa on PATH)"
+  local ok=true
+
+  # Check bun
+  local bun_bin="${SPINOSA_HOME}/bin/bun"
+  if [[ -x "$bun_bin" ]]; then
+    ok "bun: $("$bun_bin" --version 2>/dev/null || echo ok)"
   else
-    ok "Basic test passed (shim works; reload shell for PATH)"
+    warn "bun not found at ${bun_bin}"
+    ok=false
+  fi
+
+  # Check opencode (TUI packages)
+  local fw_root="${SPINOSA_HOME}/versions/${VERSION}"
+  if [[ -f "${fw_root}/workspace-template/.bin/spinosa" ]]; then
+    ok "spinosa launcher: ${fw_root}/workspace-template/.bin/spinosa"
+  else
+    warn "spinosa launcher not found"
+    ok=false
+  fi
+  if [[ -d "${fw_root}/packages/opencode" ]]; then
+    ok "TUI packages: $(find "${fw_root}/packages/opencode" -maxdepth 1 -type f -name '*.json' -print | head -1)"
+  else
+    warn "TUI packages (packages/opencode) not found"
+    ok=false
+  fi
+  if [[ "${SPINOSA_SKIP_DEPS:-}" != "1" ]]; then
+    if [[ -d "${fw_root}/node_modules" ]]; then
+      ok "node_modules present"
+    else
+      warn "node_modules missing under versions/${VERSION}"
+      ok=false
+    fi
+  fi
+
+  # Check shim
+  if [[ -f "${SPINOSA_BIN_DIR}/spinosa" ]]; then
+    ok "shim: ${SPINOSA_BIN_DIR}/spinosa"
+  else
+    warn "shim not found at ${SPINOSA_BIN_DIR}/spinosa"
+    ok=false
+  fi
+
+  if $ok; then
+    ok "All components verified"
+  else
+    warn "Some components missing — re-run install with --reinstall --yes to repair"
   fi
 }
-
 maybe_launch_dashboard() {
-  local spinosa_cmd="${SPINOSA_BIN_DIR}/spinosa"
-  if command -v spinosa >/dev/null 2>&1; then
-    spinosa_cmd="spinosa"
-  fi
-
-  if [[ "$LAUNCH_DASHBOARD" == "1" ]] || { [[ "$LAUNCH_DASHBOARD" == "auto" ]] && [[ -t 0 && -r /dev/tty ]]; }; then
-    info "Launching Spinosa dashboard..."
-    flush_pending_input
-    sleep 1
-    SPINOSA_NO_UPGRADE_CHECK=1 exec "$spinosa_cmd" </dev/tty || warn "Dashboard launch skipped — run 'spinosa' to start it manually"
-  fi
+  # The installer only installs Spinosa; the user launches the dashboard
+  # themselves in a fresh terminal. Auto-launching an interactive TUI from a
+  # `curl | bash` pipe is unreliable (no controlling TTY, orphaned/killed
+  # background jobs under SIGKILL), so we intentionally do not launch here.
+  return 0
 }
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1346,22 +1465,46 @@ main() {
   detect_platform
   resolve_version
 
-  local lockdir="${SPINOSA_HOME}/versions/.lock.${$}-${VERSION}"
+  if [[ "${DEV_MODE:-0}" -eq 1 ]]; then
+    note "Development mode selected (source-tree install)"
+  fi
 
-  # Stale lock check: if lock dir is older than 30 min, reclaim it
+  section "System check"
+  INSTALL_LOCKDIR="${SPINOSA_HOME}/versions/.install.lock"
+  local lockdir="$INSTALL_LOCKDIR"
+
+  # Stale lock check: reclaim if older than 30 min or PID is dead
   if [ -d "$lockdir" ]; then
+    local stale=0
     if [[ "$(find "$lockdir" -maxdepth 0 -mmin +30 2>/dev/null)" == "$lockdir" ]]; then
+      stale=1
+    elif [ -f "$lockdir/pid" ]; then
+      local lock_pid
+      lock_pid=$(cat "$lockdir/pid") 2>/dev/null || true
+      if [ -n "$lock_pid" ] && ! kill -0 "$lock_pid" 2>/dev/null; then
+        stale=1
+      fi
+    fi
+    if [ "$stale" -eq 1 ]; then
       rm -rf "$lockdir"
       info "Removed stale lock from previous install attempt"
     fi
   fi
   mkdir -p "$(dirname "$lockdir")"
-  mkdir "$lockdir" 2>/dev/null || die "Another installer is running for version ${VERSION}. Wait and retry, or remove: rm -rf '${lockdir}'"
+  mkdir "$lockdir" 2>/dev/null || die "Another Spinosa installer is running. Wait and retry, or remove stale lock: rm -rf '${lockdir}'"
+  printf '%s\n' "$$" > "${lockdir}/pid"
+  # Early trap: ensure lock cleanup on any exit before full cleanup trap is registered
+  trap 'rm -rf "${INSTALL_LOCKDIR:-}"' EXIT
+  trap 'rm -rf "${INSTALL_LOCKDIR:-}"; exit 1' INT TERM HUP
+
+  # Repair only after owning the global lock. This preserves metadata and
+  # prevents one installer from deleting another installer's active lock.
+  repair_spinosa_home
 
   check_release_age "$VERSION" "$MIN_DAYS"
 
-  local base_url="https://github.com/${REPO}/releases/download/${RELEASE_DOWNLOAD_TAG}"
-  local archive_name="spinosa-framework-${VERSION}.tar.gz"
+  local archive_url="https://github.com/${REPO}/archive/refs/tags/v${VERSION}.tar.gz"
+  local archive_name="spinosa-v${VERSION}.tar.gz"
 
   info "Version: ${VERSION}"
   info "Install root: ${SPINOSA_HOME}"
@@ -1370,69 +1513,96 @@ main() {
 
   should_install "$VERSION" || { rm -rf "$lockdir"; return 0; }
   handle_verify_only "$SPINOSA_HOME" && { rm -rf "$lockdir"; return 0; }
-  handle_dry_run "$base_url" "$archive_name" && { rm -rf "$lockdir"; return 0; }
+  handle_dry_run "$archive_url" "$archive_name" && { rm -rf "$lockdir"; return 0; }
 
   mkdir -p "${SPINOSA_HOME}/bin"
   mkdir -p "${SPINOSA_BIN_DIR}"
   check_download_disk_space
+
+  section "Download & extract"
 
   local tmpdir
   tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/spinosa-install.XXXXXX")"
   cleanup() {
     spinner_stop
     rm -rf "$tmpdir" "$lockdir" 2>/dev/null || true
+    if [ -n "${INSTALL_BACKUP_DIR:-}" ] && [ -d "${INSTALL_BACKUP_DIR}" ] && ! version_install_complete "$VERSION"; then
+      rm -rf "${SPINOSA_HOME}/versions/${VERSION}" 2>/dev/null || true
+      mv "${INSTALL_BACKUP_DIR}" "${SPINOSA_HOME}/versions/${VERSION}" 2>/dev/null || true
+    fi
+    if [ -n "${INSTALL_STAGE_DIR:-}" ]; then
+      rm -rf "${INSTALL_STAGE_DIR}" 2>/dev/null || true
+    fi
   }
   trap cleanup EXIT INT TERM HUP
+  # Download GitHub source tarball
+  local framework_dest="${tmpdir}/spinosa-${VERSION}.tar.gz"
+  spinner_start "Downloading Spinosa v${VERSION}"
+  if download "$archive_url" "$framework_dest"; then
+    spinner_stop
+  else
+    spinner_stop
+    die "Failed to download Spinosa v${VERSION}"
+  fi
 
-  printf '\n' >&2
-
-  reclaim_all_incomplete_versions
-  INSTALL_COMPLETED=0
-
-  # Download framework archive + checksums
-  local framework_dest="${tmpdir}/${archive_name}"
-  download_and_verify \
-    "${base_url}/${archive_name}" "$framework_dest" \
-    "Framework v${VERSION}" \
-    "checksums.txt" "$archive_name" 3 3
-
-  # Extract to temp then move atomically (creates version dir only
-  # after verified content is ready — prevents marking partial installs)
+  # Extract — GitHub's tarball has a top-level dir (spinosa-<tag>/)
   local extract_tmp="${tmpdir}/framework-extract"
-  mkdir -p "$extract_tmp"
+  spinner_start "Extracting Spinosa v${VERSION}"
   safe_untar "$framework_dest" "$extract_tmp"
-  rm -rf "${SPINOSA_HOME}/versions/${VERSION}" 2>/dev/null || true
-  mkdir -p "${SPINOSA_HOME}/versions/${VERSION}"
-  mv "$extract_tmp"/* "${SPINOSA_HOME}/versions/${VERSION}/"
-  clean_macos_metadata "${SPINOSA_HOME}/versions/${VERSION}"
-  local fw_root="${SPINOSA_HOME}/versions/${VERSION}/spinosa-framework-${VERSION}"
-
+  local top_dir
+  top_dir="$(find "$extract_tmp" -mindepth 1 -maxdepth 1 -type d | head -1)"
+  [[ -n "$top_dir" ]] || { spinner_stop; die "Archive has unexpected structure"; }
+  local version_dir="${SPINOSA_HOME}/versions/${VERSION}"
+  INSTALL_STAGE_DIR="${SPINOSA_HOME}/versions/.${VERSION}.staging.$$"
+  INSTALL_BACKUP_DIR="${SPINOSA_HOME}/versions/.${VERSION}.backup.$$"
+  rm -rf "$INSTALL_STAGE_DIR" "$INSTALL_BACKUP_DIR"
+  mkdir -p "$INSTALL_STAGE_DIR"
+  cp -R "$top_dir"/. "$INSTALL_STAGE_DIR"/ \
+    || { spinner_stop; die "Failed to stage extracted files from archive (disk full or permissions?)"; }
+  spinner_stop
+  ok "Extracted Spinosa v${VERSION}"
+  clean_macos_metadata "$INSTALL_STAGE_DIR"
+  local fw_root="$INSTALL_STAGE_DIR"
+  section "Dependencies"
   install_bundled_bun "$tmpdir"
   install_bun_dependencies "$fw_root"
+  local spinosa_bin="${fw_root}/workspace-template/.bin/spinosa"
+  [ -f "$spinosa_bin" ] || die "spinosa CLI not found in archive"
+  mkdir -p "${fw_root}/metadata"
+  printf '%s\n' "$VERSION" > "${fw_root}/metadata/version"
 
-  # Install CLI binary (atomic write: temp + mv to avoid partial reads)
-  local spinosa_bin="${fw_root}/.bin/spinosa"
-  if [ -f "$spinosa_bin" ]; then
-    cp "$spinosa_bin" "${SPINOSA_HOME}/bin/.spinosa.tmp"
-    chmod +x "${SPINOSA_HOME}/bin/.spinosa.tmp"
-    mv "${SPINOSA_HOME}/bin/.spinosa.tmp" "${SPINOSA_HOME}/bin/spinosa"
-    ok "Installed spinosa CLI"
-  else
-    die "spinosa CLI not found in archive"
+  if [ -d "$version_dir" ]; then
+    mv "$version_dir" "$INSTALL_BACKUP_DIR"
   fi
+  if ! mv "$INSTALL_STAGE_DIR" "$version_dir"; then
+    [ -d "$INSTALL_BACKUP_DIR" ] && mv "$INSTALL_BACKUP_DIR" "$version_dir"
+    die "Failed to promote staged Spinosa v${VERSION} installation"
+  fi
+  INSTALL_STAGE_DIR=""
+  fw_root="$version_dir"
+  spinosa_bin="${fw_root}/workspace-template/.bin/spinosa"
+  ok "Promoted Spinosa v${VERSION} to ${version_dir}"
+
+  cp "$spinosa_bin" "${SPINOSA_HOME}/bin/.spinosa.tmp"
+  chmod +x "${SPINOSA_HOME}/bin/.spinosa.tmp"
+  mv "${SPINOSA_HOME}/bin/.spinosa.tmp" "${SPINOSA_HOME}/bin/spinosa"
+  ok "Installed spinosa CLI"
 
   # Vendor bundles — no-op (Python vendor removed)
 
+  section "Install & configure"
   install_shims
 
   mark_version_install_complete "$VERSION"
-  install_install_state_lib "$fw_root"
   INSTALL_COMPLETED=1
+  rm -rf "$INSTALL_BACKUP_DIR"
+  INSTALL_BACKUP_DIR=""
 
   cleanup
   trap - EXIT INT TERM HUP
 
   echo ""
+  section "Verify"
   write_spinosa_env_file
   if [ "$PREFIX_MODE" -eq 0 ]; then
     setup_shell_path
@@ -1456,4 +1626,6 @@ main() {
   return 0
 }
 
-main "$@"
+if [[ "${SPINOSA_INSTALLER_LIB_ONLY:-0}" != "1" ]]; then
+  main "$@"
+fi

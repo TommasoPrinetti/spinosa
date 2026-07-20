@@ -1,0 +1,35 @@
+{
+  "name": "dialog-provider",
+  "description": "Open provider dialog via /connect and verify the provider list renders",
+  "adapter": "../adapters/spinosa.ts",
+  "terminal": { "width": 100, "height": 50 },
+  "fixture": {
+    "workspace": { "name": "provider-dialog-test", "setupStatus": "workspace_started" },
+    "sessions": [
+      { "id": "ses_provider", "title": "Provider dialog session", "directory": "$WORKSPACE", "updated": 500 }
+    ],
+    "responses": [
+      { "path": "/global/config", "body": { "autoupdate": "notify" } },
+      { "path": "/file", "body": [] },
+      { "path": "/session/ses_provider/children", "body": [] },
+      { "path": "/session/ses_provider/diff", "body": [] },
+      { "path": "/session/ses_provider/todo", "body": [] },
+      { "path": "/session/ses_provider/permission", "body": [] },
+      { "path": "/session/ses_provider/question", "body": [] },
+      { "path": "/session/ses_provider/message", "body": [] },
+      { "path": "/session/ses_provider/part", "body": [] }
+    ]
+  },
+  "steps": [
+    { "action": "waitForText", "text": "Describe the task", "timeoutMs": 8000 },
+    { "action": "capture", "name": "home" },
+
+    { "action": "type", "text": "/connect" },
+    { "action": "key", "key": "RETURN" },
+    { "action": "waitForText", "text": "Providers", "timeoutMs": 5000 },
+    { "action": "assert", "visible": ["Providers"] },
+    { "action": "capture", "name": "provider-dialog" },
+
+    { "action": "clickText", "text": "esc" }
+  ]
+}

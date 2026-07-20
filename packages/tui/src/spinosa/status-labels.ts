@@ -4,6 +4,8 @@ export function setupStatusLabel(status: SpinosaSetupStatus): string {
   switch (status) {
     case "not_started":
       return "Setup needed"
+    case "importing":
+      return "Import incomplete"
     case "cli_started":
       return "Ready to index"
     case "workspace_started":
@@ -20,6 +22,7 @@ export function setupStatusThemeKey(status: SpinosaSetupStatus): "success" | "in
     case "cli_started":
       return "info"
     case "not_started":
+    case "importing":
       return "warning"
     default:
       return "textMuted"

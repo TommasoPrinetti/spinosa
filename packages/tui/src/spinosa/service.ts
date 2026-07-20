@@ -6,20 +6,20 @@ import {
   countDictionaryTerms,
   emptyWorkspaceIndex,
   parseWorkspaceIndex,
-} from "@opencode-ai/spinosa-core/corpus/index"
+} from "../spinosa-core/corpus/index"
 import {
   parseGoalArtifact,
   parseOrchestratorAdvisories,
   parseOrchestratorCounter,
   parseReportFrontmatter,
   sessionIdFromGoalFilename,
-} from "@opencode-ai/spinosa-core/artifacts/parser"
+} from "../spinosa-core/artifacts/parser"
 import {
   normalizeFrameworkVersion,
   isLegacyDevWorkspaceVersion,
   compareFrameworkVersions,
   isPrereleaseFrameworkVersion,
-} from "@opencode-ai/spinosa-core/utils/version"
+} from "../spinosa-core/utils/version"
 import {
   isSpinosaWorkspace,
   readWorkspaceMeta,
@@ -30,20 +30,19 @@ import {
   artifactExists,
   getFrameworkHealth,
   readStartupPrompt,
-} from "@opencode-ai/spinosa-core/workspace/meta"
+} from "../spinosa-core/workspace/meta"
 import {
   listRegisteredWorkspaces,
   unregisterWorkspace,
-} from "@opencode-ai/spinosa-core/workspace/registry"
-import { readFrameworkFile } from "@opencode-ai/spinosa-core/framework/discovery"
-import { resolveBundledFrameworkVersion } from "@opencode-ai/spinosa-core/utils/version"
+} from "../spinosa-core/workspace/registry"
+import { readFrameworkVersionFromRoot, resolveFrameworkRoot } from "../spinosa-core/framework/discovery"
 import type {
   CorpusSummary,
   GoalArtifactSummary,
   RoutesSnapshot,
   SpinosaWorkspaceMeta,
-} from "@opencode-ai/spinosa-core/types"
-import type { FrameworkReleaseStream } from "@opencode-ai/spinosa-core/types"
+} from "../spinosa-core/types"
+import type { FrameworkReleaseStream } from "../spinosa-core/types"
 
 // --- Inline functions not yet in spinosa-core ---
 
@@ -56,9 +55,7 @@ export async function countRawMarkdownFiles(rootDir: string) {
 }
 
 export async function readBundledFrameworkVersion() {
-  const metadata = (await readFrameworkFile("metadata/version"))?.trim()
-  const installScript = await readFrameworkFile("install.sh")
-  return resolveBundledFrameworkVersion(metadata, installScript)
+  return readFrameworkVersionFromRoot(resolveFrameworkRoot())
 }
 
 // --- Re-exports from spinosa-core ---
@@ -93,18 +90,6 @@ export function workspaceFrameworkStream(value: string | undefined): FrameworkRe
 export function bundledFrameworkStream(value: string | undefined): FrameworkReleaseStream | undefined {
   if (!value || isLegacyDevWorkspaceVersion(value)) return
   return workspaceFrameworkStream(value)
-}
-
-export async function readInstallReleaseChannel(): Promise<FrameworkReleaseStream | undefined> {
-  const config = Bun.file(path.join(homedir(), ".spinosa", "metadata", "config.yaml"))
-  if (!(await config.exists())) return
-  const text = await config.text()
-  const match = text.match(/^beta:\s*(\S+)/m)
-  if (!match) return
-  const value = match[1]!.replace(/["']/g, "").toLowerCase()
-  if (value === "true" || value === "yes" || value === "on" || value === "1") return "beta"
-  if (value === "false" || value === "no" || value === "off" || value === "0") return "stable"
-  return
 }
 
 export function workspaceNeedsFrameworkUpdate(
@@ -200,8 +185,9 @@ export async function getRoutesSnapshot(
   const overseerCounter = notes ? parseOrchestratorCounter(notes) : undefined
   const overseerAdvisories = notes ? parseOrchestratorAdvisories(notes) : undefined
 
-  const activeGoal =
-    (preferredSessionId ? goals.find((goal) => goal.sessionId === preferredSessionId) : undefined) ?? goals[0]
+  const activeGoal = preferredSessionId
+    ? goals.find((goal) => goal.sessionId === preferredSessionId)
+    : goals[0]
 
   return {
     goals,
@@ -211,40 +197,4 @@ export async function getRoutesSnapshot(
     overseerAdvisories,
     activeGoal,
   }
-}
-
-export async function listAuxiliaryArtifacts(workspacePath: string) {
-  const buckets: Record<string, string[]> = {
-    evidence: [],
-    analysis: [],
-    serendipity: [],
-    evaluator: [],
-    extraction: [],
-  }
-  const glob = new Bun.Glob("agent_reports/*")
-  for await (const entry of glob.scan({ cwd: workspacePath, onlyFiles: true })) {
-    const name = entry.split("/").pop() ?? entry
-    if (name.startsWith("evidence_packet_")) buckets.evidence.push(name)
-    else if (name.startsWith("analysis_")) buckets.analysis.push(name)
-    else if (name.startsWith("serendipity_")) buckets.serendipity.push(name)
-    else if (name.startsWith("e_")) buckets.evaluator.push(name)
-    else if (name.startsWith("extraction_batch_")) buckets.extraction.push(name)
-  }
-  for (const key of Object.keys(buckets) as (keyof typeof buckets)[]) {
-    buckets[key].sort().reverse()
-  }
-  return buckets
-}
-
-/** Phase 7 placeholder — future SDK surface for remote clients. */
-export type SpinosaSdkSurface = {
-  getMeta: (workspacePath: string) => Promise<SpinosaWorkspaceMeta | undefined>
-  getCorpusSummary: (workspacePath: string) => Promise<CorpusSummary>
-  getRoutesSnapshot: (workspacePath: string) => Promise<RoutesSnapshot>
-}
-
-export const fileBackedSdkSurface: SpinosaSdkSurface = {
-  getMeta: readWorkspaceMeta,
-  getCorpusSummary,
-  getRoutesSnapshot,
 }

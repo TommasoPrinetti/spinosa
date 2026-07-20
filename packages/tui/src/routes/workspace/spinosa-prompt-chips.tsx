@@ -1,11 +1,11 @@
-import { createMemo, createResource, createSignal, For, Show } from "solid-js"
+import { createMemo, createResource, createSignal, For } from "solid-js"
 import { useTheme } from "../../context/theme"
 import { useToast } from "../../ui/toast"
 import { useRoute } from "../../context/route"
 import { useSpinosaWorkspace } from "../../context/spinosa-workspace"
 
-import { updateWorkspace } from "@opencode-ai/spinosa-core/commands/update"
-import { resolveFrameworkRoot } from "@opencode-ai/spinosa-core/framework/discovery"
+import { updateWorkspace } from "../../spinosa-core/commands/update"
+import { resolveFrameworkRoot } from "../../spinosa-core/framework/discovery"
 import {
   readBundledFrameworkVersion,
   workspaceNeedsFrameworkUpdate,
@@ -14,6 +14,9 @@ import {
 import { useBindings, OPENCODE_BASE_MODE } from "../../keymap"
 import { usePromptRef } from "../../context/prompt"
 import { buttonBackground, buttonBorder, buttonText } from "../../util/button"
+import { useConnected } from "../../component/use-connected"
+import { useDialog } from "../../ui/dialog"
+import { DialogProvider } from "../../component/dialog-provider"
 
 type ActionRowItem = {
   key: string
@@ -27,6 +30,8 @@ export function SpinosaPromptChips() {
   const { navigate } = useRoute()
   const spinosa = useSpinosaWorkspace()
   const promptRef = usePromptRef()
+  const connected = useConnected()
+  const dialog = useDialog()
   const [busyAction, setBusyAction] = createSignal<"update" | "completed" | undefined>()
   const [updateLabel, setUpdateLabel] = createSignal("Updating workspace…")
   const [selectedAction, setSelectedAction] = createSignal(0)
@@ -81,30 +86,36 @@ export function SpinosaPromptChips() {
     setUpdateLabel("Updating workspace…")
 
     toast.show({
-      title: "Workspace update failed",
+      title: "Couldn’t update this workspace",
       variant: "error",
-      message: "Workspace update failed",
+      message: "Nothing was changed. Check the error details and try again.",
       duration: 10000,
     })
   }
 
   const primaryActions = createMemo<ActionRowItem[]>(() =>
-    workspaceReady()
+    !connected()
+      ? ([{
+          key: "select-provider",
+          label: "Select provider",
+          onPress: () => dialog.replace(() => <DialogProvider />),
+        }] as const)
+      : workspaceReady()
       ? ([
           {
-            key: "new-workspace",
-            label: "New workspace",
-            onPress: () => navigate({ type: "onboarding" }),
-          },
-          {
             key: "add-files",
-            label: "Add files",
+            label: "Import files",
             onPress: () => navigate({ type: "add-files" }),
           },
           {
             key: "change-workspace",
-            label: "Change workspace",
+            label: "Switch workspace",
             onPress: () => spinosa.showPicker(),
+          },
+          {
+            key: "visualizer",
+            label: "Visualizer",
+            onPress: () => navigate({ type: "visualizer" }),
           },
           ...(needsWorkspaceUpdate() || busyAction() === "update" || busyAction() === "completed"
             ? [
@@ -115,7 +126,7 @@ export function SpinosaPromptChips() {
                       ? "Updated workspace!"
                       : busyAction() === "update"
                         ? updateLabel()
-                        : "Update workspace",
+                        : "Update workspace files",
                   onPress: () => void runWorkspaceUpdate(),
                 },
               ]
@@ -129,7 +140,7 @@ export function SpinosaPromptChips() {
           },
           {
             key: "select-workspace",
-            label: "Select workspace",
+            label: "Choose a workspace",
             onPress: () => spinosa.showPicker(),
           },
         ] as const),
@@ -190,17 +201,24 @@ export function SpinosaPromptChips() {
 
   useBindings(() => ({
     mode: OPENCODE_BASE_MODE,
-    enabled: () => workspaceReady() && !spinosa.genericMode && !promptRef.current?.focused,
+    enabled: () => !promptRef.current?.focused,
     bindings: [
-      { key: "n", desc: "New workspace", group: "Home", cmd: () => navigate({ type: "onboarding" }) },
-      { key: "a", desc: "Add files", group: "Home", cmd: () => navigate({ type: "add-files" }) },
-      { key: "w", desc: "Change workspace", group: "Home", cmd: () => spinosa.showPicker() },
+      { key: "Left", desc: "Previous action", group: "Home", cmd: () => moveSelection(-1) },
+      { key: "Right", desc: "Next action", group: "Home", cmd: () => moveSelection(1) },
+      { key: "Enter", desc: "Run selected action", group: "Home", cmd: () => runSelectedAction() },
+      ...(!connected()
+        ? [{ key: "p", desc: "Select provider", group: "Home", cmd: () => dialog.replace(() => <DialogProvider />) }]
+        : [
+            { key: "n", desc: "New workspace", group: "Home", cmd: () => navigate({ type: "onboarding" }) },
+            { key: "a", desc: "Import files", group: "Home", cmd: () => navigate({ type: "add-files" }) },
+            { key: "w", desc: "Switch workspace", group: "Home", cmd: () => spinosa.showPicker() },
+            { key: "v", desc: "Visualizer", group: "Home", cmd: () => navigate({ type: "visualizer" }) },
+            ...(workspaceReady() && needsWorkspaceUpdate()
+              ? [{ key: "u", desc: "Update workspace files", group: "Home", cmd: () => void runWorkspaceUpdate() }]
+              : []),
+          ]),
     ],
   }))
 
-  return (
-    <Show when={!spinosa.genericMode}>
-      <box width="100%" flexDirection="column">{renderRow(primaryActions())}</box>
-    </Show>
-  )
+  return <box width="100%" flexDirection="column">{renderRow(primaryActions())}</box>
 }

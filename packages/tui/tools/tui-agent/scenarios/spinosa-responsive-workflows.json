@@ -1,0 +1,67 @@
+{
+  "$schema": "../scenario.schema.json",
+  "name": "spinosa-responsive-workflows",
+  "description": "Exercise Spinosa footer actions, workspace picker, sessions, export, and visualizer at desktop and compact terminal sizes.",
+  "adapter": "../adapters/spinosa.ts",
+  "terminal": { "width": 100, "height": 50 },
+  "fixture": {
+    "workspace": {
+      "name": "responsive-audit-workspace",
+      "setupStatus": "workspace_started"
+    },
+    "sessions": [
+      {
+        "id": "ses_responsive",
+        "title": "Responsive workspace chat",
+        "directory": "$WORKSPACE",
+        "updated": 200
+      }
+    ],
+    "responses": [
+      { "path": "/global/config", "body": { "autoupdate": "notify" } },
+      { "path": "/file", "body": [] },
+      { "path": "/session/ses_responsive/children", "body": [] }
+    ]
+  },
+  "steps": [
+    { "action": "waitForText", "text": "Describe the task" },
+    { "action": "clickText", "text": "Settings" },
+    { "action": "assert", "visible": ["Updates", "Maintenance"], "dialog": { "open": true } },
+    { "action": "clickText", "text": "esc" },
+    { "action": "key", "key": "s", "modifiers": { "shift": true } },
+    { "action": "assert", "visible": ["Updates"], "dialog": { "open": true } },
+    { "action": "clickText", "text": "esc" },
+    { "action": "clickText", "text": "Agents" },
+    { "action": "assert", "visible": ["Select agent"], "dialog": { "open": true } },
+    { "action": "clickText", "text": "esc" },
+    { "action": "clickText", "text": "Keys" },
+    { "action": "assert", "visible": ["Keyboard shortcuts"], "dialog": { "open": true } },
+    { "action": "clickText", "text": "esc" },
+    { "action": "clickText", "text": "Workspaces" },
+    { "action": "assert", "visible": ["Coming soon."], "dialog": { "open": true } },
+    { "action": "clickText", "text": "esc" },
+    { "action": "clickText", "text": "Models" },
+    { "action": "assert", "visible": ["Coming soon."], "dialog": { "open": true } },
+    { "action": "clickText", "text": "esc" },
+    { "action": "clickText", "text": "Switch workspace" },
+    { "action": "waitForText", "text": "Choose a workspace" },
+    { "action": "key", "key": "ARROW_DOWN" },
+    { "action": "assert", "visible": ["› + New workspace"] },
+    { "action": "clickText", "text": "← Back" },
+    { "action": "resize", "width": 60, "height": 20 },
+    { "action": "assert", "visible": ["Import files", "Switch workspace", "Visualizer", "Describe the task", "Settings", "Models"] },
+    { "action": "type", "text": "/session" },
+    { "action": "key", "key": "RETURN" },
+    { "action": "waitForText", "text": "Responsive workspace chat" },
+    { "action": "assert", "dialog": { "open": true }, "requests": [{ "path": "/session", "query": { "directory": "$WORKSPACE" } }] },
+    { "action": "clickText", "text": "Responsive workspace chat" },
+    { "action": "assert", "route": "session", "dialog": { "open": false } },
+    { "action": "clickText", "text": "Export" },
+    { "action": "assert", "visible": ["Include thinking", "Include tool details", "Include assistant metadata", "Open without saving"] },
+    { "action": "clickText", "text": "esc" },
+    { "action": "clickText", "text": "< Back" },
+    { "action": "clickText", "text": "Visualizer" },
+    { "action": "waitForText", "text": "Conversation graphs" },
+    { "action": "assert", "visible": ["Workspace:", "Session:", "1 Files", "2 Flow", "3 Activity"] }
+  ]
+}

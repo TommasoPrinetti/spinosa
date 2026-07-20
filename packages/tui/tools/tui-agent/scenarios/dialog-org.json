@@ -1,0 +1,36 @@
+{
+  "name": "dialog-org",
+  "description": "Open dialog via /org, verify Switch org dialog renders, then close with escape",
+  "adapter": "../adapters/spinosa.ts",
+  "terminal": { "width": 100, "height": 50 },
+  "fixture": {
+    "workspace": { "name": "org-dialog-test", "setupStatus": "workspace_started" },
+    "sessions": [
+      { "id": "ses_org", "title": "Org dialog session", "directory": "$WORKSPACE", "updated": 100 }
+    ],
+    "responses": [
+      { "path": "/global/config", "body": { "autoupdate": "notify" } },
+      { "path": "/file", "body": [] },
+      { "path": "/session/ses_org/children", "body": [] },
+      { "path": "/session/ses_org/diff", "body": [] },
+      { "path": "/session/ses_org/todo", "body": [] },
+      { "path": "/session/ses_org/permission", "body": [] },
+      { "path": "/session/ses_org/question", "body": [] },
+      { "path": "/session/ses_org/message", "body": [] },
+      { "path": "/session/ses_org/part", "body": [] },
+      { "path": "/experimental/console", "body": { "consoleManagedProviders": [], "switchableOrgCount": 2, "activeOrgName": "test-org" } }
+    ]
+  },
+  "steps": [
+    { "action": "waitForText", "text": "Describe the task", "timeoutMs": 8000 },
+    { "action": "capture", "name": "home" },
+
+    { "action": "type", "text": "/org" },
+    { "action": "key", "key": "RETURN" },
+    { "action": "waitForText", "text": "Switch org", "timeoutMs": 5000 },
+    { "action": "assert", "visible": ["Switch org"] },
+    { "action": "capture", "name": "org-dialog" },
+
+    { "action": "clickText", "text": "esc" }
+  ]
+}

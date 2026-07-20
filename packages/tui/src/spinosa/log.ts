@@ -1,4 +1,4 @@
-import { mkdirSync, appendFileSync } from "node:fs"
+import { mkdirSync, appendFileSync, existsSync, renameSync, rmSync, statSync } from "node:fs"
 import { homedir } from "node:os"
 import path from "node:path"
 
@@ -27,15 +27,25 @@ type LogEvent =
   | "gate"        // gate action triggered
   | "tui"         // generic TUI log
 
-let logFile: string | undefined
-
-const LOG_DIR = path.join(homedir(), ".spinosa", "logs")
+const MAX_LOG_BYTES = 5 * 1024 * 1024
 
 function logPath(): string {
-  if (logFile) return logFile
-  mkdirSync(LOG_DIR, { recursive: true })
-  logFile = path.join(LOG_DIR, "tui.ndjson")
-  return logFile
+  const logDir = path.join(process.env.SPINOSA_HOME ?? path.join(homedir(), ".spinosa"), "logs")
+  mkdirSync(logDir, { recursive: true })
+  return path.join(logDir, "tui.ndjson")
+}
+
+function rotateLog(file: string): void {
+  if (!existsSync(file) || statSync(file).size < MAX_LOG_BYTES) return
+  const previous = `${file}.1`
+  rmSync(previous, { force: true })
+  renameSync(file, previous)
+}
+
+function sanitizeLogText(value: string): string {
+  let sanitized = value.replaceAll(homedir(), "~")
+  if (activeWorkspacePath) sanitized = sanitized.replaceAll(activeWorkspacePath, "$WORKSPACE")
+  return sanitized
 }
 
 function logEntry(level: LogLevel, event: LogEvent, data: Record<string, unknown>) {
@@ -45,11 +55,13 @@ function logEntry(level: LogLevel, event: LogEvent, data: Record<string, unknown
       level,
       event,
     }
-    if (activeWorkspacePath) entry.ws = activeWorkspacePath
+    if (activeWorkspacePath) entry.ws = path.basename(activeWorkspacePath)
     for (const [k, v] of Object.entries(data)) {
-      entry[k] = v
+      entry[k] = typeof v === "string" ? sanitizeLogText(v) : v
     }
-    appendFileSync(logPath(), JSON.stringify(entry) + "\n")
+    const file = logPath()
+    rotateLog(file)
+    appendFileSync(file, JSON.stringify(entry) + "\n")
   } catch {
     // best-effort
   }
@@ -85,9 +97,19 @@ export function logGate(label: string) {
   logEntry("info", "gate", { label, msg: `Gate: ${label}` })
 }
 
+let _toastError: ((err: unknown) => void) | undefined
+/** Register a toast callback — called by logError for visible error feedback */
+export function setToastError(fn: (err: unknown) => void) {
+  _toastError = fn
+}
+export function getToastError() {
+  return _toastError
+}
+
 /** Log an error with optional stack */
 export function logError(context: string, err: unknown) {
   const msg = err instanceof Error ? err.message : String(err)
   const stack = err instanceof Error ? err.stack : undefined
   logEntry("error", "error", { context, err: msg, ...(stack ? { stack } : {}), msg: `${context}: ${msg}` })
+  _toastError?.(err)
 }
