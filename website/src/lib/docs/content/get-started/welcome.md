@@ -24,7 +24,7 @@ No cloud. No uploads. Your documents stay on your machine.
 
 ```bash
 # Install (macOS or Linux)
-curl -fsSL https://github.com/TommasoPrinetti/spinosa/releases/download/stable/install.sh | bash
+curl -fsSL https://github.com/medialab/spinosa/releases/download/stable/install.sh | bash
 
 # Create a workspace from your document folder
 spinosa new

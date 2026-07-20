@@ -1,4 +1,4 @@
-const GITHUB_REPO = 'TommasoPrinetti/spinosa';
+const GITHUB_REPO = 'medialab/spinosa';
 
 export type GhRelease = {
 	tag_name: string;

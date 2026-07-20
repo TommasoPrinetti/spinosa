@@ -7,15 +7,15 @@ export type ReleaseChannel = "stable" | "beta"
 
 const SPINOSA_STABLE_INSTALL_URL =
   process.env.SPINOSA_STABLE_INSTALL_URL ??
-  "https://github.com/TommasoPrinetti/spinosa/releases/download/stable/install.sh"
+  "https://github.com/medialab/spinosa/releases/download/stable/install.sh"
 
 const SPINOSA_BETA_INSTALL_URL =
   process.env.SPINOSA_BETA_INSTALL_URL ??
-  "https://github.com/TommasoPrinetti/spinosa/releases/download/beta/install.sh"
+  "https://github.com/medialab/spinosa/releases/download/beta/install.sh"
 
 
 const SPINOSA_RELEASE_REPO =
-  process.env.SPINOSA_RELEASE_REPO ?? "TommasoPrinetti/spinosa"
+  process.env.SPINOSA_RELEASE_REPO ?? "medialab/spinosa"
 const FETCH_TIMEOUT_MS = 10_000
 
 export function spinosaConfigFile(): string {

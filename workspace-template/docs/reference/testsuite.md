@@ -134,7 +134,7 @@ rm -f ~/.local/bin/spinosa
 ### B2. Fresh install — piped (matches user docs)
 
 ```bash
-curl -fsSL https://github.com/TommasoPrinetti/spinosa/releases/download/vX.Y.Z/install.sh | bash
+curl -fsSL https://github.com/medialab/spinosa/releases/download/vX.Y.Z/install.sh | bash
 ```
 
 Use **published** `install.sh` for the candidate version (or local `bash install.sh` only for pre-publish dev builds).
@@ -378,7 +378,7 @@ See RELEASE_GUIDE §9. Summary:
 ## Phase G — GitHub release (blocking, post-publish)
 
 ```bash
-curl -sL "https://api.github.com/repos/TommasoPrinetti/spinosa/releases/tags/vX.Y.Z" | \
+curl -sL "https://api.github.com/repos/medialab/spinosa/releases/tags/vX.Y.Z" | \
   python3 -c "import json,sys; r=json.load(sys.stdin); [print(a['name'], a['state'], a['size']) for a in r['assets']]"
 ```
 
@@ -390,7 +390,7 @@ curl -sL "https://api.github.com/repos/TommasoPrinetti/spinosa/releases/tags/vX.
 ### G1. Latest pointer smoke test
 
 ```bash
-curl -fsSL https://github.com/TommasoPrinetti/spinosa/releases/latest/download/install.sh | head -6 | grep PINNED_VERSION
+curl -fsSL https://github.com/medialab/spinosa/releases/latest/download/install.sh | head -6 | grep PINNED_VERSION
 ```
 
 Must show `PINNED_VERSION="X.Y.Z"` for the release you just shipped.

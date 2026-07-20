@@ -169,7 +169,7 @@ bash script/release.sh v0.8.0-beta.18
 ### 8. Verify
 
 ```bash
-curl -fsSL https://github.com/TommasoPrinetti/spinosa/releases/download/beta/install.sh | grep PINNED_VERSION
+curl -fsSL https://github.com/medialab/spinosa/releases/download/beta/install.sh | grep PINNED_VERSION
 # Must show the version you just published
 
 # Check the release exists
@@ -184,7 +184,7 @@ Run this on a **fresh machine or Linux VM** to validate the installer works end 
 
 ```bash
 # Inside the VM
-curl -fsSL https://github.com/TommasoPrinetti/spinosa/releases/download/beta/install.sh | bash
+curl -fsSL https://github.com/medialab/spinosa/releases/download/beta/install.sh | bash
 source ~/.bashrc
 spinosa version
 ```
@@ -200,7 +200,7 @@ limactl start spinosa-test
 
 # Run install
 limactl shell spinosa-test bash -c '
-  curl -fsSL https://github.com/TommasoPrinetti/spinosa/releases/download/beta/install.sh | bash
+  curl -fsSL https://github.com/medialab/spinosa/releases/download/beta/install.sh | bash
   source ~/.bashrc
   spinosa version
 '
