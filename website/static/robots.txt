@@ -1,3 +1,6 @@
-# allow crawling everything by default
 User-agent: *
-Disallow:
+Allow: /
+Disallow: /install/
+Disallow: /install
+
+Sitemap: https://medialab.github.io/spinosa/sitemap.xml

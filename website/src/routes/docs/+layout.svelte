@@ -9,6 +9,11 @@
 
 	let { children } = $props();
 
+	const docTitle = $derived($page.data?.doc?.title ?? '');
+	const docDesc = $derived($page.data?.doc?.description ?? '');
+	const pageTitle = $derived(docTitle ? `${docTitle} — Spinosa Docs` : 'Spinosa Docs');
+	const siteOrigin = $derived($page.url.origin);
+
 	afterNavigate(() => {
 		window.scrollTo(0, 0);
 	});
@@ -46,6 +51,20 @@
 		setTimeout(() => (showCopied = false), 2000);
 	}
 </script>
+
+<svelte:head>
+	<title>{pageTitle}</title>
+	<meta name="description" content={docDesc} />
+	<meta property="og:title" content={pageTitle} />
+	<meta property="og:description" content={docDesc} />
+	<meta property="og:type" content="article" />
+	<meta property="og:url" content={siteOrigin + base + $page.url.pathname} />
+	<meta property="og:image" content={siteOrigin + base + '/og-image.jpg'} />
+	<meta name="twitter:card" content="summary_large_image" />
+	<meta name="twitter:title" content={pageTitle} />
+	<meta name="twitter:description" content={docDesc} />
+	<link rel="canonical" href={siteOrigin + base + $page.url.pathname} />
+</svelte:head>
 
 <header
 	class="bg-white absolute top-0 left-0 right-0 z-20 w-full h-10 border-b border-neutral-200 grid grid-cols-2 md:grid-cols-3 px-4 md:px-8 items-center"

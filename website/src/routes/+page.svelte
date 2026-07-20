@@ -51,22 +51,46 @@
 	<title>Spinosa — Chat with your research documents, locally</title>
 	<meta
 		name="description"
-		content="Spinosa turns your research documents into a workspace you can chat with. Ask questions, get verified answers with source citations."
+		content="Spinosa turns your research documents into a workspace you can chat with. Ask questions in plain language, get verified answers with source citations."
 	/>
-	<meta property="og:title" content="Spinosa" />
+	<meta name="keywords" content="research, LLM, AI agents, document analysis, local AI, knowledge management, evidence verification" />
+
+	<meta property="og:title" content="Spinosa — Chat with your research documents" />
+	<meta property="og:site_name" content="Spinosa" />
 	<meta
 		property="og:description"
-		content="Spinosa turns your research documents into a workspace you can chat with. Ask questions, get verified answers with source citations."
+		content="Spinosa turns your research documents into a workspace you can chat with. Ask questions in plain language, get verified answers with source citations."
 	/>
 	<meta property="og:type" content="website" />
+	<meta property="og:url" content="{origin}{base}/" />
+	<meta property="og:locale" content="en_US" />
 	<meta property="og:image" content="{origin}{base}/og-image.jpg" />
 	<meta property="og:image:width" content="3848" />
 	<meta property="og:image:height" content="2402" />
+
 	<meta name="twitter:card" content="summary_large_image" />
-	<meta name="twitter:title" content="Spinosa" />
-	<meta name="twitter:description" content="Install Spinosa with a single curl command." />
+	<meta name="twitter:title" content="Spinosa — Chat with your research documents" />
+	<meta name="twitter:description" content="Spinosa turns your documents into a searchable local workspace. Ask questions, get verified answers with source citations." />
 	<meta name="twitter:image" content="{origin}{base}/og-image.jpg" />
+
 	<link rel="canonical" href="{origin}{base}/" />
+
+	<script type="application/ld+json">
+		{JSON.stringify({
+			"@context": "https://schema.org",
+			"@type": "SoftwareApplication",
+			"name": "Spinosa",
+			"applicationCategory": "DataScience",
+			"operatingSystem": "macOS, Linux",
+			"description": "Spinosa turns research documents into a local workspace you can chat with. AI agents search your files, draft answers, and verify every claim against the original text.",
+			"url": "https://medialab.github.io/spinosa/",
+			"author": {
+				"@type": "Organization",
+				"name": "medialab",
+				"url": "https://medialab.sciencespo.fr/"
+			}
+		})}
+	</script>
 </svelte:head>
 
 <div class="relative w-full bg-white">
