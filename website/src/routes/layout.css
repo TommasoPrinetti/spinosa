@@ -1,0 +1,129 @@
+@import 'tailwindcss';
+
+@theme {
+	--color-washed-clay: oklch(0.965 0.003 110);
+	--color-warm-limestone: oklch(0.915 0.003 110);
+	--color-basalt: oklch(0.06 0.005 110);
+	--color-olive-grove: oklch(0.35 0.075 110);
+	--color-sun-cured-terracotta: oklch(0.55 0.12 35);
+}
+
+body {
+	font-family: 'Inter Tight', system-ui, sans-serif;
+	overscroll-behavior: none;
+}
+
+@layer {
+	h1 {
+		@apply text-5xl;
+	}
+
+	h2 {
+		@apply text-3xl;
+	}
+
+	h3 {
+		@apply text-2xl;
+	}
+
+	a {
+		@apply cursor-pointer;
+	}
+}
+
+@keyframes fade-in {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+
+::selection {
+	background: #000;
+	color: #fff;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+	}
+}
+
+article > * + * {
+	margin-top: 20px;
+}
+
+article p,
+article pre,
+article ul,
+article ol,
+article table {
+	margin-bottom: 20px;
+}
+
+article h2 {
+	margin-top: 1.25em;
+}
+
+article h3 {
+	margin-top: 1em;
+}
+
+article table {
+	width: 100%;
+	border-collapse: collapse;
+}
+
+article table th,
+article table td {
+	padding: 8px 16px;
+	text-align: left;
+	vertical-align: top;
+}
+
+article table th:first-child,
+article table td:first-child {
+	padding-left: 0;
+}
+
+article table th:last-child,
+article table td:last-child {
+	padding-right: 0;
+}
+
+article table th {
+	font-weight: 600;
+}
+
+article pre {
+	background: var(--color-neutral-100);
+	border: 1px solid var(--color-neutral-200);
+	border-radius: 6px;
+	padding: 13px 16px;
+	overflow-x: auto;
+}
+
+article :not(pre) > code {
+	background: var(--color-neutral-100);
+	border-radius: 3px;
+	padding: 0.15em 0.3em;
+	font-size: 0.85em;
+}
+
+article pre code {
+	background: none;
+	padding: 0;
+	font-size: 0.85em;
+}
+
+article a {
+	text-decoration: underline;
+	text-underline-offset: 2px;
+	cursor: pointer;
+}
