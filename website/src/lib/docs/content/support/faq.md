@@ -1,62 +1,68 @@
 # FAQ
 
-Support-first answers for when setup, indexing, reports, or maintenance are not behaving the way you expect.
-
-## Install and command issues
+## Install and setup
 
 **Command not found: `spinosa`**
-Make sure `~/.spinosa/bin` is on your `PATH`, then open a new shell. If it still fails, re-run the install script.
+Make sure `~/.spinosa/bin` is on your `PATH`, then open a new terminal. If it still fails, re-run the install script.
 
-**I installed Spinosa, but the startup prompt never appeared**
-Run `spinosa new` again. The workspace creation step is what prints the startup prompt for your LLM tool.
+**I installed Spinosa, but `spinosa` opens something unexpected**
+Make sure you have the latest version by running `spinosa upgrade`.
 
-**Which command should I try first when something feels wrong?**
-Start with `spinosa check <workspace>`. It is the fastest way to surface missing files, broken paths, and configuration problems.
+**The TUI looks garbled or misaligned**
+Your terminal needs to support Unicode and true color (24-bit). Most modern terminals do. If you're using an older terminal, try a different one (iTerm2, Kitty, Alacritty, or the latest Terminal.app).
+
+## TUI usage
+
+**How do I create a workspace?**
+Press `W` to open the workspace picker, then click **+ New workspace**. The onboarding wizard guides you through the steps.
+
+**How do I add more documents to an existing workspace?**
+Press `I` from the home screen, or run `spinosa add <folder>` from the terminal.
+
+**How do I switch between workspaces?**
+Press `W` to open the workspace picker, then select a different workspace.
+
+**How do I change the AI model?**
+Press `K` to configure providers, then `M` to switch between models.
+
+**What are the keyboard shortcuts?**
+Press `?` or `Ctrl+P` and type `/help` to see all shortcuts. Key ones: `S` Settings, `A` Agents, `K` Keys, `W` Workspaces, `M` Models, `N` New session, `I` Import files.
 
 ## Startup and indexing
 
-**Startup seems stuck or takes too long**
-Startup time depends on corpus size and file mix. If it has clearly stalled, re-run the startup prompt. Spinosa is designed to resume rather than start over blindly.
+**Startup takes too long**
+Startup time depends on corpus size and file mix. If it stalls, cancel and start again — Spinosa resumes rather than starting over.
 
 **The OCR output is garbled**
-Check the original image or scanned PDF quality first. If the source is blurry, low-contrast, or skewed, OCR quality will drop with it. Replace the file and re-run intake or setup.
+Check the original image quality. Blurry, low-contrast, or skewed images produce poor OCR. Replace the source and re-run intake.
 
-**Can I add more files after startup?**
-Yes. Use `spinosa prepare <workspace>` or the source intake workflow. Spinosa will convert the new files and refresh the relevant workspace structures.
+**Can I add more files after creating a workspace?**
+Yes. Press `I` in the TUI or run `spinosa add <folder>`.
 
-## Reports and evidence
+## Reports
 
-**My question returned a fast-path answer instead of a full report**
-Ask more explicitly for evidence from the corpus. Operational questions can be answered directly, while evidence requests trigger the full report pipeline.
+**My question returned a short answer instead of a full report**
+Ask more explicitly for evidence from your documents. Operational questions get fast answers; evidence requests trigger the full pipeline.
 
 **I see `○ pending` on a report**
-The draft exists, but verification has not finished yet. Wait for the Verifier to complete before treating the answer as settled.
+The draft exists but verification hasn't finished. Wait for the Verifier before treating it as settled.
 
 **The report says `⚠ corrections` or `✗ failed`**
-Treat that as a real signal, not decoration. `⚠ corrections` means verification found issues but repaired them. `✗ failed` means important claims could not be supported reliably.
+This is a real signal, not decoration. `⚠ corrections` means verification found issues but repaired them. `✗ failed` means important claims couldn't be supported.
 
-**I know the answer is in my files, but Spinosa found no evidence**
-Rephrase the question using alternative wording, names, or dates. If the issue persists, inspect `system/dictionary.md` and consider re-running startup or `prepare` so the corpus can be re-indexed cleanly.
+**I know the answer is in my files, but Spinosa found nothing**
+Rephrase using alternative words, names, or dates. If it persists, try re-indexing: press `I` or run `spinosa add` on the same folder.
 
-For report anatomy, statuses, and dashboard charts, use [Reports & Charts](/docs/reports).
-
-## Workspace maintenance
-
-**Can I edit files in `raw/`?**
-Edit headers carefully if metadata needs fixing, but avoid rewriting source text bodies. The converted body is the evidence layer Spinosa quotes and verifies against.
+## Maintenance
 
 **How do I update Spinosa?**
-Use `spinosa upgrade` to update the CLI itself. Use `spinosa update <workspace>` when you need to refresh framework files inside an existing workspace.
+`spinosa upgrade` updates the CLI. The TUI checks for updates on every start and prompts you.
 
-**How do I clean up stale process files?**
-Use the Janitor workflow. It proposes moves before anything is archived to `.trash/`.
+**How do I clean up stale workspace entries?**
+Open the workspace picker (`W`) and click **Delete stale** in the top header. This removes entries pointing to deleted folders.
 
-**Can I uninstall without losing my workspace?**
-Yes. `spinosa uninstall` removes the installed framework and leaves your workspace folders in place.
+**Can I uninstall without losing my workspaces?**
+Yes. `spinosa uninstall --yes` removes the framework but leaves your workspace folders in place.
 
-## Next reads
-
-- [CLI Reference](/docs/cli-reference) for the exact commands mentioned here
-- [Reports & Charts](/docs/reports) for verification states and report reading
-- [Corpus Structure](/docs/corpus) for where configuration, dictionary, and report files live
-- [Glossary](/docs/glossary) if a support term is unfamiliar
+**Where are my workspaces stored?**
+Each workspace is a folder on your filesystem. You choose the location during creation. The global workspace registry is at `~/.spinosa/metadata/workspaces.json`.

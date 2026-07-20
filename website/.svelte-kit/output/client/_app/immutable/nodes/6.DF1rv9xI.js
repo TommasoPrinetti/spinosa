@@ -1,1 +1,0 @@
-import{H as e,K as t,U as n,q as r}from"../chunks/B0JiTRQd.js";import"../chunks/xihTtKlq.js";import{t as i}from"../chunks/BdrQAJEj.js";import{t as a}from"../chunks/CneMPOx_.js";function o(o,s){r(s,!0);let c=()=>n(i,`$page`,l),[l,u]=e();a(o,{get doc(){return c().data.doc}}),t(),u()}export{o as component};

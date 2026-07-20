@@ -1,103 +1,136 @@
 # CLI Reference
 
-The `spinosa` CLI manages workspace creation, validation, sync, maintenance, and upgrades. A `pilosa` migration shim also exists for backward compatibility and redirects to `spinosa`.
+The `spinosa` CLI manages workspaces, conversion, maintenance, and upgrades.
 
-## Command reference
+## Getting help
 
-### spinosa new
-
-Create a workspace from your document folder.
-
-- Scans the folder and classifies each file by type
-- Copies files into `raw/` using the appropriate conversion engine
-- Fills in configuration and context files
-- Prints a startup prompt to open the workspace with your LLM tool
-
-During scanning, you'll see a summary of what was found:
-
-```
-✓ Source scan complete
-├─ 12 text-based files to rename to .md (2.4 MB)
-├─ 8 Office/EPUB/HTML files available for MarkItDown conversion (45 MB)
-├─ 5 scanned PDFs and images available for OCR (120 MB)
-├─ 3 native files to copy unchanged (1.1 MB)
-└─ 0 files ignored
+```bash
+spinosa          # Launch the TUI dashboard (main way to use Spinosa)
+spinosa help     # Show help text
+spinosa version  # Show installed version
+spinosa doctor   # Full diagnostic of system health
 ```
 
-### spinosa prepare <workspace>
+## Workspace management
 
-Re-run setup on an existing workspace.
+### spinosa create <source>
 
-### spinosa update <workspace>
+Create a workspace from a document folder.
 
-Update framework files from a release. Preserves your data (configuration, context, dictionary, workspace index, logs).
+```bash
+spinosa create ~/research/papers
+```
+
+This scans the folder, classifies files by type, copies them into the workspace, and registers it. After creation, run `spinosa` to open the TUI and start a chat.
+
+Flags: `--name`, `--extensions`, `--cli`, `--launch`
+
+### spinosa add <source>
+
+Add more files to an existing workspace.
+
+```bash
+spinosa add ~/research/more-papers --workspace my-papers-spinosa
+```
+
+Files are converted and added to the workspace's `raw/` directory.
+
+Flags: `--workspace`, `--file`, `--dir`, `--extensions`
+
+### spinosa list
+
+List all registered workspaces.
+
+```bash
+spinosa list
+spinosa list --json    # Machine-readable output
+```
+
+### spinosa status [workspace]
+
+Check workspace health.
+
+```bash
+spinosa status
+spinosa status my-papers-spinosa
+```
+
+Reports framework version, workspace status, and document tool availability.
+
+## Updates
+
+### spinosa update [workspace]
+
+Update framework template files in a workspace. Preserves your data.
+
+```bash
+spinosa update my-papers-spinosa
+spinosa update --dry-run   # Preview without making changes
+spinosa update --force     # Override user modifications
+```
 
 ### spinosa upgrade
 
-Upgrade the CLI to the latest release. Downloads and verifies checksums automatically.
+Upgrade the Spinosa CLI to the latest version.
 
-### spinosa check <workspace>
+```bash
+spinosa upgrade                 # Latest stable
+spinosa upgrade --channel beta  # Beta channel
+spinosa upgrade --version 1.0.0 # Specific version
+```
 
-Validate workspace structure and settings. Reports missing files, broken paths, configuration issues.
+Downloads the installer and verifies checksums automatically. Prompts for confirmation before upgrading.
 
-### spinosa health
+## Maintenance
 
-Check system status and which conversion engines are available on this machine.
+### spinosa startup-autoclean
 
-### spinosa sync
+Clean stale installer files from previous upgrade attempts.
 
-Sync agent and skill definitions between the canonical `.agents/` directory and vendor-specific directories (`.claude/`, `.opencode/`, `.codex/`).
+```bash
+spinosa startup-autoclean
+spinosa startup-autoclean --dry-run
+```
 
 ### spinosa uninstall
 
-Remove Spinosa from the system. Your workspace folders stay in place.
+Remove Spinosa from your system. Workspace folders stay in place.
 
-### spinosa help
-
-Show the help message.
+```bash
+spinosa uninstall --yes
+```
 
 ## File classification
 
-During `spinosa new` and source intake, each file is classified and routed to the right engine:
+During `spinosa create` and `spinosa add`, files are classified automatically:
 
-| Category                 | File types                                                                           | What happens                            |
-| ------------------------ | ------------------------------------------------------------------------------------ | --------------------------------------- |
-| **Markdown-convertible** | txt, rtf, wiki files, yaml, toml, css, js, py, rb, sh, log, tex, bib, org, adoc, rst | Renamed to `.md` (no conversion needed) |
-| **MarkItDown**           | docx, pptx, xlsx, xls, epub, html, msg, zip, text-based PDF                          | Converted to `.md`                      |
-| **OCR**                  | scanned PDF, jpg, png, gif, webp, heic, tif, bmp, svg                                | OCR-processed to `.md`                  |
-| **Native**               | md, csv, json, yaml, xml, log, org, adoc, rst, tex, bib                              | Copied unchanged                        |
-| **Skipped**              | mp4, mov, avi, mkv (video), mp3, wav, aac, flac (audio)                              | Left at source location                 |
-| **Ignored**              | AGENTS.md, .DS*Store, .*\*, node_modules, .git                                       | Skipped entirely                        |
-
-## PDF classification
-
-PDFs are automatically classified as text-based (routed to MarkItDown) or image-based (routed to OCR):
-
-1. Encrypted PDFs → OCR
-2. PDFs with embedded fonts → MarkItDown
-3. PDFs with no extractable text → OCR
-4. Fallback: `pdftotext` check (if available) → MarkItDown if it returns text
+| Category | File types | What happens |
+|----------|-----------|-------------|
+| Text-based | txt, rtf, yaml, toml, css, js, py, md, etc. | Renamed to `.md` |
+| MarkItDown | docx, pptx, xlsx, epub, html, text PDF | Converted to markdown |
+| OCR | scanned PDF, jpg, png, webp, heic | OCR-processed to markdown |
+| Native | csv, json, xml | Copied unchanged |
+| Skipped | video, audio | Left at source |
+| Ignored | AGENTS.md, .DS_Store, node_modules, .git | Skipped |
 
 ## Environment variables
 
-| Variable             | Purpose                                                     |
-| -------------------- | ----------------------------------------------------------- |
-| `NO_COLOR=1`         | Disable ANSI colors in output                               |
-| `USE_GUM=1`          | Use gum for enhanced interactive menus                      |
-| `SPINOSA_HOME`       | Override the installation directory (default: `~/.spinosa`) |
-| `SPINOSA_NO_EMOJI=1` | Disable emoji in output                                     |
+| Variable | Purpose |
+|----------|---------|
+| `SPINOSA_HOME` | Override install directory (default: `~/.spinosa`) |
+| `NO_COLOR=1` | Disable ANSI colors |
+| `USE_GUM=1` | Use gum for enhanced menus |
+| `SPINOSA_NO_EMOJI=1` | Disable emoji |
 
-## Common task map
+## Common tasks
 
-- First-time setup: `spinosa new`
-- Add or refresh workspace setup: `spinosa prepare <workspace>`
-- Validate a workspace that looks wrong: `spinosa check <workspace>`
-- Update framework files in an existing workspace: `spinosa update <workspace>`
-- Upgrade the installed CLI itself: `spinosa upgrade`
-
-## Next reads
-
-- [Tour](/docs/tour) for the first-run flow around `spinosa new`
-- [Corpus Structure](/docs/corpus) for what the commands create and maintain
-- [FAQ](/docs/faq) for command-not-found and setup troubleshooting
-- [Glossary](/docs/glossary) for terms like corpus, workspace, and OCR
+| Task | Command |
+|------|---------|
+| Launch TUI | `spinosa` |
+| Create workspace | `spinosa create <folder>` |
+| Add files | `spinosa add <folder>` |
+| Update workspace templates | `spinosa update <workspace>` |
+| Upgrade CLI | `spinosa upgrade` |
+| List workspaces | `spinosa list` |
+| Check health | `spinosa doctor` |
+| Uninstall | `spinosa uninstall --yes` |

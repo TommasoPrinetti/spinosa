@@ -1,70 +1,93 @@
-# Tour — Your First Ride Through Spinosa
+# Tour — From Install to Your First Report
 
-This walkthrough takes you from zero to your first verified report. It stays practical on purpose: install, index, ask, read, repeat.
+This walkthrough takes you from zero to your first verified report in about 10 minutes.
 
-## 1. Install and create a workspace
+## 1. Install Spinosa
 
-Spinosa needs the CLI and a folder of source documents.
+Open a terminal and run:
 
 ```bash
-# One command installs everything
 curl -fsSL https://github.com/medialab/spinosa/releases/download/stable/install.sh | bash
-
-# Create a workspace from your document folder
-spinosa new
 ```
 
-The CLI asks you to choose your document folder, name the workspace, and confirm what it found. When it finishes, it prints a startup prompt for your LLM tool.
+This installs the `spinosa` command and all its dependencies (Bun runtime, document converters, OCR engine). After install, open a new terminal window.
 
-## 2. Run the startup prompt
+## 2. Launch the dashboard
 
-Copy that startup prompt and run it. This is the one-time setup pass that prepares the workspace for research.
+```bash
+spinosa
+```
 
-What you'll notice:
+This opens the Spinosa TUI (terminal UI) dashboard. If this is your first time, you'll see:
 
-- Spinosa reads the converted files in `raw/`
-- It builds the dictionary and navigation maps
-- It writes a startup report so you can confirm indexing completed cleanly
+- A welcome screen with the Spinosa logo and version
+- A list of workspaces (empty on first run)
+- A **+ New workspace** button in the bottom-right area
 
-Typical startup time is a few minutes for small corpora and longer for large, mixed-format collections.
+Press `W` or click **Workspaces** in the footer to open the workspace picker.
 
-## 3. Ask your first question
+## 3. Create a workspace
 
-Once startup finishes, ask a plain-language research question in your LLM tool.
+In the workspace picker, click **+ New workspace**. This starts the onboarding wizard.
 
-Example:
+The wizard guides you through these steps:
 
-> What did the Normandy interviews say about coastal erosion?
+1. **Path** — Enter the folder path containing your research documents (PDFs, Word files, images, etc.)
+2. **Name** — Give your workspace a name
+3. **Tools** — Verify that the document processing tools are installed (OCR, MarkItDown)
+4. **Scan** — Spinosa scans your folder and classifies each file by type
+5. **Import** — Select which file types to import
+6. **Setup** — Workspace folder is created and registered
+7–9. **Convert** — Files are copied and converted to markdown in phases
+10. **Provider** — Choose which AI coding tool you use (Claude Code, OpenCode, Gemini, etc.)
+11. **Done** — Summary of what was imported
 
-Spinosa then searches the corpus, assembles evidence, drafts an answer, and verifies the result against the source text before handing the report back.
+> **Tip:** If you already have a workspace folder, you can skip the wizard and just point the workspace picker to it.
 
-## 4. Read the result
+## 4. Start a chat session
 
-Every answer comes back as a markdown report in `agent_reports/`.
+When the wizard finishes, you'll return to the home screen with a chat prompt at the bottom. Type a question about your documents, for example:
 
-The report gives you:
+```
+What did the interviews say about coastal erosion?
+```
 
-- A direct answer to the question
-- Evidence quotes with source paths
+Press **Enter** to send. Spinosa's agents search your documents, assemble evidence, and return a markdown report.
+
+## 5. Read the report
+
+Every answer comes back with:
+
+- A direct answer to your question
+- Quoted evidence with source file paths
 - Analysis that separates interpretation from source text
-- Limitations so you can judge scope and confidence
 - A verification status showing whether the claims passed source checks
+- Limitations so you can judge scope and confidence
 
-For the full anatomy of a report, including statuses and charts, use [Reports & Charts](/docs/reports).
+You can navigate the report with `↑↓`, open cited files, or ask follow-up questions in the same chat.
 
-## 5. Keep going
+## 6. Visualize your session
 
-After the first report, the normal loop is simple:
+Press `W` and select a workspace, then look for **Visualizer** in the top menu. The visualizer shows:
 
-1. Ask a narrower follow-up or a broader comparison.
-2. Review the cited files in `raw/` if you want to inspect the evidence directly.
-3. Add new documents when the corpus changes, then refresh the workspace.
+- **Files view** (press `1`) — heatmap of which files were accessed
+- **Flow view** (press `2`) — graph of tool calls the agents made
+- **Activity view** (press `3`) — timeline of the conversation
 
-If you want to understand what the agents are doing behind the scenes, read [Agents & Pipeline](/docs/agents). If you want the file layout and workspace internals, read [Corpus Structure](/docs/corpus).
+Use `+`/`-` to zoom, click and drag to pan, and `Enter` to inspect details.
+
+## 7. Keep going
+
+After your first report, the normal loop is simple:
+
+1. Ask follow-up questions in the same chat
+2. Add new documents: press `I` or use the add-files wizard
+3. Switch between workspaces: press `W` to open the workspace picker
+4. Start a new chat session: press `N`
 
 ## Next reads
 
-- [Agents & Pipeline](/docs/agents) for how questions are routed and verified
-- [Corpus Structure](/docs/corpus) for the workspace layout and index files
-- [CLI Reference](/docs/cli-reference) for commands like `prepare`, `check`, and `update`
-- [FAQ](/docs/faq) if startup or report generation is misbehaving
+- [TUI Guide](/spinosa/docs/tui) — keyboard shortcuts and navigation
+- [Agents](/spinosa/docs/agents) — how the agents divide the work
+- [Reports](/spinosa/docs/reports) — how to read verification statuses and charts
+- [Workspace](/spinosa/docs/workspace) — what's on disk and how the file layout works

@@ -1,57 +1,35 @@
 # Reports & Charts
 
-This is the canonical page for reading Spinosa output. Use it to understand what a report contains, how verification changes its status, and what the dashboard-style charts are telling you.
+Every substantial answer from Spinosa comes back as a markdown report in the chat. Reports show the answer, the evidence behind it, the interpretation, limitations, and a verification status.
 
-## What a report is
+## Report sections
 
-Every substantial answer comes back as a markdown report in `agent_reports/`. A report is not just a summary. It is the package Spinosa uses to show:
+**Answer** — The shortest direct response to your question.
 
-- the answer,
-- the evidence behind it,
-- the interpretation layered on top,
-- the limitations,
-- and whether verification passed.
+**Evidence** — Quoted passages from your documents with source paths and confidence labels. This is what you read when you need to know exactly what the corpus supports.
 
-## Report anatomy
+**Analysis** — Interpretation built from the evidence.
 
-A typical report includes these sections:
+**Limitations** — What is missing, ambiguous, or out of scope.
 
-### Answer
+**Sources** — The file paths used to ground the answer.
 
-The shortest direct response Spinosa can give to your question.
-
-### Evidence
-
-Quoted passages with source paths and confidence labels. This is the part you read when you need to know exactly what the corpus supports.
-
-### Analysis
-
-Interpretation built from the evidence. Analysis should be useful, but it should never pretend to be the source itself.
-
-### Limitations
-
-What is missing, ambiguous, weakly supported, or still out of scope.
-
-### Sources
-
-The file paths used to ground the answer.
-
-### Status
-
-The verification outcome after the Verifier checks the report against the source files.
+**Status** — The verification outcome (see below).
 
 ## Verification statuses
 
-- `○ pending`: the draft exists, but verification has not finished yet.
-- `✓ verified`: the checked claims and quotes passed source review.
-- `⚠ corrections`: the report needed minor fixes during verification but is still usable.
-- `✗ failed`: important claims could not be supported reliably. Review before relying on it.
+| Status | Meaning |
+|--------|---------|
+| `○ pending` | Draft exists, verification not finished yet |
+| `✓ verified` | Claims and quotes passed source review |
+| `⚠ corrections` | Minor fixes made during verification, still usable |
+| `✗ failed` | Important claims could not be supported reliably |
 
-If you only remember one rule, make it this one: trust reports by reading the status and the evidence together.
+Trust reports by reading the status and the evidence together.
 
-## The navigation dashboard
+## Navigation dashboard
 
-Many reports open with a compact dashboard like this:
+Many reports open with a compact dashboard:
 
 ```text
 ┌─ Corpus Navigation ──────────────────────────────────────────────┐
@@ -62,36 +40,34 @@ Many reports open with a compact dashboard like this:
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-How to read it:
-
-- `Maps` tells you how broadly the system ranged across navigation maps.
-- `Raw` tells you how many files were scanned versus opened in more depth.
-- `Source` tells you how many sources made it into the final answer.
-- `Status` tells you whether verification is still pending, passed, corrected, or failed.
+- **Maps** — how many navigation maps were searched
+- **Raw** — how many files were scanned vs read in depth
+- **Source** — how many sources made it into the final answer
+- **Status** — verification outcome
 
 ## Chart types
 
-Spinosa uses simple Unicode charts so progress and health stay readable in plain text.
+Spinosa uses simple Unicode charts readable in plain text.
 
-| Chart             | Characters | Meaning                             |
-| ----------------- | ---------- | ----------------------------------- |
-| Distribution bars | `▓░█`      | Done versus total                   |
-| Progress bar      | `▓░`       | Linear progress through a process   |
-| Status matrix     | `✓⚠✗○◉`    | Health across multiple categories   |
-| Gauge             | `◐◑◉`      | A single health or completion score |
-| Sparkline         | `▁▂▃▄▅▆▇█` | A trend across time or batches      |
-| Stacked bar       | `█▓▒░`     | A total split into component parts  |
+| Chart | Characters | Meaning |
+|-------|-----------|---------|
+| Distribution bars | `▓░█` | Done versus total |
+| Progress bar | `▓░` | Linear progress |
+| Status matrix | `✓⚠✗○◉` | Health across categories |
+| Gauge | `◐◑◉` | Single health score |
+| Sparkline | `▁▂▃▄▅▆▇█` | Trend over time |
+| Stacked bar | `█▓▒░` | Total split into parts |
 
-## Using reports well
+## Reading reports well
 
-- Read the Answer first, then test it against the Evidence.
-- Use Limitations to decide whether to ask a narrower or broader follow-up.
-- Open the cited files in `raw/` when a claim matters and you want the surrounding context.
-- Treat a failed or pending status as a reason to pause, not as a cosmetic warning.
+- Read the Answer first, then check it against the Evidence.
+- Use Limitations to decide whether to ask a narrower follow-up.
+- Open cited files when a claim matters and you want surrounding context.
+- Treat failed or pending status as a reason to pause, not decoration.
 
-## Next reads
+## Related
 
-- [Tour](/docs/tour) for the first-report walkthrough
-- [Agents & Pipeline](/docs/agents) for how reports are assembled and verified
-- [Corpus Structure](/docs/corpus) for where reports and source files live
-- [FAQ](/docs/faq) for troubleshooting pending, failed, or confusing reports
+- [Tour](/spinosa/docs/tour) — first report walkthrough
+- [Agents](/spinosa/docs/agents) — how reports are assembled and verified
+- [Workspace](/spinosa/docs/workspace) — where reports and source files live
+- [FAQ](/spinosa/docs/faq) — troubleshooting reports

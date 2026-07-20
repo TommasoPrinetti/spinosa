@@ -48,15 +48,15 @@
 </script>
 
 <svelte:head>
-	<title>Spinosa — Deploy anywhere, from one command</title>
+	<title>Spinosa — Chat with your research documents, locally</title>
 	<meta
 		name="description"
-		content="Install Spinosa with a single curl command. Deploy and manage your infrastructure from the terminal."
+		content="Spinosa turns your research documents into a workspace you can chat with. Ask questions, get verified answers with source citations."
 	/>
 	<meta property="og:title" content="Spinosa" />
 	<meta
 		property="og:description"
-		content="Install Spinosa with a single curl command. Deploy and manage your infrastructure from the terminal."
+		content="Spinosa turns your research documents into a workspace you can chat with. Ask questions, get verified answers with source citations."
 	/>
 	<meta property="og:type" content="website" />
 	<meta property="og:image" content="{origin}{base}/og-image.jpg" />

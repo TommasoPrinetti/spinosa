@@ -1,1 +1,0 @@
-import{t as e}from"../chunks/DK3Fl9T5.js";import{a as t,t as n}from"../chunks/BOzshIre.js";var r=e({load:()=>i,prerender:()=>!0}),i=()=>t(302,n);export{r as universal};
