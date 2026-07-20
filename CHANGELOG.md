@@ -13,6 +13,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `@spinosa/tui-agent` — deterministic OpenTUI driver for agent-operated TUI debugging. Ships as a npm-packable package with a CLI (`tui-agent run`, `interact`, `list`, `show`, `diff`, `doctor`), JSON scenario DSL, JSONL agent control loop, artifact output (text, SVG, spans, tree, state), and a Spinosa adapter example. See `packages/tui/tools/tui-agent/README.md`.
 - `/session` command alias for `/sessions` in the TUI command palette.
 - HomeFooter keyboard labels (Shift+S/A/K/W/M) are now wired to actual key bindings via `useBindings`.
+- Workspace picker: "Delete stale" button removes all non‑existent workspace index entries in one click, with confirmation dialog.
 
 ### Changed
 
@@ -36,6 +37,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Prompt workspace status bar uses `overflow="hidden"` and shows a separator pipe below 80 columns.
 - Session transcript scroll container has `minHeight={0}` to prevent overflow in constrained layouts.
 - DialogProvider wraps dialog overlay with a positioned `box` instead of layering the overlay over the entire screen, preventing obscure mouse-targeting issues.
+- `bun run dev` from outside a Spinosa workspace no longer auto‑opens the last saved workspace. Shows global home instead.
+- Cleaned 108 stale e2e‑test workspace entries from the global registry.
 
 ## [0.9.0-beta.22] — 2026-07-17
 
