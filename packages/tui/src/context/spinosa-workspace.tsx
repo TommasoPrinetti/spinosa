@@ -1,5 +1,4 @@
 import { createEffect, createSignal, createResource, onCleanup } from "solid-js"
-import path from "node:path"
 import { createSimpleContext } from "./helper"
 import { useKV } from "./kv"
 import { useRoute } from "./route"
@@ -16,9 +15,7 @@ import {
 import { isSpinosaWorkspace, readWorkspaceMeta } from "../spinosa/service"
 import type { SpinosaWorkspaceMeta } from "../spinosa/types"
 import { setActiveWorkspacePath, tuiLog } from "../spinosa/log"
-import { parseWorkspaceID } from "../spinosa-core/workspace/identity"
-import { recoverWorkspacePathByID } from "../spinosa-core/workspace/registry"
-import { inspectRegisteredWorkspacePresence, inspectWorkspacePresence, isUsableWorkspacePresence } from "../spinosa-core/workspace/presence"
+import { inspectRegisteredWorkspacePresence, isUsableWorkspacePresence } from "../spinosa-core/workspace/presence"
 import { runSpinosaBootHealth, SPINOSA_BOOT_OPERATIONS, type SpinosaBootOperation } from "../spinosa-core/system/boot"
 import type { RouteNavigateInput } from "./route"
 export const { use: useSpinosaWorkspace, provider: SpinosaWorkspaceProvider } = createSimpleContext({
@@ -109,7 +106,9 @@ export const { use: useSpinosaWorkspace, provider: SpinosaWorkspaceProvider } = 
     }
 
     createEffect(() => {
-      if (!kv.ready || bootHealth.loading || attemptedInitialWorkspaceHydration || activePath() || genericMode()) return
+      if (!kv.ready || bootHealth.loading || attemptedInitialWorkspaceHydration || activePath() || genericMode()) {
+        return
+      }
       if (startup.initialRoute || route.data.type !== "global" || route.data.prompt) {
         attemptedInitialWorkspaceHydration = true
         return
@@ -124,21 +123,6 @@ export const { use: useSpinosaWorkspace, provider: SpinosaWorkspaceProvider } = 
         void openWorkspace(cwdWorkspace)
         return
       }
-
-      const savedPath = kv.get(SPINOSA_ACTIVE_WORKSPACE_KV) as string | undefined
-      const workspaceID = parseWorkspaceID(kv.get(SPINOSA_ACTIVE_WORKSPACE_ID_KV) as string | undefined)
-      if (savedPath && isSpinosaWorkspace(savedPath)) {
-        const savedPresence = inspectWorkspacePresence({ workspacePath: savedPath, workspaceID })
-        if (isUsableWorkspacePresence(savedPresence)) {
-          void openWorkspace(savedPath)
-          return
-        }
-      }
-      if (!workspaceID) return
-      const recoveryRoots = [paths.cwd, ...(savedPath ? [path.dirname(savedPath)] : [])]
-      void recoverWorkspacePathByID(workspaceID, recoveryRoots).then((recovered) => {
-        if (recovered) return openWorkspace(recovered)
-      }).catch(() => {})
     })
 
     const refresh = async (): Promise<void> => {
