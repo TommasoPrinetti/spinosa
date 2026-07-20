@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs"
+import * as readline from "node:readline"
 import { spawnSync } from "node:child_process"
 import { createHash } from "node:crypto"
 import { homedir } from "node:os"
@@ -187,6 +188,17 @@ export async function upgradeFramework(
       options.onPhase?.("release_notes", "Could not fetch release notes")
     }
     options.onPhase?.("confirm", "Awaiting confirmation")
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
+    const answer = await new Promise<string>((resolve) => {
+      rl.question(`Upgrade to v${resolvedVersion}? [Y/n] `, (answer) => {
+        rl.close()
+        resolve(answer.trim().toLowerCase())
+      })
+    })
+    if (answer === "n" || answer === "no") {
+      options.onPhase?.("confirm", "Upgrade cancelled")
+      return { success: false, previousVersion: normalizedInstalled || undefined, workspaceUpgradesNeeded: [] }
+    }
   }
 
   options.onPhase?.("download", `Downloading installer v${resolvedVersion} (${channel})`)
