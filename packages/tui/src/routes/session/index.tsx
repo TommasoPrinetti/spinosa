@@ -101,6 +101,7 @@ type ToolPart = SDKToolPart
 type ToolCalloutSummary = {
   tag: string
   command: string
+  commands?: string[]
 }
 type ToolCalloutSide = "left" | "right"
 type ToolCalloutInfo = { side: ToolCalloutSide; offsetTop: number; summary?: ToolCalloutSummary; continuation?: boolean }
@@ -400,7 +401,8 @@ export function Session() {
         (value) => pathFormatter.format(value),
       )
       const tag = count > 1 ? `${summary.tag} x${count}` : summary.tag
-      const groupSummary: ToolCalloutSummary = { tag, command: summary.command }
+      const commands = count > 1 ? group.parts.map((p) => buildCopyCommand(p.tool, p.state.input ?? {}, { tag: summary.tag, command: summary.command })) : undefined
+      const groupSummary: ToolCalloutSummary = { tag, command: summary.command, commands }
       const side = ["bash", "read", "grep", "glob", "webfetch", "websearch"].includes(group.display) ? "left" : "right"
       const offsetTop = side === "left" ? leftHeight : rightHeight
       sides.set(first.callID, { side, offsetTop, summary: groupSummary })
@@ -1691,6 +1693,9 @@ function ToolRailCallout(props: {
 }
 
 function buildCopyCommand(tool: string, input: Record<string, unknown>, summary: ToolCalloutSummary): string {
+  if (summary.commands && summary.commands.length > 1) {
+    return summary.commands.join(" && ")
+  }
   const display = toolDisplay(tool)
   if (display === "bash") {
     return stringValue(input.command) ?? summary.command
