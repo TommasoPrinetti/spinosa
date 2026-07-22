@@ -345,16 +345,14 @@ export async function checkUpgradeAvailable(): Promise<AutoUpgradeResult> {
 
   const cache = readVersionCache(channel)
   if (cache) {
-    const cmp = compareFrameworkVersions(installedVersion, cache.version)
-    if (cmp !== undefined && cmp >= 0) {
-      if (cmp > 0) {
-        rmSync(versionCachePath(channel), { force: true })
-      } else if (now < cache.skipUntil) {
-        return { available: false }
+    const cmp = cache.version ? compareFrameworkVersions(installedVersion, cache.version) : undefined
+    if (cmp !== undefined && cmp < 0) {
+      if (now < cache.skipUntil) {
+        return { available: false, currentVersion: installedVersion, latestVersion: cache.version }
       }
-    } else {
-      rmSync(versionCachePath(channel), { force: true })
     }
+    // Always re-fetch when installed >= cached: a new release may have appeared
+    rmSync(versionCachePath(channel), { force: true })
   }
 
   let latest: string | undefined
@@ -370,7 +368,7 @@ export async function checkUpgradeAvailable(): Promise<AutoUpgradeResult> {
   const latestCmp = compareFrameworkVersions(latest, installedVersion)
   const available = latestCmp !== undefined && latestCmp > 0
 
-  // Cache: no-upgrade skips re-check for 1h (matches bash behavior pattern)
+  // Cache: used only to suppress re-prompting when an update was already shown
   const skipUntil = available ? 0 : Math.floor(Date.now() / 1000) + 3600
   writeVersionCache(channel, latest, skipUntil)
 
