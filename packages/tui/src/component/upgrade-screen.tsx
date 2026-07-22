@@ -1,11 +1,14 @@
 import { createSignal } from "solid-js"
 import { TextAttributes } from "@opentui/core"
+import { existsSync } from "node:fs"
+import * as path from "node:path"
 import { useTheme } from "../context/theme"
 import { useBindings } from "../keymap"
 import type { AutoUpgradeResult, UpgradeResult } from "../spinosa-core/commands/upgrade"
+import { resolveFrameworkRoot } from "../spinosa-core/framework/discovery"
 import { Spinner } from "./spinner"
 
-type Phase = "prompt" | "installing" | "success" | "failed"
+type Phase = "prompt" | "installing" | "workspace_prompt" | "updating_workspaces" | "success" | "failed"
 
 export type UpgradeScreenProps = {
   upgrade: AutoUpgradeResult
@@ -17,6 +20,8 @@ export function UpgradeScreen(props: UpgradeScreenProps) {
   const [phase, setPhase] = createSignal<Phase>("prompt")
   const [phaseMessage, setPhaseMessage] = createSignal("")
   const [result, setResult] = createSignal<UpgradeResult | null>(null)
+  const [wsUpdated, setWsUpdated] = createSignal(0)
+  const [wsTotal, setWsTotal] = createSignal(0)
 
   const startUpgrade = async () => {
     setPhase("installing")
@@ -30,12 +35,44 @@ export function UpgradeScreen(props: UpgradeScreenProps) {
         onPhase: (_phase, detail) => setPhaseMessage(detail),
       })
       setResult(res)
-      setPhase(res.success ? "success" : "failed")
+      if (!res.success) {
+        setPhase("failed")
+        return
+      }
+      if (res.workspaceUpgradesNeeded.length > 0) {
+        setPhase("workspace_prompt")
+      } else {
+        setPhase("success")
+      }
     } catch (err) {
       setResult(null)
       setPhase("failed")
       setPhaseMessage(err instanceof Error ? err.message : String(err))
     }
+  }
+
+  const updateWorkspaces = async () => {
+    const r = result()
+    if (!r) return
+    setPhase("updating_workspaces")
+    setWsTotal(r.workspaceUpgradesNeeded.length)
+    setWsUpdated(0)
+    const fwRoot = resolveFrameworkRoot()
+    if (!fwRoot) { setPhase("success"); return }
+    const { updateWorkspace } = await import("../spinosa-core/commands/update")
+    for (const ws of r.workspaceUpgradesNeeded) {
+      setPhaseMessage(ws)
+      const wsFile = path.join(ws, ".spinosa", "workspace")
+      if (!existsSync(wsFile)) {
+        setWsUpdated((n) => n + 1)
+        continue
+      }
+      try {
+        await updateWorkspace({ workspacePath: ws, frameworkRoot: fwRoot })
+      } catch { /* best-effort */ }
+      setWsUpdated((n) => n + 1)
+    }
+    setPhase("success")
   }
 
   useBindings(() => {
@@ -45,6 +82,17 @@ export function UpgradeScreen(props: UpgradeScreenProps) {
         { key: "y", desc: "Yes, update", group: "Upgrade", cmd: startUpgrade },
         { key: "n", desc: "No, skip", group: "Upgrade", cmd: props.onClose },
         { key: "escape", desc: "Skip", group: "Upgrade", cmd: props.onClose },
+      ],
+    }
+  })
+
+  useBindings(() => {
+    if (phase() !== "workspace_prompt") return { bindings: [] }
+    return {
+      bindings: [
+        { key: "y", desc: "Yes, update workspaces", group: "Upgrade", cmd: updateWorkspaces },
+        { key: "n", desc: "No, skip workspace update", group: "Upgrade", cmd: () => setPhase("success") },
+        { key: "escape", desc: "Skip workspace update", group: "Upgrade", cmd: () => setPhase("success") },
       ],
     }
   })
@@ -117,6 +165,52 @@ export function UpgradeScreen(props: UpgradeScreenProps) {
             <box flexDirection="row" gap={1} paddingTop={1}>
               <Spinner />
               <text fg={theme.textMuted}>{phaseMessage()}</text>
+            </box>
+          </>
+        )}
+
+        {phase() === "workspace_prompt" && (
+          <>
+            <text attributes={TextAttributes.BOLD} fg={theme.text}>
+              Update Workspaces
+            </text>
+            <text fg={theme.textMuted}>
+              {result()?.workspaceUpgradesNeeded.length} workspace(s) need updating to match the new framework version.
+            </text>
+            <text fg={theme.textMuted}>Update now?</text>
+            <box flexDirection="row" gap={2} paddingTop={1}>
+              <box
+                paddingLeft={3}
+                paddingRight={3}
+                backgroundColor={theme.primary}
+                onMouseUp={updateWorkspaces}
+              >
+                <text fg={theme.selectedListItemText}>Yes</text>
+              </box>
+              <box
+                paddingLeft={3}
+                paddingRight={3}
+                backgroundColor={theme.backgroundElement}
+                onMouseUp={() => setPhase("success")}
+              >
+                <text fg={theme.text}>No</text>
+              </box>
+            </box>
+            <text fg={theme.textMuted} paddingTop={1}>y / n</text>
+          </>
+        )}
+
+        {phase() === "updating_workspaces" && (
+          <>
+            <text attributes={TextAttributes.BOLD} fg={theme.text}>
+              Updating Workspaces
+            </text>
+            <text fg={theme.textMuted}>
+              {wsUpdated()}/{wsTotal()} — {phaseMessage()}
+            </text>
+            <box flexDirection="row" gap={1} paddingTop={1}>
+              <Spinner />
+              <text fg={theme.textMuted}>Updating workspace files...</text>
             </box>
           </>
         )}
