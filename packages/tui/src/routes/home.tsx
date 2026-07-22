@@ -369,12 +369,6 @@ export function Home() {
               <text fg={theme.textMuted}>{versionLabel()}</text>
               <box height={1} />
             </Show>
-            <Show when={spinosa.bootHealth?.upgrade?.available}>
-              <text fg={theme.textMuted}>
-                Run {'"spinosa upgrade"'} for v{spinosa.bootHealth!.upgrade!.latestVersion}
-              </text>
-              <box height={1} />
-            </Show>
             <Show when={maintenance()?.installInProgress}>
               <text fg={theme.textMuted}>Maintenance checks will resume when this installation finishes.</text>
               <box height={1} />
