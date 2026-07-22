@@ -293,6 +293,7 @@ export async function upgradeFramework(
     }
   } catch { /* cleanup is best-effort */ }
 
+  options.onPhase?.("discover", "Checking workspaces for updates...")
   const workspaces: string[] = []
   try { workspaces.push(...(await discoverRegisteredWorkspaces())) } catch { /* workspace discovery is best-effort */ }
   const needsUpdate: string[] = []
