@@ -20,6 +20,7 @@ function capture() {
       out: (message: string) => { output.push(message) },
       error: (message: string) => { errors.push(message) },
       format: "human" as const,
+      confirm: async () => false,
     },
   }
 }

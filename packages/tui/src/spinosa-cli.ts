@@ -199,8 +199,29 @@ async function runUpgrade(parsed: ParsedArgs, io: SpinosaCliIo): Promise<number>
     reinstall: parsed.flags.has("reinstall"),
     onPhase: (_phase, detail) => io.out(detail),
   })
-  if (result.success) io.out(`Spinosa ${result.newVersion ?? "already current"}`)
-  else {
+  if (result.success) {
+    io.out(`Spinosa ${result.newVersion ?? "already current"}`)
+
+    if (result.workspaceUpgradesNeeded.length > 0) {
+      const ok = await io.confirm(
+        `${result.workspaceUpgradesNeeded.length} workspace(s) need updating to match the new framework version. Update now?`,
+        true,
+      )
+      if (ok) {
+        const fwRoot = resolveFrameworkRoot()
+        if (fwRoot) {
+          for (const ws of result.workspaceUpgradesNeeded) {
+            const wsFile = path.join(ws, ".spinosa", "workspace")
+            if (!existsSync(wsFile)) continue
+            io.out(`  Updating ${path.basename(ws)}...`)
+            try {
+              await updateWorkspace({ workspacePath: ws, frameworkRoot: fwRoot })
+            } catch { /* best-effort */ }
+          }
+        }
+      }
+    }
+  } else {
     io.error("Spinosa upgrade failed")
     io.out("Check your internet connection or run 'spinosa upgrade --channel stable' to try the stable channel.")
   }
