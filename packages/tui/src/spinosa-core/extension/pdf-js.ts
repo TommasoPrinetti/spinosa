@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises"
 import { getDocument, type PDFDocumentProxy } from "pdfjs-dist/legacy/build/pdf.mjs"
 import { createCanvas } from "@napi-rs/canvas"
+import stripAnsi from "strip-ansi"
 
 async function getDoc(pdfPath: string): Promise<PDFDocumentProxy> {
   const data = await readFile(pdfPath)
@@ -104,7 +105,7 @@ export async function pdfExtractAllText(pdfPath: string): Promise<string> {
       try {
         const pg = await doc.getPage(i)
         const content = await pg.getTextContent()
-        pages.push(content.items.map((item) => ("str" in item ? item.str : "")).join(" "))
+        pages.push(stripAnsi(content.items.map((item) => ("str" in item ? item.str : "")).join(" ")))
       } catch {
         continue
       }
@@ -122,7 +123,7 @@ export async function pdfExtractPageTexts(pdfPath: string): Promise<{ page: numb
         const content = await pg.getTextContent()
         result.push({
           page: i,
-          text: content.items.map((item) => ("str" in item ? item.str : "")).join(" "),
+          text: stripAnsi(content.items.map((item) => ("str" in item ? item.str : "")).join(" ")),
         })
       } catch {
         continue

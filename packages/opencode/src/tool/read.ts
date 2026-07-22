@@ -1,3 +1,4 @@
+import stripAnsi from "strip-ansi"
 import { Effect, Option, Schema, Scope, Stream } from "effect"
 import { NonNegativeInt } from "@opencode-ai/core/schema"
 import * as path from "path"
@@ -336,7 +337,7 @@ export const ReadTool = Tool.define<
       }
 
       let output = [`<path>${filepath}</path>`, `<type>file</type>`, "<content>\n"].join("\n")
-      output += file.raw.map((line, i) => `${i + file.offset}: ${line}`).join("\n")
+      output += stripAnsi(file.raw.map((line, i) => `${i + file.offset}: ${line}`).join("\n"))
 
       const last = file.offset + file.raw.length - 1
       const next = last + 1

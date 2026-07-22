@@ -1,7 +1,10 @@
 import { existsSync, mkdirSync, appendFileSync, readFileSync, readdirSync, rmSync } from "node:fs"
 import * as path from "node:path"
+import { spawn } from "node:child_process"
+import { fileURLToPath } from "node:url"
 import { MarkItDown } from "markitdown-ts"
 
+import stripAnsi from "strip-ansi"
 import { fileExt } from "../constants"
 import {
   shouldSkipSourceFile,
@@ -19,6 +22,7 @@ import type { FileClass, ImportRoute } from "../extension/types"
 import { injectColdFrontmatter, convertedOutputExists } from "./frontmatter"
 import type { ImportBatchManager } from "./batch"
 import { isSpinosaCancellationError, throwIfSpinosaCancelled } from "./cancellation"
+import type { PpuOcrFile, PpuOcrBatchResult } from "./ppu-ocr"
 import { runPpuOcrBatch } from "./ppu-ocr"
 import { ProgressEmitter } from "../progress/progress"
 import { ocrAvailable } from "../tools/detection"
@@ -421,49 +425,109 @@ export async function processOcr(
   }
 
   if (toProcess.length > 0) {
-    throwIfSpinosaCancelled(shouldAbort)
-    onLog?.(`PPU PaddleOCR: Processing ${toProcess.length} files`)
     const ocrLog = path.join(logsDir, "ocr-processed.ndjson")
-    try {
-      const ocrResult = await runPpuOcrBatch(toProcess, {
-        onLog,
-        shouldAbort,
-        onProgress: (current, total, relPath) => {
-          prog?.file("OCR", ++processed, total, relPath)
-        },
-        onPageProgress: (current, total, relPath, page) => {
-          prog?.file("OCR", processed, total, `${relPath} page ${page}`)
-        },
-      })
-      converted += ocrResult.converted
-      for (const f of toProcess) {
-        const ok = convertedOutputExists(f.dest)
+    onLog?.(`PPU PaddleOCR: Processing ${toProcess.length} files`)
+
+    for (let i = 0; i < toProcess.length; i++) {
+      throwIfSpinosaCancelled(shouldAbort)
+      const f = toProcess[i]!
+      onLog?.(`  ${f.rel} → OCR ...`)
+
+      try {
+        const result = await runOcrWorker([f as PpuOcrFile], { onLog })
+        const ok = result.converted > 0 && convertedOutputExists(f.dest)
         appendNdjson(ocrLog, {
           ts: isoNow(), status: ok ? "ok" : "fail",
           source: f.rel, output: ocrOutputRelPath(f.rel),
           engine: "ppu-paddle-ocr", pages: "", duration_s: 0,
         })
         if (ok) {
+          converted++
           recoverable.push({ src: f.src, dest: f.dest })
         } else {
-          failed++
+          skipped++
         }
+      } catch (err) {
+        if (isSpinosaCancellationError(err)) throw err
+        onLog?.(`  PPU PaddleOCR failed: ${f.rel} — ${err instanceof Error ? err.message : String(err)}`)
+        appendNdjson(ocrLog, {
+          ts: isoNow(), status: "fail",
+          source: f.rel, output: ocrOutputRelPath(f.rel),
+          engine: "ppu-paddle-ocr", pages: "", duration_s: 0,
+        })
+        skipped++
       }
-      // Reconcile the progress numerator to the true total so the bar reaches
-      // 100% once every OCR file has been resolved (the batch may report
-      // progress per page rather than per file).
-      processed = total
-      prog?.file("OCR", processed, total, "")
-    } catch (err) {
-      if (isSpinosaCancellationError(err)) throw err
-      onLog?.(`PPU PaddleOCR engine failed: ${err instanceof Error ? err.message : String(err)} — skipping OCR pass`)
-      failed = toProcess.length
-      processed = total
-      prog?.file("OCR", processed, total, "")
+      prog?.file("OCR", ++processed, total, f.rel)
     }
+    prog?.file("OCR", processed, total, "")
   }
 
   return { converted, skipped, failed, renamed: 0, recoverable }
+}
+
+function workerScriptPath(): string {
+  return fileURLToPath(new URL("ppu-ocr-worker.ts", import.meta.url))
+}
+
+async function runOcrWorker(
+  files: PpuOcrFile[],
+  options?: {
+    onLog?: (msg: string) => void
+    onProgress?: (current: number, total: number, relPath: string) => void
+    onPageProgress?: (current: number, total: number, relPath: string, page: string) => void
+  },
+): Promise<PpuOcrBatchResult> {
+  const workerScript = workerScriptPath()
+  const workerArgs = JSON.stringify({ files })
+  const child = spawn(process.argv0, ["run", workerScript, workerArgs], {
+    stdio: ["ignore", "pipe", "ignore"],
+    detached: true,
+  })
+  child.unref()
+
+  let stdoutBuf = ""
+  child.stdout.on("data", (chunk: Buffer) => { stdoutBuf += chunk.toString() })
+
+  const { code, signal } = await new Promise<{ code: number | null; signal: string | null }>((resolve) => {
+    child.on("close", (c, s) => resolve({ code: c, signal: s }))
+  })
+
+  let workerConverted = 0
+  let workerSkipped = 0
+
+  for (const line of stdoutBuf.split("\n").filter(Boolean)) {
+    try {
+      const msg = JSON.parse(line)
+      switch (msg.type) {
+        case "progress":
+          options?.onProgress?.(msg.current, msg.total, msg.relPath)
+          break
+        case "pageProgress":
+          options?.onPageProgress?.(msg.current, msg.total, msg.relPath, msg.page)
+          break
+        case "log":
+          options?.onLog?.(msg.message)
+          break
+        case "done":
+          workerConverted = msg.converted
+          workerSkipped = msg.skipped
+          break
+        case "error":
+          options?.onLog?.(`PPU PaddleOCR worker: ${msg.message}`)
+          break
+      }
+    } catch {
+      options?.onLog?.(`PPU PaddleOCR worker: ${line}`)
+    }
+  }
+
+  if (signal) {
+    options?.onLog?.(`PPU PaddleOCR worker terminated by signal ${signal} — worker crash`)
+  } else if (code !== 0) {
+    options?.onLog?.(`PPU PaddleOCR worker exited with code ${code}`)
+  }
+
+  return { converted: workerConverted, skipped: workerSkipped }
 }
 
 
@@ -672,7 +736,7 @@ export async function verifyAndRecoverImport(
           const converter = new MarkItDown()
           const result = await converter.convert(srcFile)
           throwIfSpinosaCancelled(shouldAbort)
-          const text = result?.markdown ?? ""
+        const text = stripAnsi(result?.markdown ?? "")
           writeTextAtomicSafe(destFile, text)
           injectColdFrontmatter(destFile)
           onLog?.(`    Recovered (markitdown-ts): ${relPath}`)
@@ -692,7 +756,7 @@ export async function verifyAndRecoverImport(
         let ppuConverted = 0
         if (ocrAvailable()) {
           try {
-            const ppuResult = await runPpuOcrBatch([{ src: srcFile, rel: relPath, dest: destFile }], { onLog, shouldAbort })
+            const ppuResult = await runOcrWorker([{ src: srcFile, rel: relPath, dest: destFile }], { onLog })
             ppuConverted = ppuResult.converted
           } catch (err) {
             if (isSpinosaCancellationError(err)) throw err

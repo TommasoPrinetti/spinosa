@@ -5,6 +5,7 @@ import { fileExt } from "../constants"
 import { isSpinosaCancellationError, throwIfSpinosaCancelled } from "./cancellation"
 import { injectColdFrontmatter } from "./frontmatter"
 import { pdfRenderDocumentPageToPng, withPdfDocument } from "../extension/pdf-js"
+import stripAnsi from "strip-ansi"
 import { writeTextAtomic, writeTextAtomicSafe } from "../utils/fs"
 
 // Bound a single OCR page so a pathological image/PDF cannot hang the whole
@@ -68,7 +69,7 @@ function writeMarkdown(destFile: string, title: string, body: string, sourceRel:
   const confidenceLine = typeof confidence === "number" ? `\nOCR confidence: ${confidence.toFixed(3)}\n` : ""
   writeTextAtomicSafe(
     destFile,
-    `# ${title}\n\nConverted from \`${sourceRel}\` with ppu-paddle-ocr.${confidenceLine}\n${body.trim() || "[No text detected]"}\n`,
+    `# ${title}\n\nConverted from \`${sourceRel}\` with ppu-paddle-ocr.${confidenceLine}\n${stripAnsi(body).trim() || "[No text detected]"}\n`,
   )
   injectColdFrontmatter(destFile)
 }

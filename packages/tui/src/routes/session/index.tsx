@@ -1802,7 +1802,7 @@ function UserMessage(props: {
               backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
               flexShrink={0}
             >
-              <text fg={theme.text}>{text()}</text>
+              <text fg={theme.text}>{stripAnsi(text())}</text>
               <Show when={files().length}>
                 <box
                   flexDirection="row"
@@ -2104,7 +2104,7 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
             syntaxStyle={syntax()}
             streaming={true}
             internalBlockMode="top-level"
-            content={props.part.text.trim()}
+            content={stripAnsi(props.part.text.trim())}
             tableOptions={{ style: "grid" }}
             conceal={ctx.conceal()}
             fg={theme.markdownText}
