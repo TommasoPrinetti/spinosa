@@ -57,7 +57,6 @@ import { FrecencyProvider } from "./component/prompt/frecency"
 import { PromptStashProvider } from "./component/prompt/stash"
 import { DialogAlert } from "./ui/dialog-alert"
 import { DialogConfirm } from "./ui/dialog-confirm"
-import { UpgradeScreen } from "./component/upgrade-screen"
 import { ToastProvider, useToast } from "./ui/toast"
 import { isDefaultTitle } from "./util/session"
 import { setToastError } from "./spinosa/log"
@@ -1154,14 +1153,6 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     return render({ params: route.data.data })
   })
 
-  const [upgradeActive, setUpgradeActive] = createSignal(false)
-  createEffect(() => {
-    if (!tuiReady()) return
-    const health = spinosa.bootHealth
-    if (!health?.upgrade?.available) return
-    setUpgradeActive(true)
-  })
-
   return (
     <box
       width={dimensions().width}
@@ -1190,13 +1181,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
           <Show when={route.data.type === "workspace"}>
             <Session />
           </Show>
-          <Show when={route.data.type === "global" && upgradeActive()}>
-            <UpgradeScreen
-              upgrade={spinosa.bootHealth!.upgrade!}
-              onClose={() => exit()}
-            />
-          </Show>
-          <Show when={route.data.type === "global" && !upgradeActive()}>
+          <Show when={route.data.type === "global"}>
             <Home />
           </Show>
           <Show when={route.data.type === "onboarding"}>
