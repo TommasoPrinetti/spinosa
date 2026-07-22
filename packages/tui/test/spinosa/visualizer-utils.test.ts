@@ -6,7 +6,7 @@ describe("inputSummary", () => {
     expect(inputSummary("read", { filePath: "~/Downloads/ultimate-spinosa-test.md" })).toBe(
       "ultimate-spinosa-test.md",
     )
-    expect(inputSummary("edit", { file_path: String.raw`C:\Users\tommaso\notes.md` })).toBe("notes.md")
+    expect(inputSummary("edit", { file_path: String.raw`C:\Users\user\notes.md` })).toBe("notes.md")
     expect(inputSummary("write", {})).toBe("")
   })
 })
