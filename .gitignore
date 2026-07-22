@@ -78,3 +78,13 @@ local:/
 # Runtime token metadata (already gitignored but was committed before)
 .tokensave/branch-meta.json
 .tokensave/config.json
+
+# Processing artifacts and logs (risk of personal/research data leaks)
+*ocr-processed*
+*.jsonl
+*.bak
+
+# Prevent workspace data files from being accidentally committed
+workspace-template/raw/*.log
+workspace-template/raw/*.tsv
+workspace-template/raw/*.jsonl

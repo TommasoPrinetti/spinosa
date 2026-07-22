@@ -23,6 +23,7 @@ updated: 2026-06-04
 - Onboarding copies text-like files, native-readable files, and PDFs here.
 - `AGENTS.md` files are control instructions, not evidence; they must never be imported, mapped, headered, or cited.
 - Skipped media are recorded in `.spinosa/onboarding-summary.md` unless a later processing pass creates text artifacts in `raw/`.
+- **Never commit personal data to this repository.** Processing logs, OCR output, backup files (`.bak`, `.jsonl`, `*ocr-processed*`) and any file containing emails, credentials, or local paths must not be tracked. These patterns are in `.gitignore` at the repo root.
 
 ## Validation
 
