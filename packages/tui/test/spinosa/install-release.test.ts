@@ -66,6 +66,27 @@ describe("install and release flow", () => {
     expect(await Bun.file(sentinel).text()).toBe("keep\n")
   })
 
+  test("installer recognizes legacy Spinosa shims without an ownership marker", async () => {
+    await using tmp = await tmpdir()
+    const home = path.join(tmp.path, "home")
+    const bin = path.join(tmp.path, "bin")
+    const shim = path.join(bin, "spinosa")
+    await mkdir(bin, { recursive: true })
+    await Bun.write(
+      shim,
+      ["#!/bin/sh", `home=\"${home}\"`, 'target="${home}/bin/spinosa"', 'exec bash "$target" "$@"', ""].join("\n"),
+    )
+
+    const result = Bun.spawnSync({
+      cmd: ["bash", "-c", 'installer="$1"; shim="$2"; set --; source "$installer"; is_owned_spinosa_shim "$shim"', "spinosa-test", path.join(repoRoot, "install.sh"), shim],
+      env: { ...process.env, SPINOSA_INSTALLER_LIB_ONLY: "1", SPINOSA_HOME: home, SPINOSA_BIN_DIR: bin, NO_COLOR: "1" },
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+
+    expect(result.exitCode).toBe(0)
+  })
+
   test("non-TTY steps report lifecycle, enforce timeout, and emit no control bytes", () => {
     const installer = path.join(repoRoot, "install.sh")
     const result = Bun.spawnSync({

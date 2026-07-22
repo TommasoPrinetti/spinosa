@@ -2,7 +2,7 @@
 # shellcheck shell=bash
 # ── install.sh — Spinosa Framework Installer (auto-re-execs with bash) ──────
 
-PINNED_VERSION="1.0.1-beta.1"
+PINNED_VERSION="1.0.1-beta.2"
 PINNED_TAG="beta"
 BUNDLED_BUN_VERSION="1.3.14"
 DEFAULT_DEPS_TIMEOUT_SECONDS="600"
@@ -404,6 +404,18 @@ detect_platform() {
   info "Platform: ${PLATFORM}"
 }
 
+is_owned_spinosa_shim() {
+  local shim="$1"
+  grep -Fqx '# Managed by Spinosa install.sh' "$shim" 2>/dev/null && return 0
+
+  # Installers before v1.0.1-beta.1 created the same wrapper without the
+  # ownership marker. Recognize that exact legacy shape so upgrades remain
+  # safe without taking over an unrelated `spinosa` command.
+  grep -Fqx "home=\"${SPINOSA_HOME}\"" "$shim" 2>/dev/null \
+    && grep -Fqx 'target="${home}/bin/spinosa"' "$shim" 2>/dev/null \
+    && grep -Fqx 'exec bash "$target" "$@"' "$shim" 2>/dev/null
+}
+
 preflight_tools() {
   local tool
   for tool in tar unzip find awk sed grep df mktemp; do
@@ -437,7 +449,7 @@ validate_install_paths() {
     die "Install root is not an owned Spinosa directory: ${SPINOSA_HOME}. Choose an empty directory."
   fi
   if [ "$PREFIX_MODE" -eq 0 ] && [ -e "${SPINOSA_BIN_DIR}/spinosa" ] \
-    && ! grep -q '^# Managed by Spinosa install.sh$' "${SPINOSA_BIN_DIR}/spinosa" 2>/dev/null; then
+    && ! is_owned_spinosa_shim "${SPINOSA_BIN_DIR}/spinosa"; then
     die "Refusing to overwrite non-Spinosa command: ${SPINOSA_BIN_DIR}/spinosa. Move it or choose --bin-dir."
   fi
 }
@@ -1309,7 +1321,7 @@ install_shims() {
     return 0
   fi
   local shim="${SPINOSA_BIN_DIR}/spinosa"
-  if [ -e "$shim" ] && ! grep -q '^# Managed by Spinosa install.sh$' "$shim" 2>/dev/null; then
+  if [ -e "$shim" ] && ! is_owned_spinosa_shim "$shim"; then
     die "Refusing to overwrite non-Spinosa command: ${shim}. Move it or choose --bin-dir."
   fi
   local shim_tmp="${shim}.tmp.$$"
