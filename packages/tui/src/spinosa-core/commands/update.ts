@@ -392,6 +392,39 @@ async function updateWorkspaceUnlocked(options: UpdateOptions): Promise<UpdateRe
     }
   }
 
+  // Phase 4: remove known contaminant files (processing artifacts, backup files, etc.)
+  phase("4", "Clean processing artifacts")
+  if (!dryRun || true) {
+    const archiveRoot = path.join(workspacePath, ".trash", "framework-cleaned")
+    const contaminantPatterns = [
+      "*ocr-processed*",
+      "*.jsonl",
+      "*.bak",
+      "raw/*.log",
+    ]
+    let cleaned = 0
+    walkDir(workspacePath, (filePath) => {
+      const rel = path.relative(workspacePath, filePath)
+      for (const pattern of contaminantPatterns) {
+        if (matchSimpleGlob(rel, pattern)) {
+          if (!dryRun) {
+            try {
+              const archived = resolvePathWithinRoot(archiveRoot, rel, "workspace contaminant path")
+              mkdirSync(path.dirname(archived), { recursive: true })
+              rmSync(archived, { force: true, recursive: true })
+              renameSync(filePath, archived)
+              cleaned++
+            } catch (error) {
+              spinosaLogWarn("update", `clean failed: ${rel} — ${String(error)}`)
+            }
+          }
+          break
+        }
+      }
+    })
+    phase("4", `Cleaned ${cleaned} processing artifacts`)
+  }
+
   // Regenerate manifest.tsv
   phase("5", "Regenerate manifest")
   if (!dryRun && !hadFailures) {
@@ -556,4 +589,31 @@ export async function updateWorkspace(options: UpdateOptions): Promise<UpdateRes
     if (snapshot) rmSync(snapshot.root, { recursive: true, force: true })
     rmSync(lockPath, { recursive: true, force: true })
   }
+}
+
+function walkDir(root: string, fn: (filePath: string) => void): void {
+  try {
+    for (const entry of readdirSync(root, { withFileTypes: true })) {
+      const fullPath = path.join(root, entry.name)
+      if (entry.name === ".trash" || entry.name === ".spinosa" || entry.name === "node_modules") continue
+      if (entry.isDirectory()) {
+        walkDir(fullPath, fn)
+      } else if (entry.isFile()) {
+        fn(fullPath)
+      }
+    }
+  } catch {}
+}
+
+function matchSimpleGlob(filePath: string, pattern: string): boolean {
+  if (!pattern.includes("*")) return filePath === pattern
+  const parts = pattern.split("*")
+  let pos = 0
+  for (let i = 0; i < parts.length; i++) {
+    if (parts[i] === "") continue
+    const idx = filePath.indexOf(parts[i], pos)
+    if (idx === -1) return false
+    pos = idx + parts[i].length
+  }
+  return true
 }
