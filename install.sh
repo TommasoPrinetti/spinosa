@@ -2,14 +2,14 @@
 # shellcheck shell=bash
 # ── install.sh — Spinosa Framework Installer (auto-re-execs with bash) ──────
 
-PINNED_VERSION="1.0.1-beta.2"
+PINNED_VERSION="1.0.1-beta.3"
 PINNED_TAG="beta"
 BUNDLED_BUN_VERSION="1.3.14"
 DEFAULT_DEPS_TIMEOUT_SECONDS="600"
 DEFAULT_DOWNLOAD_TIMEOUT_SECONDS="600"
 DEFAULT_EXTRACT_TIMEOUT_SECONDS="120"
 DEFAULT_VERIFY_TIMEOUT_SECONDS="45"
-PROGRESS_BAR_WIDTH=20
+WAVE_WIDTH=6
 
 if [ -z "${BASH_VERSION-}" ]; then
   if command -v bash >/dev/null 2>&1; then
@@ -207,14 +207,24 @@ STEP_OUTPUT_FILE=""
 STEP_LABEL=""
 STEP_STARTED_AT=0
 
-_render_progress() {
+wave_string() {
+  local frame="$1" wave="" i position level
+  local -a glyphs=("▁" "▂" "▃" "▄" "▅" "▆" "▇" "█")
+  for ((i = 0; i < WAVE_WIDTH; i++)); do
+    position=$(((i + frame) % 14))
+    level=$((position <= 6 ? position : 13 - position))
+    wave+="${glyphs[level]}"
+  done
+  printf '%s' "$wave"
+}
+
+_render_wave() {
   local label="$1" timeout_seconds="$2" started_at="$3"
-  local tick=0 elapsed fill empty bar
+  local tick=0 elapsed wave bar
   while :; do
     elapsed=$(( $(date +%s) - started_at ))
-    fill=$(( tick % (PROGRESS_BAR_WIDTH + 1) ))
-    empty=$(( PROGRESS_BAR_WIDTH - fill ))
-    bar="$(printf '%*s' "$fill" '' | tr ' ' '#')$(printf '%*s' "$empty" '' | tr ' ' '-')"
+    wave="$(wave_string "$tick")"
+    bar="$wave"
     printf '\r\033[2K  %s [%s] %ss/%ss' "$label" "$bar" "$elapsed" "$timeout_seconds" >&2
     tick=$((tick + 1))
     sleep 0.2
@@ -227,7 +237,7 @@ step_begin() {
   STEP_STARTED_AT="$(date +%s)"
   spinosa_log INFO "step=start label=${STEP_LABEL} timeout=${timeout_seconds}s"
   if [ -t 2 ]; then
-    _render_progress "$STEP_LABEL" "$timeout_seconds" "$STEP_STARTED_AT" &
+    _render_wave "$STEP_LABEL" "$timeout_seconds" "$STEP_STARTED_AT" &
     STEP_RENDER_PID=$!
   else
     printf '  START %s (timeout %ss)\n' "$STEP_LABEL" "$timeout_seconds" >&2

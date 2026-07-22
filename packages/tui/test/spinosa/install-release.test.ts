@@ -87,6 +87,18 @@ describe("install and release flow", () => {
     expect(result.exitCode).toBe(0)
   })
 
+  test("installer uses the TUI wave for indeterminate work", () => {
+    const result = Bun.spawnSync({
+      cmd: ["bash", "-c", 'installer="$1"; set --; source "$installer"; wave_string 0', "spinosa-test", path.join(repoRoot, "install.sh")],
+      env: { ...process.env, SPINOSA_INSTALLER_LIB_ONLY: "1", NO_COLOR: "1" },
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+
+    expect(result.exitCode).toBe(0)
+    expect(result.stdout.toString()).toBe("▁▂▃▄▅▆")
+  })
+
   test("non-TTY steps report lifecycle, enforce timeout, and emit no control bytes", () => {
     const installer = path.join(repoRoot, "install.sh")
     const result = Bun.spawnSync({
