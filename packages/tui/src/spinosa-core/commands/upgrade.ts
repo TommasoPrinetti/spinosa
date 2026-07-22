@@ -274,6 +274,24 @@ export async function upgradeFramework(
     }
   }
 
+  // Remove old version directories, keeping only the newly installed one
+  try {
+    const versionsDir = path.join(spinosaHome(), "versions")
+    if (existsSync(versionsDir)) {
+      let cleaned = 0
+      for (const entry of readdirSync(versionsDir, { withFileTypes: true })) {
+        if (!entry.isDirectory()) continue
+        if (entry.name === resolvedVersion) continue
+        if (entry.name.startsWith(".")) continue
+        try {
+          rmSync(path.join(versionsDir, entry.name), { recursive: true, force: true })
+          cleaned++
+        } catch { /* best-effort */ }
+      }
+      if (cleaned > 0) spinosaLogInfo("upgrade", `removed ${cleaned} old version(s) from ${versionsDir}`)
+    }
+  } catch { /* cleanup is best-effort */ }
+
   const workspaces: string[] = []
   try { workspaces.push(...(await discoverRegisteredWorkspaces())) } catch { /* workspace discovery is best-effort */ }
   const needsUpdate: string[] = []
