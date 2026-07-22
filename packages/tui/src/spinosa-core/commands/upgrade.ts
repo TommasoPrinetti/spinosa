@@ -148,6 +148,7 @@ export async function upgradeFramework(
     options.onPhase?.("resolve", `Resolving latest ${channel} version`)
     const latest = await resolveReleaseVersionForChannel(channel)
     if (!latest) {
+      spinosaLogInfo("upgrade", `failed to resolve latest version for channel ${channel}`)
       return { success: false, workspaceUpgradesNeeded: [] }
     }
     resolvedVersion = latest

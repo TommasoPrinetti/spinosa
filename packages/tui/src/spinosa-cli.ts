@@ -24,6 +24,7 @@ import { runStatus } from "./spinosa-cli/commands/status"
 import { runList } from "./spinosa-cli/commands/list"
 import { runStartupAutoclean } from "./spinosa-cli/commands/startup-autoclean"
 import { PREFLIGHT_RESTART_EXIT_CODE, runLaunchPreflight } from "./spinosa-cli/commands/preflight"
+import { startSpinosaWeb } from "./spinosa-web/server"
 
 export { parseSpinosaCliArgs }
 
@@ -57,6 +58,7 @@ function helpText(): string {
     "  spinosa version",
     "  spinosa upgrade [--channel stable|beta] [--version X.Y.Z] [--yes] [--reinstall]",
     "  spinosa uninstall [--yes]",
+    "  spinosa web [--port PORT] [--api-port PORT]",
     "",
     "Global flags:",
     "  --json       Machine-readable JSON output",
@@ -198,8 +200,44 @@ async function runUpgrade(parsed: ParsedArgs, io: SpinosaCliIo): Promise<number>
     onPhase: (_phase, detail) => io.out(detail),
   })
   if (result.success) io.out(`Spinosa ${result.newVersion ?? "already current"}`)
-  else io.error("Spinosa upgrade failed")
+  else {
+    io.error("Spinosa upgrade failed")
+    io.out("Check your internet connection or run 'spinosa upgrade --channel stable' to try the stable channel.")
+  }
   return result.success ? 0 : 1
+}
+
+async function runWeb(parsed: ParsedArgs, io: SpinosaCliIo): Promise<number> {
+  const webDir = path.join(import.meta.dirname, "..", "..", "spinosa-web")
+  const hasSpa = existsSync(webDir)
+
+  if (!hasSpa) {
+    io.error("packages/spinosa-web not found. Create it first: bun create packages/spinosa-web")
+    return 1
+  }
+
+  io.out("Starting Spinosa web app...")
+
+  const { default: open } = await import("open")
+  const webPort = parsed.values.get("port") ?? "3002"
+
+  const proc = Bun.spawn(["bun", "run", "dev:full"], {
+    cwd: webDir,
+    stdio: ["ignore", "inherit", "inherit"],
+    env: { ...process.env, PORT: webPort },
+  })
+
+  await new Promise((r) => setTimeout(r, 3000))
+
+  const webUrl = `http://127.0.0.1:${webPort}`
+  io.out(`\n  Spinosa Web: ${webUrl}\n`)
+  open(webUrl).catch(() => {})
+
+  return await new Promise<number>((resolve) => {
+    const onSignal = () => { proc.kill(); resolve(0) }
+    process.on("SIGINT", onSignal)
+    process.on("SIGTERM", onSignal)
+  })
 }
 
 export async function runSpinosaCli(args: string[], io?: SpinosaCliIo): Promise<number> {
@@ -236,6 +274,8 @@ export async function runSpinosaCli(args: string[], io?: SpinosaCliIo): Promise<
         return await runStartupAutoclean({ io: resolvedIo, dryRun: parsed.flags.has("dry-run") })
       case "preflight":
         return await runLaunchPreflight() === "restart" ? PREFLIGHT_RESTART_EXIT_CODE : 0
+      case "web":
+        return await runWeb(parsed, resolvedIo)
       case "version":
       case "--version":
         return runVersion(resolvedIo)
