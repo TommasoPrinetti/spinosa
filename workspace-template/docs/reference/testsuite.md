@@ -55,7 +55,7 @@ flowchart LR
 **Canonical path (macOS maintainer machine):**
 
 ```text
-/Users/tommasoprinetti/Downloads/TEST-VAULT/
+~/Downloads/TEST-VAULT/
   generic-files/              # pdf, csv, docx — fast MarkItDown/structured gate
   Ex2-harvesting-tasks/       # md, jpg, mp3/mp4, transcriptions — multimodal gate
 ```
@@ -232,7 +232,7 @@ spinosa new "$CORPUS" --extensions md,txt --cli other --launch copy --no-color
 
 ### C2. `spinosa new` — TEST-VAULT integration (blocking)
 
-Uses the canonical corpus at `SPINOSA_TEST_VAULT` (default: `/Users/tommasoprinetti/Downloads/TEST-VAULT`).
+Uses the canonical corpus at `SPINOSA_TEST_VAULT` (default: `~/Downloads/TEST-VAULT`).
 
 **Prerequisites:** Phase B install complete; `spinosa doctor` shows MarkItDown + OCR available.
 
@@ -264,7 +264,7 @@ bash .bin/test-new-test-vault.sh
 **Direct invocation** (equivalent to subset script, for debugging):
 
 ```bash
-TEST_VAULT="${SPINOSA_TEST_VAULT:-/Users/tommasoprinetti/Downloads/TEST-VAULT}"
+TEST_VAULT="${SPINOSA_TEST_VAULT:-~/Downloads/TEST-VAULT}"
 CORPUS=/tmp/spinosa-test-vault-generic
 rm -rf "$CORPUS" "${CORPUS}-spinosa" 2>/dev/null || true
 rsync -a --exclude '.DS_Store' --exclude '._*' "${TEST_VAULT}/generic-files/" "$CORPUS/"
@@ -366,7 +366,7 @@ See RELEASE_GUIDE §9. Summary:
 
 1. `curl | bash` install on Ubuntu 22.04+ (amd64 or arm64)
 2. `spinosa version` / `spinosa doctor`
-3. Copy TEST-VAULT: `rsync -avz mac-host:/Users/tommasoprinetti/Downloads/TEST-VAULT/ /tmp/TEST-VAULT/`
+3. Copy TEST-VAULT: `rsync -avz mac-host:~/Downloads/TEST-VAULT/ /tmp/TEST-VAULT/`
 4. Run `SPINOSA_TEST_VAULT=/tmp/TEST-VAULT bash .bin/test-new-test-vault.sh` (subset gate)
 5. Optional: `SPINOSA_TEST_VAULT_SCOPE=mixed|full` on VM before major releases
 6. Edge matrix: PDF-only, JPG-only, empty dir, unicode filenames — build subsets under `/tmp/TEST-VAULT/` (see RELEASE_GUIDE §9c); always pass `--cli other --launch copy`

@@ -20,3 +20,24 @@ DEVELOPMENT.md            export-ignore
 # Dev tools
 tests/                    export-ignore
 /script/                  export-ignore
+
+# Package-level test directories (700+ files)
+test/                     export-ignore
+
+# Root-level project dev artifacts (not user-facing)
+/.agents/                 export-ignore
+/.assets/                 export-ignore
+
+# Workspace-template example content (not template structure)
+workspace-template/.spinosa/memory/handoff-spinosa-core-20260706.md  export-ignore
+workspace-template/.spinosa/memory/orchestrator-notes.md             export-ignore
+workspace-template/.spinosa/memory/ppu-paddle-ocr-notes.md           export-ignore
+workspace-template/raw/.ocr-processed.log                            export-ignore
+workspace-template/agent_reports/architecture-audit-2026-07-09.md    export-ignore
+workspace-template/agent_reports/bug-audit-v0.8.0-beta.10.md         export-ignore
+workspace-template/agent_reports/tui-screen-audit-2026-07-09.md      export-ignore
+workspace-template/agent_reports/tui-startup-perf.md                 export-ignore
+workspace-template/agent_reports/upgrade-update-audit-2026-07-09.md  export-ignore
+
+# Dev docs (internal work packages, not user-facing)
+/docs/                    export-ignore

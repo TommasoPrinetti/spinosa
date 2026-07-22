@@ -2,7 +2,7 @@
 
 ## Execution Directive (Standard)
 
-Implement the confirmed findings from `/Users/tommasoprinetti/Downloads/tui-performance-report.md` non-destructively on `codex/tui-performance-fixes`. Validate each recommendation against current OpenTUI and Solid behavior, preserve existing user changes, add focused proof, and keep the maintained TUI and Spinosa suites green.
+Implement the confirmed findings from the TUI performance report non-destructively on `codex/tui-performance-fixes`. Validate each recommendation against current OpenTUI and Solid behavior, preserve existing user changes, add focused proof, and keep the maintained TUI and Spinosa suites green.
 
 ## Metadata
 

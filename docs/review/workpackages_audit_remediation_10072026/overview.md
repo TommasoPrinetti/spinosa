@@ -2,7 +2,7 @@
 
 ## Execution Directive (Standard)
 
-Implement the confirmed findings from `/Users/tommasoprinetti/Downloads/spinosa-audit-report.md` non-destructively. Read this overview first, continue from the first unfinished item, run focused Bun tests and the TUI typecheck, and do not add compatibility fallbacks.
+Implement the confirmed findings from the audit report non-destructively. Read this overview first, continue from the first unfinished item, run focused Bun tests and the TUI typecheck, and do not add compatibility fallbacks.
 
 ## Metadata
 
