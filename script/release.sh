@@ -65,7 +65,10 @@ mkdir -p "$CHANNEL_DIST"
 cp install.sh "${CHANNEL_DIST}/install.sh"
 sed -i '' 's/^PINNED_VERSION=".*"/PINNED_VERSION="'"${VERSION}"'"/' "${CHANNEL_DIST}/install.sh"
 sed -i '' 's/^PINNED_TAG=".*"/PINNED_TAG="'"${CHANNEL}"'"/' "${CHANNEL_DIST}/install.sh"
-shasum -a 256 "${CHANNEL_DIST}/install.sh" | awk '{print $1"  "$2}' > "${CHANNEL_DIST}/checksums.txt"
+(
+  cd "$CHANNEL_DIST"
+  shasum -a 256 install.sh | awk '{print $1"  "$2}' > checksums.txt
+)
 
 # Push tag
 git push origin "refs/tags/${TAG}"

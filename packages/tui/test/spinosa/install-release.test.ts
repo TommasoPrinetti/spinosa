@@ -168,6 +168,7 @@ describe("install and release flow", () => {
     expect(releaseScript).toContain("git archive --format=tar.gz")
     expect(releaseScript).toContain('"${DIST}/${ARCHIVE_NAME}"')
     expect(releaseScript).toContain("shasum -a 256 install.sh")
+    expect(releaseScript).toContain('cd "$CHANNEL_DIST"')
   })
 
   test("installer uses one global lock and stages before replacing a version", async () => {
