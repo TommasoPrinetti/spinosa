@@ -8,7 +8,7 @@ import { installedUpgradeVersion, verifyInstallerChecksum } from "../../src/spin
 const repoRoot = path.resolve(import.meta.dir, "../../../..")
 
 describe("install and release flow", () => {
-  test("installer dry-run uses GitHub auto-tarball and workspace-template layout", async () => {
+  test("installer dry-run uses immutable release archive and workspace-template layout", async () => {
     await using tmp = await tmpdir()
     const result = Bun.spawnSync({
       cmd: [
@@ -34,9 +34,94 @@ describe("install and release flow", () => {
 
     const output = `${result.stdout.toString()}\n${result.stderr.toString()}`
     expect(result.exitCode).toBe(0)
-    expect(output).toContain("https://github.com/medialab/spinosa/archive/refs/tags/v0.8.0-beta.16.tar.gz")
+    expect(output).toContain("https://github.com/medialab/spinosa/releases/download/v0.8.0-beta.16/spinosa-v0.8.0-beta.16.tar.gz")
     expect(output).toContain(`/versions/0.8.0-beta.16/`)
     expect(output).not.toContain("spinosa-framework-")
+    expect(existsSync(path.join(tmp.path, "home"))).toBe(false)
+    expect(output).not.toContain("\u001b[")
+  })
+
+  test("installer rejects unsafe and foreign install roots without mutating them", async () => {
+    await using tmp = await tmpdir()
+    const foreignHome = path.join(tmp.path, "foreign")
+    const sentinel = path.join(foreignHome, "keep.txt")
+    await mkdir(foreignHome, { recursive: true })
+    await Bun.write(sentinel, "keep\n")
+
+    const foreign = Bun.spawnSync({
+      cmd: ["bash", path.join(repoRoot, "install.sh"), "--dry-run", "--prefix", foreignHome, "--version", "1.0.0"],
+      env: { ...process.env, NO_COLOR: "1" },
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    const root = Bun.spawnSync({
+      cmd: ["bash", path.join(repoRoot, "install.sh"), "--dry-run", "--prefix", "/", "--version", "1.0.0"],
+      env: { ...process.env, NO_COLOR: "1" },
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+
+    expect(foreign.exitCode).toBe(1)
+    expect(root.exitCode).toBe(1)
+    expect(await Bun.file(sentinel).text()).toBe("keep\n")
+  })
+
+  test("non-TTY steps report lifecycle, enforce timeout, and emit no control bytes", () => {
+    const installer = path.join(repoRoot, "install.sh")
+    const result = Bun.spawnSync({
+      cmd: ["bash", "-c", 'installer="$1"; set --; source "$installer"; run_timed_step "Hung step" 1 bash -c "sleep 5"', "test", installer],
+      env: { ...process.env, SPINOSA_INSTALLER_LIB_ONLY: "1", NO_COLOR: "1" },
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    const output = `${result.stdout.toString()}${result.stderr.toString()}`
+    expect(result.exitCode).toBe(124)
+    expect(output).toContain("START Hung step (timeout 1s)")
+    expect(output).toContain("timed out after 1s")
+    expect(output).not.toContain("\u001b[")
+  })
+
+  test("installer never evicts a lock owned by a live process", async () => {
+    await using tmp = await tmpdir()
+    const home = path.join(tmp.path, "home")
+    await mkdir(path.join(home, "metadata"), { recursive: true })
+    await mkdir(path.join(home, "versions", ".install.lock"), { recursive: true })
+    await Bun.write(path.join(home, "metadata", "config.yaml"), "spinosa: true\n")
+    await Bun.write(path.join(home, "versions", ".install.lock", "pid"), `${process.pid}\n`)
+
+    const result = Bun.spawnSync({
+      cmd: ["bash", path.join(repoRoot, "install.sh"), "--yes", "--version", "1.0.0"],
+      env: {
+        ...process.env,
+        SPINOSA_HOME: home,
+        SPINOSA_BIN_DIR: path.join(tmp.path, "bin"),
+        NO_COLOR: "1",
+      },
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+
+    expect(result.exitCode).toBe(1)
+    expect(result.stderr.toString()).toContain("Another Spinosa installer is running")
+    expect(existsSync(path.join(home, "versions", ".install.lock"))).toBe(true)
+  })
+
+  test("installer compares SemVer without GNU sort", () => {
+    const installer = path.join(repoRoot, "install.sh")
+    const result = Bun.spawnSync({
+      cmd: [
+        "bash",
+        "-c",
+        'installer="$1"; set --; source "$installer"; compare_versions 1.10.0 1.9.0 || a=$?; compare_versions 1.0.0-beta.2 1.0.0-beta.10 || b=$?; compare_versions 1.0.0 1.0.0-rc.1 || c=$?; printf "%s %s %s\\n" "$a" "$b" "$c"',
+        "test",
+        installer,
+      ],
+      env: { ...process.env, SPINOSA_INSTALLER_LIB_ONLY: "1", NO_COLOR: "1" },
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    expect(result.exitCode).toBe(0)
+    expect(result.stdout.toString().trim()).toBe("1 2 1")
   })
 
   test("committed installer version matches package version", async () => {
@@ -80,6 +165,8 @@ describe("install and release flow", () => {
     expect(releaseScript).toContain("CHANNEL_DIST=\"dist/${CHANNEL}\"")
     expect(releaseScript).toContain("\"${CHANNEL_DIST}/install.sh\"")
     expect(releaseScript).toContain("\"${CHANNEL_DIST}/checksums.txt\"")
+    expect(releaseScript).toContain("git archive --format=tar.gz")
+    expect(releaseScript).toContain('"${DIST}/${ARCHIVE_NAME}"')
     expect(releaseScript).toContain("shasum -a 256 install.sh")
   })
 

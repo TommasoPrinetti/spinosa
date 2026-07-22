@@ -40,13 +40,24 @@ if [ -n "$(git status --porcelain)" ]; then
   exit 1
 fi
 
+# Create the immutable tag before building its source archive.
+if ! git rev-parse "$TAG" >/dev/null 2>&1; then
+  git tag "$TAG"
+  echo "→ Created tag $TAG"
+fi
+
 # Prepare tag assets
 DIST="dist/v${VERSION}"
 mkdir -p "$DIST"
 cp install.sh "${DIST}/install.sh"
 sed -i '' 's/^PINNED_VERSION=".*"/PINNED_VERSION="'"${VERSION}"'"/' "${DIST}/install.sh"
 sed -i '' 's/^PINNED_TAG=".*"/PINNED_TAG="'"${TAG}"'"/' "${DIST}/install.sh"
-shasum -a 256 "${DIST}/install.sh" | awk '{print $1"  "$2}' > "${DIST}/checksums.txt"
+ARCHIVE_NAME="spinosa-v${VERSION}.tar.gz"
+git archive --format=tar.gz --prefix="spinosa-${VERSION}/" -o "${DIST}/${ARCHIVE_NAME}" "$TAG"
+(
+  cd "$DIST"
+  shasum -a 256 install.sh "$ARCHIVE_NAME" | awk '{print $1"  "$2}' > checksums.txt
+)
 
 # Prepare channel assets (PINNED_TAG = channel name for upgrade resolution)
 CHANNEL_DIST="dist/${CHANNEL}"
@@ -55,12 +66,6 @@ cp install.sh "${CHANNEL_DIST}/install.sh"
 sed -i '' 's/^PINNED_VERSION=".*"/PINNED_VERSION="'"${VERSION}"'"/' "${CHANNEL_DIST}/install.sh"
 sed -i '' 's/^PINNED_TAG=".*"/PINNED_TAG="'"${CHANNEL}"'"/' "${CHANNEL_DIST}/install.sh"
 shasum -a 256 "${CHANNEL_DIST}/install.sh" | awk '{print $1"  "$2}' > "${CHANNEL_DIST}/checksums.txt"
-
-# Create tag if it doesn't exist
-if ! git rev-parse "$TAG" >/dev/null 2>&1; then
-  git tag "$TAG"
-  echo "→ Created tag $TAG"
-fi
 
 # Push tag
 git push origin "refs/tags/${TAG}"
@@ -72,6 +77,7 @@ gh release create "$TAG" \
   --generate-notes \
   $PRERELEASE \
   "${DIST}/install.sh" \
+  "${DIST}/${ARCHIVE_NAME}" \
   "${DIST}/checksums.txt"
 echo "→ Release v${VERSION} created"
 

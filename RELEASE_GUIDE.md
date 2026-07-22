@@ -45,7 +45,7 @@ bash script/release.sh v0.8.0-beta.1     # beta
 bash script/release.sh v0.7.7             # stable
 ```
 
-Creates the GitHub Release, uploads `install.sh` + `checksums.txt`, syncs the rolling channel tag.
+Creates the GitHub Release, uploads `install.sh`, the immutable source archive, and `checksums.txt`, then syncs the rolling channel tag.
 
 ---
 
@@ -86,11 +86,15 @@ git commit -m "release: v0.8.0-beta.1"
 VERSION="0.8.0-beta.18"
 DIST="dist/v${VERSION}"
 mkdir -p "$DIST"
+git tag "v${VERSION}"
 
 cp install.sh "${DIST}/install.sh"
 sed -i '' 's/^PINNED_VERSION=".*"/PINNED_VERSION="'"${VERSION}"'"/' "${DIST}/install.sh"
 sed -i '' 's/^PINNED_TAG=".*"/PINNED_TAG="v'"${VERSION}"'"/' "${DIST}/install.sh"
-shasum -a 256 "${DIST}/install.sh" | awk '{print $1"  "$2}' > "${DIST}/checksums.txt"
+git archive --format=tar.gz --prefix="spinosa-${VERSION}/" \
+  -o "${DIST}/spinosa-v${VERSION}.tar.gz" "v${VERSION}"
+(cd "$DIST" && shasum -a 256 install.sh "spinosa-v${VERSION}.tar.gz" \
+  | awk '{print $1"  "$2}' > checksums.txt)
 ```
 
 ### 6. Create GitHub Release
@@ -101,6 +105,7 @@ gh release create "v${VERSION}" \
   --generate-notes \
   $([[ "$VERSION" == *-* ]] && echo "--prerelease") \
   "dist/v${VERSION}/install.sh" \
+  "dist/v${VERSION}/spinosa-v${VERSION}.tar.gz" \
   "dist/v${VERSION}/checksums.txt"
 ```
 
