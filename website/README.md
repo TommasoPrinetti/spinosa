@@ -1,42 +1,37 @@
-# sv
+# spinosa-website
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+A SvelteKit project for the Spinosa documentation and landing page. Built with SvelteKit 5, Tailwind CSS v4, and the static adapter.
 
-## Creating a project
-
-If you're seeing this, you've probably already done this step. Congrats!
+## Setup
 
 ```sh
-# create a new project
-npx sv create my-app
+bun install
 ```
 
-To recreate this project with the same configuration:
+## Development
 
 ```sh
-# recreate this project
-bun x sv@0.16.1 create --template minimal --types ts --add prettier tailwindcss="plugins:none" sveltekit-adapter="adapter:vercel" mcp="ide:opencode" --install bun spinosa-website
+bun dev          # Start the dev server
 ```
 
-## Developing
-
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
+## Build
 
 ```sh
-npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
+bun build        # Build for production -> website/build/
+bun run preview  # Preview the production build
 ```
 
-## Building
-
-To create a production version of your app:
+## Quality checks
 
 ```sh
-npm run build
+bun run lint     # Check code style with prettier
+bun run check    # Typecheck with svelte-check
 ```
 
-You can preview the production build with `npm run preview`.
+Run `lint` before `check`.
 
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+## Deployment
+
+The site deploys to GitHub Pages when you push to `beta` or `main`.
+
+Site URL: `https://medialab.github.io/spinosa/`
