@@ -131,10 +131,6 @@ export function Home() {
     if (!workspacePath || spinosa.genericMode) return undefined
     return workspaceAsciiBannerText(workspacePath)
   })
-  const workspaceBannerFits = createMemo(() => {
-    const banner = workspaceBannerText()
-    return Boolean(banner && banner.length * 9 <= dimensions().width - 4)
-  })
   const versionLabel = createMemo(() => {
     const parts: string[] = []
     if (bundledVersion()) parts.push(`Spinosa v${bundledVersion()}`)
@@ -266,6 +262,7 @@ export function Home() {
   createEffect(() => {
     if (!startupPrompt() || providerConnected() || providerPromptRequested) return
     providerPromptRequested = true
+    if (dialog.stack.length > 0) return
     dialog.replace(() => <DialogProvider />)
   })
 
@@ -410,29 +407,32 @@ export function Home() {
             </Show>
             <pluginRuntime.Slot name="home_logo" mode="replace">
               <Show when={workspaceBannerText()} fallback={<Logo />}>
-                {(banner) => (
-                  <Show
-                    when={workspaceBannerFits()}
-                    fallback={
-                      <text
-                        width="100%"
-                        fg={theme.text}
-                        attributes={TextAttributes.BOLD}
-                        wrapMode="none"
-                        overflow="hidden"
-                      >
-                        {banner()}
-                      </text>
-                    }
-                  >
-                    <ascii_font
-                      text={banner()}
-                      font="block"
-                      color={theme.text}
-                      selectable={false}
-                    />
-                  </Show>
-                )}
+                {(banner) => {
+                  let scroll: any
+                  onMount(() => {
+                    const totalWidth = banner().length * 9
+                    const viewWidth = dimensions().width - 4
+                    if (totalWidth <= viewWidth) return
+                    const timer = setInterval(() => {
+                      if (!scroll) return
+                      scroll.scrollBy(1)
+                      if (scroll.scrollLeft >= totalWidth - viewWidth) {
+                        scroll.scrollLeft = 0
+                      }
+                    }, 40)
+                    onCleanup(() => clearInterval(timer))
+                  })
+                  return (
+                    <scrollbox ref={(r) => (scroll = r)} width="100%" scrollX overflow="hidden">
+                      <ascii_font
+                        text={banner()}
+                        font="block"
+                        color={theme.text}
+                        selectable={false}
+                      />
+                    </scrollbox>
+                  )
+                }}
               </Show>
             </pluginRuntime.Slot>
           </box>
