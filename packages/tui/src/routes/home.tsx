@@ -407,32 +407,14 @@ export function Home() {
             </Show>
             <pluginRuntime.Slot name="home_logo" mode="replace">
               <Show when={workspaceBannerText()} fallback={<Logo />}>
-                {(banner) => {
-                  let scroll: any
-                  onMount(() => {
-                    const totalWidth = banner().length * 9
-                    const viewWidth = dimensions().width - 4
-                    if (totalWidth <= viewWidth) return
-                    const timer = setInterval(() => {
-                      if (!scroll) return
-                      scroll.scrollBy(1)
-                      if (scroll.scrollLeft >= totalWidth - viewWidth) {
-                        scroll.scrollLeft = 0
-                      }
-                    }, 40)
-                    onCleanup(() => clearInterval(timer))
-                  })
-                  return (
-                    <scrollbox ref={(r) => (scroll = r)} width="100%" scrollX overflow="hidden">
-                      <ascii_font
-                        text={banner()}
-                        font="block"
-                        color={theme.text}
-                        selectable={false}
-                      />
-                    </scrollbox>
-                  )
-                }}
+                {(banner) => (
+                  <ascii_font
+                    text={banner()}
+                    font="block"
+                    color={theme.text}
+                    selectable={false}
+                  />
+                )}
               </Show>
             </pluginRuntime.Slot>
           </box>
