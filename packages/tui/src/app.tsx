@@ -57,6 +57,7 @@ import { FrecencyProvider } from "./component/prompt/frecency"
 import { PromptStashProvider } from "./component/prompt/stash"
 import { DialogAlert } from "./ui/dialog-alert"
 import { DialogConfirm } from "./ui/dialog-confirm"
+import { UpgradeScreen } from "./component/upgrade-screen"
 import { ToastProvider, useToast } from "./ui/toast"
 import { isDefaultTitle } from "./util/session"
 import { setToastError } from "./spinosa/log"
@@ -468,8 +469,26 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     },
     { priority: 1 },
   )
+  // Always enable cmd+c/ctrl+c copy when text is selected, regardless of the copy-on-select flag
+  const offSelectionCopy = keymap.intercept(
+    "key",
+    ({ event }) => {
+      if (!(event.ctrl && event.name === "c")) return
+      const text = renderer.getSelection()?.getSelectedText()
+      if (!text || !clipboard.write) return
+      clipboard
+        .write(text)
+        .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
+        .catch(toast.error)
+      renderer.clearSelection()
+      event.preventDefault()
+      event.stopPropagation()
+    },
+    { priority: 1 },
+  )
   onCleanup(() => {
     offSelectionKeys()
+    offSelectionCopy()
     attention.dispose()
   })
 
@@ -573,17 +592,41 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
   })
 
   const connected = useConnected()
+  let resetProviderDialogOpened = false
 
   createEffect(
     on(
-      () => sync.status === "complete" && !connected(),
+      () => tuiReady() && sync.status === "complete" && (!connected() || args.reset),
       (needsProvider, neededProvider) => {
         // Open once when bootstrap confirms there is no usable provider.
-        if (!needsProvider || neededProvider) return
+        if (!needsProvider) return
+        if (args.reset) {
+          if (resetProviderDialogOpened) return
+          resetProviderDialogOpened = true
+        } else if (neededProvider) return
         dialog.replace(() => <DialogProviderList />)
       },
     ),
   )
+
+  // When the provider dialog is dismissed without selecting a provider,
+  // auto-select the free Spinosa default (OpenCode Zen)
+  createEffect(() => {
+    if (
+      tuiReady() &&
+      dialog.stack.length === 0 &&
+      sync.status === "complete" &&
+      !connected()
+    ) {
+      const provider = sync.data.provider.find((item) => item.id === "opencode")
+      const model = Object.values(provider?.models ?? {}).find(
+        (item) => item.cost?.input === 0 && item.status !== "deprecated",
+      )
+      if (provider && model) {
+        local.model.set({ providerID: provider.id, modelID: model.id }, { recent: true })
+      }
+    }
+  })
 
   const currentWorktreeWorkspace = createMemo(() => {
     const workspaceID = project.workspace.current()
@@ -1111,29 +1154,12 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     return render({ params: route.data.data })
   })
 
-  const [upgradePrompted, setUpgradePrompted] = createSignal(false)
+  const [upgradeActive, setUpgradeActive] = createSignal(false)
   createEffect(() => {
+    if (!tuiReady()) return
     const health = spinosa.bootHealth
-    if (!health?.upgrade?.available || upgradePrompted()) return
-    setUpgradePrompted(true)
-    void (async () => {
-      const upg = health!.upgrade!
-      const choice = await DialogConfirm.show(
-        dialog,
-        "Update Available",
-        `Spinosa v${upg.latestVersion} is available (current: v${upg.currentVersion}). Update now?`,
-        { confirmLabel: "Yes", cancelLabel: "No", defaultChoice: "confirm" },
-      )
-      if (choice !== true) return
-      const { upgradeFramework } = await import("./spinosa-core/commands/upgrade")
-      const result = await upgradeFramework({ version: upg.latestVersion, yes: true, suppressInstallOutput: true })
-      if (result.success) {
-        console.log("Run spinosa")
-      } else {
-        console.log(`Upgrade failed. Run "spinosa upgrade" manually.`)
-      }
-      void exit()
-    })()
+    if (!health?.upgrade?.available) return
+    setUpgradeActive(true)
   })
 
   return (
@@ -1164,7 +1190,13 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
           <Show when={route.data.type === "workspace"}>
             <Session />
           </Show>
-          <Show when={route.data.type === "global"}>
+          <Show when={route.data.type === "global" && upgradeActive()}>
+            <UpgradeScreen
+              upgrade={spinosa.bootHealth!.upgrade!}
+              onClose={() => exit()}
+            />
+          </Show>
+          <Show when={route.data.type === "global" && !upgradeActive()}>
             <Home />
           </Show>
           <Show when={route.data.type === "onboarding"}>
