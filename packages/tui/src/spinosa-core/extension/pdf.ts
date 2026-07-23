@@ -9,6 +9,19 @@ import {
 
 export { pdfExtractAllText, pdfExtractPageTexts, pdfRenderPageToPng } from "./pdf-js"
 
+const QUICK_SCAN_LEN = 262144
+const PDFJS_TIMEOUT_MS = 5000
+
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(`Timed out after ${ms}ms`)), ms)
+    p.then(
+      (v) => { clearTimeout(t); resolve(v) },
+      (e) => { clearTimeout(t); reject(e) },
+    )
+  })
+}
+
 export async function pdfPageCount(pdfPath: string): Promise<number> {
   try {
     return await jsPdfPageCount(pdfPath)
@@ -42,22 +55,30 @@ export async function pdfTextPagesMeetThreshold(
 export async function isTextBasedPdf(pdfPath: string): Promise<boolean> {
   if (fileExt(pdfPath) !== "pdf") return false
 
-  let header: Buffer
+  let data: Buffer
   try {
-    header = (await readFile(pdfPath)).subarray(0, 262144)
+    data = await readFile(pdfPath)
   } catch {
     return false
   }
 
-  if (searchBuffer(header, Buffer.from("/Encrypt"), 0, header.length)) return false
+  if (searchBuffer(data, Buffer.from("/Encrypt"), 0, data.length)) return false
 
-  const quickLen = Math.min(header.length, 262144)
   if (
-    searchBuffer(header, Buffer.from("/Font"), 0, quickLen) ||
-    searchBuffer(header, Buffer.from("/CIDFont"), 0, quickLen)
+    searchBuffer(data, Buffer.from("/Font"), 0, QUICK_SCAN_LEN) ||
+    searchBuffer(data, Buffer.from("/CIDFont"), 0, QUICK_SCAN_LEN)
   ) return true
+
+  if (
+    searchBuffer(data, Buffer.from("/Font"), QUICK_SCAN_LEN, data.length) ||
+    searchBuffer(data, Buffer.from("/CIDFont"), QUICK_SCAN_LEN, data.length)
+  ) return true
+
   try {
-    return await withPdfDocument(pdfPath, (doc) => pdfDocumentTextPagesMeetThreshold(doc))
+    return await withTimeout(
+      withPdfDocument(pdfPath, (doc) => pdfDocumentTextPagesMeetThreshold(doc)),
+      PDFJS_TIMEOUT_MS,
+    )
   } catch {
     return false
   }
