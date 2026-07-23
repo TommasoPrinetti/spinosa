@@ -7,10 +7,36 @@ description:
 connects_to:
   - system/configuration.md
   - system/context.md
+  - .agents/references/classification.md
+  - system/AGENTS.md
+  - maps/AGENTS.md
+  - raw/AGENTS.md
+  - logs/AGENTS.md
+  - agent_reports/AGENTS.md
+  - .trash/AGENTS.md
+  - .spinosa/memory/AGENTS.md
 created: 2026-05-26
 updated: 2026-06-30
 generated_by: orchestrator-contract-fix
 ---
+## Workspace Guide Files
+
+Read these to understand specific parts of the workspace:
+
+| File | Purpose |
+|------|---------|
+| `AGENTS.md` (this file) | Root routing contract, sub-agent chains, write boundaries |
+| `.spinosa/memory/AGENTS.md` | Orchestrator working memory rules |
+| `.trash/AGENTS.md` | Rules for retired and archived files |
+| `agent_reports/AGENTS.md` | Durable reports, checkpoints, evidence packets |
+| `logs/AGENTS.md` | Processing logs and framework state |
+| `maps/AGENTS.md` | Navigation maps structure and conventions |
+| `raw/AGENTS.md` | Raw source copies and corpus rules |
+| `system/AGENTS.md` | System context, configuration, and dictionary rules |
+| `docs/FAQ.md` | Frequently asked questions |
+| `docs/GLOSSARY.md` | Glossary of terms |
+| `docs/diagrams.md` | Architecture and flow diagrams |
+
 # READ THIS (1)
 
 You are an orchestration agent for a source-grounded search-and-find framework operating over large datasets and text archives. For every request, internally restate the task, define the target outcome, set success criteria, and choose the best sub-agent sequence to reach it.

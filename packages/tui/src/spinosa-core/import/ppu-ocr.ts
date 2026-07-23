@@ -64,12 +64,19 @@ function pageDirFor(destFile: string): string {
   return destFile.endsWith(".md") ? destFile.slice(0, -3) : `${destFile}_pages`
 }
 
+function cleanOcrBody(body: string): string {
+  let cleaned = stripAnsi(body).trim()
+  cleaned = cleaned.replace(/!\[.*?\]\(data:image\/[^)]+\)/g, "")
+  cleaned = cleaned.replace(/!\[\]\(\)/g, "")
+  cleaned = cleaned.replace(/\n{3,}/g, "\n\n")
+  return cleaned || "[No text detected]"
+}
+
 function writeMarkdown(destFile: string, title: string, body: string, sourceRel: string, confidence?: number): void {
   mkdirSync(path.dirname(destFile), { recursive: true })
-  const confidenceLine = typeof confidence === "number" ? `\nOCR confidence: ${confidence.toFixed(3)}\n` : ""
   writeTextAtomicSafe(
     destFile,
-    `# ${title}\n\nConverted from \`${sourceRel}\` with ppu-paddle-ocr.${confidenceLine}\n${stripAnsi(body).trim() || "[No text detected]"}\n`,
+    `# ${title}\n\n${cleanOcrBody(body)}\n`,
   )
   injectColdFrontmatter(destFile)
 }
@@ -96,7 +103,7 @@ function writeSplitPages(destFile: string, title: string, sourceRel: string, pag
         "",
         `# ${title} - Page ${displayPage}`,
         "",
-        pages.get(pageNumber)?.trim() || "[No text detected on this page]",
+        cleanOcrBody(pages.get(pageNumber) || "") || "[No text detected on this page]",
         "",
       ].join("\n"),
     )
