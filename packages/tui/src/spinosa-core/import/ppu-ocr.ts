@@ -153,10 +153,10 @@ async function ppuService(onLog?: (line: string) => void): Promise<PaddleOcrServ
           } as Record<string, unknown>
         }
         onLog?.("PPU PaddleOCR: step 1 - dynamic import...")
-        const { PaddleOcrService: OcrService } = await import("ppu-paddle-ocr")
+        const { PaddleOcrService: OcrService, V6_MEDIUM_MODEL } = await import("ppu-paddle-ocr")
         if (needsPolyfill) delete (globalThis as Record<string, unknown>).document
         onLog?.("PPU PaddleOCR: step 2 - import OK, constructing...")
-        const instance = new OcrService({ processing: { engine: "canvas-native" } })
+        const instance = new OcrService({ model: V6_MEDIUM_MODEL, processing: { engine: "canvas-native" } })
         onLog?.("PPU PaddleOCR: step 3 - constructed, initializing...")
         await instance.initialize()
         onLog?.("PPU PaddleOCR: step 4 - ready")
