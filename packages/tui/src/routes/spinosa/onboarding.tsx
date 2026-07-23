@@ -281,6 +281,7 @@ export function Onboarding() {
   let spinTimer: ReturnType<typeof setInterval> | undefined
   const spinOn = () => { if (!spinTimer) spinTimer = setInterval(() => setSpinIdx((i) => (i + 1) % 14), 200) }
   const spinOff = () => { if (spinTimer) { clearInterval(spinTimer); spinTimer = undefined; setSpinIdx(0) } }
+  const [stopping, setStopping] = createSignal(false)
   const [gateLabel, setGateLabel] = createSignal("")
   const [gateAction, setGateAction] = createSignal<() => void>(() => {})
   const [waitingForGate, setWaitingForGate] = createSignal(false)
@@ -436,9 +437,7 @@ let nameInput: TextareaRenderable | undefined
   })
 
   const stopActiveWork = () => {
-    if (CANCELABLE_STEPS.some((candidate) => candidate === step())) {
-      setProcessingStatus("Stopping current operation...")
-    }
+    setStopping(true)
     if (gateResolve) { gateResolve(); gateResolve = undefined }
     workflow.bump()
     abortProcessing = true
@@ -486,13 +485,13 @@ let nameInput: TextareaRenderable | undefined
         step: from,
         busy: busy(),
         waitingForGate: waitingForGate(),
-        cancellableSteps: CANCELABLE_STEPS,
+        cancellableSteps: CANCELABLE_STEPS as unknown as string[],
       }),
       confirm: () => confirmSpinosaBack(dialog, from),
       stop: stopActiveWork,
       waitForStop: () => activeWork.wait(),
       navigate: () => navigateBackFrom(from),
-    }).finally(() => { backNavigationPending = false })
+    }).finally(() => { backNavigationPending = false; setStopping(false) })
   }
 
   const handleBackPress = () => requestBack(true)
@@ -1227,7 +1226,15 @@ let nameInput: TextareaRenderable | undefined
   )
 
   return (
-    <CenteredColumn>
+    <Show when={!stopping()} fallback={
+      <box width="100%" height="100%" alignItems="center" justifyContent="center">
+        <box flexDirection="column" alignItems="center" gap={1}>
+          <text fg={theme.textMuted}>{waveString(spinIdx())}</text>
+          <text fg={theme.textMuted}>Stopping process, exit cleanly, wait</text>
+        </box>
+      </box>
+    }>
+      <CenteredColumn>
       <box flexGrow={1} alignItems="center" paddingLeft={2} paddingRight={2}>
         <box flexGrow={1} minHeight={0} />
         <box width="100%" maxWidth={72} flexDirection="column" gap={1}>
@@ -1613,5 +1620,6 @@ let nameInput: TextareaRenderable | undefined
         <box flexGrow={1} minHeight={0} />
       </box>
     </CenteredColumn>
+    </Show>
   )
 }
