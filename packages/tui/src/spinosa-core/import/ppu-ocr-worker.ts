@@ -2,7 +2,6 @@ import { runPpuOcrBatch, type PpuOcrFile } from "./ppu-ocr"
 
 interface WorkerInput {
   files: PpuOcrFile[]
-  engine?: "ppu-paddle-ocr" | "trocr"
 }
 
 function send(type: string, payload: Record<string, unknown> = {}) {
@@ -12,19 +11,6 @@ function send(type: string, payload: Record<string, unknown> = {}) {
 async function main() {
   const input = JSON.parse(process.argv[2]) as WorkerInput
   const { files } = input
-  const engine = input.engine ?? process.env.SPINOSA_OCR_ENGINE ?? "ppu-paddle-ocr"
-
-  if (engine === "trocr" || engine === "trocr-hybrid") {
-    send("log", { message: `Using TrOCR (${engine}) engine for ${files.length} file(s)` })
-    const { trocrBatch } = await import("./ppu-ocr-trocr")
-    process.env.SPINOSA_OCR_ENGINE = engine
-    const result = await trocrBatch(files, {
-      onLog: (msg) => send("log", { message: msg }),
-    })
-    send("done", { converted: result.converted, skipped: result.skipped })
-    process.exit(0)
-    return
-  }
 
   const result = await runPpuOcrBatch(files, {
     onLog: (msg) => send("log", { message: msg }),
