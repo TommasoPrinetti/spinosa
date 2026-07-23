@@ -50,6 +50,8 @@
     "./component/spinner": "./src/component/spinner.tsx"
   },
   "dependencies": {
+    "@huggingface/transformers": "4.2.0",
+    "@img/sharp-darwin-arm64": "0.35.3",
     "@napi-rs/canvas": "1.0.2",
     "@opencode-ai/core": "workspace:*",
     "@opencode-ai/plugin": "workspace:*",
