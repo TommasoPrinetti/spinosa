@@ -63,6 +63,7 @@ import { setToastError, tuiLog } from "./spinosa/log"
 import { KVProvider, useKV } from "./context/kv"
 import { KV } from "./constants/kv-keys"
 import { readWrkWorkspaceID, writeMarkerWrkID } from "./spinosa-core/workspace/identity"
+import { dbg } from "./util/debug-log"
 import * as Model from "./util/model"
 import { ArgsProvider, useArgs, type Args } from "./context/args"
 import open from "open"
@@ -166,20 +167,28 @@ function SpinosaSyncProvider(props: ParentProps) {
       return
     }
     const fromMarker = readWrkWorkspaceID(path)
+    dbg("[spinosa:bridge:wrk]", { path, fromMarker: fromMarker ?? null })
     if (fromMarker) {
       kv.set(KV.ACTIVE_WRK_WORKSPACE_ID, fromMarker)
       project.workspace.set(fromMarker)
+      tuiLog(`wrk bridge: loaded from marker ${fromMarker}`)
       return
     }
     sdk.client.experimental.workspace.list()
-      .then((r) => r.data?.find((w) => w.directory === path))
+      .then((resp) => {
+        const existing = resp.data?.find((w) => w.directory === path)
+        dbg("[spinosa:bridge:wrk] server list", { count: resp.data?.length ?? 0, found: existing?.id ?? null })
+        return existing
+      })
       .then((existing) => {
         if (existing?.id) {
           writeMarkerWrkID(path, existing.id)
           kv.set(KV.ACTIVE_WRK_WORKSPACE_ID, existing.id)
           project.workspace.set(existing.id)
+          tuiLog(`wrk bridge: found existing ${existing.id}`)
           return null
         }
+        dbg("[spinosa:bridge:wrk] creating new workspace", {})
         return sdk.client.experimental.workspace.create({ type: "directory", branch: null })
       })
       .then((created: any) => {
@@ -187,7 +196,14 @@ function SpinosaSyncProvider(props: ParentProps) {
           writeMarkerWrkID(path, created.data.id)
           kv.set(KV.ACTIVE_WRK_WORKSPACE_ID, created.data.id)
           project.workspace.set(created.data.id)
+          tuiLog(`wrk bridge: created ${created.data.id}`)
+        } else if (created) {
+          dbg("[spinosa:bridge:wrk] create returned no id", { created: JSON.stringify(created) })
         }
+      })
+      .catch((err) => {
+        dbg("[spinosa:bridge:wrk] failed", { error: String(err) })
+        tuiLog(`wrk bridge: failed — ${err instanceof Error ? err.message : String(err)}`)
       })
   })
   return (
@@ -690,7 +706,12 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         suggested: sync.data.session.length > 0,
         slashName: "sessions",
         slashAliases: ["session", "resume", "continue"],
-        run: () => {
+        run: async () => {
+          const cur = route.data
+          if (cur.type === "workspace" && cur.sessionID) {
+            const st = sync.data.session_status?.[cur.sessionID]
+            if (st?.type !== "idle") await sdk.client.session.abort({ sessionID: cur.sessionID }).catch(() => {})
+          }
           dialog.replace(() => <DialogSessionList />)
         },
       },
@@ -701,10 +722,13 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         category: "Session",
         slashName: "new",
         slashAliases: ["clear"],
-        run: () => {
-          route.navigate({
-            type: "global",
-          })
+        run: async () => {
+          const cur = route.data
+          if (cur.type === "workspace" && cur.sessionID) {
+            const st = sync.data.session_status?.[cur.sessionID]
+            if (st?.type !== "idle") await sdk.client.session.abort({ sessionID: cur.sessionID }).catch(() => {})
+          }
+          route.navigate({ type: "global" })
           dialog.clear()
         },
       },

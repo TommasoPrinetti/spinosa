@@ -417,8 +417,6 @@ export function Prompt(props: PromptProps) {
         enabled: status().type !== "idle",
         run: () => {
           if (auto()?.visible) return
-          if (!input.focused) return
-          // TODO: this should be its own command
           if (store.mode === "shell") {
             setStore("mode", "normal")
             return
@@ -1647,7 +1645,7 @@ export function Prompt(props: PromptProps) {
                     })()}
                   </box>
                 </box>
-                <text fg={store.interrupt > 0 ? theme.primary : theme.text}>
+                <text fg={store.interrupt > 0 ? theme.primary : theme.text} wrapMode="none">
                   esc{" "}
                   <span style={{ fg: store.interrupt > 0 ? theme.primary : theme.textMuted }}>
                     {store.interrupt > 0 ? "again to interrupt" : "interrupt"}

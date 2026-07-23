@@ -51,50 +51,50 @@ export function SubagentFooter() {
         flexShrink={0}
         backgroundColor={theme.backgroundPanel}
       >
-        <box flexDirection="row" justifyContent="space-between" gap={1}>
-          <box flexDirection="row" gap={1}>
-            <text fg={theme.text}>
-              <b>{subagentInfo().label}</b>
-            </text>
-            <Show when={subagentInfo().total > 0}>
-              <text style={{ fg: theme.textMuted }}>
-                ({subagentInfo().index} of {subagentInfo().total})
+          <box flexDirection="row" justifyContent="space-between" gap={1}>
+            <box flexDirection="row" gap={1}>
+              <text fg={theme.text} wrapMode="none">
+                <b>{subagentInfo().label}</b>
               </text>
-            </Show>
+              <Show when={subagentInfo().total > 0}>
+                <text style={{ fg: theme.textMuted }} wrapMode="none">
+                  ({subagentInfo().index} of {subagentInfo().total})
+                </text>
+              </Show>
+            </box>
+            <box flexDirection="row" gap={2}>
+              <box
+                onMouseOver={() => setHover("parent")}
+                onMouseOut={() => setHover(null)}
+                onMouseDown={() => keymap.dispatchCommand("session.parent")}
+                backgroundColor={buttonBackground(theme, hover() === "parent")}
+              >
+                <text fg={buttonText(theme, hover() === "parent", theme.text)} wrapMode="none">
+                  Parent <span style={{ fg: buttonText(theme, hover() === "parent", theme.textMuted) }}>{parentShortcut()}</span>
+                </text>
+              </box>
+              <box
+                onMouseOver={() => setHover("prev")}
+                onMouseOut={() => setHover(null)}
+                onMouseDown={() => keymap.dispatchCommand("session.child.previous")}
+                backgroundColor={buttonBackground(theme, hover() === "prev")}
+              >
+                <text fg={buttonText(theme, hover() === "prev", theme.text)} wrapMode="none">
+                  Prev <span style={{ fg: buttonText(theme, hover() === "prev", theme.textMuted) }}>{previousShortcut()}</span>
+                </text>
+              </box>
+              <box
+                onMouseOver={() => setHover("next")}
+                onMouseOut={() => setHover(null)}
+                onMouseDown={() => keymap.dispatchCommand("session.child.next")}
+                backgroundColor={buttonBackground(theme, hover() === "next")}
+              >
+                <text fg={buttonText(theme, hover() === "next", theme.text)} wrapMode="none">
+                  Next <span style={{ fg: buttonText(theme, hover() === "next", theme.textMuted) }}>{nextShortcut()}</span>
+                </text>
+              </box>
+            </box>
           </box>
-          <box flexDirection="row" gap={2}>
-            <box
-              onMouseOver={() => setHover("parent")}
-              onMouseOut={() => setHover(null)}
-              onMouseDown={() => keymap.dispatchCommand("session.parent")}
-              backgroundColor={buttonBackground(theme, hover() === "parent")}
-            >
-              <text fg={buttonText(theme, hover() === "parent", theme.text)}>
-                Parent <span style={{ fg: buttonText(theme, hover() === "parent", theme.textMuted) }}>{parentShortcut()}</span>
-              </text>
-            </box>
-            <box
-              onMouseOver={() => setHover("prev")}
-              onMouseOut={() => setHover(null)}
-              onMouseDown={() => keymap.dispatchCommand("session.child.previous")}
-              backgroundColor={buttonBackground(theme, hover() === "prev")}
-            >
-              <text fg={buttonText(theme, hover() === "prev", theme.text)}>
-                Prev <span style={{ fg: buttonText(theme, hover() === "prev", theme.textMuted) }}>{previousShortcut()}</span>
-              </text>
-            </box>
-            <box
-              onMouseOver={() => setHover("next")}
-              onMouseOut={() => setHover(null)}
-              onMouseDown={() => keymap.dispatchCommand("session.child.next")}
-              backgroundColor={buttonBackground(theme, hover() === "next")}
-            >
-              <text fg={buttonText(theme, hover() === "next", theme.text)}>
-                Next <span style={{ fg: buttonText(theme, hover() === "next", theme.textMuted) }}>{nextShortcut()}</span>
-              </text>
-            </box>
-          </box>
-        </box>
       </box>
     </box>
   )

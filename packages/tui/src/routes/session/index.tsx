@@ -16,6 +16,7 @@ import {
 import { Dynamic } from "solid-js/web"
 import path from "node:path"
 import { mkdir, writeFile } from "node:fs/promises"
+import { homedir } from "node:os"
 import { useRoute, useSessionRoute } from "../../context/route"
 import { useArgs } from "../../context/args"
 import { useProject } from "../../context/project"
@@ -205,10 +206,17 @@ function use() {
 export function Session() {
   const setEpilogue = useEpilogue()
   const clipboard = useClipboard()
-  const writeExport = async (file: string, content: string) => {
-    await mkdir(path.dirname(file), { recursive: true })
-    await writeFile(file, content)
-  }
+const writeExport = async (file: string, content: string) => {
+  await mkdir(path.dirname(file), { recursive: true })
+  await writeFile(file, content)
+}
+
+const resolveExportPath = (filename: string): string => {
+  const trimmed = filename.trim()
+  if (trimmed.startsWith("/")) return trimmed
+  if (trimmed.startsWith("~/")) return path.join(homedir(), trimmed.slice(2))
+  return path.join(homedir(), "Downloads", trimmed)
+}
   const openExportDialog = async () => {
     try {
       const sessionData = session()
@@ -236,15 +244,14 @@ export function Session() {
           cwd: (project.instance.path().worktree === "/" ? undefined : project.instance.path().worktree) || project.instance.directory() || paths.cwd,
         })
       } else {
-        const exportDir = paths.cwd
-        const filepath = path.join(exportDir, options.filename.trim())
+        const filepath = resolveExportPath(options.filename.trim())
         await writeExport(filepath, transcript)
         const result = await openEditor({
           renderer, value: transcript,
           cwd: (project.instance.path().worktree === "/" ? undefined : project.instance.path().worktree) || project.instance.directory() || paths.cwd,
         })
         if (result !== undefined) await writeExport(filepath, result)
-        toast.show({ message: `Session exported to ${options.filename.trim()}`, variant: "success" })
+        toast.show({ message: `Session exported to ${filepath}`, variant: "success" })
       }
     } catch {
       toast.show({ message: "Failed to export session", variant: "error" })
@@ -1122,9 +1129,7 @@ export function Session() {
                 paths.cwd,
             })
           } else {
-            const exportDir = paths.cwd
-            const filename = options.filename.trim()
-            const filepath = path.join(exportDir, filename)
+            const filepath = resolveExportPath(options.filename.trim())
 
             await writeExport(filepath, transcript)
 
@@ -1141,7 +1146,7 @@ export function Session() {
               await writeExport(filepath, result)
             }
 
-            toast.show({ message: `Session exported to ${filename}`, variant: "success" })
+            toast.show({ message: `Session exported to ${filepath}`, variant: "success" })
           }
         } catch {
           toast.show({ message: "Failed to export session", variant: "error" })
@@ -1307,7 +1312,16 @@ export function Session() {
               zIndex={10}
               onMouseOver={() => setBackHover(true)}
               onMouseOut={() => setBackHover(false)}
-              onMouseUp={() => navigate({ type: "global" })}
+              onMouseUp={async () => {
+                const currentID = route.sessionID
+                const status = currentID ? sync.data.session_status?.[currentID] : undefined
+                if (status?.type !== "idle" && status?.type !== undefined) {
+                  await sdk.client.session.abort({ sessionID: currentID! }).catch(() => {})
+                }
+                const s = session()
+                if (s?.parentID) navigate({ type: "workspace", sessionID: s.parentID })
+                else navigate({ type: "global" })
+              }}
               paddingLeft={2}
               paddingRight={2}
               paddingTop={1}
@@ -1467,7 +1481,7 @@ export function Session() {
                   )}
                 </For>
               </scrollbox>
-              <box flexShrink={0}>
+              <box flexShrink={0} overflow="hidden">
                 <Show when={permissions().length > 0 || questions().length > 0}>
                   <box paddingLeft={promptPadding()} paddingRight={promptPadding()}>
                     <Show when={permissions().length > 0}>
@@ -1621,7 +1635,10 @@ function ToolRailCallout(props: {
     const value = ctx.layout()
     return value.mode === "callout" ? value : undefined
   })
-  const color = createMemo(() => toolCalloutColor(props.callout.part.tool, theme))
+  const color = createMemo(() => {
+    if (props.callout.part.state.status === "error") return theme.error
+    return toolCalloutColor(props.callout.part.tool, theme)
+  })
   const railWidth = createMemo(() => layout()?.railWidth ?? 1)
   const [copied, setCopied] = createSignal(false)
 

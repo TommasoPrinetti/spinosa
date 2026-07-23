@@ -58,6 +58,7 @@ export function SessionFooter(props: { sessionID: string }) {
         borderColor={theme.border}
         backgroundColor={theme.backgroundPanel}
         flexWrap="wrap"
+        overflow="hidden"
         justifyContent="center"
       >
         <Show when={todoSummary()}>
@@ -92,7 +93,7 @@ export function SessionFooter(props: { sessionID: string }) {
 function FooterItem(props: { label: string; value: string }) {
   const { theme } = useTheme()
   return (
-    <text fg={theme.text}>
+    <text fg={theme.text} wrapMode="none" overflow="hidden" flexShrink={0}>
       <span style={{ fg: theme.textMuted }}>{props.label}</span> {props.value}
     </text>
   )
@@ -100,7 +101,7 @@ function FooterItem(props: { label: string; value: string }) {
 
 function FooterText(props: { value: string }) {
   const { theme } = useTheme()
-  return <text fg={theme.textMuted}>{props.value}</text>
+  return <text fg={theme.textMuted} wrapMode="none" overflow="hidden" flexShrink={0}>{props.value}</text>
 }
 
 function summarizeTodo(todos: Todo[]) {
