@@ -18,6 +18,7 @@ const HF_HOME = process.env.HF_HOME ?? path.join(homedir(), ".cache", "huggingfa
 const SNAPSHOT_DIR = path.join(HF_HOME, "hub", "models--Xenova--trocr-small-handwritten", "snapshots", "onnx")
 const VOCAB_DIR = path.join(HF_HOME, "hub", "models--Xenova--trocr-small-handwritten", "snapshots")
 
+const TROCR_MODEL = "Xenova/trocr-small-handwritten"
 const MODEL_FILES = [
   "encoder_model.onnx",
   "decoder_model.onnx",
@@ -39,28 +40,47 @@ async function downloadFile(url: string, dest: string): Promise<void> {
   })
 }
 
+function hfResolve(path: string): string {
+  return `https://huggingface.co/${TROCR_MODEL}/resolve/main/${path}`
+}
+
+function ensureDir(dir: string): void {
+  mkdirSync(dir, { recursive: true })
+}
+
 async function ensureModelFiles(): Promise<TrocrConfig> {
-  mkdirSync(SNAPSHOT_DIR, { recursive: true })
+  ensureDir(SNAPSHOT_DIR)
 
   for (const file of MODEL_FILES) {
     const dest = path.join(SNAPSHOT_DIR, file)
     if (!existsSync(dest)) {
-      const url = `${MODEL_REPO}/${file}`
-      console.error(`\nDownloading ${file} (~100MB)...`)
-      await downloadFile(url, dest)
+      console.error(`\nDownloading ${file} (~100MB, one-time)...`)
+      await downloadFile(hfResolve(`onnx/${file}`), dest)
     }
-  }
-
-  const vocabPath = path.join(VOCAB_DIR, "vocab.json")
-  if (!existsSync(vocabPath)) {
-    const vocabUrl = "https://huggingface.co/Xenova/trocr-small-handwritten/resolve/main/vocab.json"
-    mkdirSync(path.dirname(vocabPath), { recursive: true })
-    await downloadFile(vocabUrl, vocabPath)
   }
 
   return {
     encoderPath: path.join(SNAPSHOT_DIR, "encoder_model.onnx"),
     decoderPath: path.join(SNAPSHOT_DIR, "decoder_model.onnx"),
+  }
+}
+
+async function loadTokenizer(): Promise<void> {
+  const tokenizerPath = path.join(VOCAB_DIR, "tokenizer.json")
+  if (!existsSync(tokenizerPath)) {
+    ensureDir(path.dirname(tokenizerPath))
+    console.error("Downloading tokenizer.json...")
+    await downloadFile(hfResolve("tokenizer.json"), tokenizerPath)
+  }
+
+  const tk = JSON.parse(readFileSync(tokenizerPath, "utf-8"))
+  const rawVocab: Record<string, number> = tk.model?.vocab ?? {}
+  revVocab = {}
+  // Unigram vocab stores scores as values; token ID is the insertion order index
+  let idx = 0
+  for (const token of Object.keys(rawVocab)) {
+    revVocab[idx] = token
+    idx++
   }
 }
 
@@ -72,14 +92,7 @@ async function loadModel(): Promise<void> {
   encoderSession = await ort.InferenceSession.create(cfg.encoderPath)
   decoderSession = await ort.InferenceSession.create(cfg.decoderPath)
 
-  const vocabPath = path.join(VOCAB_DIR, "vocab.json")
-  if (existsSync(vocabPath)) {
-    const rawVocab: Record<string, number> = JSON.parse(readFileSync(vocabPath, "utf-8"))
-    revVocab = {}
-    for (const [token, id] of Object.entries(rawVocab)) {
-      revVocab[id] = token
-    }
-  }
+  await loadTokenizer()
 }
 
 function argmax(data: Float32Array | BigInt64Array): number {
@@ -109,7 +122,7 @@ async function decodeText(imageBuffer: Buffer): Promise<string> {
     for (let x = 0; x < 384; x++) {
       const idx = (y * 384 + x) * 4
       for (let c = 0; c < 3; c++) {
-        pixelValues[c * 384 * 384 + y * 384 + x] = imageData.data[idx + c] / 255
+        pixelValues[c * 384 * 384 + y * 384 + x] = (imageData.data[idx + c] / 255 - 0.5) / 0.5
       }
     }
   }
@@ -121,10 +134,10 @@ async function decodeText(imageBuffer: Buffer): Promise<string> {
   const encoderOutputName = encoderSession!.outputNames[0]
   const encoderHidden = encoderResults[encoderOutputName]
 
-  const maxLength = 64
-  const bosTokenId = 0
-  const eosTokenId = 1
-  const tokens: number[] = [bosTokenId]
+  const decoderStartTokenId = 2
+  const eosTokenId = 2
+  const maxLength = 96
+  const tokens: number[] = [decoderStartTokenId]
 
   for (let i = 0; i < maxLength; i++) {
     const inputIds = BigInt64Array.from(tokens.map((t) => BigInt(t)))
@@ -145,9 +158,10 @@ async function decodeText(imageBuffer: Buffer): Promise<string> {
 
   const text = tokens
     .slice(1)
+    .filter((id) => id !== eosTokenId)
     .map((id) => revVocab[id] ?? "")
     .join("")
-    .replace(/Ġ/g, " ")
+    .replace(/\u2581/g, " ")
     .replace(/\s+/g, " ")
     .trim()
 
