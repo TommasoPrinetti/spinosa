@@ -64,6 +64,30 @@ function pageDirFor(destFile: string): string {
   return destFile.endsWith(".md") ? destFile.slice(0, -3) : `${destFile}_pages`
 }
 
+async function fixOcrWithLlm(text: string): Promise<string> {
+  const endpoint = process.env.SPINOSA_OCR_FIX_URL
+  if (!endpoint) return text
+
+  try {
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: process.env.SPINOSA_OCR_FIX_MODEL ?? "minicpm-v",
+        messages: [{
+          role: "user",
+          content: `Fix OCR errors. Preserve line breaks and language.\n\n${text}`,
+        }],
+      }),
+    })
+    if (!res.ok) return text
+    const data = await res.json() as any
+    return (data.choices?.[0]?.message?.content ?? text).trim()
+  } catch {
+    return text
+  }
+}
+
 function cleanOcrBody(body: string): string {
   let cleaned = stripAnsi(body).trim()
   cleaned = cleaned.replace(/!\[.*?\]\(data:image\/[^)]+\)/g, "")
@@ -369,6 +393,20 @@ export async function runPpuOcrBatch(
           converted++
           injectColdFrontmatter(file.dest)
           injectPageDirFrontmatter(file.dest)
+          if (process.env.SPINOSA_OCR_FIX_URL) {
+            try {
+              const content = readFileSync(file.dest, "utf-8")
+              const body = content.replace(/^---[\s\S]*?---\n\n/, "")
+              const fixed = await fixOcrWithLlm(body)
+              if (fixed !== body) {
+                const fm = content.startsWith("---")
+                  ? content.split("\n---\n\n")[0] + "\n---\n\n"
+                  : ""
+                writeTextAtomicSafe(file.dest, fm + fixed)
+                options?.onLog?.(`  ${file.rel} → LLM-fixed`)
+              }
+            } catch { /* best-effort */ }
+          }
         } else {
           skipped++
         }
