@@ -519,7 +519,8 @@ async function runOcrWorker(
   },
 ): Promise<PpuOcrBatchResult> {
   const workerScript = workerScriptPath()
-  const workerArgs = JSON.stringify({ files })
+  const engine = process.env.SPINOSA_OCR_ENGINE ?? "ppu-paddle-ocr"
+  const workerArgs = JSON.stringify({ files, engine })
   const child = spawn(process.argv0, ["run", workerScript, workerArgs], {
     stdio: ["ignore", "pipe", "ignore"],
     detached: true,
