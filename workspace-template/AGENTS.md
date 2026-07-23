@@ -21,21 +21,17 @@ generated_by: orchestrator-contract-fix
 ---
 ## Workspace Guide Files
 
-Read these to understand specific parts of the workspace:
-
-| File | Purpose |
-|------|---------|
-| `AGENTS.md` (this file) | Root routing contract, sub-agent chains, write boundaries |
-| `.spinosa/memory/AGENTS.md` | Orchestrator working memory rules |
-| `.trash/AGENTS.md` | Rules for retired and archived files |
-| `agent_reports/AGENTS.md` | Durable reports, checkpoints, evidence packets |
-| `logs/AGENTS.md` | Processing logs and framework state |
-| `maps/AGENTS.md` | Navigation maps structure and conventions |
-| `raw/AGENTS.md` | Raw source copies and corpus rules |
-| `system/AGENTS.md` | System context, configuration, and dictionary rules |
-| `docs/FAQ.md` | Frequently asked questions |
-| `docs/GLOSSARY.md` | Glossary of terms |
-| `docs/diagrams.md` | Architecture and flow diagrams |
+- **`AGENTS.md`** (this file) — Root routing contract. Read first to understand the sub-agent chain, pipeline phases, and write boundaries.
+- **`.spinosa/memory/AGENTS.md`** — Rules for the orchestrator's working memory. Read when you need to persist session context between routes.
+- **`.trash/AGENTS.md`** — Rules for retired and archived files. Read when cleaning up stale artifacts or moving files out of the corpus.
+- **`agent_reports/AGENTS.md`** — Conventions for durable reports, evidence packets, and verification notes. Read before writing any artifact to `agent_reports/`.
+- **`logs/AGENTS.md`** — Processing logs and framework state tracking. Read when investigating import or processing failures.
+- **`maps/AGENTS.md`** — Navigation map structure and conventions. Read before writing or updating maps during indexing.
+- **`raw/AGENTS.md`** — Rules for raw source copies and corpus files. Read before modifying raw file headers or validating corpus integrity.
+- **`system/AGENTS.md`** — System context, configuration, and dictionary management. Read when updating workspace metadata or the master dictionary.
+- **`docs/FAQ.md`** — Frequently asked questions about Spinosa workflows.
+- **`docs/GLOSSARY.md`** — Glossary of Spinosa-specific terms.
+- **`docs/diagrams.md`** — Architecture and flow diagrams for the sub-agent pipeline.
 
 # READ THIS (1)
 
