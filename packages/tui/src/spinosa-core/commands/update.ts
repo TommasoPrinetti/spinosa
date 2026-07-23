@@ -5,6 +5,7 @@ import {
   mkdirSync,
   readSync,
   readFileSync,
+  writeFileSync,
   readdirSync,
   statSync,
   rmSync,
@@ -358,6 +359,18 @@ async function updateWorkspaceUnlocked(options: UpdateOptions): Promise<UpdateRe
     }
     updated++
     changedPaths.push(entry.path)
+  }
+
+  // Substitute placeholders in workspace files (AGENTS.md, CLAUDE.md, etc.)
+  for (const relPath of ["AGENTS.md", "CLAUDE.md"]) {
+    const filePath = path.join(workspacePath, relPath)
+    if (!existsSync(filePath)) continue
+    let content = readFileSync(filePath, "utf-8")
+    const updated = content.replaceAll("{{WORKSPACE_PATH}}", workspacePath)
+    if (updated !== content) {
+      writeFileSync(filePath, updated, "utf-8")
+      if (!changedPaths.includes(relPath)) changedPaths.push(relPath)
+    }
   }
 
   // Phase 3: remove files no longer in framework TSV

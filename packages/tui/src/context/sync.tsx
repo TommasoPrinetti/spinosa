@@ -1,3 +1,4 @@
+import { readdir, readFile } from "node:fs/promises"
 import type {
   Message,
   Agent,
@@ -32,6 +33,8 @@ import { batch, onMount } from "solid-js"
 import path from "path"
 import { useKV } from "./kv"
 import { usePermission } from "./permission"
+import { dbg } from "../util/debug-log"
+import { KV } from "../constants/kv-keys"
 
 const emptyConsoleState: ConsoleState = {
   consoleManagedProviders: [],
@@ -153,19 +156,74 @@ export const {
 
     function sessionListQuery() {
       const directory = props.sessionDirectory?.()
-      const workspace = project.workspace.current()
-      if (!kv.get("session_directory_filter_enabled", true)) {
-        return { scope: "project" as const, workspace: directory ? undefined : workspace }
+      const wrkWorkspace = project.workspace.current()
+      const filterEnabled = kv.get(KV.SESSION_DIRECTORY_FILTER, true)
+      dbg("[sync:sessionListQuery]", { directory, workspace: String(wrkWorkspace), filterEnabled })
+      if (!filterEnabled) {
+        return { scope: "project" as const, workspace: directory ? undefined : wrkWorkspace }
       }
+      if (wrkWorkspace) return { directory, workspace: wrkWorkspace }
       if (directory) return { directory }
-      if (!project.data.instance.path.worktree || !project.data.instance.path.directory) return { scope: "project" as const, workspace }
-      return { directory: project.data.instance.path.directory, workspace }
+      if (!project.data.instance.path.worktree || !project.data.instance.path.directory) return { scope: "project" as const, workspace: wrkWorkspace }
+      return { directory: project.data.instance.path.directory, workspace: wrkWorkspace }
     }
 
-    function listSessions() {
-      return sdk.client.session
-        .list({ start: Date.now() - 30 * 24 * 60 * 60 * 1000, ...sessionListQuery() })
-        .then((x) => (x.data ?? []).toSorted((a, b) => a.id.localeCompare(b.id)))
+    async function readLocalSessions(dir: string): Promise<Session[]> {
+      const sessionsDir = path.join(dir, ".opencode", "sessions")
+      try {
+        const files = await readdir(sessionsDir)
+        const jsonFiles = files.filter((f) => f.endsWith(".json"))
+        dbg("[sync:readLocalSessions]", { dir, dirExists: true, totalFiles: files.length, jsonFiles: jsonFiles.length })
+        const results: Session[] = []
+        for (const file of jsonFiles) {
+          try {
+            const content = await readFile(path.join(sessionsDir, file), "utf-8")
+            results.push(JSON.parse(content) as Session)
+          } catch { /* skip invalid files */ }
+        }
+        dbg("[sync:readLocalSessions]", { dir, parsed: results.length })
+        return results
+      } catch (e) {
+        dbg("[sync:readLocalSessions]", { dir, error: (e as Error).message })
+        return []
+      }
+    }
+
+    async function listSessions() {
+      const workspaceDir = props.sessionDirectory?.()
+      const hostDir = project.data.instance.path.directory
+      const bothDirs = [workspaceDir, hostDir].filter(Boolean) as string[]
+      const localDirs = [...new Set(bothDirs)]
+      dbg("[sync:listSessions]", { workspaceDir, hostDir, localDirs })
+      let serverList: Session[] = []
+      const localLists = await Promise.all(localDirs.map((d) => readLocalSessions(d)))
+      try {
+        serverList =
+          (await sdk.client.session
+            .list({ start: Date.now() - 30 * 24 * 60 * 60 * 1000, ...sessionListQuery() })
+            .then((x) => x.data)) ?? []
+        dbg("[sync:listSessions] server returned", { count: serverList.length })
+      } catch (e) {
+        dbg("[sync:listSessions] server list failed, using local sessions only", { error: String(e) })
+      }
+      const merged = new Map<string, Session>()
+      for (const s of serverList) merged.set(s.id, s)
+      for (const list of localLists) {
+        for (const s of list) {
+          if (!merged.has(s.id)) merged.set(s.id, s)
+        }
+      }
+      let result = [...merged.values()]
+      if (workspaceDir) {
+        const wrkID = project.workspace.current()
+        result = result.filter(
+          (s) => s.workspaceID === wrkID || (s.directory && s.directory.startsWith(workspaceDir!)),
+        )
+      }
+      result = result.toSorted((a, b) => a.id.localeCompare(b.id))
+      const rootCount = result.filter((s) => s.parentID == null).length
+      dbg("[sync:listSessions] merged", { total: result.length, root: rootCount })
+      return result
     }
 
     event.subscribe((event, { directory, workspace }) => {

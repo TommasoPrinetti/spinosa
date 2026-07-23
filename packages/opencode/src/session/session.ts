@@ -4,6 +4,7 @@ import { Slug } from "@opencode-ai/core/util/slug"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import path from "path"
+import { promises as fs } from "fs"
 import { BackgroundJob } from "@/background/job"
 import { Decimal } from "decimal.js"
 import type { ProviderMetadata, Usage } from "@opencode-ai/llm"
@@ -498,6 +499,15 @@ const layer: Layer.Layer<
     const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
 
+    const writeSessionFile = (session: Info) =>
+      Effect.gen(function* () {
+        const dir = path.join(session.directory, ".opencode", "sessions")
+        yield* Effect.tryPromise(() => fs.mkdir(dir, { recursive: true }))
+        yield* Effect.tryPromise(() =>
+          fs.writeFile(path.join(dir, `${session.id}.json`), JSON.stringify(session, null, 2)),
+        )
+      }).pipe(Effect.catchCause(() => Effect.logWarning("failed to write session file")))
+
     const createNext = Effect.fn("Session.createNext")(function* (input: {
       id?: SessionID
       title?: string
@@ -535,6 +545,7 @@ const layer: Layer.Layer<
       yield* Effect.logInfo("created", result)
 
       yield* events.publish(SessionV1.Event.Created, { sessionID: result.id, info: result })
+      yield* writeSessionFile(result)
 
       return result
     })
@@ -746,6 +757,7 @@ const layer: Layer.Layer<
           permission: info.permission === null ? undefined : (info.permission ?? current.permission),
         } as Info
         yield* events.publish(SessionV1.Event.Updated, { sessionID, info: next })
+        yield* writeSessionFile(next)
       })
 
     const touch = Effect.fn("Session.touch")(function* (sessionID: SessionID) {

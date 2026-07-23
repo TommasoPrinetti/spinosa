@@ -18,6 +18,8 @@ import { setActiveWorkspacePath, tuiLog } from "../spinosa/log"
 import { inspectRegisteredWorkspacePresence, isUsableWorkspacePresence } from "../spinosa-core/workspace/presence"
 import { runSpinosaBootHealth, SPINOSA_BOOT_OPERATIONS, type SpinosaBootOperation } from "../spinosa-core/system/boot"
 import type { RouteNavigateInput } from "./route"
+import { KV } from "../constants/kv-keys"
+
 export const { use: useSpinosaWorkspace, provider: SpinosaWorkspaceProvider } = createSimpleContext({
   name: "SpinosaWorkspace",
   init: () => {
@@ -48,13 +50,18 @@ export const { use: useSpinosaWorkspace, provider: SpinosaWorkspaceProvider } = 
     const openWorkspace = async (workspacePath: string, options?: { route?: RouteNavigateInput }) => {
       const presence = await inspectRegisteredWorkspacePresence(workspacePath).catch(() => undefined)
       if (presence && !isUsableWorkspacePresence(presence)) {
-        showPicker()
-        return
+        if (presence.status === "identity_mismatch") {
+          tuiLog(`openWorkspace: identity_mismatch at ${workspacePath}, proceeding with marker ID`)
+        } else {
+          showPicker()
+          return
+        }
       }
       setActiveWorkspacePath(workspacePath)
       tuiLog(`openWorkspace path=${workspacePath}`)
       kv.set(SPINOSA_ACTIVE_WORKSPACE_KV, workspacePath)
       kv.set(SPINOSA_GENERIC_MODE_KV, false)
+      kv.set(KV.SESSION_DIRECTORY_FILTER, true)
       setActivePath(workspacePath)
       setGenericMode(false)
       setPickerRequested(false)

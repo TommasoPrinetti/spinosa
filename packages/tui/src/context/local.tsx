@@ -454,7 +454,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         })
 
       const slots = createMemo(() => {
-        const existing = new Set(sync.data.session.filter((x) => x.parentID === undefined).map((x) => x.id))
+        const existing = new Set(sync.data.session.filter((x) => x.parentID == null).map((x) => x.id))
         return sessionStore.pinned.filter((id) => existing.has(id)).slice(0, 9)
       })
 

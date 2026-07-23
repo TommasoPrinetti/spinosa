@@ -258,7 +258,7 @@ For each segment:
 - Read evidence from files, not from inline context passed by the orchestrator.
 - Generate the appropriate chart type from the context: Distribution Bars for multi-metric comparison, Progress Bar for linear completion, Status Matrix for multi-dimensional health, Gauge for single scores, Sparkline for trends, Stacked Bar for composition.
 - The tool sets `status: draft` automatically — Verifier updates it after verification.
-- Dashboard counts (People, Sources, cited) must match enumerated evidence IDs in the Report section — reconcile against the evidence packet list, not searcher summary tables alone.
+- Dashboard counts (People, Sources, cited) must match enumerated evidence IDs in the Report section — reconcile against the evidence packet list, not searcher summary tables alone. When declared speaker count and rendered heading-label count disagree, report **both counts** in a validation-notes section rather than requiring them to match. The mismatch itself is output, not a failure to reconcile.
 - Return operational counts to orchestrator: directories seen, maps read, files read, reports written. Do not log raw command output, long grep terms, source excerpts, secrets, or credentials.
 
 ## Process File Lifecycle

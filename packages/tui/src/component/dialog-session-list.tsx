@@ -18,6 +18,8 @@ import { errorMessage } from "../util/error"
 import { DialogSessionDeleteFailed } from "./dialog-session-delete-failed"
 import { useCommandShortcut } from "../keymap"
 import { useEvent } from "../context/event"
+import { readdir, readFile } from "node:fs/promises"
+import { dbg } from "../util/debug-log"
 
 type SessionListFilter = { scope?: "project"; directory?: string; path?: string; workspace?: string }
 
@@ -42,6 +44,27 @@ export function loadDialogSessionList<T>(input: {
   )
 }
 
+async function readLocalSessions(dir: string) {
+  const sessionsDir = path.join(dir, ".opencode", "sessions")
+  try {
+    const files = await readdir(sessionsDir)
+    const jsonFiles = files.filter((f) => f.endsWith(".json"))
+    dbg("[dialog:readLocalSessions]", { dir, dirExists: true, totalFiles: files.length, jsonFiles: jsonFiles.length })
+    const results: Array<Record<string, unknown>> = []
+    for (const file of jsonFiles) {
+      try {
+        const content = await readFile(path.join(sessionsDir, file), "utf-8")
+        results.push(JSON.parse(content))
+      } catch { /* skip invalid files */ }
+    }
+    dbg("[dialog:readLocalSessions]", { dir, parsed: results.length })
+    return results
+  } catch (e) {
+    dbg("[dialog:readLocalSessions]", { dir, error: (e as Error).message })
+    return []
+  }
+}
+
 export function DialogSessionList() {
   const dialog = useDialog()
   const route = useRoute()
@@ -59,19 +82,52 @@ export function DialogSessionList() {
   const quickSwitch1 = useCommandShortcut("session.quick_switch.1")
   const quickSwitch9 = useCommandShortcut("session.quick_switch.9")
 
+  async function readFilter(filter: SessionListFilter, list: (query: any) => Promise<{ data?: any[] }>) {
+    const hostDir = project.data.instance.path.directory
+    const workspaceDir = "directory" in filter ? filter.directory : undefined
+    const localDirs = [workspaceDir, hostDir].filter(Boolean) as string[]
+    const uniqueDirs = [...new Set(localDirs)]
+    dbg("[dialog:readFilter]", { filter: JSON.stringify(filter), hostDir, workspaceDir, uniqueDirs })
+    const localLists = await Promise.all(uniqueDirs.map((d) => readLocalSessions(d)))
+    let server: any[] | undefined
+    try {
+      server = await loadDialogSessionList({ filter, list })
+      dbg("[dialog:readFilter] server returned", { count: server?.length ?? 0 })
+    } catch (e) {
+      dbg("[dialog:readFilter] server list failed", { error: String(e) })
+    }
+    const merged = new Map<string, any>((server ?? []).map((s) => [s.id, s]))
+    let localAdded = 0
+    for (const list of localLists) {
+      for (const s of list) {
+        if (!merged.has(s.id as string)) {
+          merged.set(s.id as string, s)
+          localAdded++
+        }
+      }
+    }
+    const result = [...merged.values()]
+    let filtered = result
+    if (workspaceDir) {
+      const wrkID = project.workspace.current()
+      filtered = result.filter(
+        (s) => s.workspaceID === wrkID || (s.directory && s.directory.startsWith(workspaceDir)),
+      )
+    }
+    const rootCount = filtered.filter((s) => s.parentID == null).length
+    dbg("[dialog:readFilter] merged", { total: filtered.length, root: rootCount, localAdded })
+    return filtered
+  }
+
   const [browseResults, { refetch: refetchBrowse }] = createResource(
     () => sync.session.query(),
-    (filter) => loadDialogSessionList({ filter, list: (query) => sdk.client.session.list(query) }),
+    (filter) => readFilter(filter, (query) => sdk.client.session.list(query)),
   )
   const [searchResults, { refetch }] = createResource(
     () => ({ query: search(), filter: sync.session.query() }),
     (input) => {
       if (!input.query) return undefined
-      return loadDialogSessionList({
-        search: input.query,
-        filter: input.filter,
-        list: (query) => sdk.client.session.list(query),
-      })
+      return readFilter(input.filter, (query) => sdk.client.session.list(query))
     },
   )
 
@@ -189,7 +245,7 @@ export function DialogSessionList() {
 
   function orderByRecency(sessionsList: NonNullable<ReturnType<typeof sessions>>) {
     return sessionsList
-      .filter((x) => x.parentID === undefined)
+      .filter((x) => x.parentID == null)
       .toSorted((a, b) => b.time.updated - a.time.updated)
       .map((x) => x.id)
   }
@@ -211,7 +267,7 @@ export function DialogSessionList() {
     const today = new Date().toDateString()
     const sessionMap = new Map(
       sessions()
-        .filter((x) => x.parentID === undefined)
+        .filter((x) => x.parentID == null)
         .map((x) => [x.id, x]),
     )
 

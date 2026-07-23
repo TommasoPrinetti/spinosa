@@ -59,8 +59,10 @@ import { DialogAlert } from "./ui/dialog-alert"
 import { DialogConfirm } from "./ui/dialog-confirm"
 import { ToastProvider, useToast } from "./ui/toast"
 import { isDefaultTitle } from "./util/session"
-import { setToastError } from "./spinosa/log"
+import { setToastError, tuiLog } from "./spinosa/log"
 import { KVProvider, useKV } from "./context/kv"
+import { KV } from "./constants/kv-keys"
+import { readWrkWorkspaceID, writeMarkerWrkID } from "./spinosa-core/workspace/identity"
 import * as Model from "./util/model"
 import { ArgsProvider, useArgs, type Args } from "./context/args"
 import open from "open"
@@ -152,6 +154,42 @@ export type TuiInput = {
 
 function SpinosaSyncProvider(props: ParentProps) {
   const spinosa = useSpinosaWorkspace()
+  const sdk = useSDK()
+  const project = useProject()
+  const kv = useKV()
+  createEffect(() => {
+    const path = spinosa.activePath
+    const generic = spinosa.genericMode
+    if (generic || !path) {
+      project.workspace.set(undefined)
+      kv.set(KV.ACTIVE_WRK_WORKSPACE_ID, undefined)
+      return
+    }
+    const fromMarker = readWrkWorkspaceID(path)
+    if (fromMarker) {
+      kv.set(KV.ACTIVE_WRK_WORKSPACE_ID, fromMarker)
+      project.workspace.set(fromMarker)
+      return
+    }
+    sdk.client.experimental.workspace.list()
+      .then((r) => r.data?.find((w) => w.directory === path))
+      .then((existing) => {
+        if (existing?.id) {
+          writeMarkerWrkID(path, existing.id)
+          kv.set(KV.ACTIVE_WRK_WORKSPACE_ID, existing.id)
+          project.workspace.set(existing.id)
+          return null
+        }
+        return sdk.client.experimental.workspace.create({ type: "directory", branch: null })
+      })
+      .then((created: any) => {
+        if (created?.data?.id) {
+          writeMarkerWrkID(path, created.data.id)
+          kv.set(KV.ACTIVE_WRK_WORKSPACE_ID, created.data.id)
+          project.workspace.set(created.data.id)
+        }
+      })
+  })
   return (
     <SyncProvider sessionDirectory={() => (spinosa.genericMode ? undefined : spinosa.activePath)}>
       {props.children}
@@ -557,7 +595,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     if (continued || sync.status === "loading" || !args.continue) return
     const match = sync.data.session
       .toSorted((a, b) => b.time.updated - a.time.updated)
-      .find((x) => x.parentID === undefined)?.id
+      .find((x) => x.parentID == null)?.id
     if (match) {
       continued = true
       if (args.fork) {
@@ -1002,12 +1040,12 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       },
       {
         name: "app.toggle.session_directory_filter",
-        title: kv.get("session_directory_filter_enabled", true)
+        title: kv.get(KV.SESSION_DIRECTORY_FILTER, true)
           ? "Disable session directory filtering"
           : "Enable session directory filtering",
         category: "System",
         run: async () => {
-          kv.set("session_directory_filter_enabled", !kv.get("session_directory_filter_enabled", true))
+          kv.set(KV.SESSION_DIRECTORY_FILTER, !kv.get(KV.SESSION_DIRECTORY_FILTER, true))
           await sync.session.refresh()
           dialog.clear()
         },

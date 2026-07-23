@@ -128,6 +128,7 @@ After each agent returns, check: does the output clear the output gate? For para
 | Gate passes, progress expected        | Continue to next planned agent or stop |
 | Gate fails — fixable gap              | Repeat same agent type with refined context (same or fewer parallel instances, max 2 retries per type per route) |
 | Gate fails — wrong direction          | Re-route to a different agent type     |
+| Gate fails — minor discrepancy only   | Record discrepancy as metadata annotation, continue to next agent (do not retry or abort) |
 | Gate fails — complete blocker         | Abort, log as blocked                  |
 | Gate fails — agent timed out          | Repeat once with tightened scope, then abort |
 
@@ -302,6 +303,7 @@ Canonical agent definitions: [[.agents/agents/]]. Agent vendor mirrors are pre-b
 ## Global Rules
 
 - Never read, list, or index `.DS_Store` or `._*` files. Always skip them in glob, find, ls, and read operations.
+- **Workspace boundary:** You are confined to `{{WORKSPACE_PATH}}`. You must never read, write, edit, or list files outside this directory. If a task requires external data, use the `webfetch` tool instead — never access files outside the workspace.
 - No fixed set of maps is required. Maps can be created and enriched as needed.
 - Report blockers honestly. Never invent support.
 - Use the `question` tool when missing context or direction.

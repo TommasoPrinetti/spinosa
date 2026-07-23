@@ -105,11 +105,17 @@ const layer = Layer.effect(
               return (yield* (yield* Reference.Service).list()).map((reference) => reference.path)
             }).pipe(Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(ctx.directory) }))))
           : []
+        const envWhitelist = (process.env.OPENCODE_WHITELISTED_DIRECTORIES ?? "")
+          .split(",")
+          .map((d) => d.trim())
+          .filter(Boolean)
+          .map((d) => path.join(d, "*"))
         const whitelistedDirs = [
           Truncate.GLOB,
           path.join(Global.Path.tmp, "*"),
           ...skillDirs.map((dir) => path.join(dir, "*")),
           ...referenceDirs.map((dir) => path.join(dir, "*")),
+          ...envWhitelist,
         ]
         const readonlyExternalDirectory = {
           "*": "ask",
@@ -307,6 +313,19 @@ const layer = Layer.effect(
             agents[name].permission,
             Permission.fromConfig({ external_directory: { [Truncate.GLOB]: "allow" } }),
           )
+        }
+
+        // external_directory rules: "*" patterns must come before specific path patterns
+        // so that evaluate() with findLast prefers specific paths over catch-all deny.
+        for (const name in agents) {
+          const rules = agents[name].permission
+          const edRules = rules.filter((r) => r.permission === "external_directory")
+          const other = rules.filter((r) => r.permission !== "external_directory")
+          agents[name].permission = [
+            ...other,
+            ...edRules.filter((r) => r.pattern === "*"),
+            ...edRules.filter((r) => r.pattern !== "*"),
+          ]
         }
 
         const get = Effect.fnUntraced(function* (agent: string) {

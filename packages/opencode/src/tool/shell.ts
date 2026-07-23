@@ -26,42 +26,6 @@ export { Parameters } from "./shell/prompt"
 
 const MAX_METADATA_LENGTH = 30_000
 const CWD = new Set(["cd", "chdir", "popd", "pushd", "push-location", "set-location"])
-const FILES = new Set([
-  ...CWD,
-  "rm",
-  "cp",
-  "mv",
-  "mkdir",
-  "touch",
-  "chmod",
-  "chown",
-  "cat",
-  // Leave PowerShell aliases out for now. Common ones like cat/cp/mv/rm/mkdir
-  // already hit the entries above, and alias normalization should happen in one
-  // place later so we do not risk double-prompting.
-  "get-content",
-  "set-content",
-  "add-content",
-  "copy-item",
-  "move-item",
-  "remove-item",
-  "new-item",
-  "rename-item",
-])
-const CMD_FILES = new Set([
-  "copy",
-  "del",
-  "dir",
-  "erase",
-  "md",
-  "mkdir",
-  "move",
-  "rd",
-  "ren",
-  "rename",
-  "rmdir",
-  "type",
-])
 const FLAGS = new Set(["-destination", "-literalpath", "-path"])
 const SWITCHES = new Set(["-confirm", "-debug", "-force", "-nonewline", "-recurse", "-verbose", "-whatif"])
 
@@ -394,14 +358,12 @@ export const ShellTool = Tool.define(
         const tokens = command.map((item) => item.text)
         const cmd = ps || shellKind === "cmd" ? tokens[0]?.toLowerCase() : tokens[0]
 
-        if (cmd && (FILES.has(cmd) || (shellKind === "cmd" && CMD_FILES.has(cmd)))) {
-          for (const arg of pathArgs(command, ps, shellKind === "cmd")) {
-            const resolved = yield* argPath(arg, cwd, ps, shell)
-            yield* Effect.logInfo("resolved path", { arg, resolved })
-            if (!resolved || containsPath(resolved, instance)) continue
-            const dir = (yield* fs.isDir(resolved)) ? resolved : path.dirname(resolved)
-            scan.dirs.add(dir)
-          }
+        for (const arg of pathArgs(command, ps, shellKind === "cmd")) {
+          const resolved = yield* argPath(arg, cwd, ps, shell)
+          yield* Effect.logInfo("resolved path", { arg, resolved })
+          if (!resolved || containsPath(resolved, instance)) continue
+          const dir = (yield* fs.isDir(resolved)) ? resolved : path.dirname(resolved)
+          scan.dirs.add(dir)
         }
 
         if (tokens.length && (!cmd || !CWD.has(cmd))) {

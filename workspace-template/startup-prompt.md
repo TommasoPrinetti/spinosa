@@ -201,7 +201,7 @@ Startup is complete **only if** all checks pass.
 - Theme maps exist for spanning concepts (skip if single group)
 - All wikilinks resolve to existing files
 - Hub map includes `#hub` + `#group/<name>` per group. Group maps include `#group/<name>`. Theme maps include `#theme/<name>`
-- Transcript speaker mappings verified when diarization/ASR artifacts exist
+- Transcript speaker mappings verified when diarization/ASR artifacts exist. Reconciliation rule: if declared `speakers_detected` count exceeds distinct rendered heading-label count, treat rendered labels as ground truth (declared metadata may include silent participants or ASR artifacts like `SPEAKER_00`/`SPEAKER_04` with no transcript lines). Record the discrepancy as a validation note. Differences ≤ 2 with no contradictory evidence are non-blocking metadata annotations, not pipeline failures.
 
 **Retrieval tests:**
 1. Structural retrieval — open corpus overview, find a group, confirm it links to raw files

@@ -108,6 +108,7 @@ const ARITY: Record<string, number> = {
   mysql: 2, // mysql -u root
   mvn: 2, // mvn compile
   ng: 2, // ng generate component home
+  node: 2, // node -e "console.log(1)"
   npm: 2, // npm install
   "npm exec": 3, // npm exec vite
   "npm init": 3, // npm init vue
@@ -118,6 +119,9 @@ const ARITY: Record<string, number> = {
   openssl: 2, // openssl genrsa 2048
   "openssl req": 3, // openssl req -new -key key.pem
   "openssl x509": 3, // openssl x509 -in cert.pem
+  osascript: 2, // osascript -e "tell app"
+  perl: 2, // perl -e "print 1"
+  php: 2, // php -r "echo 1"
   pip: 2, // pip install numpy
   pipenv: 2, // pipenv install flask
   pnpm: 2, // pnpm install
@@ -133,9 +137,11 @@ const ARITY: Record<string, number> = {
   "pulumi stack": 3, // pulumi stack output
   pyenv: 2, // pyenv install 3.11
   python: 2, // python -m venv env
+  python3: 2, // python3 -c "print(1)"
   rake: 2, // rake db:migrate
   rbenv: 2, // rbenv install 3.2.0
   "redis-cli": 2, // redis-cli ping
+  ruby: 2, // ruby -e "puts 1"
   rustup: 2, // rustup update
   serverless: 2, // serverless invoke
   sfdx: 3, // sfdx force:org:list

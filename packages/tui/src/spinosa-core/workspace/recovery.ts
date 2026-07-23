@@ -91,7 +91,10 @@ export async function recoverWorkspaceAtPath(input: {
   if (!validateWorkspace(candidatePath)) throw new Error("That folder is not a Spinosa workspace.")
 
   const markerID = readWorkspaceID(candidatePath)
-  if (input.workspaceID && markerID !== input.workspaceID) {
+  if (input.workspaceID && markerID && markerID !== input.workspaceID) {
+    console.warn(
+      `[spinosa:recovery] ID mismatch at ${candidatePath}: expected ${input.workspaceID}, found ${markerID}`,
+    )
     throw new Error("That folder belongs to a different workspace ID.")
   }
 

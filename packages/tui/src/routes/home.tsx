@@ -448,7 +448,7 @@ export function Home() {
                       onMouseOver={() => setSelectedRecent(idx)}
                       onMouseDown={() => { setSelectedRecent(idx); void pickRecentWorkspace(ws) }}
                     >
-                      <text fg={theme.success}>●</text>
+                      <text fg={recentStatusColor(ws.status, theme)}>●</text>
                       <text fg={buttonText(theme, active(), theme.text)}>
                         <span style={{ bold: active() }}>{ws.name}</span>
                       </text>

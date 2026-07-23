@@ -93,11 +93,20 @@ function today(): string {
   return new Date().toISOString().slice(0, 10)
 }
 
-function materializeWorkspaceConfig(workspacePath: string): void {
+function materializePlaceholders(workspacePath: string): void {
+  for (const relPath of ["AGENTS.md", "CLAUDE.md"]) {
+    const filePath = path.join(workspacePath, relPath)
+    if (!existsSync(filePath)) continue
+    let content = readFileSync(filePath, "utf-8")
+    const updated = content.replaceAll("{{WORKSPACE_PATH}}", workspacePath)
+    if (updated !== content) writeFileSync(filePath, updated, "utf-8")
+  }
   const hermesConfig = path.join(workspacePath, ".hermes", "workspace.config.yaml")
-  if (!existsSync(hermesConfig)) return
-  const content = readFileSync(hermesConfig, "utf-8")
-  writeFileSync(hermesConfig, content.replaceAll("{{SPINOSA_WORKSPACE}}", workspacePath), "utf-8")
+  if (existsSync(hermesConfig)) {
+    let content = readFileSync(hermesConfig, "utf-8")
+    const updated = content.replaceAll("{{SPINOSA_WORKSPACE}}", workspacePath)
+    if (updated !== content) writeFileSync(hermesConfig, updated, "utf-8")
+  }
 }
 
 export async function createWorkspace(options: CreateWorkspaceOptions): Promise<CreateWorkspaceResult> {
@@ -131,7 +140,7 @@ export async function createWorkspace(options: CreateWorkspaceOptions): Promise<
     throwIfSpinosaCancelled(shouldAbort)
 
     cleanMacMetadata(workspacePath)
-    materializeWorkspaceConfig(workspacePath)
+    materializePlaceholders(workspacePath)
 
     // ── Step 3: Create user-state directories (with .gitkeep) ──────────
     progress("Creating user-state directories...")
