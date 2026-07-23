@@ -41,6 +41,8 @@ export interface CopyResult {
   totalCopied: number
   stillMissing: number
   recovered: number
+  failedFileCount: number
+  failedFilePaths: string[]
 }
 
 type CopyPhase = "all" | "direct" | "markitdown" | "ocr"
@@ -842,6 +844,7 @@ export async function copySource(
     mdConverted: 0, mdSkipped: 0, mdFailed: 0,
     ocrConverted: 0, ocrSkipped: 0, ocrFailed: 0,
     totalCopied: 0, stillMissing: 0, recovered: 0,
+    failedFileCount: 0, failedFilePaths: [],
   }
 
   throwIfSpinosaCancelled(options?.shouldAbort)
@@ -893,6 +896,28 @@ export async function copySource(
   }
 
   options?.onLog?.(`Copy complete: ${res.totalCopied} total (${res.copied} direct, ${res.mdConverted} MarkItDown, ${res.ocrConverted} OCR), ${res.skipped} skipped, ${res.failed} failed, ${res.stillMissing} still missing`)
+
+  // Collect failed files and copy originals to _failed_files/ for manual review
+  if (classified) {
+    const allInputs = [
+      ...classified.markitdownFiles.map((f) => ({ ...f, phase: "markitdown" })),
+      ...classified.ocrFiles.map((f) => ({ ...f, phase: "ocr" })),
+
+    ]
+    for (const f of allInputs) {
+      if (!convertedOutputExists(f.dest)) {
+        const dest = path.join(destDir, "_failed_files", f.rel)
+        mkdirSync(path.dirname(dest), { recursive: true })
+        try { safeCopyAsync(f.src, dest) } catch { /* best-effort */ }
+        res.failedFileCount++
+        res.failedFilePaths.push(f.rel)
+      }
+    }
+  }
+
+  if (res.failedFileCount > 0) {
+    options?.onLog?.(`${res.failedFileCount} failed file(s) saved to raw/_failed_files/ for review`)
+  }
 
   return res
 }

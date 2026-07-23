@@ -916,7 +916,7 @@ let nameInput: TextareaRenderable | undefined
         setImportSummary(
           `${dr.converted}/${totalDirect + extraDirect} copied · ${mr.converted}/${totalMd + extraMdTotal} markitdown · ${or.converted}/${totalOcr + extraOcrTotal} ocr` +
           (totalRenamed > 0 ? ` · ${totalRenamed} renamed` : "") +
-          (totalFailed > 0 ? ` · ${totalFailed} failed` : ""),
+          (totalFailed > 0 ? ` · ${totalFailed} failed → _failed_files/` : ""),
         )
         setProcessingDone(true)
         setProcessingStatus("All done")
@@ -1487,7 +1487,7 @@ let nameInput: TextareaRenderable | undefined
                   </Show>
                   <Show when={failedCount() > 0}>
                     <box paddingTop={1} flexDirection="column" gap={0}>
-                      <text fg={theme.textMuted}>{failedCount()} file{failedCount() === 1 ? "" : "s"} failed — check logs for details</text>
+                      <text fg={theme.textMuted}>{failedCount()} file{failedCount() === 1 ? "" : "s"} failed — saved to raw/_failed_files/ for review</text>
                     </box>
                   </Show>
                 </Show>
