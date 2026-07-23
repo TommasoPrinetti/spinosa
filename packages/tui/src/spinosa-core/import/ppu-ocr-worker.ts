@@ -14,9 +14,10 @@ async function main() {
   const { files } = input
   const engine = input.engine ?? process.env.SPINOSA_OCR_ENGINE ?? "ppu-paddle-ocr"
 
-  if (engine === "trocr") {
-    send("log", { message: `Using TrOCR engine for ${files.length} file(s)` })
+  if (engine === "trocr" || engine === "trocr-hybrid") {
+    send("log", { message: `Using TrOCR (${engine}) engine for ${files.length} file(s)` })
     const { trocrBatch } = await import("./ppu-ocr-trocr")
+    process.env.SPINOSA_OCR_ENGINE = engine
     const result = await trocrBatch(files, {
       onLog: (msg) => send("log", { message: msg }),
     })
