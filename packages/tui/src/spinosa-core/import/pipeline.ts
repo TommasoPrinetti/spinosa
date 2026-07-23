@@ -279,6 +279,7 @@ export async function processMarkitdown(
 
   const nonPdfFiles: ClassifiedEntry[] = []
   const pdfRemaining: ClassifiedEntry[] = []
+  const pdfOcrFallback: ClassifiedEntry[] = []
 
   for (const f of toProcess) {
     throwIfSpinosaCancelled(shouldAbort)
@@ -307,9 +308,9 @@ export async function processMarkitdown(
   const remainingMd = [...nonPdfFiles, ...pdfRemaining]
   const preCount = preSkipped.length + (toProcess.length - remainingMd.length)
 
+  const mdLog = path.join(logsDir, "markitdown-processed.ndjson")
   if (remainingMd.length > 0) {
     const converter = new MarkItDown()
-    const mdLog = path.join(logsDir, "markitdown-processed.ndjson")
     // Formats markitdown-ts doesn't handle — convert inline
     const INLINE_FORMATS = new Set(["json", "csv", "xml"])
     for (const [i, f] of remainingMd.entries()) {
@@ -374,17 +375,55 @@ export async function processMarkitdown(
       } catch (err) {
         if (isSpinosaCancellationError(err)) throw err
         const errMsg = err instanceof Error ? err.message : String(err)
-        failed++
-        prog?.file("MarkItDown", ++processed, total, f.rel)
-        appendNdjson(mdLog, {
-          ts: isoNow(), status: "fail", source: f.rel,
-          output: markitdownOutputRelPath(f.rel),
-          engine: "markitdown-ts", pages: "",
-          duration_s: (Date.now() - startTime) / 1000,
-          error: errMsg,
-        })
         onLog?.(`MarkItDown failed: ${f.rel} — ${errMsg}`)
+        if (fileExt(f.src) === "pdf") {
+          pdfOcrFallback.push(f)
+          prog?.file("MarkItDown", ++processed, total, `${f.rel} → OCR fallback`)
+        } else {
+          failed++
+          prog?.file("MarkItDown", ++processed, total, f.rel)
+          appendNdjson(mdLog, {
+            ts: isoNow(), status: "fail", source: f.rel,
+            output: markitdownOutputRelPath(f.rel),
+            engine: "markitdown-ts", pages: "",
+            duration_s: (Date.now() - startTime) / 1000,
+            error: errMsg,
+          })
+        }
       }
+    }
+  }
+
+  // Recover PDFs that failed both pdf-js and MarkItDown via OCR
+  if (pdfOcrFallback.length > 0) {
+    onLog?.(`Falling back to OCR for ${pdfOcrFallback.length} PDF(s) that failed text extraction...`)
+    for (const f of pdfOcrFallback) {
+      throwIfSpinosaCancelled(shouldAbort)
+      const startTime = Date.now()
+      let ok = false
+      try {
+        const result = await runOcrWorker([{ src: f.src, rel: f.rel, dest: f.dest }], { onLog })
+        ok = result.converted > 0 && convertedOutputExists(f.dest)
+        if (ok) {
+          converted++
+          recoverable.push({ src: f.src, dest: f.dest })
+          onLog?.(`  ${f.rel} → OCR fallback succeeded`)
+        } else {
+          skipped++
+          onLog?.(`  ${f.rel} → OCR fallback returned no content`)
+        }
+      } catch (err) {
+        if (isSpinosaCancellationError(err)) throw err
+        const errMsg = err instanceof Error ? err.message : String(err)
+        skipped++
+        onLog?.(`  ${f.rel} → OCR fallback failed: ${errMsg}`)
+      }
+      appendNdjson(mdLog, {
+        ts: isoNow(), status: ok ? "ok" : "fail",
+        source: f.rel, output: markitdownOutputRelPath(f.rel),
+        engine: "ppu-paddle-ocr", pages: "", duration_s: (Date.now() - startTime) / 1000,
+      })
+      prog?.file("MarkItDown", ++processed, total, f.rel)
     }
   }
 
