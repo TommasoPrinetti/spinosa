@@ -1,5 +1,6 @@
-import { mkdir } from "node:fs/promises"
+import { mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
+import { homedir } from "node:os"
 import { TextAttributes } from "@opentui/core"
 import { useTerminalDimensions } from "@opentui/solid"
 import { createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js"
@@ -310,11 +311,11 @@ export function Visualizer() {
     let filename = path.basename(requested.trim())
     if (!filename || filename === "." || filename === "..") filename = defaultName
     if (!filename.toLowerCase().endsWith(`.${suffix}`)) filename += `.${suffix}`
-    const directory = path.join(targetWorkspace.path, "exports")
+    const directory = path.join(homedir(), "Downloads")
     try {
       await mkdir(directory, { recursive: true })
-      await Bun.write(path.join(directory, filename), exportGraphScene(scene(), format))
-      toast.show({ variant: "success", message: `Graph exported to exports/${filename}` })
+      await writeFile(path.join(directory, filename), exportGraphScene(scene(), format))
+      toast.show({ variant: "success", message: `Graph exported to ~/Downloads/${filename}` })
     } catch (error) {
       toast.show({ variant: "error", message: `Graph export failed: ${errorMessage(error)}` })
     }
