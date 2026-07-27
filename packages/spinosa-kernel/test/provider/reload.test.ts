@@ -19,6 +19,8 @@ const it = testEffect(
   ),
 )
 
+it.effect("reloads without an active workspace", () => Provider.use.reload())
+
 it.instance("reloads providers after credentials are added", () =>
   Effect.gen(function* () {
     const previous = process.env.SPINOSA_AUTH_CONTENT

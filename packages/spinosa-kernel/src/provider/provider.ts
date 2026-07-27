@@ -1639,7 +1639,7 @@ const layer = Layer.effect(
     )
 
     const list = Effect.fn("Provider.list")(() => InstanceState.use(state, (s) => s.providers))
-    const reload = Effect.fn("Provider.reload")(() => InstanceState.invalidate(state))
+    const reload = Effect.fn("Provider.reload")(() => InstanceState.invalidateAll(state))
 
     async function resolveSDK(model: Model, s: State, envs: Record<string, string | undefined>) {
       try {
