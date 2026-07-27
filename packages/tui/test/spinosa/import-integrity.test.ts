@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test"
 import path from "node:path"
 import { mkdir } from "node:fs/promises"
 import { tmpdir } from "../fixture/fixture"
-import { addFiles } from "../../src/spinosa-core/commands/add"
-import { convertedOutputExists } from "../../src/spinosa-core/import/frontmatter"
+import { addFiles } from "@spinosa/core/commands/add"
+import { convertedOutputExists } from "@spinosa/core/import/frontmatter"
 
 describe("Spinosa import integrity", () => {
   test("does not treat an empty or partial page directory as completed conversion", async () => {

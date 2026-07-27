@@ -6,7 +6,7 @@ import { bundledLanguages, type BundledLanguage } from "shiki"
 import { createSimpleContext } from "./helper"
 import { getSharedHighlighter, registerCustomTheme, ThemeRegistrationResolved } from "@pierre/diffs"
 
-export const OpenCodeTheme = ((t: Record<string, unknown>) => {
+export const SpinosaTheme = ((t: Record<string, unknown>) => {
   // Validate required fields for ThemeRegistrationResolved
   const required = ["name", "colors", "tokenColors", "semanticTokenColors"] as const
   for (const key of required) {
@@ -14,7 +14,7 @@ export const OpenCodeTheme = ((t: Record<string, unknown>) => {
   }
   return t as unknown as ThemeRegistrationResolved
 })({
-  name: "OpenCode",
+  name: "Spinosa",
   bg: "var(--color-background-stronger)",
   fg: "var(--text-base)",
   colors: {
@@ -358,7 +358,7 @@ export const OpenCodeTheme = ((t: Record<string, unknown>) => {
   },
 })
 
-registerCustomTheme("OpenCode", () => Promise.resolve(OpenCodeTheme))
+registerCustomTheme("Spinosa", () => Promise.resolve(SpinosaTheme))
 
 function renderMathInText(text: string): string {
   let result = text
@@ -413,7 +413,7 @@ async function highlightCodeBlocks(html: string): Promise<string> {
   if (matches.length === 0) return html
 
   const highlighter = await getSharedHighlighter({
-    themes: ["OpenCode"],
+    themes: ["Spinosa"],
     langs: [],
     preferredHighlighter: "shiki-wasm",
   })
@@ -438,7 +438,7 @@ async function highlightCodeBlocks(html: string): Promise<string> {
 
     const highlighted = highlighter.codeToHtml(code, {
       lang: language,
-      theme: "OpenCode",
+      theme: "Spinosa",
       tabindex: false,
     })
     result = result.replace(fullMatch, () => highlighted)
@@ -468,7 +468,7 @@ export const { use: useMarked, provider: MarkedProvider } = createSimpleContext(
       markedShiki({
         async highlight(code, lang) {
           const highlighter = await getSharedHighlighter({
-            themes: ["OpenCode"],
+            themes: ["Spinosa"],
             langs: [],
             preferredHighlighter: "shiki-wasm",
           })
@@ -480,7 +480,7 @@ export const { use: useMarked, provider: MarkedProvider } = createSimpleContext(
           }
           return highlighter.codeToHtml(code, {
             lang: lang || "text",
-            theme: "OpenCode",
+            theme: "Spinosa",
             tabindex: false,
           })
         },

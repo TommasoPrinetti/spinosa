@@ -2,7 +2,7 @@ export * as DatabaseMigration from "./migration"
 
 import { sql } from "drizzle-orm"
 import { Effect, Semaphore } from "effect"
-import type { EffectSQLiteDatabase } from "@opencode-ai/effect-drizzle-sqlite"
+import type { EffectSQLiteDatabase } from "@spinosa/effect-drizzle-sqlite"
 import { migrations } from "./migration.gen"
 import schema from "./schema.gen"
 

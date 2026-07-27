@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 // ── build-tui.ts — Compile spinosa-tui into platform binaries ─────────────
-// Based on packages/opencode/script/build.ts but adapted for the spinosa fork.
+// Based on packages/spinosa-kernel/script/build.ts but adapted for the spinosa fork.
 //
 // Usage: bun run script/build-tui.ts [--single] [--skip-install] [--sourcemaps]
 
@@ -8,7 +8,7 @@ import { $ } from "bun"
 import fs from "fs"
 import path from "path"
 import { fileURLToPath } from "url"
-import { createSolidTransformPlugin } from "../packages/opencode/node_modules/@opentui/solid/scripts/solid-plugin.ts"
+import { createSolidTransformPlugin } from "../packages/spinosa-kernel/node_modules/@opentui/solid/scripts/solid-plugin.ts"
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -48,15 +48,15 @@ const targets = singleFlag
   ? allTargets.filter((t) => t.os === process.platform && t.arch === process.arch && !t.abi)
   : allTargets
 
-const opencodePkg = await Bun.file("packages/opencode/package.json").json()
+const kernelPkg = await Bun.file("packages/spinosa-kernel/package.json").json()
 
 await $`rm -rf dist`
 
 // Pre-install native modules for all platforms (needs the version from opencode's deps)
 if (!skipInstall) {
-  await $`bun install --os="*" --cpu="*" @opentui/core@${opencodePkg.dependencies["@opentui/core"]}`
-  await $`bun install --os="*" --cpu="*" @parcel/watcher@${opencodePkg.dependencies["@parcel/watcher"]}`
-  await $`bun install --os="*" --cpu="*" @ff-labs/fff-bun@${opencodePkg.dependencies["@ff-labs/fff-bun"]}`
+  await $`bun install --os="*" --cpu="*" @opentui/core@${kernelPkg.dependencies["@opentui/core"]}`
+  await $`bun install --os="*" --cpu="*" @parcel/watcher@${kernelPkg.dependencies["@parcel/watcher"]}`
+  await $`bun install --os="*" --cpu="*" @ff-labs/fff-bun@${kernelPkg.dependencies["@ff-labs/fff-bun"]}`
 }
 
 // ── Build each platform target ──────────────────────────────────────────────
@@ -76,11 +76,11 @@ for (const item of targets) {
   await $`mkdir -p dist/${name}/bin`
 
   const binaryName = item.os === "win32" ? "spinosa-tui.exe" : "spinosa-tui"
-  const opencodeDir = path.resolve(repoRoot, "packages/opencode")
+  const kernelDir = path.resolve(repoRoot, "packages/spinosa-kernel")
 
   // Find the @opentui/core parser worker binary
   const parserWorker = (() => {
-    const local = path.join(opencodeDir, "node_modules/@opentui/core/parser.worker.js")
+    const local = path.join(kernelDir, "node_modules/@opentui/core/parser.worker.js")
     if (fs.existsSync(local)) return fs.realpathSync(local)
     const root = path.resolve(repoRoot, "node_modules/@opentui/core/parser.worker.js")
     if (fs.existsSync(root)) return fs.realpathSync(root)
@@ -88,7 +88,7 @@ for (const item of targets) {
   })()
   const workerPath = "./src/cli/tui/worker.ts"
   const bunfsRoot = item.os === "win32" ? "B:/~BUN/root/" : "/$bunfs/root/"
-  const parserWorkerRelativePath = path.relative(opencodeDir, parserWorker).replaceAll("\\", "/")
+  const parserWorkerRelativePath = path.relative(kernelDir, parserWorker).replaceAll("\\", "/")
   console.log(`  parserWorker: ${parserWorker}`)
   console.log(`  workerPath: ${workerPath}`)
 
@@ -96,7 +96,7 @@ for (const item of targets) {
   try {
     result = await Bun.build({
       conditions: ["bun", "node"],
-      tsconfig: path.join(opencodeDir, "tsconfig.json"),
+      tsconfig: path.join(kernelDir, "tsconfig.json"),
       plugins: [plugin],
       external: ["node-gyp", "youtube-transcript", "unzipper"],
       format: "esm",
@@ -114,23 +114,24 @@ for (const item of targets) {
         windows: {},
       },
       entrypoints: [
-        path.join(opencodeDir, "src/index.ts"),
+        path.join(repoRoot, "packages/spinosa-cli/src/compiled.ts"),
         parserWorker,
-        path.join(opencodeDir, "src/cli/tui/worker.ts"),
+        path.join(kernelDir, "src/cli/tui/worker.ts"),
       ],
       define: {
         FFF_LIBC: JSON.stringify(item.abi === "musl" ? "musl" : "gnu"),
-        OPENCODE_VERSION: `'${TUI_VERSION}'`,
-        OPENCODE_CHANNEL: "'beta'",
+        SPINOSA_VERSION: `'${TUI_VERSION}'`,
+        SPINOSA_CHANNEL: "'beta'",
         OTUI_TREE_SITTER_WORKER_PATH: bunfsRoot + parserWorkerRelativePath,
-        OPENCODE_WORKER_PATH: workerPath,
-        OPENCODE_LIBC: item.os === "linux" ? `'${item.abi ?? "glibc"}'` : "",
+        SPINOSA_WORKER_PATH: workerPath,
+        SPINOSA_LIBC: item.os === "linux" ? `'${item.abi ?? "glibc"}'` : "",
         ...(item.os === "linux" ? { "process.env.OPENTUI_LIBC": JSON.stringify(item.abi ?? "glibc") } : {}),
       },
     })
   } catch (err) {
-    buildErrors.push(`${name}: ${err instanceof Error ? err.message : String(err)}`)
-    console.error(`  Build failed for ${name}, continuing with remaining targets.`)
+    const detail = err instanceof AggregateError ? err.errors.map(String).join("; ") : err instanceof Error ? err.message : String(err)
+    buildErrors.push(`${name}: ${detail}`)
+    console.error(`  Build failed for ${name}: ${detail}`)
     continue
   }
 

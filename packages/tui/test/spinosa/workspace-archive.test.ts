@@ -3,7 +3,7 @@ import path from "node:path"
 import { existsSync } from "node:fs"
 import { mkdir } from "node:fs/promises"
 import { tmpdir } from "../fixture/fixture"
-import { archiveWorkspaceState } from "../../src/spinosa-core/workspace/archive"
+import { archiveWorkspaceState } from "@spinosa/core/workspace/archive"
 
 describe("workspace state archive", () => {
   test("moves state to a recoverable path without touching workspace files", async () => {

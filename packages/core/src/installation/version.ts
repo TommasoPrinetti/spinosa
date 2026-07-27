@@ -1,8 +1,8 @@
 declare global {
-  const OPENCODE_VERSION: string
-  const OPENCODE_CHANNEL: string
+  const SPINOSA_VERSION: string
+  const SPINOSA_CHANNEL: string
 }
 
-export const InstallationVersion = typeof OPENCODE_VERSION === "string" ? OPENCODE_VERSION : "local"
-export const InstallationChannel = typeof OPENCODE_CHANNEL === "string" ? OPENCODE_CHANNEL : "local"
+export const InstallationVersion = typeof SPINOSA_VERSION === "string" ? SPINOSA_VERSION : "local"
+export const InstallationChannel = typeof SPINOSA_CHANNEL === "string" ? SPINOSA_CHANNEL : "local"
 export const InstallationLocal = InstallationChannel === "local"

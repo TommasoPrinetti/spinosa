@@ -25,7 +25,7 @@ test("global home actions require a connected provider", async () => {
     formatKeyBindings: () => "",
     useCommandShortcut: () => "",
     useOpencodeModeStack: () => ({ push() {}, pop() {} }),
-    OPENCODE_BASE_MODE: "normal",
+    SPINOSA_BASE_MODE: "normal",
   }))
 
   const { SpinosaPromptChips } = await import("../../src/routes/workspace/spinosa-prompt-chips")

@@ -1,30 +1,30 @@
 import { mock } from "bun:test";
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder";
-import { Global } from "@opencode-ai/core/global";
-import type { TuiPluginApi } from "@opencode-ai/plugin/tui";
+import { AppNodeBuilder } from "@spinosa/kernel-core/effect/app-node-builder";
+import { Global } from "@spinosa/kernel-core/global";
+import type { TuiPluginApi } from "@spinosa/plugin/tui";
 import { Effect, Fiber } from "effect";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import type { AdapterInspection, AdapterLaunchContext, AdapterPrepareContext, CapturedRequest, TuiAgentAdapter } from "tui-agent-use/types";
 
-const OPENCODE_URL = (process.env.OPENCODE_URL ?? "http://127.0.0.1:8787").replace(/\/+$/, "");
+const SPINOSA_URL = (process.env.SPINOSA_URL ?? "http://127.0.0.1:8787").replace(/\/+$/, "");
 
 /**
- * Quick health check — verifies the OpenCode server is reachable.
+ * Quick health check — verifies the Spinosa server is reachable.
  * Throws a clear error if not, avoiding a silent hang.
  */
 async function checkServer() {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 3000);
   try {
-    const res = await fetch(`${OPENCODE_URL}/session?limit=1`, { signal: controller.signal });
+    const res = await fetch(`${SPINOSA_URL}/session?limit=1`, { signal: controller.signal });
     if (!res.ok) throw new Error(`Server returned ${res.status}`);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     throw new Error(
-      `Cannot connect to OpenCode at ${OPENCODE_URL}\n  ${msg}\n\n` +
-        `Make sure the OpenCode daemon is running:\n  spinosa  (or opencode serve)\n\n` +
-        `Override the URL with OPENCODE_URL env var if using a different port.`,
+      `Cannot connect to Spinosa at ${SPINOSA_URL}\n  ${msg}\n\n` +
+        `Make sure the Spinosa daemon is running:\n  spinosa  (or opencode serve)\n\n` +
+        `Override the URL with SPINOSA_URL env var if using a different port.`,
     );
   } finally {
     clearTimeout(timer);
@@ -34,7 +34,7 @@ async function checkServer() {
 /**
  * Live Spinosa adapter.
  *
- * Connects to YOUR real OpenCode instance at OPENCODE_URL (default 127.0.0.1:8787).
+ * Connects to YOUR real Spinosa instance at SPINOSA_URL (default 127.0.0.1:8787).
  * The TUI runs headless in the test renderer (no terminal pollution),
  * but all data — sessions, workspaces, chat — is REAL.
  *
@@ -66,14 +66,14 @@ const adapter: TuiAgentAdapter = {
 
     // Point HOME to an isolated temp dir so the TUI doesn't touch your real config
     process.env.HOME = context.home;
-    process.env.OPENCODE_TEST_HOME = context.home;
-    process.env.OPENCODE_FAST_BOOT = "1";
-    if (process.env.OPENCODE_ROUTE) delete process.env.OPENCODE_ROUTE;
+    process.env.SPINOSA_TEST_HOME = context.home;
+    process.env.SPINOSA_FAST_BOOT = "1";
+    if (process.env.SPINOSA_ROUTE) delete process.env.SPINOSA_ROUTE;
 
-    // Real fetch proxy — request goes to your real OpenCode instance
+    // Real fetch proxy — request goes to your real Spinosa instance
     const fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = new URL(input instanceof Request ? input.url : String(input));
-      const target = new URL(url.pathname + url.search, OPENCODE_URL);
+      const target = new URL(url.pathname + url.search, SPINOSA_URL);
       const request = new Request(target, init);
 
       const record: CapturedRequest = {
@@ -103,21 +103,21 @@ const adapter: TuiAgentAdapter = {
       markReady = resolve;
       setTimeout(() => reject(new Error(
         "TUI launch timed out after 15s.\n" +
-        "The server at " + OPENCODE_URL + " is responding, but the TUI couldn't boot.\n" +
+        "The server at " + SPINOSA_URL + " is responding, but the TUI couldn't boot.\n" +
         "This typically means a fetch to the server returned unexpected data.\n" +
-        "Check the server logs or try running with OPENCODE_FAST_BOOT=1"
+        "Check the server logs or try running with SPINOSA_FAST_BOOT=1"
       )), 15000);
     });
 
     const { run } = await import("../../../src/app");
     const fiber = Effect.runFork(
       run({
-        url: OPENCODE_URL,
+        url: SPINOSA_URL,
         directory: context.preparation.cwd ?? context.fixtureRoot,
         fetch,
         events: {
           subscribe: async (handler: (event: any) => void) => {
-            const es = new EventSource(OPENCODE_URL + "/api/event?stream=true");
+            const es = new EventSource(SPINOSA_URL + "/api/event?stream=true");
             es.onmessage = (msg) => {
               try { handler(JSON.parse(msg.data)); } catch {}
             };

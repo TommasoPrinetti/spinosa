@@ -1,6 +1,6 @@
 # Server Package Guide
 
-`@opencode-ai/server` implements the V2 HTTP API. It wires `packages/protocol` endpoint groups to `@opencode-ai/core` Effect handlers. No business rules invented here — translate HTTP ↔ core services.
+`@spinosa/server` implements the V2 HTTP API. It wires `packages/protocol` endpoint groups to `@spinosa/kernel-core` Effect handlers. No business rules invented here — translate HTTP ↔ core services.
 
 ## Entry points
 

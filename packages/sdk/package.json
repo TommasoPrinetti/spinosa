@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode-ai/sdk",
+  "name": "@spinosa/sdk",
   "version": "1.17.12",
   "type": "module",
   "license": "MIT",

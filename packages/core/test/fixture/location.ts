@@ -1,6 +1,6 @@
-import { Location } from "@opencode-ai/core/location"
-import { Project } from "@opencode-ai/core/project"
-import { AbsolutePath } from "@opencode-ai/core/schema"
+import { Location } from "@spinosa/kernel-core/location"
+import { Project } from "@spinosa/kernel-core/project"
+import { AbsolutePath } from "@spinosa/kernel-core/schema"
 import { Effect, Layer } from "effect"
 import { tmpdir } from "./tmpdir"
 

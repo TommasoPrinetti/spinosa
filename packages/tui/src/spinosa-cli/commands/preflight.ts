@@ -9,7 +9,7 @@ import {
   type AutoUpgradeResult,
   type UpdateResult,
   type UpgradeResult,
-} from "../../spinosa-core"
+} from "@spinosa/core"
 
 export const PREFLIGHT_RESTART_EXIT_CODE = 10
 

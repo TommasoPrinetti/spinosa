@@ -1,5 +1,5 @@
 import type { IntegrationDraft, IntegrationMethodRegistration } from "../effect/integration.js"
-import type { ConnectionInfo, CredentialValue } from "@opencode-ai/sdk/v2/types"
+import type { ConnectionInfo, CredentialValue } from "@spinosa/sdk/v2/types"
 import type { Hooks } from "./registration.js"
 
 export type { IntegrationDraft, IntegrationMethodRegistration }

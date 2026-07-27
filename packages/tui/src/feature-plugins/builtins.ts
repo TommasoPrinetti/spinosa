@@ -1,4 +1,4 @@
-import type { TuiPlugin, TuiPluginModule } from "@opencode-ai/plugin/tui"
+import type { TuiPlugin, TuiPluginModule } from "@spinosa/plugin/tui"
 import HomeFooter from "./home/footer"
 import SidebarContext from "./sidebar/context"
 import SidebarFiles from "./sidebar/files"

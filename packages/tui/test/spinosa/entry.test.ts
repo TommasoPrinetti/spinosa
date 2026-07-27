@@ -3,7 +3,7 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { mkdirSync, writeFileSync } from "node:fs"
 import { resolveSpinosaEntryRoute, routeForSetupStatus, routeForWorkspaceOpen } from "../../src/spinosa/entry"
-import { createWorkspaceID } from "../../src/spinosa-core/workspace/identity"
+import { createWorkspaceID } from "@spinosa/core/workspace/identity"
 import { tmpdir } from "../fixture/fixture"
 
 const fixture = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "fixtures/workspace-started")

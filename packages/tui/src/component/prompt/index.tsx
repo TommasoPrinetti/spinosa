@@ -14,7 +14,7 @@ import "opentui-spinner/solid"
 import path from "path"
 import { fileURLToPath } from "url"
 import { useLocal } from "../../context/local"
-import { Flag } from "@opencode-ai/core/flag/flag"
+import { Flag } from "@spinosa/kernel-core/flag/flag"
 import { tint, useTheme } from "../../context/theme"
 import { EmptyBorder, SplitBorder } from "../../ui/border"
 import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
@@ -37,7 +37,7 @@ import { usePromptStash } from "../../prompt/stash"
 import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
-import type { AssistantMessage, FilePart, UserMessage } from "@opencode-ai/sdk/v2"
+import type { AssistantMessage, FilePart, UserMessage } from "@spinosa/sdk/v2"
 import { Locale } from "../../util/locale"
 import { agentDisplayName } from "../../util/agent"
 import { errorMessage } from "../../util/error"
@@ -52,12 +52,12 @@ import { createFadeIn } from "../../util/signal"
 import { DialogSkill } from "../dialog-skill"
 import { DialogWorkspaceUnavailable } from "../dialog-workspace-unavailable"
 import { useArgs } from "../../context/args"
-import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut, useLeaderActive, useOpencodeKeymap } from "../../keymap"
+import { SPINOSA_BASE_MODE, useBindings, useCommandShortcut, useLeaderActive, useOpencodeKeymap } from "../../keymap"
 import { useTuiConfig } from "../../config"
 import { usePromptWorkspace } from "./workspace"
 import { usePromptMove } from "./move"
 import { readLocalAttachment } from "./local-attachment"
-import { prepareSpinosaSubmit } from "../../spinosa/orchestrator"
+import { cancelSpinosaSubmit, executeSpinosaSubmit, prepareSpinosaSubmit } from "../../spinosa/orchestrator"
 import { readStartupPrompt } from "../../spinosa/service"
 import { useSpinosaWorkspace } from "../../context/spinosa-workspace"
 
@@ -430,9 +430,10 @@ export function Prompt(props: PromptProps) {
           }, 5000)
 
           if (store.interrupt >= 2) {
-            void sdk.client.session.abort({
-              sessionID: props.sessionID,
-            })
+        void cancelSpinosaSubmit({ client: sdk.client, sessionID: props.sessionID }).then((handled) => {
+          if (handled) return
+          return sdk.client.session.abort({ sessionID: props.sessionID })
+        })
             setStore("interrupt", 0)
           }
           dialog.clear()
@@ -555,7 +556,7 @@ export function Prompt(props: PromptProps) {
         desc: "Change the workspace for the session",
         name: "workspace.set",
         category: "Session",
-        enabled: Flag.OPENCODE_EXPERIMENTAL_WORKSPACES,
+        enabled: Flag.SPINOSA_EXPERIMENTAL_WORKSPACES,
         slashName: "warp",
         run: () => {
           workspace.open()
@@ -607,7 +608,7 @@ export function Prompt(props: PromptProps) {
   }))
 
   useBindings(() => ({
-    mode: OPENCODE_BASE_MODE,
+    mode: SPINOSA_BASE_MODE,
     bindings: tuiConfig.keybinds.gather("prompt.palette", [
       "prompt.submit",
       "prompt.editor",
@@ -1080,9 +1081,11 @@ export function Prompt(props: PromptProps) {
     )
 
     let outboundText = inputText
+    let preparedSpinosa: Awaited<ReturnType<typeof prepareSpinosaSubmit>> | undefined
     if (sessionDirectory) {
       try {
         const prepared = await prepareSpinosaSubmit(sessionDirectory, inputText)
+        preparedSpinosa = prepared
         outboundText = prepared.text
         if (prepared.framed && prepared.goalPath && prepared.sessionId) {
           spinosa.setLastRoute(prepared.sessionId, prepared.goalPath)
@@ -1153,6 +1156,24 @@ export function Prompt(props: PromptProps) {
         variant,
         parts: nonTextParts.filter((x) => x.type === "file"),
       })
+    } else if (preparedSpinosa?.framed) {
+      move.startSubmit()
+      void executeSpinosaSubmit({
+        client: sdk.client,
+        sessionID,
+        prepared: preparedSpinosa,
+        model: {
+          providerID: selectedModel.providerID,
+          modelID: selectedModel.modelID,
+        },
+      }).catch((error) => {
+        toast.show({
+          title: "Couldn’t send prompt",
+          message: errorMessage(error),
+          variant: "error",
+        })
+      })
+      if (editorParts.length > 0) editor.markSelectionSent()
     } else {
       move.startSubmit()
       sdk.client.session

@@ -9,7 +9,7 @@ import {
   resolveFrameworkBin,
   installedReleaseVersion,
   readFrameworkVersionFromRoot,
-} from "../../src/spinosa-core/framework/discovery"
+} from "@spinosa/core/framework/discovery"
 
 let tmpDir: string
 let realTmpDir: string

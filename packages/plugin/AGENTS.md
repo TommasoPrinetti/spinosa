@@ -1,11 +1,11 @@
 # Plugin Package Guide
 
-`@opencode-ai/plugin` is the author-facing API for OpenCode plugins. Consumed by core (execution), TUI (presentation slots), and external plugin packages.
+`@spinosa/plugin` is the author-facing API for Spinosa plugins. Consumed by core (execution), TUI (presentation slots), and external plugin packages.
 
 ## Exports (from `package.json`)
 
 - `.` — core plugin types and registration
-- `./tui` — TUI presentation hooks (used by `@opencode-ai/tui` plugin runtime)
+- `./tui` — TUI presentation hooks (used by `@spinosa/tui` plugin runtime)
 - `./tool` — tool plugin helpers
 - `./v2/effect/*` — Effect-based V2 plugin surfaces
 

@@ -1,11 +1,11 @@
 import { mock } from "bun:test";
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder";
-import { Global } from "@opencode-ai/core/global";
-import type { TuiPluginApi } from "@opencode-ai/plugin/tui";
+import { AppNodeBuilder } from "@spinosa/kernel-core/effect/app-node-builder";
+import { Global } from "@spinosa/kernel-core/global";
+import type { TuiPluginApi } from "@spinosa/plugin/tui";
 import { Effect, Fiber } from "effect";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
-import { createWorkspaceID } from "../../../src/spinosa-core/workspace/identity";
+import { createWorkspaceID } from "@spinosa/core/workspace/identity";
 import { createTuiResolvedConfig } from "../../../test/fixture/tui-runtime";
 import {
   createEventSource,
@@ -85,12 +85,12 @@ const adapter: TuiAgentAdapter = {
     }));
     const previous = captureProcessState();
     process.env.HOME = context.home;
-    process.env.OPENCODE_TEST_HOME = context.home;
+    process.env.SPINOSA_TEST_HOME = context.home;
     process.env.SPINOSA_HOME = path.join(context.home, ".spinosa");
-    process.env.OPENCODE_FAST_BOOT = "1";
+    process.env.SPINOSA_FAST_BOOT = "1";
     if (context.scenario.route)
-      process.env.OPENCODE_ROUTE = JSON.stringify(context.scenario.route);
-    else delete process.env.OPENCODE_ROUTE;
+      process.env.SPINOSA_ROUTE = JSON.stringify(context.scenario.route);
+    else delete process.env.SPINOSA_ROUTE;
     if (context.preparation.cwd) process.chdir(context.preparation.cwd);
 
     const events = createEventSource();
@@ -322,7 +322,7 @@ function captureProcessState() {
   return {
     cwd: process.cwd(),
     env: Object.fromEntries(
-      ["HOME", "OPENCODE_TEST_HOME", "SPINOSA_HOME", "OPENCODE_ROUTE", "OPENCODE_FAST_BOOT"].map(
+      ["HOME", "SPINOSA_TEST_HOME", "SPINOSA_HOME", "SPINOSA_ROUTE", "SPINOSA_FAST_BOOT"].map(
         (key) => [key, process.env[key]],
       ),
     ),

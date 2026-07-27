@@ -7,7 +7,7 @@ import {
   cleanupStaleInstallDirectories,
   inspectSpinosaMaintenance,
   MIN_STALE_INSTALL_AGE_MS,
-} from "../../src/spinosa-core/system/maintenance"
+} from "@spinosa/core/system/maintenance"
 
 test("maintenance inspection finds only abandoned installer directories", async () => {
   await using tmp = await tmpdir()

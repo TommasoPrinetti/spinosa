@@ -6,6 +6,90 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 **Release policy:** versions are published only with explicit maintainer approval.
 
+## [1.0.1-beta.14] — 2026-07-24
+
+No user-facing changes since beta.13. (Build pipeline stabilization.)
+
+## [1.0.1-beta.13] — 2026-07-23
+
+No user-facing changes since beta.12. (Tag cleanup.)
+
+## [1.0.1-beta.12] — 2026-07-23
+
+### Changed
+
+- TrOCR engine and LLM‑based OCR post‑processing removed. `ppu-paddle-ocr` remains the sole OCR engine. All `trocr` references purged from worker and pipeline code.
+
+## [1.0.1-beta.11] — 2026-07-23
+
+### Fixed
+
+- All upgrade awareness removed from the TUI. Upgrade prompting, downloading, and installation now live exclusively in `spinosa upgrade` (CLI). The TUI never mentions or offers upgrades.
+- Post‑upgrade workspace discovery shows a progress message.
+
+## [1.0.1-beta.10] — 2026-07-23
+
+### Fixed
+
+- Version check no longer caches the "upgrade available" decision. Every TUI mount re‑fetches the remote version so the upgrade prompt appears reliably when a newer release is published.
+
+## [1.0.1-beta.9] — 2026-07-23
+
+### Fixed
+
+- After `spinosa upgrade` completes, the user is now prompted to update their workspaces from within the same CLI flow. TUI flow unified: both CLI‑only and TUI‑assisted upgrades offer the same post‑upgrade workspace update step.
+
+## [1.0.1-beta.8] — 2026-07-23
+
+### Fixed
+
+- Better error logging when upgrade version resolution fails.
+
+## [1.0.1-beta.7] — 2026-07-23
+
+### Fixed
+
+- `spinosa upgrade` no longer crashes when a registered workspace directory is missing during the post‑upgrade update phase.
+
+## [1.0.1-beta.6] — 2026-07-23
+
+### Fixed
+
+- Old version directories are purged from `~/.spinosa/versions/` after a successful upgrade.
+- Known contaminant files (leaked test artifacts, personal paths) are cleaned during workspace update.
+
+## [1.0.1-beta.5] — 2026-07-22
+
+### Added
+
+- Dedicated upgrade screen that blocks the home page until the upgrade is resolved.
+- Scrolling ASCII banner handles long workspace names.
+
+### Fixed
+
+- ASCII art always shows; removed the scrolling animation that sometimes hid the banner.
+- OCR runs in an isolated child process; ANSI escape sequences stripped from OCR output.
+- Test fixture paths anonymized.
+
+## [1.0.1-beta.4] — 2026-07-22
+
+### Changed
+
+- Remaining personal paths stripped from website, server, and installer artifacts. Leak‑prevention patterns added to `.gitignore` and `raw/AGENTS.md`.
+
+## [1.0.1-beta.1] — 2026-07-22
+
+### Added
+
+- Installer now uses the TUI wave pattern (`tui-wave`) for visual consistency.
+- First post‑stable beta release.
+
+### Fixed
+
+- Legacy Spinosa shim recognized correctly.
+- Beta checksum manifest validation fixed.
+- Stale `corpus.md` removed (replaced by `workspace.md`).
+
 ## [1.0.0] — 2026-07-20
 
 ### Added

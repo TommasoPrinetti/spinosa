@@ -48,8 +48,8 @@
 ### H3. `as unknown as ThemeRegistrationResolved` bypasses type safety — context/marked.tsx
 - **File:** context/marked.tsx
 - **Line:** 378
-- **Issue:** The `OpenCodeTheme` object is cast through `unknown` to `ThemeRegistrationResolved`, losing all type safety.
-- **Detail:** The `OpenCodeTheme` export has an explicit `tokenColors` structure, `colors` map, etc., but is cast `as unknown as ThemeRegistrationResolved`. TypeScript cannot verify the object conforms to the expected interface. If the `@pierre/diffs` package changes its `ThemeRegistrationResolved` type, there will be no compile-time error — only runtime breakage.
+- **Issue:** The `SpinosaTheme` object is cast through `unknown` to `ThemeRegistrationResolved`, losing all type safety.
+- **Detail:** The `SpinosaTheme` export has an explicit `tokenColors` structure, `colors` map, etc., but is cast `as unknown as ThemeRegistrationResolved`. TypeScript cannot verify the object conforms to the expected interface. If the `@pierre/diffs` package changes its `ThemeRegistrationResolved` type, there will be no compile-time error — only runtime breakage.
 - **Suggestion:** Narrow the type progressively or use a proper typed builder. At minimum, add a runtime schema validation or keep the explicit cast with a comment referencing why the types diverge.
 
 ### H4. Redundant open-on-hover logic — components/tooltip.tsx

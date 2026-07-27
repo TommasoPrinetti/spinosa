@@ -1,5 +1,5 @@
-import { EventV2 } from "@opencode-ai/core/event"
-import { OpenCodeEvent } from "@opencode-ai/protocol/groups/event"
+import { EventV2 } from "@spinosa/kernel-core/event"
+import { SpinosaEvent } from "@spinosa/protocol/groups/event"
 import { Effect, Schema, Stream } from "effect"
 import { HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
@@ -11,7 +11,7 @@ const subscriberCapacity = 256
 function eventData(data: unknown): Sse.Event {
   let payload: string
   try {
-    payload = JSON.stringify(Schema.encodeUnknownSync(OpenCodeEvent)(data))
+    payload = JSON.stringify(Schema.encodeUnknownSync(SpinosaEvent)(data))
   } catch {
     payload = JSON.stringify({})
   }

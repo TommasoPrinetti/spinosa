@@ -45,7 +45,7 @@ export function loadDialogSessionList<T>(input: {
 }
 
 async function readLocalSessions(dir: string) {
-  const sessionsDir = path.join(dir, ".opencode", "sessions")
+  const sessionsDir = path.join(dir, ".spinosa", "sessions")
   try {
     const files = await readdir(sessionsDir)
     const jsonFiles = files.filter((f) => f.endsWith(".json"))

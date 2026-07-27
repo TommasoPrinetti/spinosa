@@ -3,7 +3,7 @@ import { useTheme } from "../../context/theme"
 import { useSync } from "../../context/sync"
 import { Locale } from "../../util/locale"
 import { usePathFormatter } from "../../context/path-format"
-import type { AssistantMessage, Todo } from "@opencode-ai/sdk/v2"
+import type { AssistantMessage, Todo } from "@spinosa/sdk/v2"
 
 export function SessionFooter(props: { sessionID: string }) {
   const { theme } = useTheme()

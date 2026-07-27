@@ -1,6 +1,6 @@
 # Spinosa TUI — Design system (terminal)
 
-**Surface:** Product TUI on OpenTUI/Solid. Inherits OpenCode theme via `useTheme()`.
+**Surface:** Product TUI on OpenTUI/Solid. Inherits Spinosa theme via `useTheme()`.
 
 ## Typography hierarchy
 

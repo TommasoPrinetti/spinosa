@@ -4,11 +4,11 @@ import { Effect, Fiber } from "effect"
 import { existsSync, mkdirSync, mkdtempSync, rmSync, utimesSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { Global } from "@opencode-ai/core/global"
+import { AppNodeBuilder } from "@spinosa/kernel-core/effect/app-node-builder"
+import { Global } from "@spinosa/kernel-core/global"
 import { createTuiResolvedConfig } from "../fixture/tui-runtime"
 import { createEventSource, createFetch, directory, json } from "../fixture/tui-sdk"
-import { createWorkspaceID, type SpinosaWorkspaceID } from "../../src/spinosa-core/workspace/identity"
+import { createWorkspaceID, type SpinosaWorkspaceID } from "@spinosa/core/workspace/identity"
 
 type SpinosaRoute = "workspace" | "global" | "onboarding" | "add-files" | "visualizer"
 type TestRenderer = Awaited<ReturnType<typeof createTestRenderer>>
@@ -27,19 +27,19 @@ async function renderRouteFrame(
   const setup = await createTestRenderer({ width: 100, height: options.height ?? 30, useThread: false })
   const core = await import("@opentui/core")
   mock.module("@opentui/core", () => ({ ...core, createCliRenderer: async () => setup.renderer }))
-  const previousRoute = process.env.OPENCODE_ROUTE
-  const previousFastBoot = process.env.OPENCODE_FAST_BOOT
+  const previousRoute = process.env.SPINOSA_ROUTE
+  const previousFastBoot = process.env.SPINOSA_FAST_BOOT
   const previousHome = process.env.HOME
-  const previousTestHome = process.env.OPENCODE_TEST_HOME
+  const previousTestHome = process.env.SPINOSA_TEST_HOME
   const previousSpinosaHome = process.env.SPINOSA_HOME
   const previousCwd = process.cwd()
-  if (options.useDefaultRoute) delete process.env.OPENCODE_ROUTE
-  else process.env.OPENCODE_ROUTE = JSON.stringify(options.initialRoute ?? { type: route })
-  process.env.OPENCODE_FAST_BOOT = "1"
+  if (options.useDefaultRoute) delete process.env.SPINOSA_ROUTE
+  else process.env.SPINOSA_ROUTE = JSON.stringify(options.initialRoute ?? { type: route })
+  process.env.SPINOSA_FAST_BOOT = "1"
   if (options.cwd) process.chdir(options.cwd)
   if (options.home) {
     process.env.HOME = options.home
-    process.env.OPENCODE_TEST_HOME = options.home
+    process.env.SPINOSA_TEST_HOME = options.home
     process.env.SPINOSA_HOME = path.join(options.home, ".spinosa")
   }
 
@@ -92,14 +92,14 @@ async function renderRouteFrame(
     setup.renderer.destroy()
     return frame
   } finally {
-    if (previousRoute === undefined) delete process.env.OPENCODE_ROUTE
-    else process.env.OPENCODE_ROUTE = previousRoute
-    if (previousFastBoot === undefined) delete process.env.OPENCODE_FAST_BOOT
-    else process.env.OPENCODE_FAST_BOOT = previousFastBoot
+    if (previousRoute === undefined) delete process.env.SPINOSA_ROUTE
+    else process.env.SPINOSA_ROUTE = previousRoute
+    if (previousFastBoot === undefined) delete process.env.SPINOSA_FAST_BOOT
+    else process.env.SPINOSA_FAST_BOOT = previousFastBoot
     if (previousHome === undefined) delete process.env.HOME
     else process.env.HOME = previousHome
-    if (previousTestHome === undefined) delete process.env.OPENCODE_TEST_HOME
-    else process.env.OPENCODE_TEST_HOME = previousTestHome
+    if (previousTestHome === undefined) delete process.env.SPINOSA_TEST_HOME
+    else process.env.SPINOSA_TEST_HOME = previousTestHome
     if (previousSpinosaHome === undefined) delete process.env.SPINOSA_HOME
     else process.env.SPINOSA_HOME = previousSpinosaHome
     if (process.cwd() !== previousCwd) process.chdir(previousCwd)

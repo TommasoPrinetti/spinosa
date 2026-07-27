@@ -203,4 +203,4 @@ bun tools/tui-agent/cli.ts run workspace-session
 bun tools/tui-agent/cli.ts interact workspace-session
 ```
 
-The Spinosa adapter is a repository example, not part of the published runtime bundle; it imports Spinosa/OpenCode workspace sources directly. Copy its architecture, not its private imports, when integrating another TUI.
+The Spinosa adapter is a repository example, not part of the published runtime bundle; it imports Spinosa/Spinosa workspace sources directly. Copy its architecture, not its private imports, when integrating another TUI.

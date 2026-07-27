@@ -7,81 +7,186 @@ import { Flock } from "./util/flock"
 import { Flag } from "./flag/flag"
 import { makeGlobalNode } from "./effect/app-node"
 
-const app = "opencode"
-const data = path.join(xdgData!, app)
-const cache = path.join(xdgCache!, app)
-const config = path.join(xdgConfig!, app)
-const state = path.join(xdgState!, app)
-const tmp = path.join(os.tmpdir(), app)
+const legacyApp = ["open", "code"].join("")
+const app = "spinosa"
+const migrationManifest = "migration-manifest.json"
+const migrationLock = ".spinosa-migration.lock"
 
-const paths = {
-  get home() {
-    return process.env.OPENCODE_TEST_HOME ?? os.homedir()
-  },
-  data,
-  bin: path.join(cache, "bin"),
-  log: path.join(data, "log"),
-  repos: path.join(data, "repos"),
-  cache,
-  config,
-  state,
-  tmp,
+type Paths = Record<"data" | "cache" | "config" | "state" | "tmp", string>
+
+export type MigrationResult = {
+  source: string
+  target: string
+  result: "migrated" | "conflict" | "absent" | "invalid"
 }
 
-export const Path = paths
-
-Flock.setGlobal({ state })
-
-await Promise.all([
-  fs.mkdir(Path.data, { recursive: true }),
-  fs.mkdir(Path.config, { recursive: true }),
-  fs.mkdir(Path.state, { recursive: true }),
-  fs.mkdir(Path.tmp, { recursive: true }),
-  fs.mkdir(Path.log, { recursive: true }),
-  fs.mkdir(Path.bin, { recursive: true }),
-  fs.mkdir(Path.repos, { recursive: true }),
-])
-
-export class Service extends Context.Service<Service, Interface>()("@opencode/Global") {}
-
-export interface Interface {
-  readonly home: string
-  readonly data: string
-  readonly cache: string
-  readonly config: string
-  readonly state: string
-  readonly tmp: string
-  readonly bin: string
-  readonly log: string
-  readonly repos: string
+const legacyPaths: Paths = {
+  data: path.join(xdgData!, legacyApp),
+  cache: path.join(xdgCache!, legacyApp),
+  config: path.join(xdgConfig!, legacyApp),
+  state: path.join(xdgState!, legacyApp),
+  tmp: path.join(os.tmpdir(), legacyApp),
 }
 
-export function make(input: Partial<Interface> = {}): Interface {
-  return {
-    home: Path.home,
-    data: Path.data,
-    cache: Path.cache,
-    config: Flag.OPENCODE_CONFIG_DIR ?? Path.config,
-    state: Path.state,
-    tmp: Path.tmp,
-    bin: Path.bin,
-    log: Path.log,
-    repos: Path.repos,
-    ...input,
+const spinosaPaths: Paths = {
+  data: path.join(xdgData!, app),
+  cache: path.join(xdgCache!, app),
+  config: path.join(xdgConfig!, app),
+  state: path.join(xdgState!, app),
+  tmp: path.join(os.tmpdir(), app),
+}
+
+async function exists(file: string) {
+  return fs.stat(file).then(() => true).catch(() => false)
+}
+
+async function validateSqliteFiles(directory: string): Promise<boolean> {
+  const entries = await fs.readdir(directory, { withFileTypes: true })
+  for (const entry of entries) {
+    const file = path.join(directory, entry.name)
+    if (entry.isDirectory()) {
+      if (!(await validateSqliteFiles(file))) return false
+      continue
+    }
+    if (!entry.isFile() || !entry.name.endsWith(".db")) continue
+
+    try {
+      const { Database } = await import("bun:sqlite")
+      using db = new Database(file, { readonly: true })
+      const check = db.query("PRAGMA integrity_check").get() as { integrity_check?: string }
+      if (check.integrity_check !== "ok") return false
+    } catch {
+      return false
+    }
+  }
+  return true
+}
+
+async function renameLegacyConfigFiles(directory: string) {
+  for (const extension of ["json", "jsonc"]) {
+    const source = path.join(directory, `${legacyApp}.${extension}`)
+    const target = path.join(directory, `${app}.${extension}`)
+    if ((await exists(source)) && !(await exists(target))) await fs.rename(source, target)
   }
 }
 
-const layer = Layer.effect(
-  Service,
-  Effect.sync(() => Service.of(make())),
-)
+async function migrateDirectory(source: string, target: string, configDirectory = false): Promise<MigrationResult> {
+  if (!(await exists(source))) return { source, target, result: "absent" }
+  if (await exists(target)) return { source, target, result: "conflict" }
 
-export const node = makeGlobalNode({ service: Service, layer: layer, deps: [] })
+  const staging = `${target}.migrating-${process.pid}-${Date.now()}`
+  try {
+    await fs.cp(source, staging, { recursive: true, force: false, errorOnExist: true })
+    if (!(await validateSqliteFiles(staging))) {
+      await fs.rm(staging, { recursive: true, force: true })
+      return { source, target, result: "invalid" }
+    }
+    if (configDirectory) {
+      await renameLegacyConfigFiles(staging)
+    }
+    await fs.rename(staging, target)
+    return { source, target, result: "migrated" }
+  } catch (error) {
+    await fs.rm(staging, { recursive: true, force: true }).catch(() => undefined)
+    throw error
+  }
+}
 
-export const layerWith = (input: Partial<Interface>) =>
-  Layer.effect(
-    Service,
-    Effect.sync(() => Service.of(make(input))),
-  )
+export async function migrateLegacyPaths(input: { legacy: Paths; spinosa: Paths }) {
+  const lockDirectory = path.dirname(input.spinosa.data)
+  const lock = path.join(lockDirectory, migrationLock)
+  await fs.mkdir(lockDirectory, { recursive: true })
+  let handle: fs.FileHandle | undefined
+  try {
+    handle = await fs.open(lock, "wx")
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EEXIST") return [] as MigrationResult[]
+    throw error
+  }
 
-export * as Global from "./global"
+  try {
+    const results = await Promise.all(
+      (Object.keys(input.legacy) as Array<keyof Paths>).map((name) =>
+        migrateDirectory(input.legacy[name], input.spinosa[name], name === "config"),
+      ),
+    )
+    const manifestTarget = path.join(input.spinosa.data, migrationManifest)
+    if (results.some((result) => result.result !== "absent")) {
+      await fs.mkdir(input.spinosa.data, { recursive: true })
+      await fs.writeFile(
+        manifestTarget,
+        JSON.stringify({ version: 1, migratedAt: new Date().toISOString(), results }, null, 2) + "\n",
+      )
+    }
+    return results
+  } finally {
+    await handle.close()
+    await fs.rm(lock, { force: true })
+  }
+}
+
+await migrateLegacyPaths({ legacy: legacyPaths, spinosa: spinosaPaths })
+
+const globalPath = {
+  home: process.env.SPINOSA_TEST_HOME ?? os.homedir(),
+  cache: path.join(process.env.XDG_CACHE_HOME ?? path.join(os.homedir(), ".cache"), app),
+  data: path.join(process.env.XDG_DATA_HOME ?? path.join(os.homedir(), ".local", "share"), app),
+  config: path.join(process.env.XDG_CONFIG_HOME ?? path.join(os.homedir(), ".config"), app),
+  state: path.join(process.env.XDG_STATE_HOME ?? path.join(os.homedir(), ".local", "state"), app),
+  tmp: path.join(os.tmpdir(), app),
+  bin: path.join(process.env.SPINOSA_TEST_HOME ?? os.homedir(), `.${app}`, "bin"),
+  log: path.join(process.env.XDG_STATE_HOME ?? path.join(os.homedir(), ".local", "state"), app, "log"),
+  repos: path.join(process.env.XDG_DATA_HOME ?? path.join(os.homedir(), ".local", "share"), app, "repos"),
+}
+
+Flock.setGlobal({ state: globalPath.state })
+
+await Promise.all([
+  fs.mkdir(globalPath.data, { recursive: true }),
+  fs.mkdir(globalPath.config, { recursive: true }),
+  fs.mkdir(globalPath.state, { recursive: true }),
+  fs.mkdir(globalPath.tmp, { recursive: true }),
+  fs.mkdir(globalPath.log, { recursive: true }),
+  fs.mkdir(globalPath.bin, { recursive: true }),
+  fs.mkdir(globalPath.repos, { recursive: true }),
+])
+
+export namespace Global {
+  export const Path = globalPath
+
+  export interface Interface {
+    home: string
+    data: string
+    cache: string
+    config: string
+    state: string
+    tmp: string
+    bin: string
+    log: string
+    repos: string
+  }
+
+  export class Service extends Context.Service<Service, Interface>()("@spinosa/Global") {}
+
+  export function make(input: Partial<Interface> = {}): Interface {
+    return {
+      home: Path.home,
+      data: Path.data,
+      cache: Path.cache,
+      config: Flag.SPINOSA_CONFIG_DIR ?? Path.config,
+      state: Path.state,
+      tmp: Path.tmp,
+      bin: Path.bin,
+      log: Path.log,
+      repos: Path.repos,
+      ...input,
+    }
+  }
+
+  const layer = Layer.effect(Service, Effect.sync(() => Service.of(make())))
+  export const node = makeGlobalNode({ service: Service, layer, deps: [] })
+  export const layerWith = (input: Partial<Interface>) =>
+    Layer.effect(Service, Effect.sync(() => Service.of(make(input))))
+}
+
+export * from "./global"

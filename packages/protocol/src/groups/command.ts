@@ -1,5 +1,5 @@
-import { Command } from "@opencode-ai/schema/command"
-import { Location } from "@opencode-ai/schema/location"
+import { Command } from "@spinosa/schema/command"
+import { Location } from "@spinosa/schema/location"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { LocationQuery, locationQueryOpenApi } from "./location"

@@ -1,5 +1,5 @@
-import type { GoalArtifactSummary } from "../spinosa-core/types"
-import { artifactExists } from "../spinosa-core/workspace/meta"
+import type { GoalArtifactSummary } from "@spinosa/core/types"
+import { artifactExists } from "@spinosa/core/workspace/meta"
 
 export type RecoveryGap = {
   role: string

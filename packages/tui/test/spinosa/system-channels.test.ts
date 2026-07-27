@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, mock, test } from "bun:test"
-import { resolvePinnedVersionFromInstaller } from "../../src/spinosa-core/system/channels"
+import { resolvePinnedVersionFromInstaller } from "@spinosa/core/system/channels"
 
 const originalFetch = globalThis.fetch
 

@@ -1,4 +1,4 @@
-import type { ToolPart } from "@opencode-ai/sdk/v2"
+import type { ToolPart } from "@spinosa/sdk/v2"
 
 export type VisualizerMode = "timeline" | "types" | "sessions"
 

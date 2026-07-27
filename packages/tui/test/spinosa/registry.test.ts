@@ -11,8 +11,8 @@ import {
   listRegisteredWorkspaces,
   setWorkspacePresence,
   setWorkspaceTags,
-} from "../../src/spinosa-core/workspace/registry"
-import { createWorkspaceID } from "../../src/spinosa-core/workspace/identity"
+} from "@spinosa/core/workspace/registry"
+import { createWorkspaceID } from "@spinosa/core/workspace/identity"
 import { existsSync, mkdirSync, renameSync, writeFileSync } from "node:fs"
 
 describe("workspace registry", () => {
@@ -25,7 +25,7 @@ describe("workspace registry", () => {
   test("keeps every registration from concurrent processes", async () => {
     await using tmp = await tmpdir()
     const spinosaHome = path.join(tmp.path, "home")
-    const modulePath = path.resolve(import.meta.dir, "../../src/spinosa-core/workspace/registry.ts")
+    const modulePath = import.meta.resolve("@spinosa/core/workspace/registry")
     const count = 20
     const children = Array.from({ length: count }, (_, index) => Bun.spawn({
       cmd: [

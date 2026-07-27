@@ -15,8 +15,8 @@ import {
 import { isSpinosaWorkspace, readWorkspaceMeta } from "../spinosa/service"
 import type { SpinosaWorkspaceMeta } from "../spinosa/types"
 import { setActiveWorkspacePath, tuiLog } from "../spinosa/log"
-import { inspectRegisteredWorkspacePresence, isUsableWorkspacePresence } from "../spinosa-core/workspace/presence"
-import { runSpinosaBootHealth, SPINOSA_BOOT_OPERATIONS, type SpinosaBootOperation } from "../spinosa-core/system/boot"
+import { inspectRegisteredWorkspacePresence, isUsableWorkspacePresence } from "@spinosa/core/workspace/presence"
+import { runSpinosaBootHealth, SPINOSA_BOOT_OPERATIONS, type SpinosaBootOperation } from "@spinosa/core/system/boot"
 import type { RouteNavigateInput } from "./route"
 import { KV } from "../constants/kv-keys"
 

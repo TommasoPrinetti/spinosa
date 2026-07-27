@@ -1,6 +1,6 @@
 {
   "name": "dialog-status",
-  "description": "Open dialog via /status, verify OpenCode Status dialog renders, then close with escape",
+  "description": "Open dialog via /status, verify Spinosa Status dialog renders, then close with escape",
   "adapter": "../adapters/spinosa.ts",
   "terminal": { "width": 100, "height": 50 },
   "fixture": {

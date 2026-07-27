@@ -1,4 +1,4 @@
-import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
+import type { TuiPlugin, TuiPluginApi } from "@spinosa/plugin/tui"
 import type { BuiltinTuiPlugin } from "../builtins"
 import { createMemo, Match, Show, Switch } from "solid-js"
 
@@ -9,7 +9,7 @@ function Meta(props: { api: TuiPluginApi }) {
 
   return (
     <box gap={2} flexDirection="row" flexShrink={0}>
-      <text fg={theme().text}>OpenCode</text>
+      <text fg={theme().text}>Spinosa</text>
       <text fg={theme().textMuted}>local</text>
       <text fg={theme().textMuted}>{props.api.app.version}</text>
     </box>

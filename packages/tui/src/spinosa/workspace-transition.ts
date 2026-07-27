@@ -1,5 +1,5 @@
 import type { RouteNavigateInput } from "../context/route"
-import type { SpinosaSetupStatus } from "../spinosa-core/types"
+import type { SpinosaSetupStatus } from "@spinosa/core/types"
 import { routeForWorkspaceOpen, type WorkspaceOpenContext } from "./entry"
 
 type WorkspaceStatus = readonly [workspacePath: string | undefined, setupStatus: SpinosaSetupStatus | undefined]

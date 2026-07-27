@@ -1,5 +1,5 @@
 import path from "node:path";
-import type { FileNode, Part, ToolPart } from "@opencode-ai/sdk/v2";
+import type { FileNode, Part, ToolPart } from "@spinosa/sdk/v2";
 import type { WorkspaceFile } from "./visualizer-graph-data";
 import type { ToolCallRecord } from "./visualizer-types";
 

@@ -10,13 +10,13 @@ import { useTheme } from "../../context/theme"
 import { useRoute } from "../../context/route"
 import { useSpinosaWorkspace } from "../../context/spinosa-workspace"
 import { Toast, useToast } from "../../ui/toast"
-import { scanAndClassifySource, processDirectCopy, processMarkitdown, processOcr } from "../../spinosa-core/import/pipeline"
-import { isSpinosaCancellationError } from "../../spinosa-core/import/cancellation"
-import { ProgressEmitter } from "../../spinosa-core/progress/progress"
-import { ImportBatchManager } from "../../spinosa-core/import/batch"
+import { scanAndClassifySource, processDirectCopy, processMarkitdown, processOcr } from "@spinosa/core/import/pipeline"
+import { isSpinosaCancellationError } from "@spinosa/core/import/cancellation"
+import { ProgressEmitter } from "@spinosa/core/progress/progress"
+import { ImportBatchManager } from "@spinosa/core/import/batch"
 import { tuiLog, logStep, logAction, logTool, logGate, logError, setToastError } from "../../spinosa/log"
 import { CenteredColumn } from "../../component/centered-column"
-import { OPENCODE_BASE_MODE, useOpencodeKeymap, useOpencodeModeStack } from "../../keymap"
+import { SPINOSA_BASE_MODE, useOpencodeKeymap, useOpencodeModeStack } from "../../keymap"
 import { useExit } from "../../context/exit"
 import { useDialog } from "../../ui/dialog"
 import { buttonBackground, buttonText } from "../../util/button"
@@ -27,8 +27,8 @@ import {
 } from "../../spinosa/onboarding-preview"
 import type { CliRunResult } from "../../spinosa/types"
 import { readBundledFrameworkVersion, isPrereleaseFrameworkVersion } from "../../spinosa/service"
-import { resolveFrameworkRoot } from "../../spinosa-core/framework/discovery"
-import { normalizePathInput, resolveExistingUserPaths, isCloudStoragePath } from "../../spinosa-core/utils/path"
+import { resolveFrameworkRoot } from "@spinosa/core/framework/discovery"
+import { normalizePathInput, resolveExistingUserPaths, isCloudStoragePath } from "@spinosa/core/utils/path"
 import {
   blurIfFocused,
   confirmSpinosaBack,
@@ -796,7 +796,7 @@ export function AddFiles() {
     }, 400)
 
     const off = keymap.intercept("key", ({ event, consume }) => {
-      if (modeStack.current() !== OPENCODE_BASE_MODE) return
+      if (modeStack.current() !== SPINOSA_BASE_MODE) return
       setHoveredButton(null)
 
       if (event.ctrl && event.name === "c") {

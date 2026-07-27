@@ -3,7 +3,7 @@ import path from "node:path"
 import { existsSync } from "node:fs"
 import { mkdir } from "node:fs/promises"
 import { tmpdir } from "../fixture/fixture"
-import { safeCopy, safeCopyAsync } from "../../src/spinosa-core/utils/fs"
+import { safeCopy, safeCopyAsync } from "@spinosa/core/utils/fs"
 
 describe("Spinosa file copy safety", () => {
   test("keeps destination when source copy fails", async () => {

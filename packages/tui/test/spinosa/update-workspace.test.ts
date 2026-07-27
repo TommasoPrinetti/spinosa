@@ -3,8 +3,8 @@ import path from "node:path"
 import { mkdir } from "node:fs/promises"
 import { existsSync } from "node:fs"
 import { tmpdir } from "../fixture/fixture"
-import { updateWorkspace } from "../../src/spinosa-core/commands/update"
-import { createWorkspaceID } from "../../src/spinosa-core/workspace/identity"
+import { updateWorkspace } from "@spinosa/core/commands/update"
+import { createWorkspaceID } from "@spinosa/core/workspace/identity"
 
 describe("workspace update flow", () => {
   const repoRoot = path.resolve(import.meta.dir, "../../../..")

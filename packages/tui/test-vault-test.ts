@@ -1,5 +1,5 @@
-import { resolveFrameworkRoot } from "./src/spinosa-core/framework/discovery.ts"
-import { createWorkspace } from "./src/spinosa-core/commands/create.ts"
+import { resolveFrameworkRoot } from "@spinosa/core/framework/discovery"
+import { createWorkspace } from "@spinosa/core/commands/create"
 
 const root = resolveFrameworkRoot()
 console.log("Framework root:", root)

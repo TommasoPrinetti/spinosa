@@ -7,9 +7,9 @@ import { FSUtil } from "./fs-util"
 import { Location } from "./location"
 import { PositiveInt, RelativePath } from "./schema"
 import { FileSystemSearch } from "./filesystem/search"
-import { Entry, FileSystem, FindInput, Match } from "@opencode-ai/schema/filesystem"
-export { Entry, Match, Submatch } from "@opencode-ai/schema/filesystem"
-// NOTE: Entry, Match are re-exported from @opencode-ai/schema/filesystem.
+import { Entry, FileSystem, FindInput, Match } from "@spinosa/schema/filesystem"
+export { Entry, Match, Submatch } from "@spinosa/schema/filesystem"
+// NOTE: Entry, Match are re-exported from @spinosa/schema/filesystem.
 // These shadow the imported names above to create the desired public API surface.
 // Local module code uses them as types from FileSystem (line 10).
 
@@ -57,7 +57,7 @@ export interface Interface {
   readonly grep: (input: GrepInput) => Effect.Effect<readonly Match[]>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/FileSystem") {}
+export class Service extends Context.Service<Service, Interface>()("@spinosa/v2/FileSystem") {}
 
 const baseLayer = Layer.effect(
   Service,

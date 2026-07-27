@@ -1,13 +1,14 @@
-import { createMemo, createResource, onMount } from "solid-js"
+import { createMemo, createResource, createSignal, onMount } from "solid-js"
 import { useDialog } from "../ui/dialog"
 import { DialogSelect, type DialogSelectOption } from "../ui/dialog-select"
 import { useSDK } from "../context/sdk"
 import { useToast } from "../ui/toast"
 import { useTheme } from "../context/theme"
 import { useKV } from "../context/kv"
+import { spinosaReleaseChannel, setReleaseChannel, type ReleaseChannel } from "@spinosa/core/system/channels"
 
 type AutoUpdateMode = true | false | "notify"
-type SettingsValue = "auto-true" | "auto-notify" | "auto-false" | "reset-skipped"
+type SettingsValue = "auto-true" | "auto-notify" | "auto-false" | "reset-skipped" | "channel-beta" | "channel-stable"
 type GlobalConfig = Record<string, unknown> & {
   autoupdate?: boolean | "notify"
 }
@@ -23,9 +24,12 @@ export function DialogSpinosaSettings() {
   const toast = useToast()
   const kv = useKV()
   const { theme } = useTheme()
+  const [currentChannel, setCurrentChannel] = createSignal<ReleaseChannel>("stable")
 
-  onMount(() => {
+  onMount(async () => {
     dialog.setSize("medium")
+    const ch = await spinosaReleaseChannel().catch(() => "stable" as ReleaseChannel)
+    setCurrentChannel(ch)
   })
 
   const [config, { mutate }] = createResource<GlobalConfig>(async () => {
@@ -65,9 +69,18 @@ export function DialogSpinosaSettings() {
     })
   }
 
+  const updateChannel = async (channel: ReleaseChannel) => {
+    await setReleaseChannel(channel)
+    setCurrentChannel(channel)
+    toast.show({
+      variant: "success",
+      message: `Release channel set to ${channel}`,
+    })
+  }
+
   const options = createMemo<DialogSelectOption<SettingsValue>[]>(() => [
     {
-      title: "Install Spinosa updates automatically",
+      title: "Install updates automatically",
       value: "auto-true",
       description: "Download and install updates when they become available.",
       category: "Updates",
@@ -85,10 +98,26 @@ export function DialogSpinosaSettings() {
     {
       title: "Disable automatic updates",
       value: "auto-false",
-      description: "Don’t check for or install updates automatically.",
+      description: "Don't check for or install updates automatically.",
       category: "Updates",
       gutter: currentAutoUpdate() === false ? () => <text fg={theme.success}>✓</text> : undefined,
       onSelect: () => void updateAutoUpdate(false),
+    },
+    {
+      title: "Beta channel",
+      value: "channel-beta",
+      description: "Receive pre-release updates with the latest features.",
+      category: "Release Channel",
+      gutter: currentChannel() === "beta" ? () => <text fg={theme.success}>✓</text> : undefined,
+      onSelect: () => void updateChannel("beta"),
+    },
+    {
+      title: "Stable channel",
+      value: "channel-stable",
+      description: "Receive only stable, production-ready releases.",
+      category: "Release Channel",
+      gutter: currentChannel() === "stable" ? () => <text fg={theme.success}>✓</text> : undefined,
+      onSelect: () => void updateChannel("stable"),
     },
     {
       title: "Show skipped update again",
@@ -119,7 +148,7 @@ export function DialogSpinosaSettings() {
       title="Settings"
       renderFilter={false}
       options={config() ? options() : []}
-      emptyView={<text>{config.error ? "Failed to load settings." : "Loading settings…"}</text>}
+      emptyView={<text>{config.error ? "Failed to load settings." : "Loading settings\u2026"}</text>}
     />
   )
 }

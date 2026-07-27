@@ -3,7 +3,7 @@ import { existsSync } from "node:fs"
 import { chmod, mkdir } from "node:fs/promises"
 import path from "node:path"
 import { tmpdir } from "../fixture/fixture"
-import { installedUpgradeVersion, verifyInstallerChecksum } from "../../src/spinosa-core/commands/upgrade"
+import { installedUpgradeVersion, verifyInstallerChecksum } from "@spinosa/core/commands/upgrade"
 
 const repoRoot = path.resolve(import.meta.dir, "../../../..")
 

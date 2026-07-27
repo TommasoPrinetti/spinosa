@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { Part, ToolPart } from "@opencode-ai/sdk/v2";
+import type { Part, ToolPart } from "@spinosa/sdk/v2";
 import { aggregateFileUsage } from "../../src/routes/spinosa/visualizer-graph-data";
 import {
   TOOL_CALL_PAGE_SIZE,

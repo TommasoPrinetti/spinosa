@@ -4,14 +4,14 @@ import { useToast } from "../../ui/toast"
 import { useRoute } from "../../context/route"
 import { useSpinosaWorkspace } from "../../context/spinosa-workspace"
 
-import { updateWorkspace } from "../../spinosa-core/commands/update"
-import { resolveFrameworkRoot } from "../../spinosa-core/framework/discovery"
+import { updateWorkspace } from "@spinosa/core/commands/update"
+import { resolveFrameworkRoot } from "@spinosa/core/framework/discovery"
 import {
   readBundledFrameworkVersion,
   workspaceNeedsFrameworkUpdate,
   writeWorkspaceFrameworkVersion,
 } from "../../spinosa/service"
-import { useBindings, OPENCODE_BASE_MODE } from "../../keymap"
+import { useBindings, SPINOSA_BASE_MODE } from "../../keymap"
 import { usePromptRef } from "../../context/prompt"
 import { buttonBackground, buttonBorder, buttonText } from "../../util/button"
 import { useConnected } from "../../component/use-connected"
@@ -200,7 +200,7 @@ export function SpinosaPromptChips() {
   }
 
   useBindings(() => ({
-    mode: OPENCODE_BASE_MODE,
+    mode: SPINOSA_BASE_MODE,
     enabled: () => !promptRef.current?.focused,
     bindings: [
       { key: "Left", desc: "Previous action", group: "Home", cmd: () => moveSelection(-1) },

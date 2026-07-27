@@ -3,11 +3,11 @@ import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync, realpathSync
 import { tmpdir } from "node:os"
 import path from "node:path"
 
-import { resolveFrameworkRoot } from "../../src/spinosa-core/framework/discovery"
-import { createWorkspace } from "../../src/spinosa-core/commands/create"
-import { validateWorkspace } from "../../src/spinosa-core/workspace/registry"
-import { readWorkspaceMeta } from "../../src/spinosa-core/workspace/meta"
-import { writeWorkspaceStatus } from "../../src/spinosa-core/workspace/meta"
+import { resolveFrameworkRoot } from "@spinosa/core/framework/discovery"
+import { createWorkspace } from "@spinosa/core/commands/create"
+import { validateWorkspace } from "@spinosa/core/workspace/registry"
+import { readWorkspaceMeta } from "@spinosa/core/workspace/meta"
+import { writeWorkspaceStatus } from "@spinosa/core/workspace/meta"
 
 let corpusDir: string
 let testRoot: string

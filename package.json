@@ -1,14 +1,14 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "spinosa-main",
+  "name": "spinosa",
   "private": true,
   "version": "1.0.1-beta.14",
   "type": "module",
   "packageManager": "bun@1.3.14",
   "scripts": {
-    "dev": "bun run --cwd packages/opencode src/index.ts",
+    "dev": "bun run --cwd packages/spinosa-cli src/index.ts",
     "postinstall": "bun run --cwd packages/core fix-node-pty",
-    "typecheck": "bun run --cwd packages/core typecheck && bun run --cwd packages/sdk typecheck && bun run --cwd packages/tui typecheck && bun run --cwd packages/opencode typecheck"
+    "typecheck": "bun run --cwd packages/core typecheck && bun run --cwd packages/sdk typecheck && bun run --cwd packages/tui typecheck && bun run --cwd packages/spinosa-kernel typecheck && bun run --cwd packages/spinosa-core typecheck && bun run --cwd packages/spinosa-runtime typecheck && bun run --cwd packages/spinosa-harness typecheck && bun run --cwd packages/spinosa-cli typecheck"
   },
   "workspaces": {
     "packages": [
@@ -17,13 +17,17 @@
       "packages/effect-sqlite-node",
       "packages/http-recorder",
       "packages/llm",
-      "packages/opencode",
+        "packages/spinosa-kernel",
       "packages/plugin",
       "packages/protocol",
       "packages/schema",
       "packages/script",
       "packages/sdk",
       "packages/server",
+    "packages/spinosa-core",
+    "packages/spinosa-cli",
+    "packages/spinosa-harness",
+      "packages/spinosa-runtime",
       "packages/tui",
       "packages/ui"
     ],

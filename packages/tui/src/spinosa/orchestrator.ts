@@ -1,41 +1,70 @@
-import { classifyPrompt, isNonFastPath, type RouteClass } from "../spinosa-core/classify/route"
-import { orchestratorPreamble, writeGoalArtifact } from "../spinosa-core/artifacts/goal"
-import { isSpinosaWorkspace } from "../spinosa-core/workspace/meta"
+import { ResearchRunService } from "@spinosa/core"
+import { SpinosaKernelHarness } from "@spinosa/harness"
+import { cancelRun, FileResearchRunRepository, type RouteClass } from "@spinosa/runtime"
+
+const activeResearchRuns = new Map<string, { runID: string; workspacePath: string }>()
 
 export type PreparedSubmit = {
   text: string
   route: RouteClass
   sessionId?: string
   goalPath?: string
+  workspacePath?: string
   framed: boolean
 }
 
 export async function prepareSpinosaSubmit(workspacePath: string, promptText: string): Promise<PreparedSubmit> {
-  const cleaned = stripExistingPreamble(promptText)
-  const route = classifyPrompt(cleaned)
-
-  if (!isSpinosaWorkspace(workspacePath) || !isNonFastPath(route)) {
-    return { text: cleaned, route, framed: false }
-  }
-
-  const goal = await writeGoalArtifact(workspacePath, cleaned)
-  const preamble = orchestratorPreamble({
-    workspacePath,
-    route: goal.route,
-    sessionId: goal.sessionId,
-    goalPath: goal.goalPath,
-  })
-
+  const prepared = await new ResearchRunService().prepare(workspacePath, promptText)
   return {
-    text: `${preamble}\n\n${cleaned}`,
-    route: goal.route,
-    sessionId: goal.sessionId,
-    goalPath: goal.goalPath,
-    framed: true,
+    text: prepared.text,
+    route: prepared.route,
+    sessionId: prepared.runID,
+    goalPath: prepared.goalPath,
+    workspacePath: prepared.workspacePath,
+    framed: prepared.framed,
   }
 }
 
-function stripExistingPreamble(text: string) {
-  if (typeof text !== "string") throw new TypeError("Spinosa prompt must be a string")
-  return text.replace(/<system-reminder>[\s\S]*?<\/system-reminder>\s*/g, "").trim()
+export async function executeSpinosaSubmit(input: {
+  client: unknown
+  sessionID: string
+  prepared: PreparedSubmit
+  model: { providerID: string; modelID: string }
+}): Promise<void> {
+  const harness = new SpinosaKernelHarness(input.client as ConstructorParameters<typeof SpinosaKernelHarness>[0])
+  const prepared = {
+    text: input.prepared.text,
+    route: input.prepared.route,
+    runID: input.prepared.sessionId,
+    goalPath: input.prepared.goalPath,
+    workspacePath: input.prepared.workspacePath,
+    framed: input.prepared.framed,
+  }
+  if (prepared.runID && prepared.workspacePath) {
+    activeResearchRuns.set(input.sessionID, { runID: prepared.runID, workspacePath: prepared.workspacePath })
+  }
+  try {
+    await new ResearchRunService(undefined, harness).execute({ sessionID: input.sessionID, prepared, model: input.model })
+  } finally {
+    activeResearchRuns.delete(input.sessionID)
+  }
+}
+
+export async function cancelSpinosaSubmit(input: { client: unknown; sessionID: string }): Promise<boolean> {
+  const active = activeResearchRuns.get(input.sessionID)
+  if (!active) return false
+  const repository = new FileResearchRunRepository()
+  const run = await repository.load(active.workspacePath, active.runID)
+  if (run) {
+    const cancelled = cancelRun(run)
+    await repository.save(cancelled)
+    await repository.append(cancelled.workspacePath, cancelled.id, {
+      at: cancelled.updatedAt,
+      type: "cancelled",
+      status: cancelled.status,
+    })
+  }
+  const harness = new SpinosaKernelHarness(input.client as ConstructorParameters<typeof SpinosaKernelHarness>[0])
+  await harness.cancelExecution({ sessionID: input.sessionID })
+  return true
 }

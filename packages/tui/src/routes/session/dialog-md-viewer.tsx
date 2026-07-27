@@ -1,8 +1,10 @@
 import { createResource, createMemo, createSignal, onMount, Show } from "solid-js"
-import { readFile, writeFile } from "node:fs/promises"
+import { readFile, writeFile, mkdtemp, rm } from "node:fs/promises"
 import path from "node:path"
-import { homedir } from "node:os"
+import { homedir, tmpdir } from "node:os"
+import { spawn } from "node:child_process"
 import { TextAttributes } from "@opentui/core"
+import { useRenderer } from "@opentui/solid"
 import { useTheme } from "../../context/theme"
 import { useDialog } from "../../ui/dialog"
 import { useBindings } from "../../keymap"
@@ -11,12 +13,15 @@ import { useToast } from "../../ui/toast"
 export function DialogMdViewer(props: { filePath: string; workspaceRoot?: string }) {
   const dialog = useDialog()
   const toast = useToast()
+  const renderer = useRenderer()
   const { theme, syntax } = useTheme()
   const [exportState, setExportState] = createSignal<"idle" | "busy" | "done">("idle")
 
+  const [editError, setEditError] = createSignal<string | undefined>()
+
   onMount(() => dialog.setSize("xlarge"))
 
-  const [content] = createResource(() => props.filePath, (filepath) =>
+  const [content, { mutate: setContent }] = createResource(() => props.filePath, (filepath) =>
     readFile(filepath, "utf-8"),
   )
 
@@ -45,6 +50,61 @@ export function DialogMdViewer(props: { filePath: string; workspaceRoot?: string
     } catch (e) {
       setExportState("idle")
       toast.show({ variant: "error", message: `Export failed: ${e instanceof Error ? e.message : String(e)}` })
+    }
+  }
+
+  const handleEdit = async () => {
+    setEditError(undefined)
+    const editor = process.env.VISUAL || process.env.EDITOR
+    if (!editor) {
+      setEditError("No $EDITOR or $VISUAL set")
+      return
+    }
+    const md = content()
+    if (content.loading) {
+      setEditError("File is still loading, please wait")
+      return
+    }
+    if (!md) {
+      setEditError("File content unavailable")
+      return
+    }
+    const tmpDir = await mkdtemp(path.join(tmpdir(), "spinosa-edit-"))
+    const tmpFile = path.join(tmpDir, path.basename(props.filePath))
+    try {
+      await writeFile(tmpFile, md)
+      renderer.suspend()
+      renderer.currentRenderBuffer.clear()
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const child = spawn(editor, [tmpFile], {
+            cwd: props.workspaceRoot ?? path.dirname(props.filePath),
+            stdio: ["inherit", "inherit", "inherit"],
+            shell: process.platform === "darwin" || process.platform === "win32",
+          })
+          child.on("error", reject)
+          child.on("exit", (code, sig) => {
+            if (code === 0) resolve()
+            else reject(new Error(`Editor exited with ${sig ? `signal ${sig}` : `code ${code}`}`))
+          })
+        })
+      } finally {
+        renderer.currentRenderBuffer.clear()
+        renderer.resume()
+        renderer.requestRender()
+      }
+      const edited = await readFile(tmpFile, "utf-8")
+      if (edited !== md) {
+        await writeFile(props.filePath, edited)
+        setContent(edited)
+        toast.show({ variant: "success", message: "File saved" })
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setEditError(msg)
+      toast.show({ variant: "error", message: `Edit failed: ${msg}` })
+    } finally {
+      await rm(tmpDir, { recursive: true, force: true }).catch(() => {})
     }
   }
 
@@ -79,9 +139,21 @@ export function DialogMdViewer(props: { filePath: string; workspaceRoot?: string
         <text fg={theme.text} attributes={TextAttributes.BOLD}>
           {displayPath()}
         </text>
-        <text fg={theme.textMuted} onMouseUp={() => dialog.clear()}>
-          esc
-        </text>
+        <box flexDirection="row" gap={2}>
+          <text fg={theme.textMuted} attributes={TextAttributes.UNDERLINE}
+            onMouseUp={() => {
+              if (renderer.getSelection()?.getSelectedText()) return
+              void handleEdit()
+            }}>
+            Edit
+          </text>
+          <text fg={theme.textMuted} onMouseUp={() => {
+            if (renderer.getSelection()?.getSelectedText()) return
+            dialog.clear()
+          }}>
+            esc
+          </text>
+        </box>
       </box>
       <box height={1} border={["top"]} borderColor={theme.border} flexShrink={0} />
       <scrollbox flexGrow={2} minHeight={0} paddingTop={1} paddingBottom={1}>
@@ -99,13 +171,23 @@ export function DialogMdViewer(props: { filePath: string; workspaceRoot?: string
             />
           </box>
         </Show>
+        <Show when={editError()}>
+          {(msg) => (
+            <box paddingLeft={1} paddingTop={1}>
+              <text fg={theme.error}>{msg()}</text>
+            </box>
+          )}
+        </Show>
       </scrollbox>
       <box flexDirection="row" justifyContent="space-between" flexShrink={0} paddingTop={1} paddingBottom={1}>
         <text fg={theme.textMuted} attributes={TextAttributes.DIM}>
-          esc return close
+          esc return close · e export
         </text>
         <box
-          onMouseUp={() => void handleExport()}
+          onMouseUp={() => {
+            if (renderer.getSelection()?.getSelectedText()) return
+            void handleExport()
+          }}
           paddingLeft={2} paddingRight={2}
           backgroundColor={exportColor()}
         >

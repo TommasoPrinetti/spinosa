@@ -22,6 +22,7 @@ export function Toast() {
       {(current) => (
         <box
           position="absolute"
+          zIndex={4000}
           justifyContent="center"
           alignItems="flex-start"
           top={2}

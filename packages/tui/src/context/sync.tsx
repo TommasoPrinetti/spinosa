@@ -20,7 +20,7 @@ import type {
   VcsInfo,
   SnapshotFileDiff,
   ConsoleState,
-} from "@opencode-ai/sdk/v2"
+} from "@spinosa/sdk/v2"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useProject } from "./project"
 import { useEvent } from "./event"
@@ -169,7 +169,7 @@ export const {
     }
 
     async function readLocalSessions(dir: string): Promise<Session[]> {
-      const sessionsDir = path.join(dir, ".opencode", "sessions")
+      const sessionsDir = path.join(dir, ".spinosa", "sessions")
       try {
         const files = await readdir(sessionsDir)
         const jsonFiles = files.filter((f) => f.endsWith(".json"))

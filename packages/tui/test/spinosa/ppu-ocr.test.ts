@@ -25,7 +25,7 @@ describe("ppu ocr guards", () => {
         },
       }))
 
-      const { runPpuOcrBatch } = await import("../../src/spinosa-core/import/ppu-ocr")
+      const { runPpuOcrBatch } = await import("@spinosa/core/import/ppu-ocr")
       const result = await runPpuOcrBatch([{ src, rel: "bad.png", dest }], {
         onLog: (line) => logs.push(line),
       })
@@ -37,7 +37,7 @@ describe("ppu ocr guards", () => {
 
       const logsDir = path.join(root, "logs")
       mkdirSync(logsDir)
-      const { processOcr } = await import("../../src/spinosa-core/import/pipeline")
+      const { processOcr } = await import("@spinosa/core/import/pipeline")
       const phase = await processOcr([{ src, rel: "bad.png", dest }], logsDir)
       expect(phase.converted).toBe(0)
       expect(phase.skipped).toBe(0)

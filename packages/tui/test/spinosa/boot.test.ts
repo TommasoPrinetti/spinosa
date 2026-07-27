@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test"
 import { mkdirSync, renameSync, rmSync } from "node:fs"
 import path from "node:path"
-import { createWorkspaceID } from "../../src/spinosa-core/workspace/identity"
-import { runSpinosaBootHealth } from "../../src/spinosa-core/system/boot"
-import { registerWorkspace, loadRegistry } from "../../src/spinosa-core/workspace/registry"
+import { createWorkspaceID } from "@spinosa/core/workspace/identity"
+import { runSpinosaBootHealth } from "@spinosa/core/system/boot"
+import { registerWorkspace, loadRegistry } from "@spinosa/core/workspace/registry"
 import { tmpdir } from "../fixture/fixture"
 
 describe("Spinosa boot health", () => {

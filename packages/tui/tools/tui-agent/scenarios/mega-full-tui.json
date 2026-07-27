@@ -84,7 +84,7 @@
 
     { "action": "type", "text": "/status" },
     { "action": "key", "key": "RETURN" },
-    { "action": "waitForText", "text": "OpenCode Status", "timeoutMs": 5000 },
+    { "action": "waitForText", "text": "Spinosa Status", "timeoutMs": 5000 },
     { "action": "capture", "name": "status" },
     { "action": "clickText", "text": "esc" },
 

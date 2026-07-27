@@ -15,16 +15,15 @@ import {
   upgradeFramework,
   writeWorkspaceStatus,
   type ReleaseChannel,
-} from "./spinosa-core"
+} from "@spinosa/core"
 import { parseSpinosaCliArgs, type ParsedArgs } from "./spinosa-cli/parser"
-import type { UpdateResult } from "./spinosa-core/commands/update"
+import type { UpdateResult } from "@spinosa/core/commands/update"
 import { createIo, emitResult, type SpinosaCliIo } from "./spinosa-cli/io"
 import { runUninstall } from "./spinosa-cli/commands/uninstall"
 import { runStatus } from "./spinosa-cli/commands/status"
 import { runList } from "./spinosa-cli/commands/list"
 import { runStartupAutoclean } from "./spinosa-cli/commands/startup-autoclean"
 import { PREFLIGHT_RESTART_EXIT_CODE, runLaunchPreflight } from "./spinosa-cli/commands/preflight"
-import { startSpinosaWeb } from "./spinosa-web/server"
 
 export { parseSpinosaCliArgs }
 

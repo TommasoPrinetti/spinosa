@@ -1,6 +1,6 @@
 # Core Package Guide
 
-`@opencode-ai/core` is the V2 domain layer: sessions, tools, providers, SQLite persistence, Effect services. No HTTP routes here — those live in `packages/server`.
+`@spinosa/kernel-core` is the V2 domain layer: sessions, tools, providers, SQLite persistence, Effect services. No HTTP routes here — those live in `packages/server`.
 
 Database schema (Drizzle) and migrations also live in this package (`src/database/`).
 
@@ -54,7 +54,7 @@ Effect rules: `makeRuntime` for services, `InstanceState` for per-directory stat
 ## Session V2 invariants (short)
 
 - `SessionV2.prompt` admits durable input; `SessionExecution.wake` schedules drains
-- One `llm.stream(request)` per provider turn (in runner, via `@opencode-ai/llm`)
+- One `llm.stream(request)` per provider turn (in runner, via `@spinosa/llm`)
 - Tool registry and permissions are Location-scoped
 - System context in `src/system-context`; context sources stay with observed domains
 - Do not bridge through legacy `SessionPrompt.loop`
@@ -82,8 +82,8 @@ Never run tests from repo root. Use `testEffect` from test helpers for layered t
 
 | May import | Must not import |
 | ---------- | --------------- |
-| `@opencode-ai/schema`, `@opencode-ai/llm`, `@opencode-ai/plugin` | `@opencode-ai/server`, `@opencode-ai/client`, `@opencode-ai/tui` |
-| `@opencode-ai/effect-drizzle-sqlite`, `@opencode-ai/effect-sqlite-node` | `packages/opencode` |
+| `@spinosa/schema`, `@spinosa/llm`, `@spinosa/plugin` | `@spinosa/server`, `@spinosa/client`, `@spinosa/tui` |
+| `@spinosa/effect-drizzle-sqlite`, `@spinosa/effect-sqlite-node` | `packages/opencode` |
 
 ## Nested docs
 
@@ -97,5 +97,5 @@ Never run tests from repo root. Use `testEffect` from test helpers for layered t
 | Session prompt/delivery | `src/session/prompt/` |
 | Provider adapter | `src/plugin/` or `src/github-copilot/` |
 | New config module | `src/config/` (self-export pattern) |
-| Schema change | `@opencode-ai/schema` first, then core consumers |
+| Schema change | `@spinosa/schema` first, then core consumers |
 | New API surface | `packages/protocol` → `packages/server` → handler in server |

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { mkdirSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { tmpdir } from "../fixture/fixture"
-import { createWorkspaceID, ensureWorkspaceID, parseWorkspaceID, readWorkspaceIDFromMarker } from "../../src/spinosa-core/workspace/identity"
+import { createWorkspaceID, ensureWorkspaceID, parseWorkspaceID, readWorkspaceIDFromMarker } from "@spinosa/core/workspace/identity"
 
 describe("workspace identity", () => {
   test("creates and round-trips strict Spinosa IDs", () => {

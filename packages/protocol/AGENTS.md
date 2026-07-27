@@ -1,8 +1,8 @@
 # Protocol Package Guide
 
-`@opencode-ai/protocol` defines the V2 Effect HttpApi contract: endpoint groups, request/response schemas, middleware placement, OpenAPI shape. No handlers, no database, no session execution.
+`@spinosa/protocol` defines the V2 Effect HttpApi contract: endpoint groups, request/response schemas, middleware placement, OpenAPI shape. No handlers, no database, no session execution.
 
-Dependency: `@opencode-ai/schema` only (+ `effect`).
+Dependency: `@spinosa/schema` only (+ `effect`).
 
 ## Entry points
 
@@ -36,7 +36,7 @@ Location-scoped groups get `locationMiddleware`. Session-scoped groups also get 
 3. Implement handler in `packages/server/src/handlers/<name>.ts`
 4. Regenerate client: `packages/client`: `bun run generate`
 
-Do not put handler logic in protocol files. Do not import `@opencode-ai/core` or `@opencode-ai/server`.
+Do not put handler logic in protocol files. Do not import `@spinosa/kernel-core` or `@spinosa/server`.
 
 ## Events and manifests
 

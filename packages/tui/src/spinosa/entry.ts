@@ -1,8 +1,8 @@
 import type { RouteNavigateInput } from "../context/route"
-import { isSpinosaWorkspace, readWorkspaceMeta } from "../spinosa-core/workspace/meta"
-import { recoverWorkspacePathByID, registerWorkspace } from "../spinosa-core/workspace/registry"
-import { parseWorkspaceID, readWorkspaceID } from "../spinosa-core/workspace/identity"
-import type { SpinosaSetupStatus } from "../spinosa-core/types"
+import { isSpinosaWorkspace, readWorkspaceMeta } from "@spinosa/core/workspace/meta"
+import { recoverWorkspacePathByID, registerWorkspace } from "@spinosa/core/workspace/registry"
+import { parseWorkspaceID, readWorkspaceID } from "@spinosa/core/workspace/identity"
+import type { SpinosaSetupStatus } from "@spinosa/core/types"
 
 export type WorkspaceOpenContext = {
   workspacePath: string

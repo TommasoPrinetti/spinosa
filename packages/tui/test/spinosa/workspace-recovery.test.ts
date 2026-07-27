@@ -2,13 +2,13 @@ import { describe, expect, test } from "bun:test"
 import { mkdirSync, rmSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { tmpdir } from "../fixture/fixture"
-import { createWorkspaceID } from "../../src/spinosa-core/workspace/identity"
-import { loadRegistry, registerWorkspace, setWorkspacePresence } from "../../src/spinosa-core/workspace/registry"
+import { createWorkspaceID } from "@spinosa/core/workspace/identity"
+import { loadRegistry, registerWorkspace, setWorkspacePresence } from "@spinosa/core/workspace/registry"
 import {
   findWorkspaceMatchesByIDAsync,
   recoverWorkspaceAtPath,
   scanAndRecoverWorkspace,
-} from "../../src/spinosa-core/workspace/recovery"
+} from "@spinosa/core/workspace/recovery"
 
 function createWorkspace(workspacePath: string, workspaceID = createWorkspaceID()) {
   mkdirSync(path.join(workspacePath, ".spinosa"), { recursive: true })

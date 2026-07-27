@@ -6,7 +6,6 @@
   },
   "files": [
     "src/spinosa-cli.ts",
-    "src/spinosa-core/index.ts",
     "src/spinosa/log.ts",
     "src/spinosa/onboarding-preview.ts",
     "src/spinosa/service.ts",

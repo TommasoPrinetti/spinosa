@@ -3,7 +3,7 @@ import path from "node:path"
 import { mkdir } from "node:fs/promises"
 import { tmpdir } from "../fixture/fixture"
 import { analyzeRouteRecovery } from "../../src/spinosa/route-recovery"
-import type { GoalArtifactSummary } from "../../src/spinosa-core/types"
+import type { GoalArtifactSummary } from "@spinosa/core/types"
 
 test("route recovery requires the goal artifact and tolerates corrupt artifact arrays", async () => {
   await using tmp = await tmpdir()

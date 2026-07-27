@@ -8,7 +8,7 @@ import { DialogPrompt } from "../ui/dialog-prompt"
 import { Link } from "../ui/link"
 import { useTheme } from "../context/theme"
 import { TextAttributes } from "@opentui/core"
-import type { ProviderAuthAuthorization, ProviderAuthMethod } from "@opencode-ai/sdk/v2"
+import type { ProviderAuthAuthorization, ProviderAuthMethod } from "@spinosa/sdk/v2"
 import { DialogModel } from "./dialog-model"
 import { useToast } from "../ui/toast"
 import { isConsoleManagedProvider } from "../util/provider-origin"
@@ -17,6 +17,7 @@ import { useBindings } from "../keymap"
 import { useClipboard } from "../context/clipboard"
 import { useLocal } from "../context/local"
 import { DialogConfirm } from "../ui/dialog-confirm"
+import { copyProviderAuthorizationCode } from "../util/provider-authorization-code"
 
 const PROVIDER_PRIORITY: Record<string, number> = {
   opencode: 0,
@@ -99,7 +100,7 @@ export function createDialogProviderOptions() {
       placeholder: "Provider id",
       description: () => (
         <text fg={theme.textMuted}>
-          This only stores a credential. Configure the provider in opencode.json to use it.
+          This only stores a credential. Configure the provider in spinosa.json to use it.
         </text>
       ),
     })
@@ -124,13 +125,13 @@ export function createDialogProviderOptions() {
       return [{
         title: "Spinosa default",
         value: "__spinosa_default__",
-        description: "Free OpenCode model — no API key",
+        description: "Free Spinosa model — no API key",
         category: "Recommended",
         async onSelect() {
           const confirmed = await DialogConfirm.show(
             dialog,
             "Use Spinosa default?",
-            "Your prompts and source-derived content will transit through OpenCode's servers. Spinosa does not control that processing.",
+            "Your prompts and source-derived content will transit through Spinosa's servers. Spinosa does not control that processing.",
           )
           if (!confirmed) return
           local.model.set({ providerID: provider.id, modelID: model.id }, { recent: true })
@@ -270,6 +271,21 @@ function AutoMethod(props: AutoMethodProps) {
   const sync = useSync()
   const toast = useToast()
   const clipboard = useClipboard()
+  const [copied, setCopied] = createSignal(false)
+
+  async function copyCode() {
+    try {
+      const success = await copyProviderAuthorizationCode(props.authorization, clipboard.write)
+      if (!success) {
+        toast.show({ message: "Clipboard is unavailable", variant: "error" })
+        return
+      }
+      setCopied(true)
+      toast.show({ message: "Copied to clipboard", variant: "info" })
+    } catch (error) {
+      toast.error(error)
+    }
+  }
 
   useBindings(() => ({
     bindings: [
@@ -277,14 +293,7 @@ function AutoMethod(props: AutoMethodProps) {
         key: "c",
         desc: "Copy provider code",
         group: "Dialog",
-        cmd: () => {
-          const code =
-            props.authorization.instructions.match(/[A-Z0-9]{4}-[A-Z0-9]{4,5}/)?.[0] ?? props.authorization.url
-          clipboard
-            .write?.(code)
-            .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
-            .catch(toast.error)
-        },
+        cmd: copyCode,
       },
     ],
   }))
@@ -325,8 +334,10 @@ function AutoMethod(props: AutoMethodProps) {
         <text fg={theme.textMuted}>{props.authorization.instructions}</text>
       </box>
       <text fg={theme.textMuted}>Waiting for authorization...</text>
-      <text fg={theme.text}>
-        c <span style={{ fg: theme.textMuted }}>copy</span>
+      <text fg={copied() ? theme.success : theme.text} onMouseUp={copyCode}>
+        <Show when={copied()} fallback={<>c <span style={{ fg: theme.textMuted }}>copy</span></>}>
+          ✓ Copied
+        </Show>
       </text>
     </box>
   )
@@ -398,7 +409,7 @@ function ApiMethod(props: ApiMethodProps) {
           opencode: (
             <box gap={1}>
               <text fg={theme.textMuted}>
-                OpenCode Zen gives you access to all the best coding models at the cheapest prices with a single API
+                Spinosa Zen gives you access to all the best coding models at the cheapest prices with a single API
                 key.
               </text>
               <text fg={theme.text}>
@@ -409,11 +420,11 @@ function ApiMethod(props: ApiMethodProps) {
           "opencode-go": (
             <box gap={1}>
               <text fg={theme.textMuted}>
-                OpenCode Go is a $10 per month subscription that provides reliable access to popular open coding models
+                Spinosa Go is a $10 per month subscription that provides reliable access to popular open coding models
                 with generous usage limits.
               </text>
               <text fg={theme.text}>
-                Go to <span style={{ fg: theme.primary }}>https://opencode.ai/go</span> and enable OpenCode Go
+                Go to <span style={{ fg: theme.primary }}>https://opencode.ai/go</span> and enable Spinosa Go
               </text>
             </box>
           ),
@@ -434,7 +445,7 @@ function ApiMethod(props: ApiMethodProps) {
         if (props.custom && !sync.data.provider_next.all.some((provider) => provider.id === props.providerID)) {
           toast.show({
             variant: "info",
-            message: `Saved credential for ${props.providerID}. Configure it in opencode.json to use it.`,
+            message: `Saved credential for ${props.providerID}. Configure it in spinosa.json to use it.`,
           })
           dialog.clear()
           return

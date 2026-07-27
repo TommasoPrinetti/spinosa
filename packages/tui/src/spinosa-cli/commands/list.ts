@@ -1,6 +1,6 @@
 import type { SpinosaCliIo } from "../io"
 import { emitResult } from "../io"
-import { inspectWorkspacePresence, loadRegistry, readWorkspaceMeta, workspacePresenceLabel } from "../../spinosa-core"
+import { inspectWorkspacePresence, loadRegistry, readWorkspaceMeta, workspacePresenceLabel } from "@spinosa/core"
 
 interface WorkspaceEntry {
   path: string

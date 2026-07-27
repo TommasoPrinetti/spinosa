@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { existsSync, readFileSync } from "node:fs"
 import path from "node:path"
-import { SPINOSA_AGENT_FILES } from "../../src/spinosa-core/constants"
+import { SPINOSA_AGENT_FILES } from "@spinosa/core/constants"
 
 const repoRoot = path.resolve(import.meta.dir, "../../../..")
 const templateRoot = path.join(repoRoot, "workspace-template")

@@ -6,11 +6,11 @@
 
 Researchers and analysts working from a **Spinosa workspace**: `raw/` sources, `maps/` navigation, and orchestrated agent routes (`g_*.md`, `NN_*.md`). They use a terminal for long sessions and switch between asking questions, checking corpus health, and tracking pipeline progress.
 
-Secondary user: **OpenCode-only** mode — coding agent without a Spinosa workspace.
+Secondary user: **Spinosa-only** mode — coding agent without a Spinosa workspace.
 
 ## Product purpose
 
-Spinosa TUI is the control surface for corpus-grounded orchestration inside OpenCode:
+Spinosa TUI is the control surface for corpus-grounded orchestration inside Spinosa:
 
 1. Pick or create a workspace
 2. Run startup/indexing when needed

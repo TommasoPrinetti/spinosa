@@ -1,34 +1,38 @@
 import { TextAttributes } from "@opentui/core"
-import { createSignal, For, Show } from "solid-js"
+import { createMemo, createSignal, For, Show } from "solid-js"
 import { useTheme } from "../context/theme"
 import { useDialog } from "../ui/dialog"
+import { useSpinosaWorkspace } from "../context/spinosa-workspace"
 import { DialogSpinosaSettings } from "./dialog-spinosa-settings"
 import { DialogAgent } from "./dialog-agent"
 import { DialogSessionList } from "./dialog-session-list"
 import { DialogModel } from "./dialog-model"
+import { DialogProvider } from "./dialog-provider"
 import { MAIN_CONTENT_MAX_WIDTH } from "../util/layout"
 
 export function HomeFooter() {
   const { theme } = useTheme()
   const dialog = useDialog()
+  const spinosa = useSpinosaWorkspace()
   const [hovered, setHovered] = createSignal<string | undefined>()
 
-  const openSettings = () => dialog.replace(() => <DialogSpinosaSettings />)
-  const openAgents = () => dialog.replace(() => <DialogAgent />)
-  const openSessions = () => dialog.replace(() => <DialogSessionList />)
-  const openModels = () => dialog.replace(() => <DialogModel />)
-
   type Shortcut = { id: string; label: string; action: () => void }
-  const buttons: Shortcut[] = [
-    { id: "S", label: "Settings", action: openSettings },
-    { id: "A", label: "Agents", action: openAgents },
-    { id: "K", label: "Sessions", action: openSessions },
-    { id: "W", label: "Models", action: openModels },
-  ]
+  const buttons = createMemo<Shortcut[]>(() => {
+    const items: Shortcut[] = [
+      { id: "S", label: "Settings", action: () => dialog.replace(() => <DialogSpinosaSettings />) },
+      { id: "A", label: "Agents", action: () => dialog.replace(() => <DialogAgent />) },
+      { id: "P", label: "Provider", action: () => dialog.replace(() => <DialogProvider />) },
+      { id: "M", label: "Models", action: () => dialog.replace(() => <DialogModel />) },
+    ]
+    if (!spinosa.genericMode) {
+      items.splice(2, 0, { id: "K", label: "Sessions", action: () => dialog.replace(() => <DialogSessionList />) })
+    }
+    return items
+  })
 
   return (
     <box width="100%" maxWidth={MAIN_CONTENT_MAX_WIDTH} flexDirection="row" justifyContent="center" gap={0}>
-      <For each={buttons}>
+      <For each={buttons()}>
         {(item, i) => (
           <>
             <Show when={i() > 0}>

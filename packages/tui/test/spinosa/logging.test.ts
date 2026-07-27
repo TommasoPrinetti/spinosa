@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import path from "node:path"
 import { tmpdir } from "../fixture/fixture"
-import { spinosaLogInfo } from "../../src/spinosa-core/utils/log"
+import { spinosaLogInfo } from "@spinosa/core/utils/log"
 import { setActiveWorkspacePath, tuiLog } from "../../src/spinosa/log"
 
 describe("Spinosa logging", () => {

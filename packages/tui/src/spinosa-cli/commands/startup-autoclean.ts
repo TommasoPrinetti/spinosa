@@ -1,6 +1,6 @@
 import type { SpinosaCliIo } from "../io"
 import { emitResult } from "../io"
-import { cleanupStaleInstallDirectories, inspectSpinosaMaintenance } from "../../spinosa-core/system/maintenance"
+import { cleanupStaleInstallDirectories, inspectSpinosaMaintenance } from "@spinosa/core/system/maintenance"
 
 /**
  * Removes only abandoned installer work directories. It intentionally never

@@ -6,12 +6,12 @@ import { useDialog } from "../ui/dialog"
 import { Spinner } from "./spinner"
 import { buttonBackground, buttonBorder, buttonText } from "../util/button"
 import { truncatePathTail } from "../spinosa/truncate-path"
-import { unregisterWorkspace } from "../spinosa-core/workspace/registry"
+import { unregisterWorkspace } from "@spinosa/core/workspace/registry"
 import {
   recoverWorkspaceAtPath,
   scanAndRecoverWorkspace,
-} from "../spinosa-core/workspace/recovery"
-import type { SpinosaWorkspaceID } from "../spinosa-core/workspace/identity"
+} from "@spinosa/core/workspace/recovery"
+import type { SpinosaWorkspaceID } from "@spinosa/core/workspace/identity"
 import { useBindings } from "../keymap"
 
 type MissingWorkspaceAction = "path" | "scan" | "remove"

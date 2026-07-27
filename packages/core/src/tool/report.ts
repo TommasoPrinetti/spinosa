@@ -1,6 +1,6 @@
 export * as ReportTool from "./report"
 
-import { ToolFailure } from "@opencode-ai/llm"
+import { ToolFailure } from "@spinosa/llm"
 import { Effect, Layer, Schema } from "effect"
 import { makeLocationNode } from "../effect/app-node"
 import { FileMutation } from "../file-mutation"

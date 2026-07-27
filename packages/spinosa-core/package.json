@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@spinosa/core",
+  "version": "1.0.1-beta.14",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test --timeout 30000 --only-failures"
+  },
+  "dependencies": {
+    "@napi-rs/canvas": "catalog:",
+    "@spinosa/harness": "workspace:*",
+    "@spinosa/runtime": "workspace:*",
+    "markitdown-ts": "0.0.10",
+    "pdfjs-dist": "4.9.155",
+    "ppu-paddle-ocr": "6.0.0",
+    "strip-ansi": "7.1.2"
+  },
+  "devDependencies": {
+    "@tsconfig/bun": "catalog:",
+    "@types/bun": "catalog:",
+    "@typescript/native-preview": "catalog:",
+    "typescript": "catalog:"
+  }
+}

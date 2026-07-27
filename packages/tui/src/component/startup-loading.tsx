@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js"
 import { useTheme } from "../context/theme"
-import type { SpinosaBootOperation } from "../spinosa-core/system/boot"
+import type { SpinosaBootOperation } from "@spinosa/core/system/boot"
 import { Spinner } from "./spinner"
 
 const MINIMUM_BOOT_DISPLAY_MS = 3_000

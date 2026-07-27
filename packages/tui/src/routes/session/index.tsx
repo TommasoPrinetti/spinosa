@@ -38,7 +38,7 @@ import type {
   TextPart,
   ReasoningPart,
   SessionStatus,
-} from "@opencode-ai/sdk/v2"
+} from "@spinosa/sdk/v2"
 import { useLocal } from "../../context/local"
 import { Locale } from "../../util/locale"
 import { webSearchProviderLabel } from "../../util/tool-display"
@@ -82,7 +82,7 @@ import { collapseToolOutput } from "../../util/collapse-tool-output"
 import { usePluginRuntime } from "../../plugin/runtime"
 import { DialogRetryAction } from "../../component/dialog-retry-action"
 import { getRevertDiffFiles } from "../../util/revert-diff"
-import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut, useOpencodeKeymap } from "../../keymap"
+import { SPINOSA_BASE_MODE, useBindings, useCommandShortcut, useOpencodeKeymap } from "../../keymap"
 import { usePathFormatter } from "../../context/path-format"
 import { LocationProvider } from "../../context/location"
 import { agentDisplayName } from "../../util/agent"
@@ -1245,12 +1245,12 @@ const resolveExportPath = (filename: string): string => {
   }))
 
   useBindings(() => ({
-    mode: OPENCODE_BASE_MODE,
+    mode: SPINOSA_BASE_MODE,
     bindings: tuiConfig.keybinds.gather("session", sessionBindingCommands),
   }))
 
   useBindings(() => ({
-    mode: OPENCODE_BASE_MODE,
+    mode: SPINOSA_BASE_MODE,
     enabled: foregroundTasks().length > 0,
     priority: 1,
     bindings: tuiConfig.keybinds.get("session.background"),
@@ -1482,7 +1482,7 @@ const resolveExportPath = (filename: string): string => {
                   )}
                 </For>
               </scrollbox>
-              <box flexShrink={0} overflow="hidden">
+              <box flexShrink={0}>
                 <Show when={permissions().length > 0 || questions().length > 0}>
                   <box paddingLeft={promptPadding()} paddingRight={promptPadding()}>
                     <Show when={permissions().length > 0}>

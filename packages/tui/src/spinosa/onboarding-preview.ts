@@ -1,16 +1,16 @@
 import { existsSync } from "node:fs"
 import { lstat, readdir } from "node:fs/promises"
 import path from "node:path"
-import { detectLlmTools as coreDetectLlmTools } from "../spinosa-core/tools/detection"
-import { resolveUserPath } from "../spinosa-core/utils/path"
-import { pluralCount } from "../spinosa-core/utils/string"
-import { fileExt } from "../spinosa-core/constants"
-import { shouldSkipSourceFile, classifySourceFile, scanClassifySourceFile } from "../spinosa-core/extension/classifier"
-import type { FileClass } from "../spinosa-core/extension/types"
-import { suggestWorkspacePath as coreSuggestWorkspacePath } from "../spinosa-core/scan/scanner"
-import { resolveWorkspacePath as resolveCoreWorkspacePath } from "../spinosa-core/commands/create"
-import { detectDocumentTools as coreDetectDocumentTools } from "../spinosa-core/scan/scanner"
-import type { ToolStatus as CoreToolStatus } from "../spinosa-core/scan/scanner"
+import { detectLlmTools as coreDetectLlmTools } from "@spinosa/core/tools/detection"
+import { resolveUserPath } from "@spinosa/core/utils/path"
+import { pluralCount } from "@spinosa/core/utils/string"
+import { fileExt } from "@spinosa/core/constants"
+import { shouldSkipSourceFile, classifySourceFile, scanClassifySourceFile } from "@spinosa/core/extension/classifier"
+import type { FileClass } from "@spinosa/core/extension/types"
+import { suggestWorkspacePath as coreSuggestWorkspacePath } from "@spinosa/core/scan/scanner"
+import { resolveWorkspacePath as resolveCoreWorkspacePath } from "@spinosa/core/commands/create"
+import { detectDocumentTools as coreDetectDocumentTools } from "@spinosa/core/scan/scanner"
+import type { ToolStatus as CoreToolStatus } from "@spinosa/core/scan/scanner"
 
 export type OnboardingImportOption = {
   ext: string
@@ -220,5 +220,5 @@ export async function buildImportScanPreview(
   }
 }
 
-export { resolveUserPath } from "../spinosa-core/utils/path"
-export { suggestWorkspacePath } from "../spinosa-core/scan/scanner"
+export { resolveUserPath } from "@spinosa/core/utils/path"
+export { suggestWorkspacePath } from "@spinosa/core/scan/scanner"

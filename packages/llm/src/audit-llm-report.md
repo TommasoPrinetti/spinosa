@@ -125,12 +125,12 @@ OK, so this finding is not a real bug. Let me remove it.
 - **Detail:** Gemini doesn't emit per-block IDs, so the code hardcodes `"reasoning-0"` everywhere. This works because Gemini streams one candidate at a time. If a future Gemini model emits multiple reasoning blocks in one response, they'd collide on the same ID.
 - **Suggestion:** Use a counter variable (similar to `nextToolCallId`) for reasoning content IDs.
 
-### L-4: `llm.ts` `GenerateObjectDynamicOptions` uses `jsonSchema` field but the `JsonSchema` dependency is from `effect` not `@opencode-ai/...`
+### L-4: `llm.ts` `GenerateObjectDynamicOptions` uses `jsonSchema` field but the `JsonSchema` dependency is from `effect` not `@spinosa/...`
 
 - **File:** `llm.ts`
 - **Line:** 107
 - **Issue:** No dependency issue, but the import of `JsonSchema` from `"effect"` may confuse readers about which schema system is in use
-- **Detail:** The `GenerateObjectDynamicOptions` interface references `JsonSchema.JsonSchema`. The import at line 1 (`import { Effect, JsonSchema, Schema } from "effect"`) provides this. Meanwhile, `@opencode-ai/schema/llm` exports their own `JsonSchema = Schema.Record(Schema.String, Schema.Unknown)`. These are compatible since both are `Record<string, unknown>`, but the unused project-local `JsonSchema` is also available via `./schema`. This is correct — just noting the dual source is potentially confusing.
+- **Detail:** The `GenerateObjectDynamicOptions` interface references `JsonSchema.JsonSchema`. The import at line 1 (`import { Effect, JsonSchema, Schema } from "effect"`) provides this. Meanwhile, `@spinosa/schema/llm` exports their own `JsonSchema = Schema.Record(Schema.String, Schema.Unknown)`. These are compatible since both are `Record<string, unknown>`, but the unused project-local `JsonSchema` is also available via `./schema`. This is correct — just noting the dual source is potentially confusing.
 - **Suggestion:** No change needed; just documentation observation.
 
 ### L-5: `endpoint.ts` `render` function doesn't encode query parameter values
@@ -200,7 +200,7 @@ OK, so this finding is not a real bug. Let me remove it.
 ## Import Verification
 
 The following patterns were checked across all source files:
-- All cross-package imports (`@opencode-ai/schema`, `effect`, `@smithy/*`, `aws4fetch`) resolve
+- All cross-package imports (`@spinosa/schema`, `effect`, `@smithy/*`, `aws4fetch`) resolve
 - All intra-package relative imports resolve to existing files
 - All named exports match the exporting module's declarations
 - No circular imports detected at the module level

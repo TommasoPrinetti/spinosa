@@ -130,7 +130,7 @@ test("scans and imports files from the dedicated add-files screen", async () => 
     }),
   }))
   mock.module("../../src/keymap", () => ({
-    OPENCODE_BASE_MODE: "base",
+    SPINOSA_BASE_MODE: "base",
     useOpencodeKeymap: () => ({
       intercept: () => () => {},
     }),

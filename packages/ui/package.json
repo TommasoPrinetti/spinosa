@@ -1,5 +1,5 @@
 {
-  "name": "@opencode-ai/ui",
+  "name": "@spinosa/ui",
   "version": "1.17.12",
   "type": "module",
   "license": "MIT",
@@ -64,7 +64,7 @@
     "generate:v2-oc2": "bun run script/build-oc2-v2-overrides.ts"
   },
   "devDependencies": {
-    "@opencode-ai/script": "workspace:*",
+    "@spinosa/script": "workspace:*",
     "@solidjs/meta": "catalog:",
     "@tailwindcss/vite": "catalog:",
     "@tsconfig/node22": "catalog:",

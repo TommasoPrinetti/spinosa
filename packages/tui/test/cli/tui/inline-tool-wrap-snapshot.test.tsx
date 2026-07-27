@@ -52,7 +52,7 @@ const tools: readonly ToolFixture[] = [
   {
     icon: "✱",
     label:
-      'Grep "export const OPENCODE_DB|OPENCODE_DB|OPENCODE_DEV|Global\\.Path\\.data|data =" in packages/opencode/src (115 matches)',
+      'Grep "export const SPINOSA_DB|SPINOSA_DB|SPINOSA_DEV|Global\\.Path\\.data|data =" in packages/opencode/src (115 matches)',
   },
 ] as const
 
@@ -311,7 +311,7 @@ describe("TUI inline tool wrapping", () => {
       estimateToolCalloutHeight(
         {
           tag: "GREP",
-          command: '"OPENCODE_DB|sqlite|drizzle|APPDATA" in packages/opencode/src/storage/db.ts',
+          command: '"SPINOSA_DB|sqlite|drizzle|APPDATA" in packages/opencode/src/storage/db.ts',
         },
         24,
       ),

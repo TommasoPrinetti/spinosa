@@ -1,0 +1,35 @@
+import { describe, expect, test } from "bun:test"
+import fs from "fs/promises"
+import os from "os"
+import path from "path"
+import { migrateProjectPaths } from "@/config/paths"
+
+describe("project config migration", () => {
+  test("migrates nested workspace config and reports collisions without overwriting", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "spinosa-project-migration-"))
+    const project = path.join(root, "project")
+    const nested = path.join(project, "worktree", "nested")
+    try {
+      await fs.mkdir(path.join(project, ".opencode", "agents"), { recursive: true })
+      await fs.writeFile(path.join(project, ".opencode", "agents", "agent.md"), "preserved")
+      await fs.writeFile(path.join(project, "opencode.json"), '{ "theme": "legacy" }')
+      await fs.mkdir(nested, { recursive: true })
+
+      const first = await migrateProjectPaths(nested, project)
+
+      expect(first.some((result) => result.result === "migrated")).toBe(true)
+      expect(await fs.readFile(path.join(project, ".spinosa", "agents", "agent.md"), "utf8")).toBe("preserved")
+      expect(await fs.readFile(path.join(project, "spinosa.json"), "utf8")).toContain("legacy")
+
+      await fs.mkdir(path.join(project, ".opencode"), { recursive: true })
+      await fs.writeFile(path.join(project, ".opencode", "new.md"), "legacy")
+      const second = await migrateProjectPaths(nested, project)
+
+      expect(second.some((result) => result.result === "conflict")).toBe(true)
+      expect(await fs.readFile(path.join(project, ".spinosa", "agents", "agent.md"), "utf8")).toBe("preserved")
+      expect(JSON.parse(await fs.readFile(path.join(nested, ".spinosa-migration-report.json"), "utf8"))).toMatchObject({ version: 1 })
+    } finally {
+      await fs.rm(root, { recursive: true, force: true })
+    }
+  })
+})

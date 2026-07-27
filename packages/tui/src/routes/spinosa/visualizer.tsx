@@ -9,7 +9,7 @@ import { useRoute } from "../../context/route"
 import { useSDK } from "../../context/sdk"
 import { useSpinosaWorkspace } from "../../context/spinosa-workspace"
 import { useTheme } from "../../context/theme"
-import { OPENCODE_BASE_MODE, useBindings } from "../../keymap"
+import { SPINOSA_BASE_MODE, useBindings } from "../../keymap"
 import { listRegisteredWorkspaces, readWorkspaceMeta } from "../../spinosa/service"
 import { setupStatusThemeKey } from "../../spinosa/status-labels"
 import type { SpinosaSetupStatus } from "../../spinosa/types"
@@ -343,7 +343,7 @@ export function Visualizer() {
   const openHelp = () => dialog.replace(() => <GraphHelp />)
 
   useBindings(() => ({
-    mode: OPENCODE_BASE_MODE,
+    mode: SPINOSA_BASE_MODE,
     enabled: () => dialog.stack.length === 0,
     bindings: [
       ...MODES.map((item, index) => ({

@@ -4,8 +4,8 @@ import { existsSync } from "node:fs"
 import * as path from "node:path"
 import { useTheme } from "../context/theme"
 import { useBindings } from "../keymap"
-import type { AutoUpgradeResult, UpgradeResult } from "../spinosa-core/commands/upgrade"
-import { resolveFrameworkRoot } from "../spinosa-core/framework/discovery"
+import type { AutoUpgradeResult, UpgradeResult } from "@spinosa/core/commands/upgrade"
+import { resolveFrameworkRoot } from "@spinosa/core/framework/discovery"
 import { Spinner } from "./spinner"
 
 type Phase = "prompt" | "installing" | "workspace_prompt" | "updating_workspaces" | "success" | "failed"
@@ -27,7 +27,7 @@ export function UpgradeScreen(props: UpgradeScreenProps) {
     setPhase("installing")
     setPhaseMessage("Starting...")
     try {
-      const { upgradeFramework } = await import("../spinosa-core/commands/upgrade")
+      const { upgradeFramework } = await import("@spinosa/core/commands/upgrade")
       const res = await upgradeFramework({
         version: props.upgrade.latestVersion,
         yes: true,
@@ -59,7 +59,7 @@ export function UpgradeScreen(props: UpgradeScreenProps) {
     setWsUpdated(0)
     const fwRoot = resolveFrameworkRoot()
     if (!fwRoot) { setPhase("success"); return }
-    const { updateWorkspace } = await import("../spinosa-core/commands/update")
+    const { updateWorkspace } = await import("@spinosa/core/commands/update")
     for (const ws of r.workspaceUpgradesNeeded) {
       setPhaseMessage(ws)
       const wsFile = path.join(ws, ".spinosa", "workspace")

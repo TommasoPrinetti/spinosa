@@ -8,31 +8,31 @@ import { useTheme } from "../../context/theme"
 import { useRoute } from "../../context/route"
 import { useSpinosaWorkspace } from "../../context/spinosa-workspace"
 import { Toast } from "../../ui/toast"
-import { ProgressEmitter } from "../../spinosa-core/progress/progress"
-import { createWorkspace, resolveWorkspacePath } from "../../spinosa-core/commands/create"
-import { prepareOnboarding, completeOnboarding } from "../../spinosa-core/commands/onboard"
-import type { OnboardingContext, PhaseAccumulator, OnboardingResult } from "../../spinosa-core/commands/onboard"
-import { scanAndClassifySource, processDirectCopy, processMarkitdown, processOcr, type PhaseResult } from "../../spinosa-core/import/pipeline"
-import { isSpinosaCancellationError } from "../../spinosa-core/import/cancellation"
-import { addFiles } from "../../spinosa-core/commands/add"
+import { ProgressEmitter } from "@spinosa/core/progress/progress"
+import { createWorkspace, resolveWorkspacePath } from "@spinosa/core/commands/create"
+import { prepareOnboarding, completeOnboarding } from "@spinosa/core/commands/onboard"
+import type { OnboardingContext, PhaseAccumulator, OnboardingResult } from "@spinosa/core/commands/onboard"
+import { scanAndClassifySource, processDirectCopy, processMarkitdown, processOcr, type PhaseResult } from "@spinosa/core/import/pipeline"
+import { isSpinosaCancellationError } from "@spinosa/core/import/cancellation"
+import { addFiles } from "@spinosa/core/commands/add"
 import {
   buildStartupChatPrompt,
   formatStartupProgressMessage,
   STARTUP_PROGRESS_INTERVAL_MS,
   STARTUP_PROGRESS_THRESHOLD_MS,
   runStartup as tsRunStartup,
-} from "../../spinosa-core/commands/startup"
-import { resolveFrameworkRoot } from "../../spinosa-core/framework/discovery"
+} from "@spinosa/core/commands/startup"
+import { resolveFrameworkRoot } from "@spinosa/core/framework/discovery"
 import { spawn } from "node:child_process"
 import { tuiLog, logStep, logAction, logPhase, logTool, logResult, logError, logGate } from "../../spinosa/log"
 import { useExit } from "../../context/exit"
 import { useDialog } from "../../ui/dialog"
 import type { CliRunResult } from "../../spinosa/types"
 import { readBundledFrameworkVersion, isPrereleaseFrameworkVersion, readStartupPrompt, writePreferredCli } from "../../spinosa/service"
-import { writeWorkspaceStatus } from "../../spinosa-core/workspace/meta"
-import { normalizePathInput, resolveExistingUserPaths, isCloudStoragePath } from "../../spinosa-core/utils/path"
+import { writeWorkspaceStatus } from "@spinosa/core/workspace/meta"
+import { normalizePathInput, resolveExistingUserPaths, isCloudStoragePath } from "@spinosa/core/utils/path"
 import { CenteredColumn } from "../../component/centered-column"
-import { OPENCODE_BASE_MODE, useOpencodeKeymap, useOpencodeModeStack } from "../../keymap"
+import { SPINOSA_BASE_MODE, useOpencodeKeymap, useOpencodeModeStack } from "../../keymap"
 import { buttonBackground, buttonBorder, buttonText } from "../../util/button"
 import {
   buildNewWorkspacePreview,
@@ -92,8 +92,8 @@ let nextSourceId = 1
 
 const CLI_OPTIONS: CliOption[] = [
   { value: "spinosa", label: "Spinosa", description: "Open the Spinosa TUI with the startup prompt ready." },
-  { value: "opencode", label: "OpenCode", description: "Run the OpenCode CLI with the startup prompt." },
-  { value: "opencode_desktop", label: "OpenCode Desktop", description: "Open OpenCode and paste the copied prompt." },
+  { value: "opencode", label: "Spinosa", description: "Run the Spinosa CLI with the startup prompt." },
+  { value: "opencode_desktop", label: "Spinosa Desktop", description: "Open Spinosa and paste the copied prompt." },
   { value: "gemini", label: "Gemini", description: "Run the Gemini CLI in this workspace." },
   { value: "qwen", label: "Qwen", description: "Run the Qwen CLI in this workspace." },
   { value: "claude_code", label: "Claude Code", description: "Run the terminal CLI in this workspace." },
@@ -1077,7 +1077,7 @@ let nameInput: TextareaRenderable | undefined
       setWorkspaceName(nameInput.plainText?.trim() ?? defaultWorkspaceName())
     }, 300)
     const off = keymap.intercept("key", ({ event, consume }) => {
-      if (modeStack.current() !== OPENCODE_BASE_MODE) return
+      if (modeStack.current() !== SPINOSA_BASE_MODE) return
       setHoveredButton(null)
 
       if (event.ctrl && event.name === "c") {

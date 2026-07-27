@@ -6,20 +6,20 @@ import {
   countDictionaryTerms,
   emptyWorkspaceIndex,
   parseWorkspaceIndex,
-} from "../spinosa-core/corpus/index"
+} from "@spinosa/core/corpus/index"
 import {
   parseGoalArtifact,
   parseOrchestratorAdvisories,
   parseOrchestratorCounter,
   parseReportFrontmatter,
   sessionIdFromGoalFilename,
-} from "../spinosa-core/artifacts/parser"
+} from "@spinosa/core/artifacts/parser"
 import {
   normalizeFrameworkVersion,
   isLegacyDevWorkspaceVersion,
   compareFrameworkVersions,
   isPrereleaseFrameworkVersion,
-} from "../spinosa-core/utils/version"
+} from "@spinosa/core/utils/version"
 import {
   isSpinosaWorkspace,
   readWorkspaceMeta,
@@ -30,19 +30,19 @@ import {
   artifactExists,
   getFrameworkHealth,
   readStartupPrompt,
-} from "../spinosa-core/workspace/meta"
+} from "@spinosa/core/workspace/meta"
 import {
   listRegisteredWorkspaces,
   unregisterWorkspace,
-} from "../spinosa-core/workspace/registry"
-import { readFrameworkVersionFromRoot, resolveFrameworkRoot } from "../spinosa-core/framework/discovery"
+} from "@spinosa/core/workspace/registry"
+import { readFrameworkVersionFromRoot, resolveFrameworkRoot } from "@spinosa/core/framework/discovery"
 import type {
   CorpusSummary,
   GoalArtifactSummary,
   RoutesSnapshot,
   SpinosaWorkspaceMeta,
-} from "../spinosa-core/types"
-import type { FrameworkReleaseStream } from "../spinosa-core/types"
+} from "@spinosa/core/types"
+import type { FrameworkReleaseStream } from "@spinosa/core/types"
 
 // --- Inline functions not yet in spinosa-core ---
 

@@ -1,6 +1,6 @@
 # TUI Package Guide
 
-`@opencode-ai/tui` is the canonical OpenCode terminal application. SolidJS + OpenTUI. Hosts (`packages/opencode`, `packages/cli`) only wire transport, config, and Effect layers — they do not own UI trees.
+`@spinosa/tui` is the canonical Spinosa terminal application. SolidJS + OpenTUI. Hosts (`packages/opencode`, `packages/cli`) only wire transport, config, and Effect layers — they do not own UI trees.
 
 Read `specs/tui-package.md` for extraction history and boundary rules.
 
@@ -16,7 +16,7 @@ Subpath exports in `package.json` expose stable host/plugin surfaces: `./config`
 
 Entry stack (`spinosa/entry.ts`, `routes/spinosa/`):
 
-1. **workspace-picker** — registered workspaces, cwd, OpenCode-only, new workspace
+1. **workspace-picker** — registered workspaces, cwd, Spinosa-only, new workspace
 2. **onboarding** — `not_started` / add-files wizard via `SpinosaCliBridge`
 3. **startup-hub** — `cli_started` → begin indexing in Chat
 4. **workspace** — chat/session shell
@@ -68,8 +68,8 @@ src/
 
 ## Architecture rules
 
-- **SDK is the backend boundary.** Missing data or operations belong in the server API and `@opencode-ai/sdk`, not imports from `packages/opencode` or `packages/cli`.
-- **Do not add new `@opencode-ai/core` imports.** ~12 files still import core (Flag, Global, InstallationVersion, Flock, Glob, AppNodeBuilder) from the extraction migration. Shrink this set; do not expand it. Pass behavior through `run()` inputs, SDK, or explicit runtime providers instead.
+- **SDK is the backend boundary.** Missing data or operations belong in the server API and `@spinosa/sdk`, not imports from `packages/opencode` or `packages/cli`.
+- **Do not add new `@spinosa/kernel-core` imports.** ~12 files still import core (Flag, Global, InstallationVersion, Flock, Glob, AppNodeBuilder) from the extraction migration. Shrink this set; do not expand it. Pass behavior through `run()` inputs, SDK, or explicit runtime providers instead.
 - **One canonical UI.** Never duplicate feature trees into `packages/cli` or `packages/opencode`. Host adapters live in those packages; presentation lives here.
 - **Tool rendering stays tolerant.** Accept `unknown` wire shapes; do not import backend tool implementations for types.
 
@@ -96,8 +96,8 @@ Snapshot tests live under `test/`. Prefer extending existing test helpers over n
 
 - Rendering: `@opentui/core`, `@opentui/solid`, `@opentui/keymap`
 - State: SolidJS (`createStore` preferred over many signals — same as `packages/app`)
-- Shared web primitives: `@opencode-ai/ui` where terminal and web align
-- Plugins: `@opencode-ai/plugin` presentation slots; host injects `pluginHost`
+- Shared web primitives: `@spinosa/ui` where terminal and web align
+- Plugins: `@spinosa/plugin` presentation slots; host injects `pluginHost`
 
 ## When changing behavior
 

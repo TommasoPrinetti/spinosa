@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { buildLaunchCommand } from "../../src/spinosa-core/handoff/builder"
+import { buildLaunchCommand } from "@spinosa/core/handoff/builder"
 
 describe("spinosa handoff builder", () => {
   test("uses a non-conflicting heredoc delimiter when prompt contains the default marker", () => {

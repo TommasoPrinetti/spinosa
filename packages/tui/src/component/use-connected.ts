@@ -7,10 +7,10 @@ export function useConnected() {
   const local = useLocal()
   return createMemo(() => {
     const model = local.model.current()
-    const acceptedFreeOpenCode =
+    const acceptedFreeSpinosa =
       model?.providerID === "opencode" &&
       local.model.recent().some((item) => item.providerID === model.providerID && item.modelID === model.modelID)
-    return acceptedFreeOpenCode ||
+    return acceptedFreeSpinosa ||
     sync.data.provider.some(
       (provider) =>
         provider.id !== "opencode" || Object.values(provider.models).some((model) => model.cost?.input !== 0),

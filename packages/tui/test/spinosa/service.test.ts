@@ -14,7 +14,7 @@ import {
   workspaceNeedsFrameworkUpdate,
   writeWorkspaceFrameworkVersion,
 } from "../../src/spinosa/service"
-import { parseOrchestratorCounter } from "../../src/spinosa-core/artifacts/parser"
+import { parseOrchestratorCounter } from "@spinosa/core/artifacts/parser"
 
 const fixture = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "fixtures/workspace-started")
 

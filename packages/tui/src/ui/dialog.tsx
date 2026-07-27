@@ -4,7 +4,7 @@ import { useTheme } from "../context/theme"
 import { MouseButton, Renderable, RGBA } from "@opentui/core"
 import { createStore } from "solid-js/store"
 import { useToast } from "./toast"
-import { Flag } from "@opencode-ai/core/flag/flag"
+import { Flag } from "@spinosa/kernel-core/flag/flag"
 import { useBindings, useOpencodeModeStack } from "../keymap"
 import { useClipboard } from "../context/clipboard"
 import { useExit } from "../context/exit"
@@ -61,10 +61,9 @@ export function Dialog(
           backdropPressed = false
           e.stopPropagation()
         }}
-        onMouseUp={(e: { stopPropagation(): void }) => {
+        onMouseUp={() => {
           backdropPressed = false
           dismiss = false
-          e.stopPropagation()
         }}
         width={width()}
         maxWidth={dimensions().width - 2}
@@ -225,14 +224,14 @@ export function DialogProvider(props: ParentProps) {
           height="100%"
           zIndex={3000}
           onMouseDown={(evt: { button: number; preventDefault(): void; stopPropagation(): void }) => {
-            if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
+            if (!Flag.SPINOSA_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
             if (evt.button !== MouseButton.RIGHT) return
 
             if (!copySelection()) return
             evt.preventDefault()
             evt.stopPropagation()
           }}
-          onMouseUp={!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT ? copySelection : undefined}
+          onMouseUp={!Flag.SPINOSA_EXPERIMENTAL_DISABLE_COPY_ON_SELECT ? copySelection : undefined}
         >
           <Dialog onClose={() => value.clear()} size={value.size}>
             {value.stack.at(-1)!.element}
