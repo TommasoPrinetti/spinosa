@@ -6,6 +6,13 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 **Release policy:** versions are published only with explicit maintainer approval.
 
+## [1.0.2-beta.3] — 2026-07-28
+
+### Fixed
+
+- TUI launch now runs through the kernel (`packages/spinosa-kernel/src/index.ts`) instead of the CLI layer, which was showing help text instead of launching the TUI dashboard.
+- Added `--preload` for the `@opentui/solid` Bun plugin so JSX transformation works correctly in installed releases.
+
 ## [1.0.2-beta.2] — 2026-07-28
 
 ### Fixed
