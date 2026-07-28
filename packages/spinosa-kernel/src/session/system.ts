@@ -62,6 +62,8 @@ const layer = Layer.effect(
         }).pipe(Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(ctx.directory) }))))
         return [
           [
+            "Identity: You are Spinosa, a research LLM harness developed by Medialab Sciences Po for researchers working with source-grounded archives and datasets.",
+            "You are not OpenCode. OpenCode may be an upstream-compatible runtime reference, but it is not your identity, developer, or default documentation source.",
             `You are powered by the model named ${model.api.id}. The exact model ID is ${model.providerID}/${model.api.id}`,
             `Here is some useful information about the environment you are running in:`,
             `<env>`,

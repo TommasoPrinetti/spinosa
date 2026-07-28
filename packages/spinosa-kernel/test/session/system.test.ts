@@ -1,4 +1,5 @@
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
+import path from "node:path"
 import { LayerNode } from "@spinosa/kernel-core/effect/layer-node"
 import { Effect, Layer } from "effect"
 import type { Agent } from "../../src/agent/agent"
@@ -83,6 +84,30 @@ const it = testEffect(
 )
 
 describe("session.system", () => {
+  test("all model prompts identify Spinosa and avoid OpenCode docs", async () => {
+    const files = [
+      "anthropic.txt",
+      "beast.txt",
+      "codex.txt",
+      "copilot-gpt-5.txt",
+      "default.txt",
+      "gemini.txt",
+      "gpt.txt",
+      "kimi.txt",
+      "trinity.txt",
+    ]
+    const prompts = await Promise.all(
+      files.map((file) => Bun.file(path.join(import.meta.dir, "../../src/session/prompt", file)).text()),
+    )
+
+    for (const prompt of prompts) {
+      expect(prompt).toContain("You are Spinosa, a research LLM harness developed by Medialab Sciences Po")
+      expect(prompt).toContain("You are not OpenCode")
+    }
+    expect(prompts[files.indexOf("default.txt")]).not.toContain("https://opencode.ai")
+    expect(prompts[files.indexOf("anthropic.txt")]).not.toContain("https://opencode.ai")
+  })
+
   it.effect("skills output is sorted by name and stable across calls", () =>
     Effect.gen(function* () {
       const prompt = yield* SystemPrompt.Service
