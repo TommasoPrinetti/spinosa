@@ -178,28 +178,16 @@ function SpinosaSyncProvider(props: ParentProps) {
       .then((resp) => {
         const existing = resp.data?.find((w) => w.directory === path)
         dbg("[spinosa:bridge:wrk] server list", { count: resp.data?.length ?? 0, found: existing?.id ?? null })
-        return existing
-      })
-      .then((existing) => {
         if (existing?.id) {
           writeMarkerWrkID(path, existing.id)
           kv.set(KV.ACTIVE_WRK_WORKSPACE_ID, existing.id)
           project.workspace.set(existing.id)
           tuiLog(`wrk bridge: found existing ${existing.id}`)
-          return null
+          return
         }
-        dbg("[spinosa:bridge:wrk] creating new workspace", {})
-        return sdk.client.experimental.workspace.create({ type: "directory", branch: null })
-      })
-      .then((created: any) => {
-        if (created?.data?.id) {
-          writeMarkerWrkID(path, created.data.id)
-          kv.set(KV.ACTIVE_WRK_WORKSPACE_ID, created.data.id)
-          project.workspace.set(created.data.id)
-          tuiLog(`wrk bridge: created ${created.data.id}`)
-        } else if (created) {
-          dbg("[spinosa:bridge:wrk] create returned no id", { created: JSON.stringify(created) })
-        }
+        kv.set(KV.ACTIVE_WRK_WORKSPACE_ID, undefined)
+        project.workspace.set(undefined)
+        tuiLog("wrk bridge: using base workspace")
       })
       .catch((err) => {
         dbg("[spinosa:bridge:wrk] failed", { error: String(err) })

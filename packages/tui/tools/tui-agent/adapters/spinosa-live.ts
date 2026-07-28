@@ -2,10 +2,12 @@ import { mock } from "bun:test";
 import { AppNodeBuilder } from "@spinosa/kernel-core/effect/app-node-builder";
 import { Global } from "@spinosa/kernel-core/global";
 import type { TuiPluginApi } from "@spinosa/plugin/tui";
-import { Effect, Fiber } from "effect";
+import { readWorkspaceMeta } from "@spinosa/core/workspace/meta";
+import { Cause, Effect, Exit, Fiber } from "effect";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
-import type { AdapterInspection, AdapterLaunchContext, AdapterPrepareContext, CapturedRequest, TuiAgentAdapter } from "tui-agent-use/types";
+import { createTuiResolvedConfig } from "../../../test/fixture/tui-runtime";
+import type { AdapterInspection, AdapterLaunchContext, AdapterPrepareContext, CapturedRequest, TuiAgentAdapter } from "tui-agent-use";
 
 const SPINOSA_URL = (process.env.SPINOSA_URL ?? "http://127.0.0.1:8787").replace(/\/+$/, "");
 
@@ -51,7 +53,25 @@ const adapter: TuiAgentAdapter = {
     await checkServer();
     const stateDirectory = path.join(context.home, ".local", "state", "opencode");
     mkdirSync(stateDirectory, { recursive: true });
-    return { cwd: context.fixtureRoot };
+    const cwd = process.env.SPINOSA_LIVE_DIRECTORY ?? context.fixtureRoot;
+    if (process.env.SPINOSA_LIVE_DIRECTORY) {
+      const meta = await readWorkspaceMeta(cwd);
+      if (!meta?.workspaceID) throw new Error(`Invalid Spinosa workspace: ${cwd}`);
+      const metadataDirectory = path.join(context.home, ".spinosa", "metadata");
+      mkdirSync(metadataDirectory, { recursive: true });
+      await Bun.write(path.join(metadataDirectory, "workspaces.json"), `${JSON.stringify({
+        schemaVersion: 1,
+        workspaces: [{
+          id: meta.workspaceID,
+          path: cwd,
+          name: meta.projectName,
+          tags: [],
+          state: { presence: "present", setupStatus: meta.setupStatus },
+          registration: { registeredAt: new Date().toISOString().slice(0, 10) },
+        }],
+      }, null, 2)}\n`);
+    }
+    return { cwd };
   },
 
   async launch(context: AdapterLaunchContext) {
@@ -67,14 +87,16 @@ const adapter: TuiAgentAdapter = {
     // Point HOME to an isolated temp dir so the TUI doesn't touch your real config
     process.env.HOME = context.home;
     process.env.SPINOSA_TEST_HOME = context.home;
+    process.env.SPINOSA_HOME = path.join(context.home, ".spinosa");
     process.env.SPINOSA_FAST_BOOT = "1";
     if (process.env.SPINOSA_ROUTE) delete process.env.SPINOSA_ROUTE;
 
     // Real fetch proxy — request goes to your real Spinosa instance
     const fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = new URL(input instanceof Request ? input.url : String(input));
+      const source = input instanceof Request ? input : new Request(input, init);
+      const url = new URL(source.url);
       const target = new URL(url.pathname + url.search, SPINOSA_URL);
-      const request = new Request(target, init);
+      const request = new Request(target, source);
 
       const record: CapturedRequest = {
         method: request.method,
@@ -99,9 +121,10 @@ const adapter: TuiAgentAdapter = {
     let api: TuiPluginApi | undefined;
     let disposeSlots: (() => void) | undefined;
     let markReady!: () => void;
+    let readyTimer: ReturnType<typeof setTimeout> | undefined;
     const ready = new Promise<void>((resolve, reject) => {
       markReady = resolve;
-      setTimeout(() => reject(new Error(
+      readyTimer = setTimeout(() => reject(new Error(
         "TUI launch timed out after 15s.\n" +
         "The server at " + SPINOSA_URL + " is responding, but the TUI couldn't boot.\n" +
         "This typically means a fetch to the server returned unexpected data.\n" +
@@ -115,19 +138,8 @@ const adapter: TuiAgentAdapter = {
         url: SPINOSA_URL,
         directory: context.preparation.cwd ?? context.fixtureRoot,
         fetch,
-        events: {
-          subscribe: async (handler: (event: any) => void) => {
-            const es = new EventSource(SPINOSA_URL + "/api/event?stream=true");
-            es.onmessage = (msg) => {
-              try { handler(JSON.parse(msg.data)); } catch {}
-            };
-            return () => es.close();
-          },
-        },
         args: {},
-        config: {
-          plugin_enabled: {},
-        } as any,
+        config: createTuiResolvedConfig({ plugin_enabled: {} }),
         pluginHost: {
           async start(input) {
             api = input.api;
@@ -142,7 +154,13 @@ const adapter: TuiAgentAdapter = {
       }).pipe(Effect.provide(AppNodeBuilder.build(Global.node))),
     );
 
-    await ready;
+    const stopped = Effect.runPromise(Fiber.await(fiber)).then((exit) => {
+      if (Exit.isFailure(exit)) throw Cause.squash(exit.cause);
+      throw new Error("TUI stopped before startup completed");
+    });
+    await Promise.race([ready, stopped]).finally(() => {
+      if (readyTimer) clearTimeout(readyTimer);
+    });
 
     return {
       requests,

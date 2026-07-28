@@ -1,5 +1,5 @@
 import { BoxRenderable, InputRenderable, TextRenderable } from "@opentui/core";
-import type { TuiAgentAdapter } from "../types";
+import type { TuiAgentAdapter } from "tui-agent-use";
 
 const adapter: TuiAgentAdapter = {
   name: "portable-example",

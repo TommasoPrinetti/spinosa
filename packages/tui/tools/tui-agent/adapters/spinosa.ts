@@ -18,7 +18,7 @@ import type {
   CapturedRequest,
   TuiAgentAdapter,
   TuiScenario,
-} from "../types";
+} from "tui-agent-use";
 
 type SpinosaFixture = {
   workspace?: {
