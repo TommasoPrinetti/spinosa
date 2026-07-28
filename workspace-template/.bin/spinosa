@@ -105,8 +105,8 @@ if [[ -n "$launcher_command" && "$launcher_command" != "new" && "$launcher_comma
   exit 1
 fi
 
-# No-args or new/create without source → launch TUI
-if [[ -d "${RESOLVED_ROOT}/packages/tui/src" && -n "$BUN" ]]; then
+# No-args or new/create without source → launch TUI via kernel (with SolidJS preload)
+if [[ -d "${RESOLVED_ROOT}/packages/spinosa-kernel/src" && -n "$BUN" ]]; then
   export SPINOSA_TEMPLATE_ROOT="$RESOLVED_ROOT"
   if "$BUN" run "${RESOLVED_ROOT}/packages/tui/src/spinosa-cli.ts" preflight; then
     :
@@ -115,7 +115,12 @@ if [[ -d "${RESOLVED_ROOT}/packages/tui/src" && -n "$BUN" ]]; then
     [[ "$preflight_status" -eq 10 ]] && exit 0
     exit "$preflight_status"
   fi
-  exec "$BUN" run "${RESOLVED_ROOT}/packages/tui/src/spinosa-cli.ts" "$@"
+  SOLID_PRELOAD="$(find "${RESOLVED_ROOT}/node_modules/.bun" -path '*/@opentui/solid/scripts/preload.ts' -print -quit 2>/dev/null)"
+  if [[ -n "$SOLID_PRELOAD" ]]; then
+    exec "$BUN" run --preload "$SOLID_PRELOAD" "${RESOLVED_ROOT}/packages/spinosa-kernel/src/index.ts" "$@"
+  else
+    exec "$BUN" run "${RESOLVED_ROOT}/packages/spinosa-kernel/src/index.ts" "$@"
+  fi
 fi
 
 echo "Error: Spinosa not found. Run the installer or re-install dependencies." >&2
