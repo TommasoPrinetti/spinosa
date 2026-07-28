@@ -6,6 +6,23 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 **Release policy:** versions are published only with explicit maintainer approval.
 
+## [1.0.2-beta.1] — 2026-07-28
+
+### Security
+
+- Local logs (`spinosa.log`, `tui.ndjson`, `debug.ndjson`) and the workspace registry are now written with `0600` permissions; parent directories use `0700`. Sensitive keys (`authorization`, `cookie`, `password`, `secret`, `token`, `api_key`) are redacted from log entries, and `Basic`/`Bearer` credentials are scrubbed from log text.
+- The HTTP API no longer accepts credentials via the `auth_token` query parameter. Use the `Authorization` header instead. Query credentials are now rejected with `401`.
+- The local server now refuses to bind to non-loopback hosts unless `SPINOSA_SERVER_PASSWORD` is set. Binding to `0.0.0.0` without a password throws at startup.
+- The remote UI proxy (`app.opencode.ai`) has been removed. The server serves the embedded UI only; when the embedded UI is unavailable, requests fall through to the local 404 handler. The Content-Security-Policy is tightened (`connect-src 'self'`, `base-uri 'none'`, `object-src 'none'`, `frame-src 'none'`, `form-action 'self'`).
+- The reverse proxy sanitizer now strips `authorization`, `cookie`, `origin`, and `referer` headers before forwarding requests; target-specific credentials may still be supplied explicitly via `extra`.
+- The Homebrew tap publish step no longer embeds the GitHub token in the clone URL. It uses a `GIT_ASKPASS` helper with the `GITHUB_TOKEN` environment variable instead.
+- The migration report now stores relative paths instead of absolute paths, and is written with `0600` permissions.
+
+### Changed
+
+- Dependencies bumped: esbuild `0.25.12` → `0.28.1`, `solid-js` `1.9.10` → `1.9.14`, `vite` `7.1.4` → `7.3.5`, `dompurify` `3.3.1` → `3.4.12`, `@babel/core` `7.28.4` → `7.29.6`, `minimatch` `10.0.3` → `10.2.5`, OpenTelemetry packages to `2.10.0`/`1.9.1`/`0.221.0`.
+- `.gitignore` now excludes `packages/spinosa-kernel/.spinosa-migration-report.json`, `.serena/`, and `*.tsbuildinfo`.
+
 ## [1.0.1-beta.14] — 2026-07-24
 
 No user-facing changes since beta.13. (Build pipeline stabilization.)
