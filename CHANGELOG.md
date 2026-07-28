@@ -6,6 +6,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 **Release policy:** versions are published only with explicit maintainer approval.
 
+## [1.0.2-beta.2] — 2026-07-28
+
+### Fixed
+
+- The TUI launch path (`spinosa` with no arguments) referenced a deleted `packages/opencode` directory, causing "Spinosa not found" on fresh installs. The entry point now launches from `packages/tui/src/spinosa-cli.ts`.
+
 ## [1.0.2-beta.1] — 2026-07-28
 
 ### Security
