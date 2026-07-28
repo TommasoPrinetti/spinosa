@@ -5,7 +5,7 @@ import { NonNegativeInt } from "@spinosa/kernel-core/schema"
 import { Global } from "@spinosa/kernel-core/global"
 import { FSUtil } from "@spinosa/kernel-core/fs-util"
 
-export const OAUTH_DUMMY_KEY = "opencode-oauth-dummy-key"
+export const OAUTH_DUMMY_KEY = "spinosa-oauth-dummy-key"
 
 const file = path.join(Global.Path.data, "auth.json")
 

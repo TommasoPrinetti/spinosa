@@ -824,6 +824,28 @@ Nested agent prompt`,
   }),
 )
 
+it.instance("keeps template agents available when .opencode and .spinosa coexist", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* FSUtil.use.writeWithDirs(path.join(test.directory, ".spinosa", "workspace"), "workspace_started\n")
+    yield* FSUtil.use.writeWithDirs(
+      path.join(test.directory, ".opencode", "agents", "spinosa-searcher.md"),
+      `---
+mode: subagent
+---
+Search the workspace`,
+    )
+
+    const config = yield* Config.use.get()
+
+    expect(config.agent?.["spinosa-searcher"]).toMatchObject({
+      name: "spinosa-searcher",
+      mode: "subagent",
+      prompt: "Search the workspace",
+    })
+  }),
+)
+
 it.instance("loads commands from .opencode/command (singular)", () =>
   Effect.gen(function* () {
     const test = yield* TestInstance

@@ -1,7 +1,13 @@
 import { describe, expect, test } from "bun:test"
-import { beginExecution, completeExecution, createResearchRun, nextExecution } from "../src"
+import { beginExecution, classifyPrompt, completeExecution, createResearchRun, nextExecution } from "../src"
 
 describe("research runtime", () => {
+  test("keeps greetings on the direct-chat path", () => {
+    expect(classifyPrompt("Hi")).toBe("fast_path")
+    expect(classifyPrompt("hello!")).toBe("fast_path")
+    expect(classifyPrompt("analyze this corpus")).toBe("Q2")
+  })
+
   test("runs the Q1 chain deterministically", () => {
     let run = createResearchRun({
       id: "run-1",

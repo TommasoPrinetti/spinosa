@@ -113,13 +113,21 @@ export class SpinosaKernelHarness implements SpinosaHarness {
   // Start an agent execution in a session.
   // The kernel agent name comes from the kernelAgent mapping.
   // The execution identifier is the session identifier.
-  async executeAgent(input: { sessionID: string; agent: string; prompt: string; model?: { providerID: string; modelID: string } }): Promise<{ executionID: string }> {
+  async executeAgent(input: {
+    sessionID: string
+    agent: string
+    prompt: string
+    system?: string
+    synthetic?: boolean
+    model?: { providerID: string; modelID: string }
+  }): Promise<{ executionID: string }> {
     const executor = kernelAgent(input.agent)
     const response = await this.client.session.prompt({
       sessionID: input.sessionID,
       agent: executor,
       model: input.model,
-      parts: [{ type: "text", text: input.prompt }],
+      ...(input.system ? { system: input.system } : {}),
+      parts: [{ type: "text", text: input.prompt, ...(input.synthetic ? { synthetic: true } : {}) }],
     })
     if (response.error) throw executionError(input.agent, executor, response.error)
     return { executionID: input.sessionID }

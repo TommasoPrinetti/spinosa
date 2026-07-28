@@ -105,8 +105,8 @@ export function orchestratorPreamble(input: {
   goalPath?: string
 }): string {
   const lines = [
-    "<system-reminder>",
-    "You are the Spinosa orchestrator for this workspace. Follow AGENTS.md: frame routes with goal artifacts, dispatch sub-agents, verify before delivery.",
+    "Spinosa runtime is scheduling this request.",
+    "Execute only the assigned phase. Do not call the Task tool or dispatch subagents; the runtime owns the chain.",
     `Workspace: ${input.workspacePath}`,
     `Route class: ${input.route}`,
   ]
@@ -115,6 +115,5 @@ export function orchestratorPreamble(input: {
   if (isNonFastPath(input.route)) {
     lines.push("Do not paste long reports into chat — write agent_reports/NN_*.md and point to the verified file.")
   }
-  lines.push("</system-reminder>")
   return lines.join("\n")
 }

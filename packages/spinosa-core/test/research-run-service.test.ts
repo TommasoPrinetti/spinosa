@@ -43,6 +43,14 @@ describe("ResearchRunService", () => {
       "spinosa-verifier",
       "spinosa-evaluator",
     ])
+    expect(harness.executions.map((execution) => execution.prompt)).toEqual([
+      "find evidence about interviews",
+      "Continue with the assigned phase.",
+      "Continue with the assigned phase.",
+      "Continue with the assigned phase.",
+    ])
+    expect(harness.executions.map((execution) => execution.synthetic)).toEqual([false, true, true, true])
+    expect(harness.executions[0].system).toContain("Do not call the Task tool or dispatch subagents")
     const run = await Bun.file(path.join(root, ".spinosa", "runs", prepared.runID!, "run.json")).json()
     expect(run.status).toBe("completed")
   })

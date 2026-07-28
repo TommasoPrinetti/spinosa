@@ -1,6 +1,7 @@
 export type RouteClass = "fast_path" | "Q1" | "Q2" | "Q3" | "Q4" | "Q5"
 
 const FAST_PATH = [
+  /^(?:hi|hello|hey|yo|sup|thanks|thank you|ok|okay)[!?.\s]*$/i,
   /^how do i\b/i,
   /^what is the\b/i,
   /^where is\b/i,

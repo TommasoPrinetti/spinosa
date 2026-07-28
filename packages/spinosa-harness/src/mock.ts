@@ -12,6 +12,14 @@ import type { HarnessEvent, HarnessSession, PermissionReply, SpinosaHarness } fr
 export class MockHarness implements SpinosaHarness {
   readonly capabilities = { directToolExecution: true, permissions: true, cancellation: true }
   readonly events: HarnessEvent[] = []
+  readonly executions: Array<{
+    sessionID: string
+    agent: string
+    prompt: string
+    system?: string
+    synthetic?: boolean
+    model?: { providerID: string; modelID: string }
+  }> = []
   readonly sessions = new Map<string, HarnessSession>()
   private sequence = 0
 
@@ -27,8 +35,16 @@ export class MockHarness implements SpinosaHarness {
 
   // Start a mock agent execution.
   // The method creates an agent.started event and returns a mock execution identifier.
-  async executeAgent(input: { sessionID: string; agent: string; prompt: string }): Promise<{ executionID: string }> {
+  async executeAgent(input: {
+    sessionID: string
+    agent: string
+    prompt: string
+    system?: string
+    synthetic?: boolean
+    model?: { providerID: string; modelID: string }
+  }): Promise<{ executionID: string }> {
     const executionID = "execution-" + ++this.sequence
+    this.executions.push(input)
     this.events.push({ type: "agent.started", sessionID: input.sessionID, executionID, detail: input.agent })
     return { executionID }
   }

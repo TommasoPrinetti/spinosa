@@ -55,7 +55,14 @@ export interface SpinosaHarness {
   // The agent name selects the behavior for the execution.
   // The prompt contains the instructions for the agent.
   // The model is optional. When given, it selects the provider and model.
-  executeAgent(input: { sessionID: string; agent: string; prompt: string; model?: { providerID: string; modelID: string } }): Promise<{ executionID: string }>
+  executeAgent(input: {
+    sessionID: string
+    agent: string
+    prompt: string
+    system?: string
+    synthetic?: boolean
+    model?: { providerID: string; modelID: string }
+  }): Promise<{ executionID: string }>
 
   // Run a tool directly without an agent.
   // The tool name selects which tool to run.

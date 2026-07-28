@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "migratedAt": "2026-07-27T16:09:08.200Z",
+  "migratedAt": "2026-07-28T10:26:02.919Z",
   "conflicts": [
     {
-      "source": "/Users/tommasoprinetti/.opencode",
-      "target": "/Users/tommasoprinetti/.spinosa",
+      "source": "/Users/tommasoprinetti/Documents/spinosa-next-transition/.opencode",
+      "target": "/Users/tommasoprinetti/Documents/spinosa-next-transition/.spinosa",
       "result": "conflict"
     }
   ]

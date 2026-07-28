@@ -22,6 +22,8 @@ describe("SpinosaKernelHarness", () => {
       sessionID: "ses_123",
       agent: "spinosa-searcher",
       prompt: "Assigned agent: spinosa-searcher",
+      system: "Execute only the assigned phase.",
+      synthetic: true,
       model: { providerID: "opencode", modelID: "north-mini-code-free" },
     })
 
@@ -30,7 +32,8 @@ describe("SpinosaKernelHarness", () => {
         sessionID: "ses_123",
         agent: "build",
         model: { providerID: "opencode", modelID: "north-mini-code-free" },
-        parts: [{ type: "text", text: "Assigned agent: spinosa-searcher" }],
+        system: "Execute only the assigned phase.",
+        parts: [{ type: "text", text: "Assigned agent: spinosa-searcher", synthetic: true }],
       },
     ])
   })

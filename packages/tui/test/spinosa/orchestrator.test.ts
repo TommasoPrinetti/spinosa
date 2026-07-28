@@ -18,6 +18,7 @@ afterAll(() => {
       rmSync(path.join(reports, name))
     }
   }
+  rmSync(path.join(fixture, ".spinosa", "runs"), { recursive: true, force: true })
 })
 
 describe("prepareSpinosaSubmit", () => {
@@ -25,7 +26,7 @@ describe("prepareSpinosaSubmit", () => {
     const prepared = await prepareSpinosaSubmit(fixture, "Find source-grounded evidence for fixture topic")
     expect(prepared.framed).toBe(true)
     expect(prepared.goalPath).toMatch(/^agent_reports\/g_/)
-    expect(prepared.text).toContain("<system-reminder>")
+    expect(prepared.text).toBe("Find source-grounded evidence for fixture topic")
     if (prepared.goalPath) {
       expect(await Bun.file(path.join(fixture, prepared.goalPath)).exists()).toBe(true)
     }
@@ -35,6 +36,14 @@ describe("prepareSpinosaSubmit", () => {
     const prepared = await prepareSpinosaSubmit(fixture, "How do I open settings pane?")
     expect(prepared.framed).toBe(false)
     expect(prepared.route).toBe("fast_path")
+  })
+
+  test("sends greetings directly without a runtime preamble", async () => {
+    const prepared = await prepareSpinosaSubmit(fixture, "Hi")
+
+    expect(prepared.framed).toBe(false)
+    expect(prepared.route).toBe("fast_path")
+    expect(prepared.text).toBe("Hi")
   })
 
   test("creates agent_reports when framing a fresh workspace", async () => {

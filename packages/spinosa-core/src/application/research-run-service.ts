@@ -60,15 +60,8 @@ export class ResearchRunService {
       sessionId: active.id,
       route,
     })
-    const preamble = orchestratorPreamble({
-      workspacePath,
-      route,
-      sessionId: active.id,
-      goalPath: goal.goalPath,
-    })
-
     return {
-      text: preamble + "\n\n" + cleanedPrompt,
+      text: cleanedPrompt,
       route,
       runID: active.id,
       goalPath: goal.goalPath,
@@ -99,10 +92,13 @@ export class ResearchRunService {
       }
 
       try {
+        const phase = phasePrompt(input.prepared, execution.agent, run.phaseIndex)
         await this.harness.executeAgent({
           sessionID: input.sessionID,
           agent: execution.agent,
-          prompt: phasePrompt(input.prepared, execution.agent, run.phaseIndex),
+          prompt: phase.prompt,
+          system: phase.system,
+          synthetic: phase.synthetic,
           model: input.model,
         })
       } catch (error) {
@@ -152,17 +148,28 @@ export class ResearchRunService {
   }
 }
 
-function phasePrompt(prepared: PreparedResearchRun, agent: string, phaseIndex: number): string {
-  if (phaseIndex === 0) return prepared.text
-  return [
-    "<system-reminder>",
-    "Spinosa runtime schedules this research run. Execute only the assigned phase; do not dispatch the remaining chain.",
+function phasePrompt(prepared: PreparedResearchRun, agent: string, phaseIndex: number): {
+  prompt: string
+  system: string
+  synthetic: boolean
+} {
+  const system = [
+    orchestratorPreamble({
+      workspacePath: prepared.workspacePath ?? "",
+      route: prepared.route,
+      sessionId: prepared.runID,
+      goalPath: prepared.goalPath,
+    }),
     `Assigned agent: ${agent}`,
     `Goal artifact: ${prepared.goalPath}`,
     "Write the phase artifact required by the goal before replying.",
-    "</system-reminder>",
-    prepared.text.replace(/<system-reminder>[\s\S]*?<\/system-reminder>\s*/g, ""),
   ].join("\n\n")
+
+  return {
+    prompt: phaseIndex === 0 ? prepared.text : "Continue with the assigned phase.",
+    system,
+    synthetic: phaseIndex > 0,
+  }
 }
 
 function stripExistingPreamble(text: string): string {
