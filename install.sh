@@ -919,7 +919,7 @@ version_dir_has_framework() {
   [ -d "$fw_dir" ] || return 1
   [ -f "${fw_dir}/workspace-template/.spinosa/workspace-files.tsv" ] || return 1
   [ -f "${fw_dir}/workspace-template/.bin/spinosa" ] || return 1
-  [ -d "${fw_dir}/packages/opencode" ] || return 1
+  [ -d "${fw_dir}/packages/spinosa-kernel" ] || return 1
 }
 
 # Runtime deps required for the TUI. Incomplete bun installs (half-failed or
@@ -1576,7 +1576,7 @@ run_basic_test() {
 
   [[ -x "$bun_bin" ]] && "$bun_bin" --version || healthy=1
   [[ -f "${fw_root}/workspace-template/.bin/spinosa" ]] || healthy=1
-  [[ -d "${fw_root}/packages/opencode" ]] || healthy=1
+  [[ -d "${fw_root}/packages/spinosa-kernel" ]] || healthy=1
   if [[ "${SPINOSA_SKIP_DEPS:-}" != "1" ]]; then
     [[ -d "${fw_root}/node_modules" ]] || healthy=1
   fi

@@ -34,7 +34,7 @@ const IS_PREVIEW = CHANNEL !== "latest"
 const VERSION = await (async () => {
   if (env.SPINOSA_VERSION) return env.SPINOSA_VERSION
   if (IS_PREVIEW) return `0.0.0-${CHANNEL}-${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")}`
-  const version = await fetch("https://registry.npmjs.org/opencode-ai/latest")
+  const version = await fetch("https://registry.npmjs.org/@spinosa%2Fkernel/latest")
     .then((res) => {
       if (!res.ok) throw new Error(res.statusText)
       return res.json() as unknown as { version: string }
@@ -49,11 +49,14 @@ const VERSION = await (async () => {
 
 const bot = ["actions-user", "opencode", "opencode-agent[bot]"]
 const teamPath = path.resolve(import.meta.dir, "../../../.github/TEAM_MEMBERS")
+const members = (await Bun.file(teamPath).exists())
+  ? await Bun.file(teamPath)
+      .text()
+      .then((x) => x.split(/\r?\n/).map((x) => x.trim()))
+      .then((x) => x.filter((x) => x && !x.startsWith("#")))
+  : []
 const team = [
-  ...(await Bun.file(teamPath)
-    .text()
-    .then((x) => x.split(/\r?\n/).map((x) => x.trim()))
-    .then((x) => x.filter((x) => x && !x.startsWith("#")))),
+  ...members,
   ...bot,
 ]
 
@@ -74,4 +77,4 @@ export const Script = {
     return team
   },
 }
-console.log(`opencode script`, JSON.stringify(Script, null, 2))
+console.log(`spinosa script`, JSON.stringify(Script, null, 2))

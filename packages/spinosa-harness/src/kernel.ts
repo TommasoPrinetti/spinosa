@@ -3,7 +3,14 @@
 // Use this implementation in production and integration tests.
 
 import { createSpinosaClient } from "@spinosa/sdk/v2"
-import type { HarnessCapabilities, HarnessEvent, HarnessSession, PermissionReply, SpinosaHarness } from "./contract"
+import {
+  SILENT_AGENT_OUTPUT_METADATA,
+  type HarnessCapabilities,
+  type HarnessEvent,
+  type HarnessSession,
+  type PermissionReply,
+  type SpinosaHarness,
+} from "./contract"
 
 // The raw result from a kernel API call.
 // data is the response payload when the call succeeds.
@@ -16,6 +23,7 @@ type SpinosaKernelClient = {
   session: {
     create(input: Record<string, unknown>): Promise<SpinosaKernelResult>
     prompt(input: Record<string, unknown>): Promise<SpinosaKernelResult>
+    deleteMessage(input: Record<string, unknown>): Promise<SpinosaKernelResult>
     abort(input: Record<string, unknown>): Promise<SpinosaKernelResult>
     get(input: Record<string, unknown>): Promise<SpinosaKernelResult>
   }
@@ -39,13 +47,6 @@ function requiredID(value: unknown, label: string): string {
   const id = record(value).id
   if (typeof id !== "string" || !id) throw new Error("SpinosaKernel " + label + " response did not include an id")
   return id
-}
-
-// Map a spinosa agent name to a kernel agent name.
-// Agents with the "spinosa-" prefix use the "build" agent in the kernel.
-// All other agent names pass through unchanged.
-function kernelAgent(agent: string): string {
-  return agent.startsWith("spinosa-") ? "build" : agent
 }
 
 // Build a descriptive error for an agent execution failure.
@@ -119,17 +120,28 @@ export class SpinosaKernelHarness implements SpinosaHarness {
     prompt: string
     system?: string
     synthetic?: boolean
+    silent?: boolean
     model?: { providerID: string; modelID: string }
   }): Promise<{ executionID: string }> {
-    const executor = kernelAgent(input.agent)
+    const executor = input.agent
     const response = await this.client.session.prompt({
       sessionID: input.sessionID,
       agent: executor,
       model: input.model,
       ...(input.system ? { system: input.system } : {}),
-      parts: [{ type: "text", text: input.prompt, ...(input.synthetic ? { synthetic: true } : {}) }],
+      parts: [{
+        type: "text",
+        text: input.prompt,
+        ...(input.synthetic ? { synthetic: true } : {}),
+        ...(input.silent ? { metadata: { [SILENT_AGENT_OUTPUT_METADATA]: true } } : {}),
+      }],
     })
     if (response.error) throw executionError(input.agent, executor, response.error)
+    if (input.silent) {
+      const messageID = requiredID(record(response.data).info, "assistant message")
+      const removed = await this.client.session.deleteMessage({ sessionID: input.sessionID, messageID })
+      if (removed.error) throw new Error(`Spinosa kernel could not hide intermediate output from "${input.agent}"`)
+    }
     return { executionID: input.sessionID }
   }
 

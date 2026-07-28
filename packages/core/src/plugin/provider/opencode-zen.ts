@@ -13,7 +13,7 @@ import { ConfigProviderV1 } from "../../v1/config/provider"
 import { ConfigProviderOptionsV1 } from "../../v1/config/provider-options"
 import { ConfigV1 } from "../../v1/config/config"
 
-const defaultServer = "https://console.spinosa.ai"
+export const OpenCodeZenServer = "https://console.opencode.ai"
 const clientID = "opencode-cli"
 const methodID = Integration.MethodID.make("device")
 const RemoteResponse = Schema.Struct({ config: ConfigV1.Info })
@@ -44,17 +44,17 @@ function oauth(http: HttpClient.HttpClient) {
     },
     authorize: () =>
       Effect.gen(function* () {
-        const device = yield* post(http, `${defaultServer}/auth/device/code`, { client_id: clientID }, Device)
+        const device = yield* post(http, `${OpenCodeZenServer}/auth/device/code`, { client_id: clientID }, Device)
         return {
           mode: "auto" as const,
-          url: `${defaultServer}${device.verification_uri_complete}`,
+          url: `${OpenCodeZenServer}${device.verification_uri_complete}`,
           instructions: `Enter code: ${device.user_code}`,
-          callback: poll(http, defaultServer, device.device_code, Duration.seconds(device.interval)),
+          callback: poll(http, OpenCodeZenServer, device.device_code, Duration.seconds(device.interval)),
         }
       }),
     refresh: (credential) =>
       Effect.gen(function* () {
-        const server = typeof credential.metadata?.server === "string" ? credential.metadata.server : defaultServer
+        const server = typeof credential.metadata?.server === "string" ? credential.metadata.server : OpenCodeZenServer
         const token = yield* post(
           http,
           `${server}/auth/device/token`,
@@ -100,7 +100,7 @@ export const OpenCodeZenPlugin = define<HttpClient.HttpClient | EventV2.Service 
 
     yield* ctx.integration.transform((draft) => {
       draft.update("opencode", (integration) => {
-        integration.name = "Spinosa"
+        integration.name = "OpenCode Zen"
       })
       draft.method.update(oauth(http))
       draft.method.update({ integrationID: "opencode", method: { type: "key", label: "API key (service account)" } })
@@ -164,7 +164,9 @@ export const OpenCodeZenPlugin = define<HttpClient.HttpClient | EventV2.Service 
 
       const item = catalog.provider.get(ProviderV2.ID.opencode)
       if (!item) return
-      const hasKey = Boolean(process.env.SPINOSA_API_KEY || connected || item.provider.request.body.apiKey)
+      const hasKey = Boolean(
+        process.env.SPINOSA_API_KEY || process.env.OPENCODE_API_KEY || connected || item.provider.request.body.apiKey,
+      )
       catalog.provider.update(item.provider.id, (provider) => {
         if (!hasKey) provider.request.body.apiKey = "public"
       })
@@ -189,7 +191,7 @@ export const OpenCodeZenPlugin = define<HttpClient.HttpClient | EventV2.Service 
 
 function fetchProviders(http: HttpClient.HttpClient, value: CredentialValue) {
   const metadata = value.metadata
-  const server = typeof metadata?.server === "string" ? metadata.server : defaultServer
+  const server = typeof metadata?.server === "string" ? metadata.server : OpenCodeZenServer
   const orgID = typeof metadata?.orgID === "string" ? metadata.orgID : undefined
   const token = value.type === "oauth" ? value.access : value.key
   return http

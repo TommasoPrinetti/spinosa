@@ -4,6 +4,7 @@ import { Effect, Layer, Option, Schema } from "effect"
 import { HttpClient, HttpClientRequest, HttpRouter } from "effect/unstable/http"
 import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiError, HttpApiGroup } from "effect/unstable/httpapi"
 import { ServerAuth } from "../../src/server/auth"
+import { ServerAuth as SharedServerAuth } from "@spinosa/server/auth"
 import {
   Authorization,
   authorizationLayer,
@@ -58,12 +59,13 @@ const v2ApiLayer = HttpRouter.serve(
 
 const noAuthLayer = ServerAuth.Config.configLayer({ password: Option.none(), username: "opencode" })
 const secretLayer = ServerAuth.Config.configLayer({ password: Option.some("secret"), username: "opencode" })
+const sharedSecretLayer = SharedServerAuth.Config.configLayer({ password: Option.some("secret"), username: "opencode" })
 const kitSecretLayer = ServerAuth.Config.configLayer({ password: Option.some("secret"), username: "kit" })
 
 const it = testEffect(apiLayer.pipe(Layer.provide(noAuthLayer)))
 const itSecret = testEffect(apiLayer.pipe(Layer.provide(secretLayer)))
 const itKitSecret = testEffect(apiLayer.pipe(Layer.provide(kitSecretLayer)))
-const itV2Secret = testEffect(v2ApiLayer.pipe(Layer.provide(secretLayer)))
+const itV2Secret = testEffect(v2ApiLayer.pipe(Layer.provide(sharedSecretLayer)))
 
 const basic = (username: string, password: string) => ServerAuth.header({ username, password }) ?? ""
 

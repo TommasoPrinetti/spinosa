@@ -10,13 +10,14 @@ import { Config } from "@/config/config"
 import { ConfigPlugin } from "@/config/plugin"
 import { CurrentWorkingDirectory } from "@/config/tui-cwd"
 import { TuiConfig } from "../../src/config/tui"
+import { TUI_SCHEMA_URL } from "../../src/config/tui-migrate"
 import { TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(LayerNode.compile(LayerNode.group([Config.node, FSUtil.node])))
 const winIt = process.platform === "win32" ? it.instance : it.instance.skip
 
-const globalConfigFiles = ["opencode.json", "opencode.jsonc", "tui.json", "tui.jsonc"].map((file) =>
+const globalConfigFiles = ["opencode.json", "opencode.jsonc", "spinosa.json", "spinosa.jsonc", "tui.json", "tui.jsonc"].map((file) =>
   path.join(Global.Path.config, file),
 )
 
@@ -152,7 +153,7 @@ it.instance("resolves attention config defaults and overrides", () =>
         notifications: true,
         sound: true,
         volume: 0.4,
-        sound_pack: "opencode.default",
+        sound_pack: "spinosa.default",
         sounds: {},
       })
 
@@ -189,12 +190,12 @@ it.instance("resolves attention config defaults and overrides", () =>
   ),
 )
 
-it.instance("migrates tui-specific keys from opencode.json when tui.json does not exist", () =>
+it.instance("migrates tui-specific keys from spinosa.json when tui.json does not exist", () =>
   withCleanState(
     Effect.gen(function* () {
       const fs = yield* FSUtil.Service
       const test = yield* TestInstance
-      const source = path.join(test.directory, "opencode.json")
+      const source = path.join(test.directory, "spinosa.json")
       yield* fs.writeJson(source, {
         theme: "migrated-theme",
         tui: { scroll_speed: 5 },
@@ -206,6 +207,7 @@ it.instance("migrates tui-specific keys from opencode.json when tui.json does no
       expect(config.scroll_speed).toBe(5)
       expect(config.keybinds.get("app.exit")?.[0]?.key).toBe("ctrl+q")
       expect(JSON.parse(yield* fs.readFileString(path.join(test.directory, "tui.json")))).toMatchObject({
+        $schema: TUI_SCHEMA_URL,
         theme: "migrated-theme",
         scroll_speed: 5,
       })
@@ -213,7 +215,7 @@ it.instance("migrates tui-specific keys from opencode.json when tui.json does no
       expect(server.theme).toBeUndefined()
       expect(server.keybinds).toBeUndefined()
       expect(server.tui).toBeUndefined()
-      expect(yield* fs.existsSafe(path.join(test.directory, "opencode.json.tui-migration.bak"))).toBe(true)
+      expect(yield* fs.existsSafe(path.join(test.directory, "spinosa.json.tui-migration.bak"))).toBe(true)
       expect(yield* fs.existsSafe(path.join(test.directory, "tui.json"))).toBe(true)
     }),
   ),
@@ -225,7 +227,7 @@ it.instance("migrates project legacy tui keys even when global tui.json already 
       const fs = yield* FSUtil.Service
       const test = yield* TestInstance
       yield* fs.writeJson(path.join(Global.Path.config, "tui.json"), { theme: "global" })
-      yield* fs.writeJson(path.join(test.directory, "opencode.json"), {
+      yield* fs.writeJson(path.join(test.directory, "spinosa.json"), {
         theme: "project-migrated",
         tui: { scroll_speed: 2 },
       })
@@ -235,7 +237,7 @@ it.instance("migrates project legacy tui keys even when global tui.json already 
       expect(config.scroll_speed).toBe(2)
       expect(yield* fs.existsSafe(path.join(test.directory, "tui.json"))).toBe(true)
 
-      const server = JSON.parse(yield* fs.readFileString(path.join(test.directory, "opencode.json")))
+      const server = JSON.parse(yield* fs.readFileString(path.join(test.directory, "spinosa.json")))
       expect(server.theme).toBeUndefined()
       expect(server.tui).toBeUndefined()
     }),
@@ -247,7 +249,7 @@ it.instance("drops unknown legacy tui keys during migration", () =>
     Effect.gen(function* () {
       const fs = yield* FSUtil.Service
       const test = yield* TestInstance
-      yield* fs.writeJson(path.join(test.directory, "opencode.json"), {
+      yield* fs.writeJson(path.join(test.directory, "spinosa.json"), {
         theme: "migrated-theme",
         tui: { scroll_speed: 2, foo: 1 },
       })
@@ -263,13 +265,13 @@ it.instance("drops unknown legacy tui keys during migration", () =>
   ),
 )
 
-it.instance("skips migration when opencode.jsonc is syntactically invalid", () =>
+it.instance("skips migration when spinosa.jsonc is syntactically invalid", () =>
   withCleanState(
     Effect.gen(function* () {
       const fs = yield* FSUtil.Service
       const test = yield* TestInstance
       yield* fs.writeFileString(
-        path.join(test.directory, "opencode.jsonc"),
+        path.join(test.directory, "spinosa.jsonc"),
         `{
   "theme": "broken-theme",
   "tui": { "scroll_speed": 2 }
@@ -281,8 +283,8 @@ it.instance("skips migration when opencode.jsonc is syntactically invalid", () =
       expect(config.theme).toBeUndefined()
       expect(config.scroll_speed).toBeUndefined()
       expect(yield* fs.existsSafe(path.join(test.directory, "tui.json"))).toBe(false)
-      expect(yield* fs.existsSafe(path.join(test.directory, "opencode.jsonc.tui-migration.bak"))).toBe(false)
-      const source = yield* fs.readFileString(path.join(test.directory, "opencode.jsonc"))
+      expect(yield* fs.existsSafe(path.join(test.directory, "spinosa.jsonc.tui-migration.bak"))).toBe(false)
+      const source = yield* fs.readFileString(path.join(test.directory, "spinosa.jsonc"))
       expect(source).toContain('"theme": "broken-theme"')
       expect(source).toContain('"tui": { "scroll_speed": 2 }')
     }),
@@ -294,16 +296,16 @@ it.instance("skips migration when tui.json already exists", () =>
     Effect.gen(function* () {
       const fs = yield* FSUtil.Service
       const test = yield* TestInstance
-      yield* fs.writeJson(path.join(test.directory, "opencode.json"), { theme: "legacy" })
+      yield* fs.writeJson(path.join(test.directory, "spinosa.json"), { theme: "legacy" })
       yield* fs.writeJson(path.join(test.directory, "tui.json"), { diff_style: "stacked" })
 
       const config = yield* getTuiConfig(test.directory)
       expect(config.diff_style).toBe("stacked")
       expect(config.theme).toBeUndefined()
 
-      const server = JSON.parse(yield* fs.readFileString(path.join(test.directory, "opencode.json")))
+      const server = JSON.parse(yield* fs.readFileString(path.join(test.directory, "spinosa.json")))
       expect(server.theme).toBe("legacy")
-      expect(yield* fs.existsSafe(path.join(test.directory, "opencode.json.tui-migration.bak"))).toBe(false)
+      expect(yield* fs.existsSafe(path.join(test.directory, "spinosa.json.tui-migration.bak"))).toBe(false)
     }),
   ),
 )
@@ -313,7 +315,7 @@ it.instance("continues loading tui config when legacy source cannot be stripped"
     Effect.gen(function* () {
       const fs = yield* FSUtil.Service
       const test = yield* TestInstance
-      const source = path.join(test.directory, "opencode.json")
+      const source = path.join(test.directory, "spinosa.json")
       yield* fs.writeJson(source, { theme: "readonly-theme" })
 
       yield* Effect.acquireUseRelease(
@@ -339,7 +341,7 @@ it.instance("migration backup preserves JSONC comments", () =>
       const fs = yield* FSUtil.Service
       const test = yield* TestInstance
       yield* fs.writeFileString(
-        path.join(test.directory, "opencode.jsonc"),
+        path.join(test.directory, "spinosa.jsonc"),
         `{
   // top-level comment
   "theme": "jsonc-theme",
@@ -351,7 +353,7 @@ it.instance("migration backup preserves JSONC comments", () =>
       )
 
       yield* getTuiConfig(test.directory)
-      const backup = yield* fs.readFileString(path.join(test.directory, "opencode.jsonc.tui-migration.bak"))
+      const backup = yield* fs.readFileString(path.join(test.directory, "spinosa.jsonc.tui-migration.bak"))
       expect(backup).toContain("// top-level comment")
       expect(backup).toContain("// nested comment")
       expect(backup).toContain('"theme": "jsonc-theme"')
@@ -360,15 +362,15 @@ it.instance("migration backup preserves JSONC comments", () =>
   ),
 )
 
-it.instance("migrates legacy tui keys across multiple opencode.json levels", () =>
+it.instance("migrates legacy tui keys across multiple spinosa.json levels", () =>
   withCleanState(
     Effect.gen(function* () {
       const fs = yield* FSUtil.Service
       const test = yield* TestInstance
       const nested = path.join(test.directory, "apps", "client")
       yield* fs.makeDirectory(nested, { recursive: true })
-      yield* fs.writeJson(path.join(test.directory, "opencode.json"), { theme: "root-theme" })
-      yield* fs.writeJson(path.join(nested, "opencode.json"), { theme: "nested-theme" })
+      yield* fs.writeJson(path.join(test.directory, "spinosa.json"), { theme: "root-theme" })
+      yield* fs.writeJson(path.join(nested, "spinosa.json"), { theme: "nested-theme" })
 
       const config = yield* getTuiConfig(nested)
       expect(config.theme).toBe("nested-theme")

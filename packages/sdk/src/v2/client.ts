@@ -15,25 +15,34 @@ function pick(value: string | null, fallback?: string, encode?: (value: string) 
   return value
 }
 
+function decode(value: string) {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
+}
+
 function rewrite(request: Request, values: { directory?: string; workspace?: string }) {
   if (request.method !== "GET" && request.method !== "HEAD") return request
 
   const url = new URL(request.url)
   let changed = false
 
-  for (const [name, key] of [
-    ["x-spinosa-directory", "directory"],
-    ["x-spinosa-workspace", "workspace"],
+  for (const [names, key] of [
+    [["x-spinosa-directory", "x-opencode-directory"], "directory"],
+    [["x-spinosa-workspace", "x-opencode-workspace"], "workspace"],
   ] as const) {
     const value = pick(
-      request.headers.get(name),
+      request.headers.get(names[0]) ?? request.headers.get(names[1]),
       key === "directory" ? values.directory : values.workspace,
       key === "directory" ? encodeURIComponent : undefined,
     )
     if (!value) continue
+    const queryValue = key === "directory" ? decode(value) : value
     for (const query of url.pathname.startsWith("/api/") ? [key, `location[${key}]`] : [key]) {
       if (!url.searchParams.has(query)) {
-        url.searchParams.set(query, value)
+        url.searchParams.set(query, queryValue)
       }
     }
     changed = true
@@ -44,6 +53,8 @@ function rewrite(request: Request, values: { directory?: string; workspace?: str
   const next = new Request(url, request)
   next.headers.delete("x-spinosa-directory")
   next.headers.delete("x-spinosa-workspace")
+  next.headers.delete("x-opencode-directory")
+  next.headers.delete("x-opencode-workspace")
   return next
 }
 

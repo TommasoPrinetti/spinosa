@@ -139,7 +139,9 @@ const layer = Layer.effect(
     const global = yield* Global.Service
     const location = yield* Location.Service
     const policy = yield* Policy.Service
-    const names = ["spinosa.json", "spinosa.jsonc"]
+    const legacyNames = ["opencode.json", "opencode.jsonc"]
+    const names = [...legacyNames, "spinosa.json", "spinosa.jsonc"]
+    const directoryNames = [".opencode", ".spinosa"]
     const decodeOptions = { errors: "all", onExcessProperty: "ignore", propertyOrder: "original" } as const
     const decodeInfo = Schema.decodeUnknownOption(Info, decodeOptions)
     const decodeV1Info = Schema.decodeUnknownOption(ConfigV1.Info, decodeOptions)
@@ -178,7 +180,7 @@ const layer = Layer.effect(
       ? []
       : yield* fs
           .up({
-            targets: [".spinosa", ...names.toReversed()],
+            targets: [...directoryNames, ...names.toReversed()],
             start: location.directory,
             stop: location.project.directory,
           })
@@ -186,13 +188,13 @@ const layer = Layer.effect(
     const directories = [
       globalDirectory,
       ...discovered
-        .filter((item) => path.basename(item) === ".spinosa")
+        .filter((item) => directoryNames.includes(path.basename(item)))
         .toReversed()
         .map((directory) => AbsolutePath.make(directory)),
     ]
     // A config closer to the opened directory should win over one higher up.
     // Search starts nearby, so reverse the results before applying them.
-    const directPaths = discovered.filter((item) => path.basename(item) !== ".spinosa").toReversed()
+    const directPaths = discovered.filter((item) => !directoryNames.includes(path.basename(item))).toReversed()
     const direct = yield* Effect.forEach(directPaths, loadFile).pipe(
       Effect.orDie,
       Effect.map((configs) => configs.filter((config): config is Document => config !== undefined)),

@@ -1,6 +1,11 @@
 import { test, expect, describe } from "bun:test"
 import { SessionV1 } from "@spinosa/kernel-core/v1/session"
-import { extractResponseText, formatPromptTooLargeError } from "../../src/cli/cmd/github"
+import {
+  extractResponseText,
+  formatPromptTooLargeError,
+  GitHubApiURL,
+  GitHubDevShareURL,
+} from "../../src/cli/cmd/github"
 import type { MessageV2 } from "../../src/session/message-v2"
 import { SessionID, MessageID, PartID } from "../../src/session/schema"
 
@@ -14,6 +19,11 @@ function createTextPart(text: string): SessionV1.Part {
     text,
   }
 }
+
+test("uses reachable upstream GitHub service endpoints", () => {
+  expect(GitHubApiURL).toBe("https://api.opencode.ai")
+  expect(GitHubDevShareURL).toBe("https://dev.opencode.ai")
+})
 
 function createReasoningPart(text: string): SessionV1.Part {
   return {

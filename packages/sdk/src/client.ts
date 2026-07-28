@@ -14,19 +14,31 @@ function pick(value: string | null, fallback?: string) {
   return value
 }
 
+function decode(value: string) {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
+}
+
 function rewrite(request: Request, directory?: string) {
   if (request.method !== "GET" && request.method !== "HEAD") return request
 
-  const value = pick(request.headers.get("x-spinosa-directory"), directory)
+  const value = pick(
+    request.headers.get("x-spinosa-directory") ?? request.headers.get("x-opencode-directory"),
+    directory,
+  )
   if (!value) return request
 
   const url = new URL(request.url)
   if (!url.searchParams.has("directory")) {
-    url.searchParams.set("directory", value)
+    url.searchParams.set("directory", decode(value))
   }
 
   const next = new Request(url, request)
   next.headers.delete("x-spinosa-directory")
+  next.headers.delete("x-opencode-directory")
   return next
 }
 

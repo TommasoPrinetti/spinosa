@@ -6,6 +6,7 @@ import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { Auth } from "../../src/auth"
 import { Config } from "../../src/config/config"
 import { Installation } from "../../src/installation"
+import { Provider } from "../../src/provider/provider"
 import { MoveSession } from "@spinosa/kernel-core/control-plane/move-session"
 import { ServerAuth } from "../../src/server/auth"
 import { RootHttpApi } from "../../src/server/routes/instance/httpapi/api"
@@ -33,11 +34,12 @@ const apiLayer = HttpRouter.serve(
   Layer.provide(Layer.mock(MoveSession.Service)({})),
   Layer.provide(
     Layer.mock(Installation.Service)({
-      method: () => Effect.succeed("npm"),
+      method: Effect.succeed("self-managed"),
       latest: () => Effect.succeed("9.9.9"),
       upgrade: () => Effect.void,
     }),
   ),
+  Layer.provide(Layer.mock(Provider.Service)({})),
   Layer.provide(ServerAuth.Config.configLayer({ password: Option.none(), username: "opencode" })),
 )
 const it = testEffect(apiLayer)

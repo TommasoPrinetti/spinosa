@@ -18,6 +18,7 @@ export class MockHarness implements SpinosaHarness {
     prompt: string
     system?: string
     synthetic?: boolean
+    silent?: boolean
     model?: { providerID: string; modelID: string }
   }> = []
   readonly sessions = new Map<string, HarnessSession>()
@@ -41,6 +42,7 @@ export class MockHarness implements SpinosaHarness {
     prompt: string
     system?: string
     synthetic?: boolean
+    silent?: boolean
     model?: { providerID: string; modelID: string }
   }): Promise<{ executionID: string }> {
     const executionID = "execution-" + ++this.sequence

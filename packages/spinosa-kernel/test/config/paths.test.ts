@@ -27,7 +27,13 @@ describe("project config migration", () => {
 
       expect(second.some((result) => result.result === "conflict")).toBe(true)
       expect(await fs.readFile(path.join(project, ".spinosa", "agents", "agent.md"), "utf8")).toBe("preserved")
-      expect(JSON.parse(await fs.readFile(path.join(nested, ".spinosa-migration-report.json"), "utf8"))).toMatchObject({ version: 1 })
+      const report = path.join(nested, ".spinosa-migration-report.json")
+      const content = await fs.readFile(report, "utf8")
+      expect(JSON.parse(content)).toMatchObject({ version: 1 })
+
+      await Bun.sleep(5)
+      await migrateProjectPaths(nested, project)
+      expect(await fs.readFile(report, "utf8")).toBe(content)
     } finally {
       await fs.rm(root, { recursive: true, force: true })
     }

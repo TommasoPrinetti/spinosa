@@ -86,6 +86,7 @@ import { SPINOSA_BASE_MODE, useBindings, useCommandShortcut, useOpencodeKeymap }
 import { usePathFormatter } from "../../context/path-format"
 import { LocationProvider } from "../../context/location"
 import { agentDisplayName } from "../../util/agent"
+import { isSilentResearchAssistant } from "../../spinosa/visibility"
 
 addDefaultParsers(parsers.parsers)
 
@@ -296,7 +297,11 @@ const resolveExportPath = (filename: string): string => {
       .filter((x) => x.parentID === parentID || x.id === parentID)
       .toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
   })
-  const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
+  const messages = createMemo(() =>
+    (sync.data.message[route.sessionID] ?? []).filter(
+      (message) => !isSilentResearchAssistant(message, sync.data.part),
+    ),
+  )
   const foregroundTasks = createMemo(() =>
     sync.data.capabilities.experimentalBackgroundSubagents
       ? messages().flatMap((message) =>

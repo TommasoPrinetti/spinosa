@@ -13,8 +13,7 @@ import { Shell } from "@spinosa/kernel-core/shell"
 import { CorsConfig, isAllowedRequestOrigin, type CorsOptions } from "@spinosa/server/cors"
 import {
   PTY_CONNECT_TICKET_QUERY,
-  PTY_CONNECT_TOKEN_HEADER,
-  PTY_CONNECT_TOKEN_HEADER_VALUE,
+  hasPtyConnectTokenHeader,
 } from "@/server/shared/pty-ticket"
 import { Effect, Layer, Option, Queue, Schema } from "effect"
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
@@ -143,7 +142,7 @@ export const ptyHandlers = HttpApiBuilder.group(InstanceHttpApi, "pty", (handler
 
     const connectToken = Effect.fn("PtyHttpApi.connectToken")(function* (ctx: { params: { ptyID: PtyID } }) {
       const request = yield* HttpServerRequest.HttpServerRequest
-      if (request.headers[PTY_CONNECT_TOKEN_HEADER] !== PTY_CONNECT_TOKEN_HEADER_VALUE || !validOrigin(request, cors))
+      if (!hasPtyConnectTokenHeader(request.headers) || !validOrigin(request, cors))
         return yield* new ApiError.PtyForbiddenError({ message: "Invalid PTY connect token request" })
       yield* get(ctx)
       return yield* tickets.issue({ ptyID: ctx.params.ptyID, ...(yield* ticketScope) })

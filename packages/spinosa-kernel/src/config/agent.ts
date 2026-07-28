@@ -10,31 +10,22 @@ import { ConfigParse } from "./parse"
 
 export async function load(dir: string) {
   const result: Record<string, ConfigAgentV1.Info> = {}
-  const sources = dir.endsWith(`${path.sep}.spinosa`)
-    ? [
-        { cwd: path.dirname(dir), pattern: ".opencode/{agent,agents}/**/*.md", prefixes: [".opencode/agent/", ".opencode/agents/"] },
-        { cwd: dir, pattern: "{agent,agents}/**/*.md", prefixes: ["agent/", "agents/"] },
-      ]
-    : [{ cwd: dir, pattern: "{agent,agents}/**/*.md", prefixes: ["agent/", "agents/"] }]
+  for (const item of await Glob.scan("{agent,agents}/**/*.md", {
+    cwd: dir,
+    absolute: true,
+    dot: true,
+    symlink: true,
+  })) {
+    const md = await ConfigMarkdown.parse(item).catch(() => undefined)
+    if (!md) continue
 
-  for (const source of sources) {
-    for (const item of await Glob.scan(source.pattern, {
-      cwd: source.cwd,
-      absolute: true,
-      dot: true,
-      symlink: true,
-    })) {
-      const md = await ConfigMarkdown.parse(item).catch(() => undefined)
-      if (!md) continue
-
-      const name = configEntryNameFromPath(path.relative(source.cwd, item), source.prefixes)
-      const config = {
-        name,
-        ...md.data,
-        prompt: md.content.trim(),
-      }
-      result[config.name] = ConfigParse.schema(ConfigAgentV1.Info, config, item)
+    const name = configEntryNameFromPath(path.relative(dir, item), ["agent/", "agents/"])
+    const config = {
+      name,
+      ...md.data,
+      prompt: md.content.trim(),
     }
+    result[config.name] = ConfigParse.schema(ConfigAgentV1.Info, config, item)
   }
   return result
 }

@@ -421,7 +421,8 @@ export function Prompt(props: PromptProps) {
             setStore("mode", "normal")
             return
           }
-          if (!props.sessionID) return
+          const sessionID = props.sessionID
+          if (!sessionID) return
 
           setStore("interrupt", store.interrupt + 1)
 
@@ -430,10 +431,10 @@ export function Prompt(props: PromptProps) {
           }, 5000)
 
           if (store.interrupt >= 2) {
-        void cancelSpinosaSubmit({ client: sdk.client, sessionID: props.sessionID }).then((handled) => {
-          if (handled) return
-          return sdk.client.session.abort({ sessionID: props.sessionID })
-        })
+            void cancelSpinosaSubmit({ client: sdk.client, sessionID }).then((handled) => {
+              if (handled) return
+              return sdk.client.session.abort({ sessionID }).then(() => undefined)
+            })
             setStore("interrupt", 0)
           }
           dialog.clear()
@@ -1158,21 +1159,41 @@ export function Prompt(props: PromptProps) {
       })
     } else if (preparedSpinosa?.framed) {
       move.startSubmit()
-      void executeSpinosaSubmit({
-        client: sdk.client,
-        sessionID,
-        prepared: preparedSpinosa,
-        model: {
-          providerID: selectedModel.providerID,
-          modelID: selectedModel.modelID,
-        },
-      }).catch((error) => {
-        toast.show({
-          title: "Couldn’t send prompt",
-          message: errorMessage(error),
-          variant: "error",
+      void sdk.client.session
+        .prompt(
+          {
+            sessionID,
+            ...selectedModel,
+            agent: agent.name,
+            model: selectedModel,
+            variant,
+            noReply: true,
+            parts: [
+              ...editorParts,
+              { type: "text", text: outboundText, ignored: true },
+              ...nonTextParts,
+            ],
+          },
+          { throwOnError: true },
+        )
+        .then(() =>
+          executeSpinosaSubmit({
+            client: sdk.client,
+            sessionID,
+            prepared: preparedSpinosa,
+            model: {
+              providerID: selectedModel.providerID,
+              modelID: selectedModel.modelID,
+            },
+          }),
+        )
+        .catch((error) => {
+          toast.show({
+            title: "Couldn’t send prompt",
+            message: errorMessage(error),
+            variant: "error",
+          })
         })
-      })
       if (editorParts.length > 0) editor.markSelectionSent()
     } else {
       move.startSubmit()

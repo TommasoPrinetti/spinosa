@@ -69,14 +69,14 @@ it.instance("build agent has correct default properties", () =>
   }),
 )
 
-it.instance("plan agent denies edits except .opencode/plans/*", () =>
+it.instance("plan agent denies edits except .spinosa/plans/*", () =>
   Effect.gen(function* () {
     const plan = yield* load((svc) => svc.get("plan"))
     expect(plan).toBeDefined()
     // Wildcard is denied
     expect(evalPerm(plan, "edit")).toBe("deny")
     // But specific path is allowed
-    expect(Permission.evaluate("edit", ".opencode/plans/foo.md", plan!.permission).action).toBe("allow")
+    expect(Permission.evaluate("edit", ".spinosa/plans/foo.md", plan!.permission).action).toBe("allow")
   }),
 )
 
@@ -598,7 +598,7 @@ it.instance(
   () =>
     Effect.gen(function* () {
       const test = yield* TestInstance
-      const skillDir = path.join(test.directory, ".opencode", "skill", "perm-skill")
+      const skillDir = path.join(test.directory, ".spinosa", "skill", "perm-skill")
       yield* Effect.promise(() =>
         Bun.write(
           path.join(skillDir, "SKILL.md"),

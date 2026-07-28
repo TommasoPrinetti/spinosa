@@ -7,7 +7,7 @@ import { Integration } from "@spinosa/kernel-core/integration"
 import { ModelV2 } from "@spinosa/kernel-core/model"
 import { PluginV2 } from "@spinosa/kernel-core/plugin"
 import { PluginHost } from "@spinosa/kernel-core/plugin/host"
-import { OpenCodeZenPlugin } from "@spinosa/kernel-core/plugin/provider/opencode-zen"
+import { OpenCodeZenPlugin, OpenCodeZenServer } from "@spinosa/kernel-core/plugin/provider/opencode-zen"
 import { ProviderV2 } from "@spinosa/kernel-core/provider"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
@@ -70,12 +70,13 @@ const cost = (input: number, output = 0) => [{ input, output, cache: { read: 0, 
 describe("OpenCodeZenPlugin", () => {
   it.effect("registers account and service account methods", () =>
     Effect.gen(function* () {
+      expect(OpenCodeZenServer).toBe("https://console.opencode.ai")
       yield* addPlugin()
       expect((yield* (yield* Integration.Service).get(Integration.ID.make("opencode")))?.methods).toEqual([
         {
           id: Integration.MethodID.make("device"),
           type: "oauth",
-          label: "Spinosa Console account",
+          label: "OpenCode Zen",
         },
         { type: "key", label: "API key (service account)" },
       ])
@@ -198,7 +199,7 @@ describe("OpenCodeZenPlugin", () => {
   )
 
   it.effect("uses a public key and disables paid models without credentials", () =>
-    withEnv({ SPINOSA_API_KEY: undefined }, () =>
+    withEnv({ SPINOSA_API_KEY: undefined, OPENCODE_API_KEY: undefined }, () =>
       Effect.gen(function* () {
         const catalog = yield* Catalog.Service
         yield* catalog.transform((catalog) => {
@@ -224,7 +225,7 @@ describe("OpenCodeZenPlugin", () => {
   )
 
   it.effect("keeps free models without credentials", () =>
-    withEnv({ SPINOSA_API_KEY: undefined }, () =>
+    withEnv({ SPINOSA_API_KEY: undefined, OPENCODE_API_KEY: undefined }, () =>
       Effect.gen(function* () {
         const catalog = yield* Catalog.Service
         yield* catalog.transform((catalog) => {
@@ -250,7 +251,7 @@ describe("OpenCodeZenPlugin", () => {
   )
 
   it.effect("treats output-only cost as free without credentials", () =>
-    withEnv({ SPINOSA_API_KEY: undefined }, () =>
+    withEnv({ SPINOSA_API_KEY: undefined, OPENCODE_API_KEY: undefined }, () =>
       Effect.gen(function* () {
         const catalog = yield* Catalog.Service
         yield* catalog.transform((catalog) => {
@@ -277,67 +278,71 @@ describe("OpenCodeZenPlugin", () => {
     ),
   )
 
-  it.effect("uses SPINOSA_API_KEY as credentials", () =>
-    withEnv({ SPINOSA_API_KEY: "secret" }, () =>
-      Effect.gen(function* () {
-        const catalog = yield* Catalog.Service
-        yield* catalog.transform((catalog) => {
-          const provider = ProviderV2.Info.make({
-            ...ProviderV2.Info.empty(ProviderV2.ID.opencode),
-            api: { type: "aisdk", package: "test-provider" },
+  for (const key of ["SPINOSA_API_KEY", "OPENCODE_API_KEY"] as const) {
+    it.effect(`uses ${key} as credentials`, () =>
+      withEnv({ SPINOSA_API_KEY: undefined, OPENCODE_API_KEY: undefined, [key]: "secret" }, () =>
+        Effect.gen(function* () {
+          const catalog = yield* Catalog.Service
+          yield* catalog.transform((catalog) => {
+            const provider = ProviderV2.Info.make({
+              ...ProviderV2.Info.empty(ProviderV2.ID.opencode),
+              api: { type: "aisdk", package: "test-provider" },
+            })
+            const model = ModelV2.Info.make({
+              ...ModelV2.Info.empty(provider.id, ModelV2.ID.make("paid")),
+              api: { id: ModelV2.ID.make("paid"), type: "aisdk", package: "test-provider" },
+              cost: cost(1),
+            })
+            catalog.provider.update(provider.id, () => {})
+            catalog.model.update(provider.id, model.id, (draft) => {
+              draft.cost = [...model.cost]
+            })
           })
-          const model = ModelV2.Info.make({
-            ...ModelV2.Info.empty(provider.id, ModelV2.ID.make("paid")),
-            api: { id: ModelV2.ID.make("paid"), type: "aisdk", package: "test-provider" },
-            cost: cost(1),
-          })
-          catalog.provider.update(provider.id, () => {})
-          catalog.model.update(provider.id, model.id, (draft) => {
-            draft.cost = [...model.cost]
-          })
-        })
-        yield* addPlugin()
-        expect(required(yield* catalog.provider.get(ProviderV2.ID.opencode)).request.body.apiKey).toBeUndefined()
-        expect(required(yield* catalog.model.get(ProviderV2.ID.opencode, ModelV2.ID.make("paid"))).enabled).toBe(true)
-      }),
-    ),
-  )
+          yield* addPlugin()
+          expect(required(yield* catalog.provider.get(ProviderV2.ID.opencode)).request.body.apiKey).toBeUndefined()
+          expect(required(yield* catalog.model.get(ProviderV2.ID.opencode, ModelV2.ID.make("paid"))).enabled).toBe(true)
+        }),
+      ),
+    )
+  }
 
   it.effect("uses configured provider env vars as credentials", () =>
-    withEnv({ SPINOSA_API_KEY: undefined, CUSTOM_SPINOSA_API_KEY: "secret" }, () =>
-      Effect.gen(function* () {
-        const catalog = yield* Catalog.Service
-        const integrations = yield* Integration.Service
-        yield* integrations.transform((editor) => {
-          editor.method.update({
-            integrationID: Integration.ID.make("opencode"),
-            method: { type: "env", names: ["CUSTOM_SPINOSA_API_KEY"] },
+    withEnv(
+      { SPINOSA_API_KEY: undefined, OPENCODE_API_KEY: undefined, CUSTOM_SPINOSA_API_KEY: "secret" },
+      () =>
+        Effect.gen(function* () {
+          const catalog = yield* Catalog.Service
+          const integrations = yield* Integration.Service
+          yield* integrations.transform((editor) => {
+            editor.method.update({
+              integrationID: Integration.ID.make("opencode"),
+              method: { type: "env", names: ["CUSTOM_SPINOSA_API_KEY"] },
+            })
           })
-        })
-        yield* catalog.transform((catalog) => {
-          const provider = ProviderV2.Info.make({
-            ...ProviderV2.Info.empty(ProviderV2.ID.opencode),
-            api: { type: "aisdk", package: "test-provider" },
+          yield* catalog.transform((catalog) => {
+            const provider = ProviderV2.Info.make({
+              ...ProviderV2.Info.empty(ProviderV2.ID.opencode),
+              api: { type: "aisdk", package: "test-provider" },
+            })
+            const model = ModelV2.Info.make({
+              ...ModelV2.Info.empty(provider.id, ModelV2.ID.make("paid")),
+              api: { id: ModelV2.ID.make("paid"), type: "aisdk", package: "test-provider" },
+              cost: cost(1),
+            })
+            catalog.provider.update(provider.id, () => {})
+            catalog.model.update(provider.id, model.id, (draft) => {
+              draft.cost = [...model.cost]
+            })
           })
-          const model = ModelV2.Info.make({
-            ...ModelV2.Info.empty(provider.id, ModelV2.ID.make("paid")),
-            api: { id: ModelV2.ID.make("paid"), type: "aisdk", package: "test-provider" },
-            cost: cost(1),
-          })
-          catalog.provider.update(provider.id, () => {})
-          catalog.model.update(provider.id, model.id, (draft) => {
-            draft.cost = [...model.cost]
-          })
-        })
-        yield* addPlugin()
-        expect(required(yield* catalog.provider.get(ProviderV2.ID.opencode)).request.body.apiKey).toBeUndefined()
-        expect(required(yield* catalog.model.get(ProviderV2.ID.opencode, ModelV2.ID.make("paid"))).enabled).toBe(true)
-      }),
-    ),
+          yield* addPlugin()
+          expect(required(yield* catalog.provider.get(ProviderV2.ID.opencode)).request.body.apiKey).toBeUndefined()
+          expect(required(yield* catalog.model.get(ProviderV2.ID.opencode, ModelV2.ID.make("paid"))).enabled).toBe(true)
+        }),
+      ),
   )
 
   it.effect("uses configured apiKey as credentials", () =>
-    withEnv({ SPINOSA_API_KEY: undefined }, () =>
+    withEnv({ SPINOSA_API_KEY: undefined, OPENCODE_API_KEY: undefined }, () =>
       Effect.gen(function* () {
         const catalog = yield* Catalog.Service
         yield* catalog.transform((catalog) => {
@@ -369,7 +374,7 @@ describe("OpenCodeZenPlugin", () => {
   )
 
   it.effect("ignores non-opencode providers and models", () =>
-    withEnv({ SPINOSA_API_KEY: undefined }, () =>
+    withEnv({ SPINOSA_API_KEY: undefined, OPENCODE_API_KEY: undefined }, () =>
       Effect.gen(function* () {
         const catalog = yield* Catalog.Service
         yield* catalog.transform((catalog) => {

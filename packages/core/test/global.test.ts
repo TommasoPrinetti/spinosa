@@ -19,6 +19,11 @@ describe("global paths", () => {
     expect(Global.make().tmp).toBe(Global.Path.tmp)
   })
 
+  test("tool binaries do not share the installer runtime directory", () => {
+    expect(Global.Path.bin).toBe(path.join(Global.Path.cache, "bin"))
+    expect(Global.Path.bin).not.toBe(path.join(Global.Path.home, ".spinosa", "bin"))
+  })
+
   test("tmp path created on module load", async () => {
     expect((await fs.stat(Global.Path.tmp)).isDirectory()).toBe(true)
   })

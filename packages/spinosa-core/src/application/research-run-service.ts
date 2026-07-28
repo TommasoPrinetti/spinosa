@@ -1,6 +1,7 @@
 import type { SpinosaHarness } from "@spinosa/harness"
 import {
   beginExecution,
+  agentsForRoute,
   classifyPrompt,
   completeExecution,
   createResearchRun,
@@ -93,12 +94,15 @@ export class ResearchRunService {
 
       try {
         const phase = phasePrompt(input.prepared, execution.agent, run.phaseIndex)
+        const agents = agentsForRoute(run.route)
+        const deliveryAgent = agents.find((agent) => agent === "spinosa-writer") ?? agents[0]
         await this.harness.executeAgent({
           sessionID: input.sessionID,
           agent: execution.agent,
           prompt: phase.prompt,
           system: phase.system,
           synthetic: phase.synthetic,
+          silent: execution.agent !== deliveryAgent,
           model: input.model,
         })
       } catch (error) {
@@ -168,7 +172,7 @@ function phasePrompt(prepared: PreparedResearchRun, agent: string, phaseIndex: n
   return {
     prompt: phaseIndex === 0 ? prepared.text : "Continue with the assigned phase.",
     system,
-    synthetic: phaseIndex > 0,
+    synthetic: true,
   }
 }
 

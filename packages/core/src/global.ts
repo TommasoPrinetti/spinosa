@@ -134,7 +134,7 @@ const globalPath = {
   config: path.join(process.env.XDG_CONFIG_HOME ?? path.join(os.homedir(), ".config"), app),
   state: path.join(process.env.XDG_STATE_HOME ?? path.join(os.homedir(), ".local", "state"), app),
   tmp: path.join(os.tmpdir(), app),
-  bin: path.join(process.env.SPINOSA_TEST_HOME ?? os.homedir(), `.${app}`, "bin"),
+  bin: path.join(process.env.XDG_CACHE_HOME ?? path.join(os.homedir(), ".cache"), app, "bin"),
   log: path.join(process.env.XDG_STATE_HOME ?? path.join(os.homedir(), ".local", "state"), app, "log"),
   repos: path.join(process.env.XDG_DATA_HOME ?? path.join(os.homedir(), ".local", "share"), app, "repos"),
 }

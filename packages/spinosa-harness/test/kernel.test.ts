@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { SpinosaKernelHarness } from "../src/kernel"
 
 describe("SpinosaKernelHarness", () => {
-  test("maps Spinosa workflow agents to the native kernel executor", async () => {
+  test("passes Spinosa workflow agent identity and system instructions to the kernel", async () => {
     const requests: Record<string, unknown>[] = []
     const harness = new SpinosaKernelHarness({
       session: {
@@ -11,6 +11,7 @@ describe("SpinosaKernelHarness", () => {
           requests.push(input)
           return { data: {} }
         },
+        deleteMessage: async () => ({ data: {} }),
         abort: async () => ({ data: {} }),
         get: async () => ({ data: {} }),
       },
@@ -30,11 +31,45 @@ describe("SpinosaKernelHarness", () => {
     expect(requests).toEqual([
       {
         sessionID: "ses_123",
-        agent: "build",
+        agent: "spinosa-searcher",
         model: { providerID: "opencode", modelID: "north-mini-code-free" },
         system: "Execute only the assigned phase.",
         parts: [{ type: "text", text: "Assigned agent: spinosa-searcher", synthetic: true }],
       },
+    ])
+  })
+
+  test("removes intermediate assistant output after a silent execution", async () => {
+    const removed: Record<string, unknown>[] = []
+    const requests: Record<string, unknown>[] = []
+    const harness = new SpinosaKernelHarness({
+      session: {
+        create: async () => ({ data: {} }),
+        prompt: async (input) => {
+          requests.push(input)
+          return { data: { info: { id: "msg_assistant" }, parts: [] } }
+        },
+        deleteMessage: async (input) => {
+          removed.push(input)
+          return { data: {} }
+        },
+        abort: async () => ({ data: {} }),
+        get: async () => ({ data: {} }),
+      },
+      global: { event: async () => ({ stream: (async function* () {})() }) },
+      permission: { reply: async () => ({ data: {} }) },
+    })
+
+    await harness.executeAgent({
+      sessionID: "ses_123",
+      agent: "spinosa-searcher",
+      prompt: "find evidence",
+      silent: true,
+    })
+
+    expect(removed).toEqual([{ sessionID: "ses_123", messageID: "msg_assistant" }])
+    expect(requests[0]?.parts).toEqual([
+      { type: "text", text: "find evidence", metadata: { spinosaSilent: true } },
     ])
   })
 
@@ -43,6 +78,7 @@ describe("SpinosaKernelHarness", () => {
       session: {
         create: async () => ({ data: {} }),
         prompt: async () => ({ error: { message: "Agent not found", ref: "err_test" } }),
+        deleteMessage: async () => ({ data: {} }),
         abort: async () => ({ data: {} }),
         get: async () => ({ data: {} }),
       },
@@ -52,7 +88,7 @@ describe("SpinosaKernelHarness", () => {
 
     await expect(
       harness.executeAgent({ sessionID: "ses_123", agent: "spinosa-searcher", prompt: "find evidence" }),
-    ).rejects.toThrow('Spinosa kernel could not execute "spinosa-searcher" (kernel agent "build"): Agent not found [ref err_test]')
+    ).rejects.toThrow('Spinosa kernel could not execute "spinosa-searcher" (kernel agent "spinosa-searcher"): Agent not found [ref err_test]')
   })
 
   test("reads diagnostics from an SDK error payload", async () => {
@@ -60,6 +96,7 @@ describe("SpinosaKernelHarness", () => {
       session: {
         create: async () => ({ data: {} }),
         prompt: async () => ({ error: { data: { message: "Provider unavailable", ref: "err_sdk" } } }),
+        deleteMessage: async () => ({ data: {} }),
         abort: async () => ({ data: {} }),
         get: async () => ({ data: {} }),
       },

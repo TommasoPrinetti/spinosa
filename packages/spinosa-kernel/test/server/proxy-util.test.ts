@@ -65,11 +65,13 @@ describe("ProxyUtil", () => {
       expect(result.get("content-type")).toBe("application/json")
     })
 
-    test("strips opencode-specific headers", () => {
+    test("strips Spinosa and legacy OpenCode location headers", () => {
       const req = new Request("http://localhost", {
         headers: {
           "x-opencode-directory": "/home/user/project",
           "x-opencode-workspace": "ws_123",
+          "x-spinosa-directory": "/home/user/current",
+          "x-spinosa-workspace": "ws_current",
           "accept-encoding": "gzip",
           "x-custom": "keep",
         },
@@ -77,6 +79,8 @@ describe("ProxyUtil", () => {
       const result = ProxyUtil.headers(req)
       expect(result.get("x-opencode-directory")).toBeNull()
       expect(result.get("x-opencode-workspace")).toBeNull()
+      expect(result.get("x-spinosa-directory")).toBeNull()
+      expect(result.get("x-spinosa-workspace")).toBeNull()
       expect(result.get("accept-encoding")).toBeNull()
       expect(result.get("x-custom")).toBe("keep")
     })

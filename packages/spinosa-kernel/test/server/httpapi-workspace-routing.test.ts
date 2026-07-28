@@ -473,9 +473,15 @@ describe("HttpApi workspace routing middleware", () => {
       yield* serveProbe
 
       const response = yield* HttpClient.get(`/session?workspace=${workspace.id}`)
+      const headerResponse = yield* HttpClientRequest.get("/session").pipe(
+        HttpClientRequest.setHeader("x-spinosa-workspace", workspace.id),
+        HttpClient.execute,
+      )
 
       expect(response.status).toBe(200)
       expect(yield* response.json).toEqual({ directory: process.cwd(), workspaceID: workspace.id })
+      expect(headerResponse.status).toBe(200)
+      expect(yield* headerResponse.json).toEqual({ directory: process.cwd(), workspaceID: workspace.id })
     }),
   )
 
@@ -507,6 +513,7 @@ describe("HttpApi workspace routing middleware", () => {
       const dir = yield* tmpdirScoped()
       const queryDir = path.join(dir, "query-target")
       const headerDir = path.join(dir, "header-target")
+      const spinosaHeaderDir = path.join(dir, "spinosa header target")
       yield* serveProbe
 
       // Without a selected workspace, the middleware falls back to request
@@ -516,11 +523,17 @@ describe("HttpApi workspace routing middleware", () => {
         HttpClientRequest.setHeader("x-opencode-directory", headerDir),
         HttpClient.execute,
       )
+      const spinosaHeaderResponse = yield* HttpClientRequest.get("/probe").pipe(
+        HttpClientRequest.setHeader("x-spinosa-directory", encodeURIComponent(spinosaHeaderDir)),
+        HttpClient.execute,
+      )
 
       expect(queryResponse.status).toBe(200)
       expect(yield* queryResponse.json).toEqual({ directory: queryDir, workspaceID: null })
       expect(headerResponse.status).toBe(200)
       expect(yield* headerResponse.json).toEqual({ directory: headerDir, workspaceID: null })
+      expect(spinosaHeaderResponse.status).toBe(200)
+      expect(yield* spinosaHeaderResponse.json).toEqual({ directory: spinosaHeaderDir, workspaceID: null })
     }),
   )
 

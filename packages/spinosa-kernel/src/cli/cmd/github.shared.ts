@@ -2,6 +2,9 @@ import type { SessionV1 } from "@spinosa/kernel-core/v1/session"
 
 export { parseGitHubRemote } from "@/util/repository"
 
+export const GitHubApiURL = "https://api.opencode.ai"
+export const GitHubDevShareURL = "https://dev.opencode.ai"
+
 /**
  * Extracts displayable text from assistant response parts.
  * Returns null for non-text responses (signals summary needed).

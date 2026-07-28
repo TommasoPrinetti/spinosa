@@ -16,6 +16,8 @@ function sanitize(out: Headers) {
   out.delete("accept-encoding")
   out.delete("x-spinosa-directory")
   out.delete("x-spinosa-workspace")
+  out.delete("x-opencode-directory")
+  out.delete("x-opencode-workspace")
 }
 
 export function headers(input: Request | HeadersInit | Record<string, string>, extra?: HeadersInit) {

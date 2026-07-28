@@ -136,6 +136,10 @@ const targets = singleFlag
 
 await $`rm -rf dist`
 
+function packageDirectory(name: string) {
+  return name.startsWith("@spinosa/") ? name.slice("@spinosa/".length) : name
+}
+
 const binaries: Record<string, string> = {}
 if (!skipInstall) {
   await $`bun install --os="*" --cpu="*" @opentui/core@${pkg.dependencies["@opentui/core"]}`
@@ -143,7 +147,7 @@ if (!skipInstall) {
   await $`bun install --os="*" --cpu="*" @ff-labs/fff-bun@${pkg.dependencies["@ff-labs/fff-bun"]}`
 }
 for (const item of targets) {
-  const name = [
+  const packageName = [
     pkg.name,
     // changing to win32 flags npm for some reason
     item.os === "win32" ? "windows" : item.os,
@@ -153,8 +157,18 @@ for (const item of targets) {
   ]
     .filter(Boolean)
     .join("-")
-  console.log(`building ${name}`)
-  await $`mkdir -p dist/${name}/bin`
+  const directory = packageDirectory(packageName)
+  const target = [
+    "bun",
+    item.os === "win32" ? "windows" : item.os,
+    item.arch,
+    item.avx2 === false ? "baseline" : undefined,
+    item.abi === undefined ? undefined : item.abi,
+  ]
+    .filter(Boolean)
+    .join("-")
+  console.log(`building ${packageName}`)
+  await $`mkdir -p dist/${directory}/bin`
 
   const localPath = path.resolve(dir, "node_modules/@opentui/core/parser.worker.js")
   const rootPath = path.resolve(dir, "../../node_modules/@opentui/core/parser.worker.js")
@@ -169,7 +183,9 @@ for (const item of targets) {
     conditions: ["bun", "node"],
     tsconfig: "./tsconfig.json",
     plugins: [plugin],
-    external: ["node-gyp"],
+    // unzipper's optional S3 adapter is not used by Spinosa's local-file
+    // conversion flow and is intentionally absent from the standalone binary.
+    external: ["node-gyp", "@aws-sdk/client-s3"],
     format: "esm",
     minify: true,
     sourcemap: sourcemapsFlag ? "linked" : "none",
@@ -179,8 +195,8 @@ for (const item of targets) {
       autoloadDotenv: false,
       autoloadTsconfig: true,
       autoloadPackageJson: true,
-      target: name.replace(pkg.name, "bun") as any,
-      outfile: `dist/${name}/bin/opencode`,
+      target: target as any,
+      outfile: `dist/${directory}/bin/spinosa`,
       execArgv: [`--user-agent=opencode/${Script.version}`, "--use-system-ca", "--"],
       windows: {},
     },
@@ -200,22 +216,22 @@ for (const item of targets) {
 
   // Smoke test: only run if binary is for current platform
   if (item.os === process.platform && item.arch === process.arch && !item.abi) {
-    const binaryPath = `dist/${name}/bin/opencode`
+    const binaryPath = `dist/${directory}/bin/spinosa`
     console.log(`Running smoke test: ${binaryPath} --version`)
     try {
       const versionOutput = await $`${binaryPath} --version`.text()
       console.log(`Smoke test passed: ${versionOutput.trim()}`)
     } catch (e) {
-      console.error(`Smoke test failed for ${name}:`, e)
+      console.error(`Smoke test failed for ${packageName}:`, e)
       process.exit(1)
     }
   }
 
-  await $`rm -rf ./dist/${name}/bin/tui`
-  await Bun.file(`dist/${name}/package.json`).write(
+  await $`rm -rf ./dist/${directory}/bin/tui`
+  await Bun.file(`dist/${directory}/package.json`).write(
     JSON.stringify(
       {
-        name,
+        name: packageName,
         version: Script.version,
         preferUnplugged: true,
         os: [item.os],
@@ -226,15 +242,17 @@ for (const item of targets) {
       2,
     ),
   )
-  binaries[name] = Script.version
+  binaries[packageName] = Script.version
 }
 
 if (Script.release) {
-  for (const key of Object.keys(binaries)) {
-    if (key.includes("linux")) {
-      await $`tar -czf ../../${key}.tar.gz *`.cwd(`dist/${key}/bin`)
+  for (const packageName of Object.keys(binaries)) {
+    const directory = packageDirectory(packageName)
+    const asset = packageName.replace(`${pkg.name}-`, "spinosa-")
+    if (packageName.includes("linux")) {
+      await $`tar -czf ../../${asset}.tar.gz *`.cwd(`dist/${directory}/bin`)
     } else {
-      await $`zip -r ../../${key}.zip *`.cwd(`dist/${key}/bin`)
+      await $`zip -r ../../${asset}.zip *`.cwd(`dist/${directory}/bin`)
     }
   }
   await $`gh release upload v${Script.version} ./dist/*.zip ./dist/*.tar.gz --clobber --repo ${process.env.GH_REPO}`

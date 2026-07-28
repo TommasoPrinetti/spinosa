@@ -9,6 +9,7 @@ import { SessionV2 } from "@spinosa/kernel-core/session"
 import { Auth } from "../../src/auth"
 import { Config } from "../../src/config/config"
 import { Installation } from "../../src/installation"
+import { Provider } from "../../src/provider/provider"
 import { ServerAuth } from "../../src/server/auth"
 import { RootHttpApi } from "../../src/server/routes/instance/httpapi/api"
 import { controlHandlers } from "../../src/server/routes/instance/httpapi/handlers/control"
@@ -44,6 +45,7 @@ const apiLayer = HttpRouter.serve(
       moveSession: (value) => Ref.set(called, value),
     }),
   ),
+  Layer.provide(Layer.mock(Provider.Service)({})),
   Layer.provide(ServerAuth.Config.configLayer({ password: Option.none(), username: "opencode" })),
 )
 const it = testEffect(apiLayer)

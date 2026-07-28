@@ -33,7 +33,12 @@ import { setTimeout as sleep } from "node:timers/promises"
 import { Process } from "@/util/process"
 import { parseGitHubRemote } from "@/util/repository"
 import { Effect } from "effect"
-import { extractResponseText, formatPromptTooLargeError } from "./github.shared"
+import {
+  extractResponseText,
+  formatPromptTooLargeError,
+  GitHubApiURL,
+  GitHubDevShareURL,
+} from "./github.shared"
 
 type GitHubAuthor = {
   login: string
@@ -320,7 +325,7 @@ export const githubInstall = Effect.fn("Cli.github.install")(function* () {
         s.stop("Installed GitHub app")
 
         async function getInstallation() {
-          return await fetch(`https://api.spinosa.ai/get_github_app_installation?owner=${app.owner}&repo=${app.repo}`)
+          return await fetch(`${GitHubApiURL}/get_github_app_installation?owner=${app.owner}&repo=${app.repo}`)
             .then((res) => res.json())
             .then((data) => data.installation)
         }
@@ -426,7 +431,7 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
         ? (payload as IssueCommentEvent | IssuesEvent).issue.number
         : (payload as PullRequestEvent | PullRequestReviewCommentEvent).pull_request.number
     const runUrl = `/${owner}/${repo}/actions/runs/${runId}`
-    const shareBaseUrl = isMock ? "https://dev.spinosa.ai" : "https://opencode.ai"
+    const shareBaseUrl = isMock ? GitHubDevShareURL : "https://opencode.ai"
 
     let appToken: string
     let octoRest: Octokit
@@ -687,7 +692,7 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
 
     function normalizeOidcBaseUrl(): string {
       const value = process.env["OIDC_BASE_URL"]
-      if (!value) return "https://api.spinosa.ai"
+      if (!value) return GitHubApiURL
       return value.replace(/\/+$/, "")
     }
 

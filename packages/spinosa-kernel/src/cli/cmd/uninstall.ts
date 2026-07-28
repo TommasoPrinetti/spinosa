@@ -31,7 +31,6 @@ export const UninstallCommand = {
       { path: Global.Path.config, label: "Configuration", keep: args.keepConfig },
       { path: Global.Path.state, label: "State", keep: args.keepData },
       { path: Global.Path.tmp, label: "Temporary files", keep: false },
-      { path: Global.Path.bin, label: "Local binary", keep: false },
     ]
     const present = await Promise.all(
       targets.map(async (target) => ({ ...target, exists: await fs.access(target.path).then(() => true).catch(() => false) })),
@@ -54,6 +53,6 @@ export const UninstallCommand = {
       if (!target.exists || target.keep) continue
       await fs.rm(target.path, { recursive: true, force: true })
     }
-    prompts.outro("Spinosa files removed. Your distribution controls any launcher outside these paths.")
+    prompts.outro("Spinosa application files removed. The installer still controls the launcher and framework runtime.")
   },
 }

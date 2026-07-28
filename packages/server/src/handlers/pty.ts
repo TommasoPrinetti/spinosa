@@ -11,8 +11,7 @@ import { CorsConfig, isAllowedRequestOrigin } from "../cors"
 import { ForbiddenError, PtyNotFoundError } from "@spinosa/protocol/errors"
 import {
   PTY_CONNECT_TICKET_QUERY,
-  PTY_CONNECT_TOKEN_HEADER,
-  PTY_CONNECT_TOKEN_HEADER_VALUE,
+  hasPtyConnectTokenHeader,
 } from "@spinosa/protocol/groups/pty"
 import { response } from "../location"
 import { PtyEnvironment } from "../pty-environment"
@@ -119,7 +118,7 @@ export const PtyHandler = HttpApiBuilder.group(Api, "server.pty", (handlers) =>
           // The custom header forces a CORS preflight, so cross-origin browser pages cannot
           // mint tickets without passing the server's origin policy.
           if (
-            request.headers[PTY_CONNECT_TOKEN_HEADER] !== PTY_CONNECT_TOKEN_HEADER_VALUE ||
+            !hasPtyConnectTokenHeader(request.headers) ||
             !isAllowedRequestOrigin(request.headers.origin, request.headers.host, cors)
           )
             return yield* new ForbiddenError({ message: "Invalid PTY connect token request" })

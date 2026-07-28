@@ -290,7 +290,7 @@ describe("tool.registry", () => {
         yield* Effect.promise(() =>
           Bun.write(
             path.join(plugin, "package.json"),
-            JSON.stringify({ name: "@spinosa/plugin", type: "module", exports: { ".": "./dist/index.js" } }),
+            JSON.stringify({ name: "@opencode-ai/plugin", type: "module", exports: { ".": "./dist/index.js" } }),
           ),
         )
         yield* Effect.promise(() =>
@@ -310,7 +310,7 @@ describe("tool.registry", () => {
           Bun.write(
             path.join(customTools, "addition.ts"),
             [
-              'import { tool } from "@spinosa/plugin"',
+              'import { tool } from "@opencode-ai/plugin"',
               "export default tool({",
               "  description: 'Use this tool to add two numbers and return their sum.',",
               "  args: {",

@@ -1,11 +1,21 @@
 import { Config, ConfigProvider, Context, Effect, Layer, Option } from "effect"
 import { ConfigService } from "@/effect/config-service"
 
-const bool = (name: string) => Config.boolean(name).pipe(Config.withDefault(false))
+const legacyName = (name: string) => `OPENCODE_${name.slice("SPINOSA_".length)}`
+const compatible = <A>(name: string, config: (name: string) => Config.Config<A>) =>
+  Config.all({
+    current: config(name).pipe(Config.option),
+    legacy: config(legacyName(name)).pipe(Config.option),
+  }).pipe(Config.map(({ current, legacy }) => Option.getOrElse(current, () => Option.getOrUndefined(legacy))))
+const bool = (name: string) =>
+  compatible(name, Config.boolean).pipe(Config.map((value) => value ?? false))
 const positiveInteger = (name: string) =>
-  Config.number(name).pipe(
-    Config.map((value) => (Number.isInteger(value) && value > 0 ? value : undefined)),
-    Config.orElse(() => Config.succeed(undefined)),
+  compatible(name, Config.string).pipe(
+    Config.map((value) => {
+      if (value === undefined) return undefined
+      const parsed = Number(value)
+      return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined
+    }),
   )
 const experimental = bool("SPINOSA_EXPERIMENTAL")
 const enabledByExperimental = (name: string) =>
@@ -52,7 +62,7 @@ export class Service extends ConfigService.Service<Service>()("@spinosa/RuntimeF
   bashDefaultTimeoutMs: positiveInteger("SPINOSA_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS"),
   experimentalNativeLlm: bool("SPINOSA_EXPERIMENTAL_NATIVE_LLM"),
   experimentalWebSockets: bool("SPINOSA_EXPERIMENTAL_WEBSOCKETS"),
-  client: Config.string("SPINOSA_CLIENT").pipe(Config.withDefault("cli")),
+  client: compatible("SPINOSA_CLIENT", Config.string).pipe(Config.map((value) => value ?? "cli")),
 }) {}
 
 export type Info = Context.Service.Shape<typeof Service>

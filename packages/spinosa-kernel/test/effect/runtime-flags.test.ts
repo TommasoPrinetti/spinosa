@@ -65,6 +65,36 @@ describe("RuntimeFlags", () => {
     }),
   )
 
+  it.effect("accepts legacy OPENCODE flags and gives SPINOSA flags precedence", () =>
+    Effect.gen(function* () {
+      const legacy = yield* readFlags.pipe(
+        Effect.provide(
+          fromConfig({
+            OPENCODE_PURE: "true",
+            OPENCODE_DISABLE_EXTERNAL_SKILLS: "true",
+            OPENCODE_CLIENT: "legacy",
+          }),
+        ),
+      )
+      const current = yield* readFlags.pipe(
+        Effect.provide(
+          fromConfig({
+            SPINOSA_PURE: "false",
+            OPENCODE_PURE: "true",
+            SPINOSA_CLIENT: "spinosa",
+            OPENCODE_CLIENT: "legacy",
+          }),
+        ),
+      )
+
+      expect(legacy.pure).toBe(true)
+      expect(legacy.disableExternalSkills).toBe(true)
+      expect(legacy.client).toBe("legacy")
+      expect(current.pure).toBe(false)
+      expect(current.client).toBe("spinosa")
+    }),
+  )
+
   it.effect("layer parses SPINOSA_EXPERIMENTAL_LSP_TY", () =>
     Effect.gen(function* () {
       const flags = yield* readFlags.pipe(

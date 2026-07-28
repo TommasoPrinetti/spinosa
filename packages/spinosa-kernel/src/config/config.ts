@@ -36,6 +36,8 @@ import { ConfigVariable } from "./variable"
 import { Npm } from "@spinosa/kernel-core/npm"
 import { withTransientReadRetry } from "@/util/effect-http-client"
 
+export const ConfigSchemaURL = "https://opencode.ai/config.json"
+
 // Custom merge function that concatenates array fields instead of replacing them
 // Keep remeda's deep conditional merge type out of hot config-loading paths; TS profiling showed it dominates here.
 function mergeConfig(target: Info, source: Info): Info {
@@ -229,8 +231,8 @@ const layer = Layer.effect(
 
       yield* Effect.promise(() => resolveLoadedPlugins(data, options.path))
       if (!data.$schema) {
-        data.$schema = "https://spinosa.ai/config.json"
-        const updated = text.replace(/^\s*\{/, '{\n  "$schema": "https://spinosa.ai/config.json",')
+        data.$schema = ConfigSchemaURL
+        const updated = text.replace(/^\s*\{/, `{\n  "$schema": "${ConfigSchemaURL}",`)
         yield* fs.writeFileString(options.path, updated).pipe(Effect.catch(() => Effect.void))
       }
       return data
@@ -251,7 +253,7 @@ const layer = Layer.effect(
         const file = globalConfigFile()
         if (!existsSync(file)) {
           yield* fs
-          .writeWithDirs(file, JSON.stringify({ $schema: "https://spinosa.ai/config.json" }, null, 2))
+          .writeWithDirs(file, JSON.stringify({ $schema: ConfigSchemaURL }, null, 2))
             .pipe(Effect.catch(() => Effect.void))
         }
       }
@@ -266,7 +268,7 @@ const layer = Layer.effect(
             .then(async (mod) => {
               const { provider, model, ...rest } = mod.default
               if (provider && model) result.model = `${provider}/${model}`
-          result["$schema"] = "https://spinosa.ai/config.json"
+          result["$schema"] = ConfigSchemaURL
               result = mergeConfig(result, rest)
               await fsNode.writeFile(path.join(Global.Path.config, "config.json"), JSON.stringify(result, null, 2))
               await fsNode.unlink(legacy)
@@ -379,7 +381,7 @@ const layer = Layer.effect(
                 })
               : {}
             const remoteConfig = mergeConfig(isRecord(wellknown.config) ? wellknown.config : {}, fetchedConfig)
-        if (!remoteConfig.$schema) remoteConfig.$schema = "https://spinosa.ai/config.json"
+        if (!remoteConfig.$schema) remoteConfig.$schema = ConfigSchemaURL
             const source = wellknownURL
             const next = yield* loadConfig(
               JSON.stringify(remoteConfig),
@@ -421,8 +423,9 @@ const layer = Layer.effect(
         const deps: Fiber.Fiber<void>[] = []
 
         for (const dir of directories) {
-          if (dir.endsWith(".spinosa") || dir === Flag.SPINOSA_CONFIG_DIR) {
-            for (const file of ["spinosa.json", "spinosa.jsonc"]) {
+          const configDirectory = [".spinosa", ".opencode", "spinosa", "opencode"].includes(path.basename(dir))
+          if (configDirectory || dir === Flag.SPINOSA_CONFIG_DIR) {
+            for (const file of ["opencode.json", "opencode.jsonc", "spinosa.json", "spinosa.jsonc"]) {
               const source = path.join(dir, file)
               yield* Effect.logDebug(`loading config from ${source}`)
               yield* merge(source, yield* loadFile(source, authEnv))
@@ -464,9 +467,9 @@ const layer = Layer.effect(
           yield* mergePluginOrigins(dir, list)
         }
 
-        if (process.env.SPINOSA_CONFIG_CONTENT) {
+        if (Flag.SPINOSA_CONFIG_CONTENT) {
           const source = "SPINOSA_CONFIG_CONTENT"
-          const next = yield* loadConfig(process.env.SPINOSA_CONFIG_CONTENT, {
+          const next = yield* loadConfig(Flag.SPINOSA_CONFIG_CONTENT, {
             dir: ctx.directory,
             source,
           })

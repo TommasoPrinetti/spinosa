@@ -209,6 +209,34 @@ describe("Config", () => {
     ),
   )
 
+  it.live("loads legacy and Spinosa config with Spinosa taking precedence", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Promise.all([
+              fs.writeFile(path.join(tmp.path, "opencode.json"), JSON.stringify({ model: "legacy/model" })),
+              fs.writeFile(path.join(tmp.path, "spinosa.json"), JSON.stringify({ model: "spinosa/model" })),
+            ]),
+          )
+
+          return yield* Effect.gen(function* () {
+            const entries = yield* (yield* Config.Service).entries()
+            expect(
+              entries
+                .filter((entry) => entry.type === "document")
+                .map((entry) => entry.info.model),
+            ).toEqual(["legacy/model", "spinosa/model"])
+            expect(Config.latest(entries, "model")).toBe("spinosa/model")
+          }).pipe(Effect.provide(testLayer(tmp.path)))
+        }),
+      ),
+    ),
+  )
+
   it.live("does not load legacy config.json files", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),

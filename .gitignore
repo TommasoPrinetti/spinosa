@@ -65,6 +65,8 @@ framework/bin/lib/vendor/
 /.trash/
 /agent_reports/
 .tui-agent/
+.spinosa-migration-report.json
+/packages/spinosa-kernel/.spinosa/
 
 # Personal editor config
 .obsidian/

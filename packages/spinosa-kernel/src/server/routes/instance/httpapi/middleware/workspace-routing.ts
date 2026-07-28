@@ -66,25 +66,49 @@ function configuredWorkspaceID(): WorkspaceV2.ID | undefined {
   return Flag.SPINOSA_WORKSPACE_ID ? WorkspaceV2.ID.make(Flag.SPINOSA_WORKSPACE_ID) : undefined
 }
 
-function selectedWorkspaceID(url: URL, sessionWorkspaceID?: WorkspaceV2.ID): WorkspaceV2.ID | undefined {
-  const workspaceParam = url.searchParams.get("workspace")
+function requestWorkspaceID(request: HttpServerRequest.HttpServerRequest, url: URL) {
+  return (
+    url.searchParams.get("workspace") ||
+    request.headers["x-spinosa-workspace"] ||
+    request.headers["x-opencode-workspace"]
+  )
+}
+
+function selectedWorkspaceID(
+  request: HttpServerRequest.HttpServerRequest,
+  url: URL,
+  sessionWorkspaceID?: WorkspaceV2.ID,
+): WorkspaceV2.ID | undefined {
+  const workspaceParam = requestWorkspaceID(request, url)
   return sessionWorkspaceID ?? (workspaceParam ? WorkspaceV2.ID.make(workspaceParam) : undefined)
 }
 
 function selectedV2WorkspaceID(
+  request: HttpServerRequest.HttpServerRequest,
   url: URL,
   sessionWorkspaceID?: WorkspaceV2.ID,
 ): WorkspaceV2.ID | typeof InvalidWorkspaceID | undefined {
   if (sessionWorkspaceID) return sessionWorkspaceID
-  const workspaceParam = url.searchParams.get("workspace")
+  const workspaceParam = requestWorkspaceID(request, url)
   if (!workspaceParam) return undefined
   const workspaceID = Schema.decodeUnknownOption(WorkspaceV2.ID)(workspaceParam)
   if (Option.isNone(workspaceID)) return InvalidWorkspaceID
   return workspaceID.value
 }
 
+function decodeDirectory(value: string): string {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
+}
+
 function defaultDirectory(request: HttpServerRequest.HttpServerRequest, url: URL): string {
-  return url.searchParams.get("directory") || request.headers["x-spinosa-directory"] || process.cwd()
+  const query = url.searchParams.get("directory")
+  if (query) return query
+  const header = request.headers["x-spinosa-directory"] || request.headers["x-opencode-directory"]
+  return header ? decodeDirectory(header) : process.cwd()
 }
 
 function shouldStayOnControlPlane(request: HttpServerRequest.HttpServerRequest, url: URL): boolean {
@@ -165,8 +189,8 @@ function planRequest(
     const url = requestURL(request)
     const envWorkspaceID = configuredWorkspaceID()
     const workspaceID = url.pathname.startsWith("/api/")
-      ? selectedV2WorkspaceID(url, session?.workspaceID)
-      : selectedWorkspaceID(url, session?.workspaceID)
+      ? selectedV2WorkspaceID(request, url, session?.workspaceID)
+      : selectedWorkspaceID(request, url, session?.workspaceID)
     if (workspaceID === InvalidWorkspaceID) return RequestPlan.InvalidWorkspace()
     const workspace = yield* resolveWorkspace(workspaceID, envWorkspaceID)
 

@@ -27,6 +27,21 @@ async function migratePath(source: string, target: string): Promise<ProjectMigra
   return { source, target, result: "migrated" }
 }
 
+async function writeMigrationReport(directory: string, conflicts: ProjectMigrationResult[]) {
+  const root = path.resolve(directory)
+  if (!(await exists(root))) return
+  const file = path.join(root, migrationReport)
+  const existing = await fs
+    .readFile(file, "utf8")
+    .then((value) => JSON.parse(value) as { version?: number; conflicts?: ProjectMigrationResult[] })
+    .catch(() => undefined)
+  if (existing?.version === 1 && JSON.stringify(existing.conflicts) === JSON.stringify(conflicts)) return
+  await fs.writeFile(
+    file,
+    JSON.stringify({ version: 1, migratedAt: new Date().toISOString(), conflicts }, null, 2) + "\n",
+  )
+}
+
 export async function migrateProjectPaths(directory: string, worktree?: string) {
   const stop = path.resolve(worktree ?? path.parse(path.resolve(directory)).root)
   let current = path.resolve(directory)
@@ -45,10 +60,7 @@ export async function migrateProjectPaths(directory: string, worktree?: string) 
 
   const conflicts = results.filter((result) => result.result === "conflict")
   if (conflicts.length > 0) {
-    await fs.writeFile(
-      path.join(path.resolve(directory), migrationReport),
-      JSON.stringify({ version: 1, migratedAt: new Date().toISOString(), conflicts }, null, 2) + "\n",
-    )
+    await writeMigrationReport(directory, conflicts)
   }
   return results
 }
@@ -56,18 +68,28 @@ export async function migrateProjectPaths(directory: string, worktree?: string) 
 export const files = Effect.fn("ConfigPaths.projectFiles")(function* (name: string, directory: string, worktree?: string) {
   yield* Effect.tryPromise(() => migrateProjectPaths(directory, worktree)).pipe(Effect.orDie)
   const afs = yield* FSUtil.Service
-  return (yield* afs.up({ targets: [`${name}.jsonc`, `${name}.json`], start: directory, stop: worktree })).toReversed()
+  const targets =
+    name === productName
+      ? [`${productName}.jsonc`, `${productName}.json`, `${legacyName}.jsonc`, `${legacyName}.json`]
+      : [`${name}.jsonc`, `${name}.json`]
+  return (yield* afs.up({ targets, start: directory, stop: worktree })).toReversed()
 })
 
 export const directories = Effect.fn("ConfigPaths.directories")(function* (directory: string, worktree?: string) {
   yield* Effect.tryPromise(() => migrateProjectPaths(directory, worktree)).pipe(Effect.orDie)
   const afs = yield* FSUtil.Service
+  const legacyGlobal = path.join(path.dirname(Global.Path.config), legacyName)
   return unique([
+    ...((yield* afs.existsSafe(legacyGlobal)) ? [legacyGlobal] : []),
     Global.Path.config,
     ...(!Flag.SPINOSA_DISABLE_PROJECT_CONFIG
-      ? yield* afs.up({ targets: [`.${productName}`], start: directory, stop: worktree })
+      ? yield* afs.up({ targets: [`.${legacyName}`, `.${productName}`], start: directory, stop: worktree })
       : []),
-    ...(yield* afs.up({ targets: [`.${productName}`], start: Global.Path.home, stop: Global.Path.home })),
+    ...(yield* afs.up({
+      targets: [`.${legacyName}`, `.${productName}`],
+      start: Global.Path.home,
+      stop: Global.Path.home,
+    })),
     ...(Flag.SPINOSA_CONFIG_DIR ? [Flag.SPINOSA_CONFIG_DIR] : []),
   ])
 })

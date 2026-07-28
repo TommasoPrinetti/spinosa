@@ -2,7 +2,9 @@ import { ResearchRunService } from "@spinosa/core"
 import { SpinosaKernelHarness } from "@spinosa/harness"
 import { cancelRun, FileResearchRunRepository, type RouteClass } from "@spinosa/runtime"
 
-const activeResearchRuns = new Map<string, { runID: string; workspacePath: string }>()
+type ActiveResearchRun = { runID: string; workspacePath: string }
+
+const activeResearchRuns = new Map<string, ActiveResearchRun>()
 
 export type PreparedSubmit = {
   text: string
@@ -41,13 +43,19 @@ export async function executeSpinosaSubmit(input: {
     framed: input.prepared.framed,
   }
   if (prepared.runID && prepared.workspacePath) {
-    activeResearchRuns.set(input.sessionID, { runID: prepared.runID, workspacePath: prepared.workspacePath })
+    if (activeResearchRuns.has(input.sessionID)) {
+      await cancelSpinosaSubmit({ client: input.client, sessionID: input.sessionID })
+    }
+    const active = { runID: prepared.runID, workspacePath: prepared.workspacePath }
+    activeResearchRuns.set(input.sessionID, active)
+    try {
+      await new ResearchRunService(undefined, harness).execute({ sessionID: input.sessionID, prepared, model: input.model })
+    } finally {
+      if (activeResearchRuns.get(input.sessionID) === active) activeResearchRuns.delete(input.sessionID)
+    }
+    return
   }
-  try {
-    await new ResearchRunService(undefined, harness).execute({ sessionID: input.sessionID, prepared, model: input.model })
-  } finally {
-    activeResearchRuns.delete(input.sessionID)
-  }
+  await new ResearchRunService(undefined, harness).execute({ sessionID: input.sessionID, prepared, model: input.model })
 }
 
 export async function cancelSpinosaSubmit(input: { client: unknown; sessionID: string }): Promise<boolean> {

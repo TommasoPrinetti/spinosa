@@ -39,6 +39,8 @@ export type HarnessCapabilities = {
   cancellation: boolean
 }
 
+export const SILENT_AGENT_OUTPUT_METADATA = "spinosaSilent"
+
 // The interface for the spinosa harness.
 // Each implementation must provide all the methods in this interface.
 // The harness connects the spinosa runtime to the spinosa kernel.
@@ -55,12 +57,14 @@ export interface SpinosaHarness {
   // The agent name selects the behavior for the execution.
   // The prompt contains the instructions for the agent.
   // The model is optional. When given, it selects the provider and model.
+  // Silent executions remove their assistant message after completion.
   executeAgent(input: {
     sessionID: string
     agent: string
     prompt: string
     system?: string
     synthetic?: boolean
+    silent?: boolean
     model?: { providerID: string; modelID: string }
   }): Promise<{ executionID: string }>
 

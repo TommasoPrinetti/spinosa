@@ -122,6 +122,33 @@ Instructions here.
     ),
   )
 
+  it.live("discovers legacy skills when .opencode and .spinosa coexist", () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Promise.all([
+              Bun.write(path.join(dir, ".spinosa", "workspace"), "workspace_started\n"),
+              Bun.write(
+                path.join(dir, ".opencode", "skill", "legacy-skill", "SKILL.md"),
+                `---
+name: legacy-skill
+description: A legacy skill preserved during coexistence.
+---
+
+# Legacy Skill
+`,
+              ),
+            ]),
+          )
+
+          const skill = yield* Skill.Service
+          expect((yield* skill.all()).map((item) => item.name)).toContain("legacy-skill")
+        }),
+      { git: true },
+    ),
+  )
+
   it.live("returns skill directories from Skill.dirs", () =>
     provideTmpdirInstance(
       (dir) =>
@@ -130,7 +157,7 @@ Instructions here.
           Effect.gen(function* () {
             yield* Effect.promise(() =>
               Bun.write(
-                path.join(dir, ".opencode", "skill", "dir-skill", "SKILL.md"),
+                path.join(dir, ".spinosa", "skill", "dir-skill", "SKILL.md"),
                 `---
 name: dir-skill
 description: Skill for dirs test.
@@ -143,7 +170,7 @@ description: Skill for dirs test.
 
             const skill = yield* Skill.Service
             const dirs = yield* skill.dirs()
-            expect(dirs).toContain(path.join(dir, ".opencode", "skill", "dir-skill"))
+            expect(dirs).toContain(path.join(dir, ".spinosa", "skill", "dir-skill"))
             expect(dirs.length).toBe(1)
           }),
         ),

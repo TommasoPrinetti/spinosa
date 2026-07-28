@@ -54,7 +54,7 @@ import { ProviderV2 } from "@spinosa/kernel-core/provider"
 import { ModelV2 } from "@spinosa/kernel-core/model"
 
 export function webSearchEnabled(providerID: ProviderV2.ID, flags = { exa: false, parallel: false }) {
-  return providerID === ProviderV2.ID.spinosa || flags.exa || flags.parallel
+  return providerID === ProviderV2.ID.opencode || flags.exa || flags.parallel
 }
 
 type TaskDef = Tool.InferDef<typeof TaskTool>

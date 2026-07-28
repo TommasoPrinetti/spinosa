@@ -26,12 +26,17 @@ export function response<A, E, R>(data: Effect.Effect<A, E, R>) {
   })
 }
 
-function ref(request: HttpServerRequest.HttpServerRequest): Location.Ref {
+export function ref(request: Pick<HttpServerRequest.HttpServerRequest, "url" | "headers">): Location.Ref {
   const query = new URL(request.url, "http://localhost").searchParams
-  const workspaceID = query.get("location[workspace]") || request.headers["x-opencode-workspace"]
+  const workspaceID =
+    query.get("location[workspace]") ||
+    request.headers["x-spinosa-workspace"] ||
+    request.headers["x-opencode-workspace"]
+  const encodedDirectory =
+    request.headers["x-spinosa-directory"] || request.headers["x-opencode-directory"]
   const directory =
     query.get("location[directory]") ||
-    (request.headers["x-opencode-directory"] ? decode(request.headers["x-opencode-directory"]) : process.cwd())
+    (encodedDirectory ? decode(encodedDirectory) : process.cwd())
   return Location.Ref.make({
     directory: AbsolutePath.make(directory),
     workspaceID: workspaceID ? WorkspaceV2.ID.make(workspaceID) : undefined,

@@ -165,7 +165,10 @@ describe("HttpApi instance context middleware", () => {
     Effect.gen(function* () {
       yield* serveProbe()
 
-      const response = yield* HttpClient.get("/probe?directory=%25E0%25A4%25A")
+      const response = yield* HttpClientRequest.get("/probe").pipe(
+        HttpClientRequest.setHeader("x-opencode-directory", "%E0%A4%A"),
+        HttpClient.execute,
+      )
 
       expect(response.status).toBe(200)
       expect(yield* response.json).toMatchObject({

@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 
-const childProcess = require("child_process")
-const fs = require("fs")
-const path = require("path")
-const os = require("os")
+import childProcess from "child_process"
+import fs from "fs"
+import path from "path"
+import os from "os"
+import { fileURLToPath } from "url"
 
 const forwardedSignals = ["SIGINT", "SIGTERM", "SIGHUP"]
 
@@ -45,11 +46,11 @@ function run(target) {
 
 const envPath = process.env.SPINOSA_BIN_PATH
 
-const scriptPath = fs.realpathSync(__filename)
+const scriptPath = fs.realpathSync(fileURLToPath(import.meta.url))
 const scriptDir = path.dirname(scriptPath)
 
 //
-const cached = path.join(scriptDir, ".spinosa")
+const cached = path.join(scriptDir, process.platform === "win32" ? ".spinosa.exe" : ".spinosa")
 
 const platformMap = {
   darwin: "darwin",
@@ -70,7 +71,7 @@ let arch = archMap[os.arch()]
 if (!arch) {
   arch = os.arch()
 }
-const base = "spinosa-" + platform + "-" + arch
+const base = "@spinosa/kernel-" + platform + "-" + arch
 const binary = platform === "windows" ? "spinosa.exe" : "spinosa"
 
 function supportsAvx2() {

@@ -645,18 +645,13 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
   })
 
   const connected = useConnected()
-  let resetProviderDialogOpened = false
 
   createEffect(
     on(
-      () => tuiReady() && sync.status === "complete" && (!connected() || args.reset),
+      () => tuiReady() && sync.status === "complete" && !connected(),
       (needsProvider, neededProvider) => {
         // Open once when bootstrap confirms there is no usable provider.
-        if (!needsProvider) return
-        if (args.reset) {
-          if (resetProviderDialogOpened) return
-          resetProviderDialogOpened = true
-        } else if (neededProvider) return
+        if (!needsProvider || neededProvider) return
         dialog.replace(() => <DialogProviderList />)
       },
     ),

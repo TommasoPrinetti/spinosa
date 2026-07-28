@@ -40,13 +40,13 @@ already-loaded config until then.
 | Scope                         | Path                                                                                                                      |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
 | Project config                | `./spinosa.json`, `./spinosa.jsonc`, or `.spinosa/spinosa.json` (opencode walks up from the cwd to the worktree root) |
-| Global config                 | `~/.config/opencode/spinosa.json` (NOT `~/.spinosa/`)                                                                   |
+| Global config                 | `~/.config/spinosa/spinosa.json` (NOT `~/.spinosa/`)                                                                   |
 | Project agents                | `.spinosa/agent/<name>.md` or `.spinosa/agents/<name>.md`                                                               |
-| Global agents                 | `~/.config/opencode/agent(s)/<name>.md`                                                                                   |
+| Global agents                 | `~/.config/spinosa/agent(s)/<name>.md`                                                                                   |
 | Project commands              | `.spinosa/command/<name>.md` or `.spinosa/commands/<name>.md`                                                           |
-| Global commands               | `~/.config/opencode/command(s)/<name>.md`                                                                                 |
+| Global commands               | `~/.config/spinosa/command(s)/<name>.md`                                                                                 |
 | Project skills                | `.spinosa/skill(s)/<name>/SKILL.md`                                                                                      |
-| Global skills                 | `~/.config/opencode/skill(s)/<name>/SKILL.md`                                                                             |
+| Global skills                 | `~/.config/spinosa/skill(s)/<name>/SKILL.md`                                                                             |
 | External skills (auto-loaded) | `~/.claude/skills/<name>/SKILL.md`, `~/.agents/skills/<name>/SKILL.md`                                                    |
 
 Configs from each scope are deep-merged. Project overrides global. Unknown

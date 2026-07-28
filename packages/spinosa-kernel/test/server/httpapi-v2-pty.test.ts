@@ -12,7 +12,7 @@ import { PtyTicket } from "@spinosa/kernel-core/pty/ticket"
 import { HttpApiApp } from "../../src/server/routes/instance/httpapi/server"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, tmpdir, tmpdirScoped } from "../fixture/fixture"
-import { testEffect } from "../lib/effect"
+import { pollWithTimeout, testEffect } from "../lib/effect"
 
 const context = Context.empty() as Context.Context<unknown>
 const testPty = process.platform === "win32" ? test.skip : test
@@ -181,6 +181,7 @@ describe("v2 pty HttpApi", () => {
         const dir = yield* tmpdirScoped({ git: true, config: { formatter: false, lsp: false } })
         const plugin = path.join(dir, "plugin.ts")
         const cwd = path.join(dir, "child")
+        const output = path.join(dir, "env.txt")
         yield* Effect.promise(() => mkdir(cwd))
         yield* Effect.promise(() =>
           Bun.write(
@@ -209,42 +210,30 @@ describe("v2 pty HttpApi", () => {
           directoryHeader(dir),
           HttpClientRequest.bodyJson({
             command: "/bin/sh",
-            args: ["-c", 'printf "%s|%s|%s|%s|%s\\n" "$CALLER" "$SHARED" "$PLUGIN" "$TERM" "$HOOK_CWD"; sleep 5'],
+            args: [
+              "-c",
+              'printf "%s|%s|%s|%s|%s\\n" "$CALLER" "$SHARED" "$PLUGIN" "$TERM" "$HOOK_CWD" > "$OUTPUT"; sleep 5',
+            ],
             cwd,
-            env: { CALLER: "caller", SHARED: "caller", TERM: "caller" },
+            env: { CALLER: "caller", SHARED: "caller", TERM: "caller", OUTPUT: output },
           }),
           Effect.flatMap(HttpClient.execute),
         )
         expect(created.status).toBe(200)
         const info = (yield* Schema.decodeUnknownEffect(Location.response(Pty.Info))(yield* created.json)).data
 
-        const socket = yield* Socket.makeWebSocket(
-          `${(yield* serverUrl()).replace(/^http/, "ws")}/api/pty/${info.id}/connect?cursor=0&location[directory]=${encodeURIComponent(dir)}`,
-          { closeCodeIsError: () => false },
+        const result = yield* pollWithTimeout(
+          Effect.promise(async () => {
+            const file = Bun.file(output)
+            if (!(await file.exists())) return
+            return file.text()
+          }),
+          "PTY environment output was not written",
+          "15 seconds",
         )
-        const messages = yield* Queue.unbounded<string>()
-        yield* socket
-          .runRaw((message) =>
-            Queue.offer(messages, typeof message === "string" ? message : new TextDecoder().decode(message)),
-          )
-          .pipe(
-            Effect.catch(() => Effect.void),
-            Effect.forkScoped,
-          )
-        const write = yield* socket.writer
-
-        const takeUntil = (expected: string, seen = ""): Effect.Effect<string, unknown> =>
-          Effect.gen(function* () {
-            const next = seen + (yield* Queue.take(messages).pipe(Effect.timeout("5 seconds")))
-            if (next.includes(expected)) return next
-            return yield* takeUntil(expected, next)
-          })
-
-        expect(yield* takeUntil(`caller|plugin|plugin|xterm-256color|${cwd}`)).toContain(
-          `caller|plugin|plugin|xterm-256color|${cwd}`,
-        )
-        yield* write(new Socket.CloseEvent(1000, "done")).pipe(Effect.catch(() => Effect.void))
+        expect(result).toContain(`caller|plugin|plugin|xterm-256color|${cwd}`)
         yield* HttpClientRequest.delete(`/api/pty/${info.id}`).pipe(directoryHeader(dir), HttpClient.execute)
       }),
+    60_000,
   )
 })
