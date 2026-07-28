@@ -106,7 +106,7 @@ if [[ -n "$launcher_command" && "$launcher_command" != "new" && "$launcher_comma
 fi
 
 # No-args or new/create without source → launch TUI
-if [[ -d "${RESOLVED_ROOT}/packages/opencode" && -n "$BUN" ]]; then
+if [[ -d "${RESOLVED_ROOT}/packages/tui/src" && -n "$BUN" ]]; then
   export SPINOSA_TEMPLATE_ROOT="$RESOLVED_ROOT"
   if "$BUN" run "${RESOLVED_ROOT}/packages/tui/src/spinosa-cli.ts" preflight; then
     :
@@ -115,7 +115,7 @@ if [[ -d "${RESOLVED_ROOT}/packages/opencode" && -n "$BUN" ]]; then
     [[ "$preflight_status" -eq 10 ]] && exit 0
     exit "$preflight_status"
   fi
-  exec "$BUN" run --cwd "${RESOLVED_ROOT}/packages/opencode" --conditions=browser src/index.ts "$@"
+  exec "$BUN" run "${RESOLVED_ROOT}/packages/tui/src/spinosa-cli.ts" "$@"
 fi
 
 echo "Error: Spinosa not found. Run the installer or re-install dependencies." >&2
