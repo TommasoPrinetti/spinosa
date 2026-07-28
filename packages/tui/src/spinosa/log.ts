@@ -1,4 +1,4 @@
-import { mkdirSync, appendFileSync, existsSync, renameSync, rmSync, statSync } from "node:fs"
+import { mkdirSync, appendFileSync, chmodSync, existsSync, renameSync, rmSync, statSync } from "node:fs"
 import { homedir } from "node:os"
 import path from "node:path"
 
@@ -28,10 +28,12 @@ type LogEvent =
   | "tui"         // generic TUI log
 
 const MAX_LOG_BYTES = 5 * 1024 * 1024
+const SENSITIVE_KEY = /(authorization|cookie|password|secret|token|api[_-]?key)/i
 
 function logPath(): string {
   const logDir = path.join(process.env.SPINOSA_HOME ?? path.join(homedir(), ".spinosa"), "logs")
-  mkdirSync(logDir, { recursive: true })
+  mkdirSync(logDir, { recursive: true, mode: 0o700 })
+  chmodSync(logDir, 0o700)
   return path.join(logDir, "tui.ndjson")
 }
 
@@ -46,6 +48,19 @@ function sanitizeLogText(value: string): string {
   let sanitized = value.replaceAll(homedir(), "~")
   if (activeWorkspacePath) sanitized = sanitized.replaceAll(activeWorkspacePath, "$WORKSPACE")
   return sanitized
+    .replace(/\b(authorization|cookie|password|secret|token|api[_-]?key)=([^\s]+)/gi, "$1=[REDACTED]")
+    .replace(/\b(Basic|Bearer)\s+[A-Za-z0-9._~+/=-]+/gi, "$1 [REDACTED]")
+}
+
+function sanitizeLogValue(value: unknown, key: string): unknown {
+  if (SENSITIVE_KEY.test(key)) return "[REDACTED]"
+  if (Array.isArray(value)) return value.map((item) => sanitizeLogValue(item, key))
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([childKey, child]) => [childKey, sanitizeLogValue(child, childKey)]),
+    )
+  }
+  return typeof value === "string" ? sanitizeLogText(value) : value
 }
 
 function logEntry(level: LogLevel, event: LogEvent, data: Record<string, unknown>) {
@@ -57,11 +72,12 @@ function logEntry(level: LogLevel, event: LogEvent, data: Record<string, unknown
     }
     if (activeWorkspacePath) entry.ws = path.basename(activeWorkspacePath)
     for (const [k, v] of Object.entries(data)) {
-      entry[k] = typeof v === "string" ? sanitizeLogText(v) : v
+      entry[k] = sanitizeLogValue(v, k)
     }
     const file = logPath()
     rotateLog(file)
-    appendFileSync(file, JSON.stringify(entry) + "\n")
+    appendFileSync(file, JSON.stringify(entry) + "\n", { mode: 0o600 })
+    chmodSync(file, 0o600)
   } catch {
     // best-effort
   }

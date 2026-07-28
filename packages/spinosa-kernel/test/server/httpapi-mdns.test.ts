@@ -39,6 +39,25 @@ afterEach(async () => {
 })
 
 describe("HttpApi Server.listen mDNS", () => {
+  test("classifies only loopback hostnames as local", () => {
+    expect(Server.isLoopbackHostname("127.0.0.1")).toBe(true)
+    expect(Server.isLoopbackHostname("127.10.20.30")).toBe(true)
+    expect(Server.isLoopbackHostname("localhost")).toBe(true)
+    expect(Server.isLoopbackHostname("dev.localhost")).toBe(true)
+    expect(Server.isLoopbackHostname("::1")).toBe(true)
+    expect(Server.isLoopbackHostname("0.0.0.0")).toBe(false)
+    expect(Server.isLoopbackHostname("::")).toBe(false)
+    expect(Server.isLoopbackHostname("spinosa.local")).toBe(false)
+  })
+
+  test("refuses non-loopback listeners without authentication", async () => {
+    Flag.SPINOSA_SERVER_PASSWORD = undefined
+    await expect(Server.listen({ hostname: "0.0.0.0", port: 0, mdns: true })).rejects.toThrow(
+      "without SPINOSA_SERVER_PASSWORD",
+    )
+    expect(events).toEqual([])
+  })
+
   test("skips publish for loopback hostnames", async () => {
     Flag.SPINOSA_SERVER_PASSWORD = "mdns-secret"
     Flag.SPINOSA_SERVER_USERNAME = "opencode"

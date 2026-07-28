@@ -9,7 +9,7 @@ if a directory path is provided:
 - scan all markdown files in that directory
 - read overview.md first; it is the canonical status summary
 - continue from the first non-done WP item
-- make changes only in /Users/tommasoprinetti/Documents/spinosa-next
+- make changes only in `$TARGET_REPOSITORY`
 
 ensure changes are non-destructive.
 the app is locally hosted through the existing Bun commands; use the narrowest relevant command first and the release smoke check before a package is marked done.
@@ -30,8 +30,8 @@ default to hard cutovers. Do not retain a legacy/new runtime switch, dual write,
 |---|---|
 | Created | 2026-07-27 |
 | Scope | Transform this independent copy into the Spinosa product that owns an inherited OpenCode-derived kernel. |
-| Source baseline | `/Users/tommasoprinetti/Documents/spinosa-main` at commit `7a8879e2`, including its eight uncommitted product changes. |
-| Target repository | `/Users/tommasoprinetti/Documents/spinosa-next` |
+| Source baseline | `$SOURCE_REPOSITORY` at commit `7a8879e2`, including its eight uncommitted product changes. |
+| Target repository | `$TARGET_REPOSITORY` |
 | Primary constraint | Preserve current Spinosa user-side behavior. Changes are backend ownership, orchestration, and packaging changes. |
 | Toolchain | Bun 1.3.14 and the existing `bun.lock`; no package-manager migration. |
 | Migration rule | Move and reuse implementation before writing new code. Avoid moving inherited OpenCode packages for cosmetic reasons. |
@@ -39,11 +39,11 @@ default to hard cutovers. Do not retain a legacy/new runtime switch, dual write,
 
 ### Skill references to invoke globally
 
-- `/Users/tommasoprinetti/.agents/skills/coding/SKILL.md`
-- `/Users/tommasoprinetti/.agents/skills/coding/references/bun.md`
-- `/Users/tommasoprinetti/.agents/skills/coding/references/refactoring/workpackage-execution-directive.md`
-- `/Users/tommasoprinetti/.agents/skills/coding/references/code-smells/smells/index.md`
-- `/Users/tommasoprinetti/.agents/skills/coding/references/code-smells/smells/codex-code-smell.md`
+- `$AGENT_SKILLS_ROOT/coding/SKILL.md`
+- `$AGENT_SKILLS_ROOT/coding/references/bun.md`
+- `$AGENT_SKILLS_ROOT/coding/references/refactoring/workpackage-execution-directive.md`
+- `$AGENT_SKILLS_ROOT/coding/references/code-smells/smells/index.md`
+- `$AGENT_SKILLS_ROOT/coding/references/code-smells/smells/codex-code-smell.md`
 
 ## Background
 
@@ -182,7 +182,7 @@ It preserves current product behavior as the known-good reference and isolates a
 
 #### Implementation status (2026-07-27)
 
-Created `/Users/tommasoprinetti/Documents/spinosa-next` with an independent local clone and overlaid the current source working tree. Source and target both showed the same eight pre-existing modified files. Dependencies were installed in the target only; Bun regenerated the target `bun.lock` because the inherited lockfile is not frozen-install clean.
+Created `$TARGET_REPOSITORY` with an independent local clone and overlaid the current source working tree. Source and target both showed the same eight pre-existing modified files. Dependencies were installed in the target only; Bun regenerated the target `bun.lock` because the inherited lockfile is not frozen-install clean.
 
 #### Why this works
 

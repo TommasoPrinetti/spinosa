@@ -2,7 +2,7 @@
 
 ## Execution Directive (Standard)
 
-Implement this work package only in `/Users/tommasoprinetti/Documents/spinosa-next`. Continue the first non-done item. Make each migration one-way: legacy names may be read only by the explicit migration routine, never by normal runtime. Do not publish, push, release, or remove user data permanently. Validate every completed item before starting the next one.
+Implement this work package only in `$TARGET_REPOSITORY`. Continue the first non-done item. Make each migration one-way: legacy names may be read only by the explicit migration routine, never by normal runtime. Do not publish, push, release, or remove user data permanently. Validate every completed item before starting the next one.
 
 ## Goal
 
@@ -102,4 +102,3 @@ Spinosa owns every local product surface: command, package namespace, paths, dat
 - [ ] Run native single-target build and `spinosa-tui --version`.
 - [ ] Run passing Agent-TUI workflows: global home, onboarding, session, visualizer.
 - [ ] Run `git diff --check` and final identifier inventory.
-

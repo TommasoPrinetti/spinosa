@@ -85,6 +85,24 @@ describe("ProxyUtil", () => {
       expect(result.get("x-custom")).toBe("keep")
     })
 
+    test("strips local credentials and browser provenance headers", () => {
+      const req = new Request("http://localhost", {
+        headers: {
+          authorization: "Basic local-secret",
+          cookie: "session=local-secret",
+          origin: "http://localhost:4096",
+          referer: "http://localhost:4096/private?token=secret",
+          "x-custom": "keep",
+        },
+      })
+      const result = ProxyUtil.headers(req)
+      expect(result.get("authorization")).toBeNull()
+      expect(result.get("cookie")).toBeNull()
+      expect(result.get("origin")).toBeNull()
+      expect(result.get("referer")).toBeNull()
+      expect(result.get("x-custom")).toBe("keep")
+    })
+
     test("merges extra headers", () => {
       const req = new Request("http://localhost", {
         headers: { "content-type": "application/json" },
@@ -92,6 +110,15 @@ describe("ProxyUtil", () => {
       const result = ProxyUtil.headers(req, { "x-auth": "token", "content-type": "text/plain" })
       expect(result.get("x-auth")).toBe("token")
       expect(result.get("content-type")).toBe("text/plain")
+    })
+
+    test("allows explicit target credentials after sanitization", () => {
+      const result = ProxyUtil.headers(
+        { authorization: "Basic local-secret", cookie: "local=secret" },
+        { authorization: "Bearer target-secret" },
+      )
+      expect(result.get("authorization")).toBe("Bearer target-secret")
+      expect(result.get("cookie")).toBeNull()
     })
 
     test("returns original headers when no extra", () => {

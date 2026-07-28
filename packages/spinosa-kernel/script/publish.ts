@@ -3,6 +3,9 @@ import { $ } from "bun"
 import pkg from "../package.json"
 import { Script } from "@spinosa/script"
 import { fileURLToPath } from "url"
+import { mkdtemp, rm, writeFile } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import path from "node:path"
 
 const dir = fileURLToPath(new URL("..", import.meta.url))
 process.chdir(dir)
@@ -195,13 +198,35 @@ if (!Script.preview) {
     console.error("GITHUB_TOKEN is required to update homebrew tap")
     process.exit(1)
   }
-  const tap = `https://x-access-token:${token}@github.com/medialab/homebrew-tap.git`
-  await $`rm -rf ./dist/homebrew-tap`
-  await $`git clone ${tap} ./dist/homebrew-tap`
-  await Bun.file("./dist/homebrew-tap/spinosa.rb").write(homebrewFormula)
-  await $`cd ./dist/homebrew-tap && git add spinosa.rb`
-  if ((await $`cd ./dist/homebrew-tap && git diff --cached --quiet`.nothrow()).exitCode !== 0) {
-    await $`cd ./dist/homebrew-tap && git commit -m "Update to v${Script.version}"`
-    await $`cd ./dist/homebrew-tap && git push`
+  const askpassDir = await mkdtemp(path.join(tmpdir(), "spinosa-git-askpass-"))
+  const askpass = path.join(askpassDir, "askpass.sh")
+  await writeFile(
+    askpass,
+    `#!/bin/sh
+case "$1" in
+  *Username*) printf '%s\\n' x-access-token ;;
+  *Password*) printf '%s\\n' "$GITHUB_TOKEN" ;;
+  *) exit 1 ;;
+esac
+`,
+    { mode: 0o700 },
+  )
+  const gitEnv = {
+    ...process.env,
+    GIT_ASKPASS: askpass,
+    GIT_TERMINAL_PROMPT: "0",
+    GITHUB_TOKEN: token,
+  }
+  try {
+    await $`rm -rf ./dist/homebrew-tap`
+    await $`git clone https://github.com/medialab/homebrew-tap.git ./dist/homebrew-tap`.env(gitEnv)
+    await Bun.file("./dist/homebrew-tap/spinosa.rb").write(homebrewFormula)
+    await $`cd ./dist/homebrew-tap && git add spinosa.rb`
+    if ((await $`cd ./dist/homebrew-tap && git diff --cached --quiet`.nothrow()).exitCode !== 0) {
+      await $`cd ./dist/homebrew-tap && git commit -m "Update to v${Script.version}"`
+      await $`cd ./dist/homebrew-tap && git push`.env(gitEnv)
+    }
+  } finally {
+    await rm(askpassDir, { recursive: true, force: true })
   }
 }

@@ -13,6 +13,13 @@ const hop = new Set([
 
 function sanitize(out: Headers) {
   for (const key of hop) out.delete(key)
+  // Incoming credentials authenticate the local Spinosa server and must never
+  // cross a proxy trust boundary. A target-specific credential may still be
+  // supplied explicitly through `extra` after sanitization.
+  out.delete("authorization")
+  out.delete("cookie")
+  out.delete("origin")
+  out.delete("referer")
   out.delete("accept-encoding")
   out.delete("x-spinosa-directory")
   out.delete("x-spinosa-workspace")

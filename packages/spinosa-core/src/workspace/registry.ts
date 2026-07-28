@@ -1,5 +1,5 @@
-import { existsSync, mkdirSync, readdirSync, openSync, closeSync, fsyncSync } from "node:fs"
-import { mkdir, rename, rm, stat, readFile, writeFile } from "node:fs/promises"
+import { chmodSync, existsSync, mkdirSync, readdirSync, openSync, closeSync, fsyncSync } from "node:fs"
+import { chmod, mkdir, rename, rm, stat, readFile, writeFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import path from "node:path"
 import { spinosaLogWarn } from "../utils/log"
@@ -101,9 +101,9 @@ async function acquireRegistryFileLock(
   let forceReclaimed = false
   while (true) {
     try {
-      await mkdir(lockDir)
+      await mkdir(lockDir, { mode: 0o700 })
       // Record our pid so a later holder can tell whether we are still alive.
-      await writeFile(path.join(lockDir, "pid"), String(process.pid), "utf8").catch(() => {})
+      await writeFile(path.join(lockDir, "pid"), String(process.pid), { encoding: "utf8", mode: 0o600 }).catch(() => {})
       return async () => { await rm(lockDir, { recursive: true, force: true }) }
     } catch (error) {
       if (!error || typeof error !== "object" || !("code" in error) || error.code !== "EEXIST") throw error
@@ -128,6 +128,7 @@ async function acquireRegistryFileLock(
 async function writeRegistryAtomically(registry: string, content: string, updateBackup = true): Promise<void> {
   const tmp = `${registry}.tmp-${process.pid}-${crypto.randomUUID()}`
   await Bun.write(tmp, content)
+  await chmod(tmp, 0o600)
   // fsync the temp file before renaming so a crash mid-rename cannot leave a
   // partial registry on network/FUSE-backed filesystems.
   try {
@@ -293,6 +294,7 @@ function parseRegistryDocument(text: string, registry: string): WorkspaceRegistr
 }
 
 async function readParsedRegistry(registry: string): Promise<WorkspaceRegistryDocument> {
+  await chmod(registry, 0o600)
   return parseRegistryDocument(await readFile(registry, "utf8"), registry)
 }
 
@@ -323,6 +325,7 @@ function serializeRegistryEntries(entries: WorkspaceRegistryEntry[]): string {
 async function migrateLegacyRegistry(legacyRegistry: string): Promise<WorkspaceRegistryDocument> {
   const file = Bun.file(legacyRegistry)
   if (!(await file.exists())) return emptyRegistryDocument()
+  await chmod(legacyRegistry, 0o600)
   const lines = (await file.text()).split(/\r?\n/).filter(Boolean)
   const workspaces: WorkspaceRegistryEntry[] = []
   for (const line of lines) {
@@ -373,19 +376,24 @@ async function readRegistryDocument(registry: string, legacyRegistry?: string): 
     const migrated = await migrateLegacyRegistry(legacyRegistry)
     await writeRegistryAtomically(registry, serializeRegistryEntries(migrated.workspaces))
     const backup = `${legacyRegistry}.migrated`
-    if (!(await Bun.file(backup).exists())) await rename(legacyRegistry, backup).catch(() => {})
+    if (!(await Bun.file(backup).exists())) {
+      await rename(legacyRegistry, backup).catch(() => {})
+      await chmod(backup, 0o600).catch(() => {})
+    }
     return migrated
   }))
 }
 
 export async function ensureGlobalMetadata(): Promise<void> {
   const metadataDir = metadataPath()
-  mkdirSync(metadataDir, { recursive: true })
+  mkdirSync(metadataDir, { recursive: true, mode: 0o700 })
+  chmodSync(metadataDir, 0o700)
 
   const configPath = path.join(metadataDir, "config.yaml")
   if (!existsSync(configPath)) {
     await Bun.write(configPath, "beta: false\nauto_upgrade: true\n")
   }
+  await chmod(configPath, 0o600)
 }
 
 export async function loadRegistry(
@@ -704,6 +712,7 @@ export async function discoverRegisteredWorkspaces(): Promise<string[]> {
   const cachePath = metadataPath("workspace_cache.txt")
   const cacheFile = Bun.file(cachePath)
   if (await cacheFile.exists()) {
+    await chmod(cachePath, 0o600)
     const text = await cacheFile.text()
     const lines = text.split(/\r?\n/).filter(Boolean)
     return lines

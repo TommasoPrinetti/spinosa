@@ -31,15 +31,25 @@ async function writeMigrationReport(directory: string, conflicts: ProjectMigrati
   const root = path.resolve(directory)
   if (!(await exists(root))) return
   const file = path.join(root, migrationReport)
+  const persisted = conflicts.map((conflict) => ({
+    ...conflict,
+    source: path.relative(root, conflict.source),
+    target: path.relative(root, conflict.target),
+  }))
   const existing = await fs
     .readFile(file, "utf8")
     .then((value) => JSON.parse(value) as { version?: number; conflicts?: ProjectMigrationResult[] })
     .catch(() => undefined)
-  if (existing?.version === 1 && JSON.stringify(existing.conflicts) === JSON.stringify(conflicts)) return
+  if (existing?.version === 1 && JSON.stringify(existing.conflicts) === JSON.stringify(persisted)) {
+    await fs.chmod(file, 0o600)
+    return
+  }
   await fs.writeFile(
     file,
-    JSON.stringify({ version: 1, migratedAt: new Date().toISOString(), conflicts }, null, 2) + "\n",
+    JSON.stringify({ version: 1, migratedAt: new Date().toISOString(), conflicts: persisted }, null, 2) + "\n",
+    { mode: 0o600 },
   )
+  await fs.chmod(file, 0o600)
 }
 
 export async function migrateProjectPaths(directory: string, worktree?: string) {

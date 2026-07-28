@@ -29,7 +29,17 @@ describe("project config migration", () => {
       expect(await fs.readFile(path.join(project, ".spinosa", "agents", "agent.md"), "utf8")).toBe("preserved")
       const report = path.join(nested, ".spinosa-migration-report.json")
       const content = await fs.readFile(report, "utf8")
-      expect(JSON.parse(content)).toMatchObject({ version: 1 })
+      const parsed = JSON.parse(content)
+      expect(parsed).toMatchObject({ version: 1 })
+      expect(content).not.toContain(root)
+      expect(parsed.conflicts).toContainEqual({
+        source: path.relative(nested, path.join(project, ".opencode")),
+        target: path.relative(nested, path.join(project, ".spinosa")),
+        result: "conflict",
+      })
+      if (process.platform !== "win32") {
+        expect((await fs.stat(report)).mode & 0o777).toBe(0o600)
+      }
 
       await Bun.sleep(5)
       await migrateProjectPaths(nested, project)

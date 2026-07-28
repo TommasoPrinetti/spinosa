@@ -67,6 +67,9 @@ framework/bin/lib/vendor/
 .tui-agent/
 .spinosa-migration-report.json
 /packages/spinosa-kernel/.spinosa/
+/packages/spinosa-kernel/.spinosa-migration-report.json
+/.serena/
+*.tsbuildinfo
 
 # Personal editor config
 .obsidian/

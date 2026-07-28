@@ -38,6 +38,9 @@ describe("Spinosa distribution layout", () => {
     expect(publish).toContain("optionalDependencies: binaries")
     expect(publish).not.toContain('pkg.name + "-ai"')
     expect(publish).not.toContain("anomalyco/opencode")
+    expect(publish).toContain("GIT_ASKPASS: askpass")
+    expect(publish).toContain("https://github.com/medialab/homebrew-tap.git")
+    expect(publish).not.toContain("x-access-token:${token}")
     expect(dockerfile).toContain("dist/kernel-linux-x64-baseline-musl/bin/spinosa")
     expect(dockerfile).toContain('ENTRYPOINT ["spinosa"]')
   })
@@ -68,5 +71,18 @@ describe("Spinosa distribution layout", () => {
 
     expect(script).toContain("https://registry.npmjs.org/@spinosa%2Fkernel/latest")
     expect(script).toContain("await Bun.file(teamPath).exists()")
+  })
+
+  test("generated migration state and local tooling cannot be committed", async () => {
+    const [ignore, transition, cutover] = await Promise.all([
+      source("../../../../.gitignore"),
+      source("../../../../docs/review/workpackages_spinosa_kernel_transition_27072026/overview.md"),
+      source("../../../../docs/review/workpackages_spinosa_total_cutover_27072026/overview.md"),
+    ])
+
+    expect(ignore).toContain("/packages/spinosa-kernel/.spinosa-migration-report.json")
+    expect(ignore).toContain("/.serena/")
+    expect(transition).not.toMatch(/\/(?:Users|home)\/[^/]+/)
+    expect(cutover).not.toMatch(/\/(?:Users|home)\/[^/]+/)
   })
 })

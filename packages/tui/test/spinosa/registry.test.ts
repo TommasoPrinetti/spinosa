@@ -13,7 +13,7 @@ import {
   setWorkspaceTags,
 } from "@spinosa/core/workspace/registry"
 import { createWorkspaceID } from "@spinosa/core/workspace/identity"
-import { existsSync, mkdirSync, renameSync, writeFileSync } from "node:fs"
+import { chmodSync, existsSync, mkdirSync, renameSync, statSync, writeFileSync } from "node:fs"
 
 describe("workspace registry", () => {
   test("round-trips delimiters and line breaks", () => {
@@ -47,6 +47,11 @@ describe("workspace registry", () => {
     const entries = await loadRegistry(registryPath, { allowMissingMarker: true })
     expect(entries).toHaveLength(count)
     expect(JSON.parse(await Bun.file(registryPath).text()).schemaVersion).toBe(1)
+    if (process.platform !== "win32") {
+      chmodSync(registryPath, 0o644)
+      await loadRegistry(registryPath, { allowMissingMarker: true })
+      expect(statSync(registryPath).mode & 0o777).toBe(0o600)
+    }
   })
 
   test("serializes same-process registrations", async () => {
@@ -57,6 +62,12 @@ describe("workspace registry", () => {
       await Promise.all(Array.from({ length: 10 }, (_, index) => registerWorkspace(path.join(tmp.path, `ws-${index}`), `p-${index}`)))
       const entries = await loadRegistry(undefined, { allowMissingMarker: true })
       expect(entries).toHaveLength(10)
+      if (process.platform !== "win32") {
+        const metadata = path.join(process.env.SPINOSA_HOME, "metadata")
+        expect(statSync(metadata).mode & 0o777).toBe(0o700)
+        expect(statSync(path.join(metadata, "config.yaml")).mode & 0o777).toBe(0o600)
+        expect(statSync(path.join(metadata, "workspaces.json")).mode & 0o777).toBe(0o600)
+      }
     } finally {
       if (originalHome === undefined) delete process.env.SPINOSA_HOME
       else process.env.SPINOSA_HOME = originalHome
