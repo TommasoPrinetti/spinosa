@@ -1,6 +1,6 @@
-import { $ } from "bun"
 import semver from "semver"
 import path from "path"
+import { npmTagForVersion } from "../../../script/npm-release-config"
 
 const rootPkgPath = path.resolve(import.meta.dir, "../../../package.json")
 const rootPkg = await Bun.file(rootPkgPath).json()
@@ -19,33 +19,16 @@ if (!semver.satisfies(process.versions.bun, expectedBunVersionRange)) {
 
 const env = {
   SPINOSA_CHANNEL: process.env["SPINOSA_CHANNEL"],
-  SPINOSA_BUMP: process.env["SPINOSA_BUMP"],
   SPINOSA_VERSION: process.env["SPINOSA_VERSION"],
   SPINOSA_RELEASE: process.env["SPINOSA_RELEASE"],
 }
-const CHANNEL = await (async () => {
-  if (env.SPINOSA_CHANNEL) return env.SPINOSA_CHANNEL
-  if (env.SPINOSA_BUMP) return "latest"
-  if (env.SPINOSA_VERSION && !env.SPINOSA_VERSION.startsWith("0.0.0-")) return "latest"
-  return await $`git branch --show-current`.text().then((x) => x.trim())
-})()
-const IS_PREVIEW = CHANNEL !== "latest"
+const VERSION = rootPkg.version
+if (env.SPINOSA_VERSION && env.SPINOSA_VERSION !== VERSION) {
+  throw new Error(`SPINOSA_VERSION ${env.SPINOSA_VERSION} does not match canonical product version ${VERSION}`)
+}
 
-const VERSION = await (async () => {
-  if (env.SPINOSA_VERSION) return env.SPINOSA_VERSION
-  if (IS_PREVIEW) return `0.0.0-${CHANNEL}-${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")}`
-  const version = await fetch("https://registry.npmjs.org/@spinosa%2Fkernel/latest")
-    .then((res) => {
-      if (!res.ok) throw new Error(res.statusText)
-      return res.json() as unknown as { version: string }
-    })
-    .then((data) => data.version)
-  const [major, minor, patch] = version.split(".").map((x: string) => Number(x) || 0)
-  const t = env.SPINOSA_BUMP?.toLowerCase()
-  if (t === "major") return `${major + 1}.0.0`
-  if (t === "minor") return `${major}.${minor + 1}.0`
-  return `${major}.${minor}.${patch + 1}`
-})()
+const CHANNEL = env.SPINOSA_CHANNEL ?? npmTagForVersion(VERSION)
+const IS_PREVIEW = CHANNEL !== "latest"
 
 const bot = ["actions-user", "opencode", "opencode-agent[bot]"]
 const teamPath = path.resolve(import.meta.dir, "../../../.github/TEAM_MEMBERS")

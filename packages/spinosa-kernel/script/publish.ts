@@ -6,6 +6,7 @@ import { fileURLToPath } from "url"
 import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
+import { APPROVED_PUBLISH_PACKAGES } from "../../../script/npm-release-config"
 
 const dir = fileURLToPath(new URL("..", import.meta.url))
 process.chdir(dir)
@@ -39,6 +40,13 @@ for (const filepath of new Bun.Glob("*/package.json").scanSync({ cwd: "./dist" }
   binaries[pkg.name] = pkg.version
 }
 console.log("binaries", binaries)
+const expectedPlatformPackages = APPROVED_PUBLISH_PACKAGES.slice(1).sort()
+const actualPlatformPackages = Object.keys(binaries).sort()
+if (JSON.stringify(actualPlatformPackages) !== JSON.stringify(expectedPlatformPackages)) {
+  throw new Error(
+    `Platform package set does not match approved release boundary.\nExpected: ${expectedPlatformPackages.join(", ")}\nActual: ${actualPlatformPackages.join(", ")}`,
+  )
+}
 const version = Object.values(binaries)[0]
 if (!version) throw new Error("No platform packages found in dist")
 

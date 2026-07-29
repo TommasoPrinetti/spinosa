@@ -4,6 +4,42 @@
 
 ---
 
+## npm production distribution
+
+The canonical Spinosa product version is the root `package.json` version. Product packages and generated npm artifacts must use that exact version; release scripts must not derive versions from branch names or the npm registry.
+
+The first production npm release contains only:
+
+- `@spinosa/kernel`
+- `@spinosa/kernel-darwin-arm64`
+- `@spinosa/kernel-darwin-x64`
+- `@spinosa/kernel-darwin-x64-baseline`
+- `@spinosa/kernel-linux-arm64`
+- `@spinosa/kernel-linux-x64`
+- `@spinosa/kernel-linux-x64-baseline`
+- `@spinosa/kernel-linux-arm64-musl`
+- `@spinosa/kernel-linux-x64-musl`
+- `@spinosa/kernel-linux-x64-baseline-musl`
+
+`@spinosa/sdk`, `@spinosa/plugin`, Windows packages, and all other workspaces remain private until their public API or target-native validation gate is explicitly approved.
+
+The target installation flow is:
+
+```text
+install.sh → pinned Bun → exact @spinosa/kernel version → platform optionalDependency → validation → atomic activation
+```
+
+Run the baseline gates before package work:
+
+```bash
+bun run check:versions
+bun run release:list-packages
+```
+
+Use the immutable `v1.0.2-beta.3` tag as the stabilization baseline. Do not use the ambiguous name `beta`: this repository has both a branch and a moving tag with that name.
+
+---
+
 ## Release channels
 
 | Channel | Audience | GitHub endpoint | `spinosa upgrade` |
