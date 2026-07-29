@@ -93,3 +93,6 @@ local:/
 workspace-template/raw/*.log
 workspace-template/raw/*.tsv
 workspace-template/raw/*.jsonl
+
+# Compiled JS output alongside TS sources
+*.js
