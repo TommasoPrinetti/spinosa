@@ -978,8 +978,9 @@ repair_spinosa_home() {
       # Match .*.staging.* and .*.backup.* leftover dirs
       case "$base" in
         .*.staging.*|*.staging.*|.*.backup.*|*.backup.*)
-          info "Removing leftover install stage: versions/${base}"
+          step_begin "Cleaning leftover install stage" 30
           rm -rf "$entry"
+          step_end 0
           repaired=1
           ;;
       esac

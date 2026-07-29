@@ -69,27 +69,17 @@ runtime_healthy() {
     "$BUN" run "${RESOLVED_ROOT}/packages/spinosa-kernel/src/index.ts" version >/dev/null 2>&1
 }
 
-repair_and_restart() {
-  [[ "${SPINOSA_REPAIR_ATTEMPT:-0}" != "1" ]] || return 1
-  local installer="${RESOLVED_ROOT}/install.sh"
-  local version
-  version="$(tr -d '[:space:]' < "${RESOLVED_ROOT}/metadata/version" 2>/dev/null || true)"
-  [[ -n "$version" ]] || version="$(basename "$RESOLVED_ROOT")"
-  [[ -f "$installer" && -n "$version" ]] || return 1
-
-  printf 'Spinosa runtime corruption detected. v%s\n' "$version" >&2
-  printf 'Repair now? [Y/n] ' >&2
-  read -r _repair_ans
-  case "${_repair_ans:-y}" in
-    y|Y|yes|YES|"") ;;
-    *) printf 'Aborting.\n' >&2; return 1 ;;
-  esac
-  rm -f "${SPINOSA_HOME}/versions/.install.lock" 2>/dev/null || true
-  if bash "$installer" --version "$version" --yes --reinstall --no-launch --no-modify-path; then
-    printf 'Repair complete. Run spinosa again to start.\n' >&2
-    exit 0
-  fi
-  return 1
+ensure_runtime() {
+  [[ -z "$RESOLVED_ROOT" || -z "$BUN" ]] && return 1
+  link_workspace_packages "$RESOLVED_ROOT"
+  runtime_healthy && return 0
+  # workspace symlinks may have just been created; retry once
+  runtime_healthy && return 0
+  # try refreshing deps
+  _btlog ensure "running bun install to resolve dependencies"
+  "$BUN" install --cwd "$RESOLVED_ROOT" --no-summary >/dev/null 2>&1 || true
+  link_workspace_packages "$RESOLVED_ROOT"
+  runtime_healthy
 }
 
 # Ensure workspace package symlinks exist for installed releases.
@@ -110,16 +100,25 @@ link_workspace_packages() {
 }
 
 _btlog health "RESOLVED_ROOT=$RESOLVED_ROOT, BUN=$BUN"
-if [[ "$installed_release" == "true" ]]; then
-  link_workspace_packages "$RESOLVED_ROOT"
-fi
-if [[ "$installed_release" == "true" ]] && ! runtime_healthy; then
+if [[ "$installed_release" == "true" ]] && ! ensure_runtime; then
   _btlog health "runtime unhealthy, attempting repair"
-  if ! repair_and_restart "$@"; then
-    echo "Error: Spinosa runtime repair failed. Metadata was preserved." >&2
-    echo "Re-run the installer with --yes --reinstall for details." >&2
-    exit 1
+  local _ver
+  _ver="$(tr -d '[:space:]' < "${RESOLVED_ROOT}/metadata/version" 2>/dev/null || basename "$RESOLVED_ROOT")"
+  printf 'Spinosa runtime issue detected. v%s\n' "$_ver" >&2
+  printf 'Reinstall to fix? [Y/n] ' >&2
+  read -r _repair_ans
+  case "${_repair_ans:-y}" in
+    y|Y|yes|YES|"") ;;
+    *) printf 'Aborting.\n' >&2; exit 1 ;;
+  esac
+  rm -f "${SPINOSA_HOME}/versions/.install.lock" 2>/dev/null || true
+  if bash "${RESOLVED_ROOT}/install.sh" --version "$_ver" --yes --reinstall --no-launch --no-modify-path; then
+    printf 'Reinstall complete. Run spinosa again to start.\n' >&2
+    exit 0
   fi
+  echo "Error: Spinosa reinstall failed. Metadata was preserved." >&2
+  echo "Re-run the installer with --yes --reinstall for details." >&2
+  exit 1
 fi
 _btlog health "runtime healthy"
 
