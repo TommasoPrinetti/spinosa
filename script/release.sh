@@ -3,7 +3,7 @@
 # Usage: bash script/release.sh v0.8.0-beta.18   # beta
 #        bash script/release.sh v0.7.7            # stable
 #
-# Prerequisites: gh CLI authenticated, clean working tree.
+# Prerequisites: gh CLI authenticated.
 set -euo pipefail
 
 if [ $# -ne 1 ]; then
@@ -34,13 +34,23 @@ echo "→ Releasing Spinosa v${VERSION} (${CHANNEL})"
 # Check gh auth
 gh auth status 2>/dev/null || { echo "Error: gh not authenticated"; exit 1; }
 
-# Clean working tree
+# Bump root package.json so InstallationVersion matches the release.
+# This commit becomes the tag target — the tarball inherits the correct version.
+sed -i '' 's/"version": "[^"]*"/"version": "'"${VERSION}"'"/' package.json
+if [ -n "$(git status --porcelain package.json)" ]; then
+  git add package.json
+  git commit -m "release: v${VERSION}" --quiet
+  git push origin HEAD --quiet
+  echo "→ package.json bumped to ${VERSION}"
+fi
+
+# Clean working tree (after the package.json commit)
 if [ -n "$(git status --porcelain)" ]; then
   echo "Error: working tree not clean — commit first" >&2
   exit 1
 fi
 
-# Create the immutable tag before building its source archive.
+# Create the immutable tag (points to the commit with correct package.json).
 if ! git rev-parse "$TAG" >/dev/null 2>&1; then
   git tag "$TAG"
   echo "→ Created tag $TAG"
@@ -73,14 +83,6 @@ sed -i '' 's/^PINNED_TAG=".*"/PINNED_TAG="'"${CHANNEL}"'"/' "${CHANNEL_DIST}/ins
 # Push tag
 git push origin "refs/tags/${TAG}"
 echo "→ Tag $TAG pushed"
-
-# Update root package.json version so it stays in sync with releases.
-# The InstallationVersion resolver reads from this file.
-sed -i '' 's/"version": "[^"]*"/"version": "'"${VERSION}"'"/' package.json
-git add package.json
-git commit -m "release: v${VERSION}" --quiet
-git push origin HEAD --quiet
-echo "→ package.json bumped to ${VERSION}"
 
 # Create GitHub Release
 gh release create "$TAG" \
