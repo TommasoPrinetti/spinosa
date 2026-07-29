@@ -1,15 +1,14 @@
-# js
+# Spinosa
 
-To install dependencies:
+Spinosa is an AI coding agent distributed through Bun.
 
-```bash
-bun install
-```
-
-To run:
+## Install
 
 ```bash
-bun run index.ts
+bun add --global @spinosa/kernel
+spinosa --version
 ```
 
-This project was created using `bun init` in bun v1.2.12. [Bun](https://bun.sh) is a fast all-in-one JavaScript runtime.
+`@spinosa/kernel` selects the matching macOS or Linux binary through exact optional dependencies. Windows packages are not published until target-native validation is available.
+
+Source, issues, and release documentation: <https://github.com/medialab/spinosa>

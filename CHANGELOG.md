@@ -17,6 +17,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Established `release/npm-stabilization` from the immutable `v1.0.2-beta.3` baseline.
 - Made the root product version authoritative for generated npm packages and restricted the first publish set to `@spinosa/kernel` plus tested macOS/Linux platform packages.
+- Added deterministic generated manifests with Spinosa-owned metadata, explicit file allowlists, exact optional dependency versions, and validation against workspace, local-path, or Git dependency leakage.
 
 ## [1.0.2-beta.2] — 2026-07-28
 

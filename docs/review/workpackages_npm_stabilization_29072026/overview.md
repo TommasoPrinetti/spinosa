@@ -37,7 +37,7 @@ The production path must become: pinned Bun installer → exact `@spinosa/kernel
 | --- | --- | --- | --- | --- |
 | WP-00 Baseline and canonical version | Done 2026-07-29 | 2026-07-29 | `bun run check:versions` passed | — |
 | WP-01 Public package boundary | Done 2026-07-29 | 2026-07-29 | `bun run release:list-packages` and config tests passed | — |
-| WP-02 Deterministic publish manifests | Todo | 2026-07-29 | — | Normalize generated metadata and tarball contents |
+| WP-02 Deterministic publish manifests | Done 2026-07-29 | 2026-07-29 | Generated package smoke/pack and manifest checks passed | — |
 | WP-03 Bun-only kernel launcher | Todo | 2026-07-29 | — | Remove Node/npm postinstall and network fallback |
 | WP-04 Platform package generation | Todo | 2026-07-29 | — | Add matrix and registry assertions |
 | WP-05 Packed-install tests | Todo | 2026-07-29 | — | Install local tarballs in an empty project |
@@ -64,3 +64,10 @@ The production path must become: pinned Bun installer → exact `@spinosa/kernel
 - Why it works: the approved list is a single executable boundary and both repository configuration and the publish entry point fail closed on unexpected packages.
 - Proof / validation: `bun test --config /dev/null script/npm-release-config.test.ts` (3 pass); `bun run release:list-packages`; `bun run --cwd packages/spinosa-kernel typecheck`; `git diff --check`.
 - How to test: run the commands above; making any workspace public or adding an unsupported package causes a non-zero exit.
+
+## WP-02 implementation status (2026-07-29)
+
+- Changed: centralized generated npm metadata and the nine-target matrix; added README/LICENSE/file allowlists; enforced exact platform versions; added manifest validation for forbidden workspace, catalog, local-path, and Git dependencies.
+- Why it works: build and publish now consume the same package constructors and approved target list, so manifest metadata and package boundaries cannot drift independently.
+- Proof / validation: `bun test --config /dev/null script/npm-release-config.test.ts` (6 pass); single-platform kernel build and binary smoke test; `bun run release:validate-manifest --allow-partial`; `bun pm pack`; `npm pack --dry-run --json`; kernel typecheck.
+- How to test: build the current platform with `bun run --cwd packages/spinosa-kernel build --single --skip-install --skip-embed-web-ui`, run the partial validator, then inspect the dry-run pack file list. Full release builds must pass `bun run release:validate-manifest` without `--allow-partial`.

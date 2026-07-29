@@ -2,9 +2,18 @@
   "$schema": "https://json.schemastore.org/package.json",
   "version": "1.0.2-beta.3",
   "name": "@spinosa/kernel",
+  "description": "Spinosa AI coding agent",
   "type": "module",
   "license": "MIT",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/medialab/spinosa.git"
+  },
+  "homepage": "https://github.com/medialab/spinosa#readme",
+  "bugs": {
+    "url": "https://github.com/medialab/spinosa/issues"
+  },
   "scripts": {
     "typecheck": "tsgo --noEmit",
     "test": "bun test --timeout 30000 --only-failures",

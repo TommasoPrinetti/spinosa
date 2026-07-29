@@ -2,8 +2,11 @@ import { describe, expect, test } from "bun:test"
 import {
   APPROVED_PUBLISH_PACKAGES,
   KERNEL_RELEASE_TARGETS,
+  createKernelPackageManifest,
+  createPlatformPackageManifest,
   npmTagForVersion,
   platformPackageName,
+  publishManifestErrors,
 } from "./npm-release-config"
 
 describe("npm release configuration", () => {
@@ -32,5 +35,40 @@ describe("npm release configuration", () => {
     expect(npmTagForVersion("1.2.3")).toBe("latest")
     expect(npmTagForVersion("1.2.3-beta.4")).toBe("beta")
     expect(() => npmTagForVersion("1.2.3-rc.1")).toThrow("Unsupported product version")
+  })
+
+  test("generates valid deterministic publish manifests", () => {
+    for (const target of KERNEL_RELEASE_TARGETS) {
+      const manifest = createPlatformPackageManifest("@spinosa/kernel", "1.2.3-beta.4", target)
+      expect(publishManifestErrors(manifest, "1.2.3-beta.4")).toEqual([])
+    }
+
+    const optionalDependencies = Object.fromEntries(APPROVED_PUBLISH_PACKAGES.slice(1).map((name) => [name, "1.2.3-beta.4"]))
+    const manifest = createKernelPackageManifest("1.2.3-beta.4", optionalDependencies)
+    expect(publishManifestErrors(manifest, "1.2.3-beta.4")).toEqual([])
+  })
+
+  test("rejects workspace and git dependency leakage", () => {
+    const optionalDependencies = Object.fromEntries(APPROVED_PUBLISH_PACKAGES.slice(1).map((name) => [name, "1.2.3-beta.4"]))
+    const manifest = {
+      ...createKernelPackageManifest("1.2.3-beta.4", optionalDependencies),
+      dependencies: {
+        workspace: "workspace:*",
+        git: "git+https://github.com/example/private.git",
+      },
+    }
+    expect(publishManifestErrors(manifest, "1.2.3-beta.4")).toEqual([
+      "dependencies.workspace contains forbidden release dependency workspace:*",
+      "dependencies.git contains forbidden release dependency git+https://github.com/example/private.git",
+    ])
+  })
+
+  test("requires exact platform optional dependency versions", () => {
+    const optionalDependencies = Object.fromEntries(APPROVED_PUBLISH_PACKAGES.slice(1).map((name) => [name, "1.2.3-beta.4"]))
+    optionalDependencies["@spinosa/kernel-linux-x64"] = "1.2.3"
+    const manifest = createKernelPackageManifest("1.2.3-beta.4", optionalDependencies)
+    expect(publishManifestErrors(manifest, "1.2.3-beta.4")).toContain(
+      "optionalDependencies.@spinosa/kernel-linux-x64 must equal 1.2.3-beta.4",
+    )
   })
 })

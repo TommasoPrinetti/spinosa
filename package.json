@@ -10,6 +10,7 @@
     "postinstall": "bun run --cwd packages/core fix-node-pty",
     "check:versions": "bun run script/check-versions.ts",
     "release:list-packages": "bun run script/release-list-packages.ts",
+    "release:validate-manifest": "bun run script/validate-release-manifests.ts",
     "typecheck": "bun run --cwd packages/core typecheck && bun run --cwd packages/sdk typecheck && bun run --cwd packages/tui typecheck && bun run --cwd packages/spinosa-kernel typecheck && bun run --cwd packages/spinosa-core typecheck && bun run --cwd packages/spinosa-runtime typecheck && bun run --cwd packages/spinosa-harness typecheck && bun run --cwd packages/spinosa-cli typecheck"
   },
   "workspaces": {

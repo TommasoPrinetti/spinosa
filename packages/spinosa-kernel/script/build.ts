@@ -5,6 +5,7 @@ import fs from "fs"
 import path from "path"
 import { fileURLToPath } from "url"
 import { createSolidTransformPlugin } from "@opentui/solid/bun-plugin"
+import { KERNEL_RELEASE_TARGETS, createPlatformPackageManifest, platformPackageName } from "../../../script/npm-release-config"
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -50,68 +51,7 @@ const createEmbeddedWebUIBundle = async () => {
 
 const embeddedFileMap = skipEmbedWebUi ? null : await createEmbeddedWebUIBundle()
 
-const allTargets: {
-  os: string
-  arch: "arm64" | "x64"
-  abi?: "musl"
-  avx2?: false
-}[] = [
-  {
-    os: "linux",
-    arch: "arm64",
-  },
-  {
-    os: "linux",
-    arch: "x64",
-  },
-  {
-    os: "linux",
-    arch: "x64",
-    avx2: false,
-  },
-  {
-    os: "linux",
-    arch: "arm64",
-    abi: "musl",
-  },
-  {
-    os: "linux",
-    arch: "x64",
-    abi: "musl",
-  },
-  {
-    os: "linux",
-    arch: "x64",
-    abi: "musl",
-    avx2: false,
-  },
-  {
-    os: "darwin",
-    arch: "arm64",
-  },
-  {
-    os: "darwin",
-    arch: "x64",
-  },
-  {
-    os: "darwin",
-    arch: "x64",
-    avx2: false,
-  },
-  {
-    os: "win32",
-    arch: "arm64",
-  },
-  {
-    os: "win32",
-    arch: "x64",
-  },
-  {
-    os: "win32",
-    arch: "x64",
-    avx2: false,
-  },
-]
+const allTargets = KERNEL_RELEASE_TARGETS
 
 const targets = singleFlag
   ? allTargets.filter((item) => {
@@ -147,16 +87,7 @@ if (!skipInstall) {
   await $`bun install --os="*" --cpu="*" @ff-labs/fff-bun@${pkg.dependencies["@ff-labs/fff-bun"]}`
 }
 for (const item of targets) {
-  const packageName = [
-    pkg.name,
-    // changing to win32 flags npm for some reason
-    item.os === "win32" ? "windows" : item.os,
-    item.arch,
-    item.avx2 === false ? "baseline" : undefined,
-    item.abi === undefined ? undefined : item.abi,
-  ]
-    .filter(Boolean)
-    .join("-")
+  const packageName = platformPackageName(pkg.name, item)
   const directory = packageDirectory(packageName)
   const target = [
     "bun",
@@ -228,20 +159,11 @@ for (const item of targets) {
   }
 
   await $`rm -rf ./dist/${directory}/bin/tui`
-  await Bun.file(`dist/${directory}/package.json`).write(
-    JSON.stringify(
-      {
-        name: packageName,
-        version: Script.version,
-        preferUnplugged: true,
-        os: [item.os],
-        cpu: [item.arch],
-        ...(item.abi ? { libc: [item.abi] } : {}),
-      },
-      null,
-      2,
-    ),
-  )
+  await Promise.all([
+    Bun.write(`dist/${directory}/README.md`, Bun.file("./README.md")),
+    Bun.write(`dist/${directory}/LICENSE`, Bun.file("../../LICENSE")),
+    Bun.write(`dist/${directory}/package.json`, JSON.stringify(createPlatformPackageManifest(pkg.name, Script.version, item), null, 2)),
+  ])
   binaries[packageName] = Script.version
 }
 

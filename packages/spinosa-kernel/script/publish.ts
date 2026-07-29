@@ -6,7 +6,7 @@ import { fileURLToPath } from "url"
 import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { APPROVED_PUBLISH_PACKAGES } from "../../../script/npm-release-config"
+import { APPROVED_PUBLISH_PACKAGES, createKernelPackageManifest, publishManifestErrors } from "../../../script/npm-release-config"
 
 const dir = fileURLToPath(new URL("..", import.meta.url))
 process.chdir(dir)
@@ -35,9 +35,13 @@ async function publish(dir: string, name: string, version: string) {
 }
 
 const binaries: Record<string, string> = {}
-for (const filepath of new Bun.Glob("*/package.json").scanSync({ cwd: "./dist" })) {
-  const pkg = await Bun.file(`./dist/${filepath}`).json()
-  binaries[pkg.name] = pkg.version
+for (const filepath of new Bun.Glob("*/package.json").scanSync({
+  cwd: "./dist",
+})) {
+  const manifest = await Bun.file(`./dist/${filepath}`).json()
+  const errors = publishManifestErrors(manifest, pkg.version)
+  if (errors.length) throw new Error(`${filepath}: ${errors.join("; ")}`)
+  binaries[manifest.name] = manifest.version
 }
 console.log("binaries", binaries)
 const expectedPlatformPackages = APPROVED_PUBLISH_PACKAGES.slice(1).sort()
@@ -53,29 +57,15 @@ if (!version) throw new Error("No platform packages found in dist")
 await $`mkdir -p ${mainDirectory}/bin`
 await $`cp ./script/postinstall.mjs ${mainDirectory}/postinstall.mjs`
 await $`cp ./bin/spinosa ${mainDirectory}/bin/spinosa`
+await Bun.file(`${mainDirectory}/README.md`).write(await Bun.file("./README.md").text())
 await Bun.file(`${mainDirectory}/LICENSE`).write(await Bun.file("../../LICENSE").text())
 
-await Bun.file(`${mainDirectory}/package.json`).write(
-  JSON.stringify(
-    {
-      name: pkg.name,
-      type: "module",
-      bin: {
-        spinosa: "./bin/spinosa",
-      },
-      scripts: {
-        postinstall: "node ./postinstall.mjs",
-      },
-      version: version,
-      license: pkg.license,
-      os: ["darwin", "linux", "win32"],
-      cpu: ["arm64", "x64"],
-      optionalDependencies: binaries,
-    },
-    null,
-    2,
-  ),
-)
+const kernelManifest = createKernelPackageManifest(version, binaries)
+const kernelManifestErrors = publishManifestErrors(kernelManifest, pkg.version)
+if (kernelManifestErrors.length) {
+  throw new Error(`@spinosa/kernel: ${kernelManifestErrors.join("; ")}`)
+}
+await Bun.file(`${mainDirectory}/package.json`).write(JSON.stringify(kernelManifest, null, 2))
 
 const tasks = Object.entries(binaries).map(async ([name]) => {
   await publish(`./dist/${packageDirectory(name)}`, name, binaries[name])

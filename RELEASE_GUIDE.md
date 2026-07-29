@@ -34,6 +34,7 @@ Run the baseline gates before package work:
 ```bash
 bun run check:versions
 bun run release:list-packages
+bun run release:validate-manifest
 ```
 
 Use the immutable `v1.0.2-beta.3` tag as the stabilization baseline. Do not use the ambiguous name `beta`: this repository has both a branch and a moving tag with that name.
