@@ -74,6 +74,14 @@ sed -i '' 's/^PINNED_TAG=".*"/PINNED_TAG="'"${CHANNEL}"'"/' "${CHANNEL_DIST}/ins
 git push origin "refs/tags/${TAG}"
 echo "→ Tag $TAG pushed"
 
+# Update root package.json version so it stays in sync with releases.
+# The InstallationVersion resolver reads from this file.
+sed -i '' 's/"version": "[^"]*"/"version": "'"${VERSION}"'"/' package.json
+git add package.json
+git commit -m "release: v${VERSION}" --quiet
+git push origin HEAD --quiet
+echo "→ package.json bumped to ${VERSION}"
+
 # Create GitHub Release
 gh release create "$TAG" \
   --title "Spinosa v${VERSION}" \
