@@ -160,7 +160,7 @@ else
 fi
 
 info()  { spinosa_log INFO "$1"; printf '  %s %s\n' "${DIM}→${RESET}" "$1"; }
-ok()    { spinosa_log INFO "$1"; printf '  %s %s\n' "${G}✦${RESET}" "$1"; }
+ok()    { spinosa_log INFO "$1"; printf '\n  %s %s\n' "${G}✦${RESET}" "$1" >&2; }
 warn()  { spinosa_log WARN "$1"; printf '  %s %s\n' "${Y}⚠${RESET}" "$1" >&2; }
 note()  { spinosa_log INFO "$1"; printf '  %s↳%s %s\n' "${DIM}" "${RESET}" "$1"; }
 die()   { spinosa_log ERROR "$1"; printf '\n  %s %s\n\n' "${R}✗${RESET}" "$1" >&2; exit 1; }
@@ -255,7 +255,7 @@ step_end() {
     printf '\r\033[2K' >&2
   fi
   if [ "$status" -eq 0 ]; then
-    printf '  %s %s (%ss)\n' "${G}✓${RESET}" "$message" "$elapsed" >&2
+    printf '  %s %s (%ss)\n' "${G}✦${RESET}" "$message" "$elapsed" >&2
     spinosa_log INFO "step=ok label=${STEP_LABEL} elapsed=${elapsed}s"
   else
     printf '  %s %s (%ss)\n' "${R}✗${RESET}" "$message" "$elapsed" >&2
