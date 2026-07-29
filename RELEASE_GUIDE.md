@@ -39,6 +39,27 @@ bun run release:validate-manifest
 
 Use the immutable `v1.0.2-beta.3` tag as the stabilization baseline. Do not use the ambiguous name `beta`: this repository has both a branch and a moving tag with that name.
 
+### Prepare npm tarballs
+
+Create the complete package family without publishing:
+
+```bash
+bun install --frozen-lockfile
+bun run check:versions
+bun run test:packed-install
+bun run release:prepare-npm
+```
+
+The last command writes ten standalone package directories, matching immutable tarballs, SHA-256 checksums, release metadata, and the required publication order under:
+
+```text
+dist/npm/v<version>/
+```
+
+Each directory under `dist/npm/v<version>/packages/` is directly publishable with `npm publish`. Its generated `publishConfig` fixes both public access and the correct dist-tag, so no publish flags are required. The nine platform packages must be published first. Publish `@spinosa/kernel` last, only after the registry returns the exact version for every platform package.
+
+Do not publish directly from `packages/spinosa-kernel/package.json`; it is the private development manifest. Publish only the prepared tarballs.
+
 ---
 
 ## Release channels

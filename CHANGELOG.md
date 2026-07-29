@@ -6,6 +6,13 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 **Release policy:** versions are published only with explicit maintainer approval.
 
+## [1.0.2-beta.4] — 2026-07-29
+
+### Changed
+
+- Prepared the complete npm package family as deterministic tarballs: nine platform packages followed by the `@spinosa/kernel` umbrella package.
+- Added a persistent release-artifact preparation command with checksums and an explicit publication order.
+
 ## [1.0.2-beta.3] — 2026-07-28
 
 ### Fixed

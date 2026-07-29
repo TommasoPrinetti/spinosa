@@ -57,8 +57,9 @@ describe("npm release configuration", () => {
     const optionalDependencies = Object.fromEntries(APPROVED_PUBLISH_PACKAGES.slice(1).map((name) => [name, "1.2.3-beta.4"]))
     const manifest = createKernelPackageManifest("1.2.3-beta.4", optionalDependencies)
     expect(publishManifestErrors(manifest, "1.2.3-beta.4")).toEqual([])
-    expect(manifest.bin).toEqual({ spinosa: "./bin/spinosa" })
+    expect(manifest.bin).toEqual({ spinosa: "bin/spinosa" })
     expect(manifest.files).toEqual(["bin", "README.md", "LICENSE"])
+    expect(manifest.publishConfig).toEqual({ access: "public", tag: "beta" })
     expect("scripts" in manifest).toBe(false)
   })
 
@@ -126,5 +127,16 @@ describe("npm release configuration", () => {
     expect(publishManifestErrors(manifest, "1.2.3-beta.4")).toContain(
       "published manifest must not define a postinstall script",
     )
+  })
+
+  test("rejects an npm-invalid executable mapping", () => {
+    const optionalDependencies = Object.fromEntries(APPROVED_PUBLISH_PACKAGES.slice(1).map((name) => [name, "1.2.3-beta.4"]))
+    const manifest = {
+      ...createKernelPackageManifest("1.2.3-beta.4", optionalDependencies),
+      bin: {
+        spinosa: "./bin/spinosa",
+      },
+    }
+    expect(publishManifestErrors(manifest, "1.2.3-beta.4")).toContain("bin.spinosa must equal bin/spinosa")
   })
 })

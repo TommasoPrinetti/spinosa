@@ -68,6 +68,10 @@ export function createPlatformPackageManifest(baseName: string, version: string,
     version,
     description: `Spinosa kernel binary for ${target.os} ${target.arch}${target.avx2 === false ? " baseline" : ""}${target.abi ? ` ${target.abi}` : ""}`,
     ...NPM_PACKAGE_METADATA,
+    publishConfig: {
+      ...NPM_PACKAGE_METADATA.publishConfig,
+      tag: npmTagForVersion(version),
+    },
     preferUnplugged: true,
     files: ["bin", "README.md", "LICENSE"],
     os: [target.os],
@@ -82,9 +86,13 @@ export function createKernelPackageManifest(version: string, optionalDependencie
     version,
     description: "Spinosa AI coding agent",
     ...NPM_PACKAGE_METADATA,
+    publishConfig: {
+      ...NPM_PACKAGE_METADATA.publishConfig,
+      tag: npmTagForVersion(version),
+    },
     type: "module",
     bin: {
-      spinosa: "./bin/spinosa",
+      spinosa: "bin/spinosa",
     },
     files: ["bin", "README.md", "LICENSE"],
     os: ["darwin", "linux"],
@@ -102,6 +110,9 @@ export function publishManifestErrors(manifest: Record<string, any>, expectedVer
     errors.push("published manifest must not define a postinstall script")
   }
   if (manifest.publishConfig?.access !== "public") errors.push("publishConfig.access must be public")
+  if (manifest.publishConfig?.tag !== npmTagForVersion(expectedVersion)) {
+    errors.push(`publishConfig.tag must equal ${npmTagForVersion(expectedVersion)}`)
+  }
   if (manifest.license !== NPM_PACKAGE_METADATA.license) errors.push("license must be MIT")
   if (manifest.repository?.url !== NPM_PACKAGE_METADATA.repository.url) errors.push("repository must point to medialab/spinosa")
   if (manifest.homepage !== NPM_PACKAGE_METADATA.homepage) errors.push("homepage must point to medialab/spinosa")
@@ -123,6 +134,7 @@ export function publishManifestErrors(manifest: Record<string, any>, expectedVer
   }
 
   if (manifest.name === "@spinosa/kernel") {
+    if (manifest.bin?.spinosa !== "bin/spinosa") errors.push("bin.spinosa must equal bin/spinosa")
     const optionalDependencies = manifest.optionalDependencies ?? {}
     const actualNames = Object.keys(optionalDependencies).sort()
     const expectedNames = APPROVED_PUBLISH_PACKAGES.slice(1).sort()
