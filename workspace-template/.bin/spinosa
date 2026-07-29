@@ -95,14 +95,13 @@ link_workspace_packages() {
     _scoped="$(grep '"name"' "$_pkgjson" | head -1 | sed 's/.*"name": *"\([^"]*\)".*/\1/')"
     [[ "$_scoped" == @spinosa/* ]] || continue
     _short="${_scoped#@spinosa/}"
-    [[ -L "${nm}/${_short}" ]] || ln -sfn "../../$_pkg" "${nm}/${_short}" 2>/dev/null || true
+    [[ -L "${nm}/${_short}" ]] || ln -sfn "../../packages/$_name" "${nm}/${_short}" 2>/dev/null || true
   done
 }
 
 _btlog health "RESOLVED_ROOT=$RESOLVED_ROOT, BUN=$BUN"
 if [[ "$installed_release" == "true" ]] && ! ensure_runtime; then
   _btlog health "runtime unhealthy, attempting repair"
-  local _ver
   _ver="$(tr -d '[:space:]' < "${RESOLVED_ROOT}/metadata/version" 2>/dev/null || basename "$RESOLVED_ROOT")"
   printf 'Spinosa runtime issue detected. v%s\n' "$_ver" >&2
   printf 'Reinstall to fix? [Y/n] ' >&2
