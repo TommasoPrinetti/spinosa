@@ -33,6 +33,8 @@ const IS_PREVIEW = CHANNEL !== "latest"
 
 const VERSION = await (async () => {
   if (env.SPINOSA_VERSION) return env.SPINOSA_VERSION
+  const rootPkgVersion: string | undefined = (rootPkg as { version?: string }).version
+  if (rootPkgVersion && !rootPkgVersion.startsWith("0.0.0-")) return rootPkgVersion
   if (IS_PREVIEW) return `0.0.0-${CHANNEL}-${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")}`
   const version = await fetch("https://registry.npmjs.org/@spinosa%2Fkernel/latest")
     .then((res) => {

@@ -15,6 +15,9 @@ import { ServerAuth } from "@/server/auth"
 import { validateSession } from "../tui/validate-session"
 import { win32InstallCtrlCGuard } from "@spinosa/tui/terminal-win32"
 import { bootLog } from "@spinosa/kernel-core/observability/boot-log"
+import { Installation } from "@/installation"
+import { InstallationVersion } from "@spinosa/kernel-core/installation/version"
+import { Flag } from "@spinosa/kernel-core/flag/flag"
 
 declare global {
   const SPINOSA_WORKER_PATH: string
@@ -235,6 +238,34 @@ export const TuiThreadCommand = cmd({
       }
 
       const prompt = await input(args.prompt)
+
+      // CLI-side upgrade check before launching worker
+      if (!Flag.SPINOSA_DISABLE_AUTOUPDATE) {
+        process.stderr.write("checking for updates...\n")
+        try {
+          const method = await Installation.method()
+          const latest = await Installation.latest(method)
+          if (latest && latest !== InstallationVersion) {
+            process.stderr.write(`  ✦ Spinosa v${latest} available (current: v${InstallationVersion})\n`)
+            process.stderr.write("  Upgrade now? [Y/n] ")
+            const answer = await new Promise<string>((resolve) => {
+              const onData = (chunk: Buffer) => {
+                process.stdin.removeListener("data", onData)
+                resolve(chunk.toString().trim().toLowerCase() || "y")
+              }
+              process.stdin.once("data", onData)
+            })
+            if (answer === "y" || answer === "yes") {
+              await Installation.upgrade(method, latest)
+              process.stderr.write("  ✓ Upgrade complete. Restart Spinosa to use the new version.\n")
+            }
+          }
+        } catch {
+          /* upgrade check is best-effort */
+        }
+        process.stderr.write("launching TUI...\n")
+      }
+
       const config = await TuiConfig.get()
 
       const network = resolveNetworkOptionsNoConfig(args)
@@ -275,10 +306,6 @@ export const TuiThreadCommand = cmd({
         process.exitCode = 1
         return
       }
-
-      setTimeout(() => {
-        client.call("checkUpgrade", { directory: cwd }).catch(() => {})
-      }, 1000).unref?.()
 
       try {
         const elapsed = Date.now() - t0
