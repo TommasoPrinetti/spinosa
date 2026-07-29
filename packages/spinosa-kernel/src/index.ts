@@ -82,6 +82,10 @@ const cli = yargs(args)
     type: "string",
     choices: ["DEBUG", "INFO", "WARN", "ERROR"],
   })
+  .option("verbose", {
+    describe: "print boot diagnostics to stderr",
+    type: "boolean",
+  })
   .option("pure", {
     describe: "run without external plugins",
     type: "boolean",
@@ -89,6 +93,7 @@ const cli = yargs(args)
   .middleware(async (opts) => {
     if (opts.printLogs) process.env.SPINOSA_PRINT_LOGS = "1"
     if (opts.logLevel) process.env.SPINOSA_LOG_LEVEL = opts.logLevel
+    if (opts.verbose) process.env.SPINOSA_VERBOSE_BOOT = "1"
     if (opts.pure) {
       process.env.SPINOSA_PURE = "1"
     }

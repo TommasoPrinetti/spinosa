@@ -4,7 +4,11 @@
 # or TUI. All command logic lives in packages/tui/src/spinosa-cli.ts.
 set -euo pipefail
 
-_btlog() { echo "[boot:bash:$1] $2" >&2; }
+_verbose=false
+for _arg in "$@"; do
+  case "$_arg" in --verbose) _verbose=true; break ;; esac
+done
+_btlog() { $_verbose && echo "[boot:bash:$1] $2" >&2 || true; }
 
 _btlog init "spinosa launcher started"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

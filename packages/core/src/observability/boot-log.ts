@@ -50,7 +50,10 @@ function write(entry: Record<string, unknown>): void {
   }
 }
 
-const VERBOSE = "SPINOSA_VERBOSE_BOOT"
+function isVerbose(): boolean {
+  if (process.env.SPINOSA_VERBOSE_BOOT === "1" || process.env.SPINOSA_VERBOSE_BOOT === "true") return true
+  return process.argv.some((a) => a === "--verbose")
+}
 
 export function bootLog(tag: string, message: string, extra?: Record<string, unknown>): void {
   const pid = process.pid
@@ -66,7 +69,7 @@ export function bootLog(tag: string, message: string, extra?: Record<string, unk
     }
   }
   write(entry)
-  if (process.env[VERBOSE] === "1" || process.env[VERBOSE] === "true") {
+  if (isVerbose()) {
     const prefix = `[boot:${tag}]`
     const suffix = extra ? ` ${JSON.stringify(extra)}` : ""
     console.error(`${prefix} ${message}${suffix}`)
@@ -85,7 +88,7 @@ export function bootLogError(tag: string, error: unknown): void {
   }
   if (stack) entry.stack = stack
   write(entry)
-  if (process.env[VERBOSE] === "1" || process.env[VERBOSE] === "true") {
+  if (isVerbose()) {
     console.error(`[boot:${tag}:ERROR] ${msg}`)
   }
 }
