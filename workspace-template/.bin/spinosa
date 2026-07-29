@@ -77,11 +77,17 @@ repair_and_restart() {
   [[ -n "$version" ]] || version="$(basename "$RESOLVED_ROOT")"
   [[ -f "$installer" && -n "$version" ]] || return 1
 
-  printf 'Spinosa runtime corruption detected. Repairing v%s while preserving metadata...\n' "$version" >&2
+  printf 'Spinosa runtime corruption detected. v%s\n' "$version" >&2
+  printf 'Repair now? [Y/n] ' >&2
+  read -r _repair_ans
+  case "${_repair_ans:-y}" in
+    y|Y|yes|YES|"") ;;
+    *) printf 'Aborting.\n' >&2; return 1 ;;
+  esac
   rm -f "${SPINOSA_HOME}/versions/.install.lock" 2>/dev/null || true
   if bash "$installer" --version "$version" --yes --reinstall --no-launch --no-modify-path; then
-    export SPINOSA_REPAIR_ATTEMPT=1
-    exec "${SPINOSA_HOME}/bin/spinosa" "$@"
+    printf 'Repair complete. Run spinosa again to start.\n' >&2
+    exit 0
   fi
   return 1
 }
