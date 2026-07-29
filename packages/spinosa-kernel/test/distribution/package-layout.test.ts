@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test"
-import { readFile } from "fs/promises"
-import { fileURLToPath } from "url"
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import path from "node:path"
+import { APPROVED_PUBLISH_PACKAGES } from "../../../../script/npm-release-config"
 
 async function source(relative: string) {
   return readFile(new URL(relative, import.meta.url), "utf8")
@@ -17,25 +19,24 @@ describe("Spinosa distribution layout", () => {
   })
 
   test("platform packages and launchers agree on scoped names and the binary", async () => {
-    const [build, postinstall, launcher, publish, dockerfile] = await Promise.all([
+    const [build, launcher, publish, dockerfile] = await Promise.all([
       source("../../script/build.ts"),
-      source("../../script/postinstall.mjs"),
       source("../../bin/spinosa"),
       source("../../script/publish.ts"),
       source("../../Dockerfile"),
     ])
 
     expect(build).toContain('outfile: `dist/${directory}/bin/spinosa`')
-    expect(build).toContain('name: packageName')
-    expect(postinstall).toContain('const base = `@spinosa/kernel-${platform}-${arch}`')
-    expect(postinstall).toContain('platform === "windows" ? "spinosa.exe" : "spinosa"')
-    expect(launcher).toContain('const base = "@spinosa/kernel-" + platform + "-" + arch')
-    expect(launcher).toContain('platform === "windows" ? "spinosa.exe" : "spinosa"')
-    expect(launcher).toContain('fileURLToPath(import.meta.url)')
-    expect(publish).toContain("name: pkg.name")
-    expect(publish).toContain('type: "module"')
-    expect(publish).toContain('spinosa: "./bin/spinosa"')
-    expect(publish).toContain("optionalDependencies: binaries")
+    expect(build).toContain("createPlatformPackageManifest")
+    expect(build).toContain("platformPackageName")
+    expect(launcher).toStartWith("#!/usr/bin/env bun\n")
+    expect(launcher).toContain("packageNameForPlatform")
+    expect(launcher).not.toContain("SPINOSA_BIN_PATH")
+    expect(launcher).not.toContain("npm install")
+    expect(launcher).not.toContain("postinstall")
+    expect(publish).toContain("createKernelPackageManifest")
+    expect(publish).toContain("publishManifestErrors")
+    expect(publish).toContain("cp -R ./bin/.")
     expect(publish).not.toContain('pkg.name + "-ai"')
     expect(publish).not.toContain("anomalyco/opencode")
     expect(publish).toContain("GIT_ASKPASS: askpass")
@@ -46,16 +47,45 @@ describe("Spinosa distribution layout", () => {
   })
 
   test("source package launcher runs in the package's ESM context", async () => {
-    const launcher = fileURLToPath(new URL("../../bin/spinosa", import.meta.url))
-    const executable = process.execPath
-    const child = Bun.spawn([executable, launcher, "--version"], {
-      env: { ...Bun.env, SPINOSA_BIN_PATH: executable },
-      stdout: "pipe",
-      stderr: "pipe",
-    })
+    const root = await mkdtemp(path.join(tmpdir(), "spinosa-kernel-layout-"))
+    try {
+      const kernelBin = path.join(root, "node_modules", "@spinosa", "kernel", "bin")
+      const launcher = path.join(kernelBin, "spinosa")
+      await mkdir(kernelBin, { recursive: true })
+      await writeFile(launcher, await source("../../bin/spinosa"), { mode: 0o755 })
+      await writeFile(path.join(kernelBin, "platform.ts"), await source("../../bin/platform.ts"))
 
-    expect(await child.exited).toBe(0)
-    expect((await new Response(child.stdout).text()).trim()).toMatch(/^\d+\.\d+\.\d+/)
+      for (const packageName of APPROVED_PUBLISH_PACKAGES.slice(1)) {
+        const platformBin = path.join(root, "node_modules", ...packageName.split("/"), "bin")
+        await mkdir(platformBin, { recursive: true })
+        await writeFile(
+          path.join(platformBin, "spinosa"),
+          `#!/usr/bin/env bun\nconsole.log(${JSON.stringify(packageName)})\n`,
+          { mode: 0o755 },
+        )
+      }
+
+      const child = Bun.spawn([launcher], {
+        stdout: "pipe",
+        stderr: "pipe",
+      })
+      expect(await child.exited).toBe(0)
+      const selectedPackage = (await new Response(child.stdout).text()).trim()
+      expect(APPROVED_PUBLISH_PACKAGES.slice(1)).toContain(selectedPackage)
+      expect((await stat(new URL("../../bin/spinosa", import.meta.url))).mode & 0o111).not.toBe(0)
+
+      await rm(path.join(root, "node_modules", ...selectedPackage.split("/")), { recursive: true })
+      const missing = Bun.spawn([launcher], {
+        stdout: "pipe",
+        stderr: "pipe",
+      })
+      expect(await missing.exited).toBe(1)
+      const error = await new Response(missing.stderr).text()
+      expect(error).toContain(`Spinosa platform package ${selectedPackage} is missing`)
+      expect(error).toContain("does not download packages at runtime")
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
   })
 
   test("PR command launches the Spinosa executable with the computed arguments", async () => {
@@ -69,7 +99,8 @@ describe("Spinosa distribution layout", () => {
   test("release metadata uses the scoped kernel package and tolerates an absent team file", async () => {
     const script = await source("../../../script/src/index.ts")
 
-    expect(script).toContain("https://registry.npmjs.org/@spinosa%2Fkernel/latest")
+    expect(script).toContain('path.resolve(import.meta.dir, "../../../package.json")')
+    expect(script).toContain("npmTagForVersion(VERSION)")
     expect(script).toContain("await Bun.file(teamPath).exists()")
   })
 

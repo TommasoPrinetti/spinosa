@@ -46,6 +46,9 @@ describe("npm release configuration", () => {
     const optionalDependencies = Object.fromEntries(APPROVED_PUBLISH_PACKAGES.slice(1).map((name) => [name, "1.2.3-beta.4"]))
     const manifest = createKernelPackageManifest("1.2.3-beta.4", optionalDependencies)
     expect(publishManifestErrors(manifest, "1.2.3-beta.4")).toEqual([])
+    expect(manifest.bin).toEqual({ spinosa: "./bin/spinosa" })
+    expect(manifest.files).toEqual(["bin", "README.md", "LICENSE"])
+    expect("scripts" in manifest).toBe(false)
   })
 
   test("rejects workspace and git dependency leakage", () => {
@@ -69,6 +72,19 @@ describe("npm release configuration", () => {
     const manifest = createKernelPackageManifest("1.2.3-beta.4", optionalDependencies)
     expect(publishManifestErrors(manifest, "1.2.3-beta.4")).toContain(
       "optionalDependencies.@spinosa/kernel-linux-x64 must equal 1.2.3-beta.4",
+    )
+  })
+
+  test("rejects an npm postinstall lifecycle hook", () => {
+    const optionalDependencies = Object.fromEntries(APPROVED_PUBLISH_PACKAGES.slice(1).map((name) => [name, "1.2.3-beta.4"]))
+    const manifest = {
+      ...createKernelPackageManifest("1.2.3-beta.4", optionalDependencies),
+      scripts: {
+        postinstall: "",
+      },
+    }
+    expect(publishManifestErrors(manifest, "1.2.3-beta.4")).toContain(
+      "published manifest must not define a postinstall script",
     )
   })
 })

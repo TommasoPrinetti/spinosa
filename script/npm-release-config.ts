@@ -74,10 +74,7 @@ export function createKernelPackageManifest(version: string, optionalDependencie
     bin: {
       spinosa: "./bin/spinosa",
     },
-    scripts: {
-      postinstall: "node ./postinstall.mjs",
-    },
-    files: ["bin", "postinstall.mjs", "README.md", "LICENSE"],
+    files: ["bin", "README.md", "LICENSE"],
     os: ["darwin", "linux"],
     cpu: ["arm64", "x64"],
     optionalDependencies,
@@ -89,6 +86,9 @@ export function publishManifestErrors(manifest: Record<string, any>, expectedVer
   if (!APPROVED_PUBLISH_PACKAGES.includes(manifest.name)) errors.push(`unexpected package name ${manifest.name}`)
   if (manifest.version !== expectedVersion) errors.push(`version ${manifest.version} does not match ${expectedVersion}`)
   if (manifest.private === true) errors.push("published manifest must not be private")
+  if (Object.prototype.hasOwnProperty.call(manifest.scripts ?? {}, "postinstall")) {
+    errors.push("published manifest must not define a postinstall script")
+  }
   if (manifest.publishConfig?.access !== "public") errors.push("publishConfig.access must be public")
   if (manifest.license !== NPM_PACKAGE_METADATA.license) errors.push("license must be MIT")
   if (manifest.repository?.url !== NPM_PACKAGE_METADATA.repository.url) errors.push("repository must point to medialab/spinosa")

@@ -55,8 +55,7 @@ const version = Object.values(binaries)[0]
 if (!version) throw new Error("No platform packages found in dist")
 
 await $`mkdir -p ${mainDirectory}/bin`
-await $`cp ./script/postinstall.mjs ${mainDirectory}/postinstall.mjs`
-await $`cp ./bin/spinosa ${mainDirectory}/bin/spinosa`
+await $`cp -R ./bin/. ${mainDirectory}/bin/`
 await Bun.file(`${mainDirectory}/README.md`).write(await Bun.file("./README.md").text())
 await Bun.file(`${mainDirectory}/LICENSE`).write(await Bun.file("../../LICENSE").text())
 

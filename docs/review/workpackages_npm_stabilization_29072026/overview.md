@@ -38,7 +38,7 @@ The production path must become: pinned Bun installer → exact `@spinosa/kernel
 | WP-00 Baseline and canonical version | Done 2026-07-29 | 2026-07-29 | `bun run check:versions` passed | — |
 | WP-01 Public package boundary | Done 2026-07-29 | 2026-07-29 | `bun run release:list-packages` and config tests passed | — |
 | WP-02 Deterministic publish manifests | Done 2026-07-29 | 2026-07-29 | Generated package smoke/pack and manifest checks passed | — |
-| WP-03 Bun-only kernel launcher | Todo | 2026-07-29 | — | Remove Node/npm postinstall and network fallback |
+| WP-03 Bun-only kernel launcher | Done 2026-07-29 | 2026-07-29 | Launcher/layout tests, current-platform smoke, Bun/npm pack inspection passed | — |
 | WP-04 Platform package generation | Todo | 2026-07-29 | — | Add matrix and registry assertions |
 | WP-05 Packed-install tests | Todo | 2026-07-29 | — | Install local tarballs in an empty project |
 | WP-06 Registry-based installer | Todo | 2026-07-29 | — | Replace source archive installation with `bun add --exact` |
@@ -71,3 +71,10 @@ The production path must become: pinned Bun installer → exact `@spinosa/kernel
 - Why it works: build and publish now consume the same package constructors and approved target list, so manifest metadata and package boundaries cannot drift independently.
 - Proof / validation: `bun test --config /dev/null script/npm-release-config.test.ts` (6 pass); single-platform kernel build and binary smoke test; `bun run release:validate-manifest --allow-partial`; `bun pm pack`; `npm pack --dry-run --json`; kernel typecheck.
 - How to test: build the current platform with `bun run --cwd packages/spinosa-kernel build --single --skip-install --skip-embed-web-ui`, run the partial validator, then inspect the dry-run pack file list. Full release builds must pass `bun run release:validate-manifest` without `--allow-partial`.
+
+## WP-03 implementation status (2026-07-29)
+
+- Changed: replaced the Node launcher and npm-downloading postinstall with a Bun launcher that selects the exact approved platform package already present in `node_modules`; removed the lifecycle hook from generated manifests; made umbrella staging copy the complete `bin/` directory; restored launcher executable mode; updated distribution tests to exercise an isolated installed-package layout.
+- Why works: package selection is centralized in a pure target resolver and the launcher only walks installed `node_modules` ancestors. Unsupported targets and missing packages fail with explicit diagnostics; no environment override, cached binary, package-manager subprocess, or runtime network fallback remains.
+- Proof / validation: `bun test --config /dev/null packages/spinosa-kernel/test/distribution/package-layout.test.ts packages/spinosa-kernel/test/platform-package.test.ts script/npm-release-config.test.ts` (23 pass, 70 assertions); `bun run --cwd packages/spinosa-kernel build --single --skip-install --skip-embed-web-ui` (Darwin arm64 smoke reported `1.0.2-beta.3`); kernel and repository typechecks; frozen install; version/package-boundary/partial-manifest gates; `bun pm pack` and `npm pack --dry-run --json` both contained only `LICENSE`, `README.md`, `bin/platform.ts`, executable `bin/spinosa`, and `package.json`.
+- How to test: run the focused tests and current-platform build above, then prepare the umbrella directory with `createKernelPackageManifest`, pack it with Bun or npm, and confirm there is no `scripts.postinstall`, `postinstall.mjs`, Node shebang, or runtime install path.
