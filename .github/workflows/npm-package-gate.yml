@@ -1,0 +1,21 @@
+name: npm package gate
+
+on:
+  pull_request:
+  push:
+    branches:
+      - release/npm-stabilization
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  npm-package-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-bun
+      - run: bun run check:versions
+      - run: bun run test:packed-install

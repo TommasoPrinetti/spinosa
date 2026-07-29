@@ -19,10 +19,11 @@ describe("Spinosa distribution layout", () => {
   })
 
   test("platform packages and launchers agree on scoped names and the binary", async () => {
-    const [build, launcher, publish, dockerfile] = await Promise.all([
+    const [build, launcher, publish, prepare, dockerfile] = await Promise.all([
       source("../../script/build.ts"),
       source("../../bin/spinosa"),
       source("../../script/publish.ts"),
+      source("../../../../script/prepare-kernel-package.ts"),
       source("../../Dockerfile"),
     ])
 
@@ -36,9 +37,9 @@ describe("Spinosa distribution layout", () => {
     expect(launcher).not.toContain("SPINOSA_BIN_PATH")
     expect(launcher).not.toContain("npm install")
     expect(launcher).not.toContain("postinstall")
-    expect(publish).toContain("createKernelPackageManifest")
-    expect(publish).toContain("publishManifestErrors")
-    expect(publish).toContain("cp -R ./bin/.")
+    expect(publish).toContain("prepareKernelPackage")
+    expect(prepare).toContain("createKernelPackageManifest")
+    expect(prepare).toContain('cp(path.join(kernelRoot, "bin")')
     expect(publish).not.toContain('pkg.name + "-ai"')
     expect(publish).not.toContain("anomalyco/opencode")
     expect(publish).toContain("GIT_ASKPASS: askpass")

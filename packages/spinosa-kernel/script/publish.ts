@@ -8,11 +8,11 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import {
   APPROVED_PUBLISH_PACKAGES,
-  createKernelPackageManifest,
   platformPackageSetErrors,
   publishManifestErrors,
 } from "../../../script/npm-release-config"
 import { assertPlatformPackagesPublished } from "../../../script/npm-registry"
+import { prepareKernelPackage } from "../../../script/prepare-kernel-package"
 
 const dir = fileURLToPath(new URL("..", import.meta.url))
 process.chdir(dir)
@@ -67,17 +67,7 @@ if (platformSetErrors.length) throw new Error(`Platform package set mismatch: ${
 const version = Object.values(binaries)[0]
 if (!version) throw new Error("No platform packages found in dist")
 
-await $`mkdir -p ${mainDirectory}/bin`
-await $`cp -R ./bin/. ${mainDirectory}/bin/`
-await Bun.file(`${mainDirectory}/README.md`).write(await Bun.file("./README.md").text())
-await Bun.file(`${mainDirectory}/LICENSE`).write(await Bun.file("../../LICENSE").text())
-
-const kernelManifest = createKernelPackageManifest(version, binaries)
-const kernelManifestErrors = publishManifestErrors(kernelManifest, pkg.version)
-if (kernelManifestErrors.length) {
-  throw new Error(`@spinosa/kernel: ${kernelManifestErrors.join("; ")}`)
-}
-await Bun.file(`${mainDirectory}/package.json`).write(JSON.stringify(kernelManifest, null, 2))
+await prepareKernelPackage(mainDirectory, version, binaries)
 
 const tasks = Object.entries(binaries).map(async ([name]) => {
   await publish(`./dist/${packageDirectory(name)}`, name, binaries[name])

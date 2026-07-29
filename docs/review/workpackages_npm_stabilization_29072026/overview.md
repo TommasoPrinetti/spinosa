@@ -40,7 +40,7 @@ The production path must become: pinned Bun installer → exact `@spinosa/kernel
 | WP-02 Deterministic publish manifests | Done 2026-07-29 | 2026-07-29 | Generated package smoke/pack and manifest checks passed | — |
 | WP-03 Bun-only kernel launcher | Done 2026-07-29 | 2026-07-29 | Launcher/layout tests, current-platform smoke, Bun/npm pack inspection passed | — |
 | WP-04 Platform package generation | Done 2026-07-29 | 2026-07-29 | Nine-target build, manifest verifier, native dependency and registry-gate tests passed | — |
-| WP-05 Packed-install tests | Todo | 2026-07-29 | — | Install local tarballs in an empty project |
+| WP-05 Packed-install tests | Done 2026-07-29 | 2026-07-29 | Ten-package pack audit and isolated offline install smoke passed | — |
 | WP-06 Registry-based installer | Todo | 2026-07-29 | — | Replace source archive installation with `bun add --exact` |
 | WP-07 Trusted npm publishing | Todo | 2026-07-29 | — | Add protected OIDC workflow and provenance |
 | WP-08 Target-native validation | Todo | 2026-07-29 | — | Validate every advertised target |
@@ -86,3 +86,10 @@ The production path must become: pinned Bun installer → exact `@spinosa/kernel
 - Proof / validation: `bun test --config /dev/null script/npm-release-config.test.ts script/npm-registry.test.ts packages/spinosa-kernel/test/platform-package.test.ts packages/spinosa-kernel/test/distribution/package-layout.test.ts` (29 pass, 86 assertions); `bun run build:kernel:all` generated all nine packages and smoke-tested Darwin arm64 at `1.0.2-beta.3`; `bun run release:verify-platform-set` validated nine manifests; artifact inspection confirmed Darwin Mach-O and Linux glibc/musl ELF interpreters; repository typecheck, frozen install, version/package-boundary gates, and `git diff --check` passed.
 - How to test: run `bun install --frozen-lockfile`, `bun run build:kernel:all`, `bun run release:verify-platform-set`, the focused tests above, and `bun run typecheck`. Registry-gate unit tests use injected lookups and do not publish or require npm credentials.
 - Limitation: `build:kernel:all` explicitly skips the legacy embedded web UI because this repository has no buildable `packages/app`. It validates the complete kernel/native package matrix; restoring an embedded web application remains a separate production-gate item before target-native release acceptance.
+
+## WP-05 implementation status (2026-07-29)
+
+- Changed: added reusable side-effect-free umbrella staging, `script/test-packages.ts`, the `test:packed-install` command, and an npm package gate workflow. The harness packs all nine platform packages plus the umbrella, enforces exact archive allowlists, installs only local compatible tarballs in an external temporary project with an unreachable registry and fresh Bun cache, isolates HOME/Spinosa/XDG state, audits installed symlinks, removes non-selected compatible variants, and runs version, help, and readiness-confirmed headless server smokes.
+- Why works: the test consumes the same staged bytes that publishing uses and has no registry or monorepo fallback available. Any missing package, manifest drift, unexpected file, external symlink, source-tree dependency, launcher selection failure, user-state dependency, or startup regression makes the one-command gate fail.
+- Proof / validation: `bun run test:packed-install` rebuilt and validated all nine platform manifests, packed all ten public packages, installed `@spinosa/kernel@1.0.2-beta.3` with the compatible local platform tarball in a temporary empty project, and passed `spinosa --version`, `spinosa --help`, and `spinosa serve --port 0` startup smoke; focused tests (29 pass, 86 assertions), repository typecheck, frozen install, version gate, and `git diff --check` passed.
+- How to test: run `bun run test:packed-install`. CI runs the same command in `.github/workflows/npm-package-gate.yml` without npm credentials.

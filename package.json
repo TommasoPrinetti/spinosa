@@ -13,6 +13,7 @@
     "release:validate-manifest": "bun run script/validate-release-manifests.ts",
     "build:kernel:all": "bun run --cwd packages/spinosa-kernel build --skip-embed-web-ui",
     "release:verify-platform-set": "bun run script/validate-release-manifests.ts --platform-only",
+    "test:packed-install": "bun run build:kernel:all && bun run release:verify-platform-set && bun run script/test-packages.ts",
     "typecheck": "bun run --cwd packages/core typecheck && bun run --cwd packages/sdk typecheck && bun run --cwd packages/tui typecheck && bun run --cwd packages/spinosa-kernel typecheck && bun run --cwd packages/spinosa-core typecheck && bun run --cwd packages/spinosa-runtime typecheck && bun run --cwd packages/spinosa-harness typecheck && bun run --cwd packages/spinosa-cli typecheck"
   },
   "workspaces": {
