@@ -4,7 +4,11 @@
 # or TUI. All command logic lives in packages/tui/src/spinosa-cli.ts.
 set -euo pipefail
 
+_btlog() { echo "[boot:bash:$1] $2" >&2; }
+
+_btlog init "spinosa launcher started"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_btlog init "SCRIPT_DIR=$SCRIPT_DIR"
 RESOLVED_ROOT=""
 if [[ -z "${SPINOSA_HOME:-}" && -d "${SCRIPT_DIR}/../versions" && -d "${SCRIPT_DIR}/../metadata" ]]; then
   SPINOSA_HOME="$(cd "${SCRIPT_DIR}/.." && pwd)"
@@ -12,23 +16,28 @@ else
   SPINOSA_HOME="${SPINOSA_HOME:-$HOME/.spinosa}"
 fi
 export SPINOSA_HOME
+_btlog init "SPINOSA_HOME=$SPINOSA_HOME"
 
 # Resolve system root (3 tiers)
 candidate="${SCRIPT_DIR}/.."
 if [[ -f "${candidate}/.spinosa/workspace-files.tsv" ]]; then
   RESOLVED_ROOT="$(cd "$candidate/.." && pwd)"
+  _btlog root "tier1: resolved from workspace-files.tsv in parent"
 else
   candidate2="${SCRIPT_DIR}/../.."
   if [[ -f "${candidate2}/workspace-template/.spinosa/workspace-files.tsv" ]]; then
     RESOLVED_ROOT="$candidate2"
+    _btlog root "tier2: resolved from workspace-template in grandparent"
   fi
 fi
 if [[ -z "$RESOLVED_ROOT" && -d "${SPINOSA_HOME}/versions" ]]; then
+  _btlog root "tier3: scanning versions dir"
   while IFS= read -r candidate3; do
     v="$(basename "$candidate3")"
     [[ "$v" =~ ^[0-9] ]] || continue
     if [[ -f "${candidate3}/workspace-template/.spinosa/workspace-files.tsv" ]]; then
       RESOLVED_ROOT="$candidate3"
+      _btlog root "tier3: resolved from version $v"
       break
     fi
   done < <(find "${SPINOSA_HOME}/versions" -mindepth 1 -maxdepth 1 -type d -print 2>/dev/null | sort -V -r)
@@ -36,9 +45,10 @@ fi
 
 # Find bun — bundled install first, then system
 BUN=""
-[[ -x "${SPINOSA_HOME:-$HOME/.spinosa}/bin/bun" ]] && BUN="${SPINOSA_HOME:-$HOME/.spinosa}/bin/bun"
+[[ -x "${SPINOSA_HOME:-$HOME/.spinosa}/bin/bun" ]] && BUN="${SPINOSA_HOME:-$HOME/.spinosa}/bin/bun" && _btlog bun "bundled bun at $BUN"
 if [[ -z "$BUN" ]] && command -v bun >/dev/null 2>&1; then
   BUN="$(command -v bun)"
+  _btlog bun "system bun at $BUN"
 fi
 
 # Installed releases validate their runtime before dispatch. If node_modules or
@@ -46,7 +56,7 @@ fi
 # then re-run the exact original command once.
 installed_release=false
 case "$RESOLVED_ROOT" in
-  "${SPINOSA_HOME}/versions/"*) installed_release=true ;;
+  "${SPINOSA_HOME}/versions/"*) installed_release=true ; _btlog root "installed release: $RESOLVED_ROOT" ;;
 esac
 
 runtime_healthy() {
@@ -71,13 +81,16 @@ repair_and_restart() {
   return 1
 }
 
+_btlog health "RESOLVED_ROOT=$RESOLVED_ROOT, BUN=$BUN"
 if [[ "$installed_release" == "true" ]] && ! runtime_healthy; then
+  _btlog health "runtime unhealthy, attempting repair"
   if ! repair_and_restart "$@"; then
     echo "Error: Spinosa runtime repair failed. Metadata was preserved." >&2
     echo "Re-run the installer with --yes --reinstall for details." >&2
     exit 1
   fi
 fi
+_btlog health "runtime healthy"
 
 # Dispatch to TS CLI for all non-interactive commands.
 # new/create without a source argument still launches the TUI dashboard.
@@ -94,6 +107,7 @@ case "$launcher_command" in
 esac
 if [[ "$dispatch" == "true" ]]; then
   [[ -z "$RESOLVED_ROOT" || -z "$BUN" ]] && { echo "Error: Spinosa runtime not found. Reinstall Spinosa." >&2; exit 1; }
+  _btlog dispatch "dispatcing to spinosa-cli for command: $launcher_command"
   export SPINOSA_TEMPLATE_ROOT="$RESOLVED_ROOT"
   exec "$BUN" run "${RESOLVED_ROOT}/packages/tui/src/spinosa-cli.ts" "$@"
 fi
@@ -107,17 +121,21 @@ fi
 
 # No-args or new/create without source → launch TUI
 if [[ -d "${RESOLVED_ROOT}/packages/tui/src" && -n "$BUN" ]]; then
+  _btlog tui "running preflight check"
   export SPINOSA_TEMPLATE_ROOT="$RESOLVED_ROOT"
   if "$BUN" run "${RESOLVED_ROOT}/packages/tui/src/spinosa-cli.ts" preflight; then
     :
   else
     preflight_status=$?
+    _btlog preflight "preflight exited with status $preflight_status"
     [[ "$preflight_status" -eq 10 ]] && exit 0
     [[ "$preflight_status" -eq 11 ]] && exit 0
     exit "$preflight_status"
   fi
+  _btlog tui "preflight passed, exec'ing kernel"
   exec "$BUN" run "${RESOLVED_ROOT}/packages/spinosa-kernel/src/index.ts" "$@"
 fi
 
+_btlog tui "failed: RESOLVED_ROOT or BUN not found (${RESOLVED_ROOT:-unset}, ${BUN:-unset})"
 echo "Error: Spinosa not found. Run the installer or re-install dependencies." >&2
 exit 1

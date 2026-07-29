@@ -10,8 +10,10 @@ import { Heap } from "@/cli/heap"
 import { AppRuntime } from "@/effect/app-runtime"
 import { Effect } from "effect"
 import { disposeAllInstancesAndEmitGlobalDisposed } from "@/server/global-lifecycle"
+import { bootLog } from "@spinosa/kernel-core/observability/boot-log"
 
 Heap.start()
+bootLog("worker.init", "TUI background worker started", { pid: process.pid })
 
 let fatal = false
 const failWorker = (error: unknown) => {
@@ -49,6 +51,7 @@ export const rpc = {
       headers,
       body: input.body,
     })
+    bootLog("worker.fetch", "proxying fetch", { url: input.url, method: input.method })
     const response = await Server.Default().app.fetch(request)
     const body = await response.text()
     return {
@@ -63,10 +66,14 @@ export const rpc = {
   },
   async server(input: { port: number; hostname: string; mdns?: boolean; cors?: string[] }) {
     if (server) await server.stop(true)
+    bootLog("worker.server", "starting server", { port: input.port, hostname: input.hostname })
     server = await Server.listen(input)
-    return { url: server.url.toString() }
+    const url = server.url.toString()
+    bootLog("worker.server.running", "server is listening", { url })
+    return { url }
   },
   async checkUpgrade(input: { directory: string }) {
+    bootLog("worker.checkUpgrade", "checking for upgrade", { directory: input.directory })
     await InstanceRuntime.load({ directory: input.directory })
     await upgrade().catch(() => {})
   },
@@ -80,10 +87,12 @@ export const rpc = {
     )
   },
   async shutdown() {
+    bootLog("worker.shutdown", "shutting down worker")
     await InstanceRuntime.disposeAllInstances()
     if (server) await server.stop(true)
     process.off("unhandledRejection", onUnhandledRejection)
     process.off("uncaughtException", onUncaughtException)
+    bootLog("worker.shutdown.done", "worker shutdown complete")
   },
 }
 

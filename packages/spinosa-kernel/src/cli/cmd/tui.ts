@@ -14,6 +14,7 @@ import { writeHeapSnapshot } from "v8"
 import { ServerAuth } from "@/server/auth"
 import { validateSession } from "../tui/validate-session"
 import { win32InstallCtrlCGuard } from "@spinosa/tui/terminal-win32"
+import { bootLog } from "@spinosa/kernel-core/observability/boot-log"
 
 declare global {
   const SPINOSA_WORKER_PATH: string
@@ -142,6 +143,8 @@ export const TuiThreadCommand = cmd({
         hidden: true,
       }),
   handler: async (args) => {
+    const t0 = Date.now()
+    bootLog("tui.handler", "TUI command handler started")
     if (args.replay === true) {
       UI.error("--replay is not supported; replay is enabled by default")
       process.exitCode = 1
@@ -199,6 +202,10 @@ export const TuiThreadCommand = cmd({
       // chdir so the thread and worker share the same directory key.
       const next = resolveThreadDirectory(args.project)
       const file = await target()
+      bootLog("tui.worker.target", "resolved worker target", {
+        path: typeof file === "string" ? file : file.href,
+        cwd: next,
+      })
       try {
         process.chdir(next)
       } catch {
@@ -208,6 +215,7 @@ export const TuiThreadCommand = cmd({
       const cwd = Filesystem.resolve(process.cwd())
 
       const worker = new Worker(file)
+      bootLog("tui.worker.created", "background worker spawned", { pid: process.pid })
       const client = Rpc.client<typeof rpc>(worker)
       const reload = () => {
         client.call("reload", undefined).catch(() => {})
@@ -244,6 +252,11 @@ export const TuiThreadCommand = cmd({
             events: createEventSource(client),
           }
 
+      bootLog("tui.transport", "transport configured", {
+        external,
+        url: transport.url,
+      })
+
       try {
         await validateSession({
           url: transport.url,
@@ -252,7 +265,9 @@ export const TuiThreadCommand = cmd({
           fetch: transport.fetch,
           headers,
         })
+        bootLog("tui.session", "session validated", { sessionID: args.session ?? undefined })
       } catch (error) {
+        bootLog("tui.session.error", "session validation failed", { error: String(error) })
         UI.error(errorMessage(error))
         process.exitCode = 1
         return
@@ -263,6 +278,11 @@ export const TuiThreadCommand = cmd({
       }, 1000).unref?.()
 
       try {
+        const elapsed = Date.now() - t0
+        bootLog("tui.run.start", "calling Tui.run via Effect.runPromise", {
+          elapsedMs: elapsed,
+          directory: cwd,
+        })
         const { Effect } = await import("effect")
         const { run } = await import("../tui/layer")
         const { createLegacyTuiPluginHost } = await import("@/plugin/tui/runtime")
@@ -292,6 +312,9 @@ export const TuiThreadCommand = cmd({
             },
           }),
         )
+        bootLog("tui.run.done", "Tui.run completed", {
+          totalMs: Date.now() - t0,
+        })
       } finally {
         await stop()
       }

@@ -4,6 +4,10 @@
 
 ---
 
+> **⚠️ First choice: `bash script/release.sh vX.Y.Z[-beta.N]`** — the script handles everything below in one shot and is less error-prone. Use the manual steps only when you need to deviate from the standard flow.
+
+---
+
 ## Release channels
 
 | Channel | Audience | GitHub endpoint | `spinosa upgrade` |
@@ -109,7 +113,30 @@ gh release create "v${VERSION}" \
   "dist/v${VERSION}/checksums.txt"
 ```
 
-### 7. Sync rolling channel
+### 7. Verify release assets
+
+Check that the specific-version release has all three required assets:
+
+```bash
+gh release view "v${VERSION}" --json assets \
+  | python3 -c "import sys,json; [print(a['name']) for a in json.load(sys.stdin)['assets']]"
+# Expected:
+#   checksums.txt
+#   install.sh
+#   spinosa-v${VERSION}.tar.gz
+```
+
+Check that `checksums.txt` on the release contains **both** `install.sh` and the tarball:
+
+```bash
+/usr/bin/curl -sL "https://github.com/medialab/spinosa/releases/download/v${VERSION}/checksums.txt"
+# Expected: 2 lines — one for install.sh, one for spinosa-v${VERSION}.tar.gz
+```
+
+If the tarball or its checksum is missing, the installer will abort with
+`spinosa-v{VERSION}.tar.gz not found in checksums file` and the upgrade fails.
+
+### 8. Sync rolling channel
 
 ```bash
 # Stable
@@ -139,7 +166,7 @@ gh release edit "$CHANNEL" \
   $([[ "$VERSION" == *-* ]] && echo "--prerelease" || true)
 ```
 
-### 8. Verify
+### 9. Verify channel
 
 ```bash
 curl -fsSL "https://github.com/medialab/spinosa/releases/download/${CHANNEL}/install.sh" | grep PINNED_VERSION
@@ -168,3 +195,5 @@ spinosa version
 - **`dist/` is gitignored:** release assets live in `dist/vX.Y.Z/` — never committed.
 - **Beta does not move `stable`:** only stable releases refresh the rolling `stable` endpoint.
 - **GitHub Actions are disabled** for releases — everything runs locally via `gh`.
+- **`checksums.txt` needs *both* entries on the version release** — the specific-version release (e.g. `v1.0.2-beta.3`) must have `checksums.txt` containing BOTH `install.sh` AND `spinosa-v{VERSION}.tar.gz`. If the tarball is missing from checksums.txt, the installer aborts with `spinosa-v{VERSION}.tar.gz not found in checksums file`. The channel release (e.g. `beta`) only needs `install.sh` in its checksums.txt — the tarball lives on the version release, not the channel.
+- **Always run step 7 verification** before declaring a release done — curl the live checksums.txt to confirm both entries are present.

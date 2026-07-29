@@ -29,8 +29,23 @@ import { DbCommand } from "./cli/cmd/db"
 import { errorMessage } from "./util/error"
 import { PluginCommand } from "./cli/cmd/plug"
 import { Heap } from "./cli/heap"
+import { bootLog } from "@spinosa/kernel-core/observability/boot-log"
 
 const args = hideBin(process.argv)
+const { pid, ppid } = process
+
+bootLog("kernel.init", "kernel entry parsing args", {
+  argv: args.join(" "),
+  cwd: process.cwd(),
+  pid,
+  ppid,
+  SPINOSA_TEMPLATE_ROOT: process.env.SPINOSA_TEMPLATE_ROOT ?? undefined,
+  SPINOSA_PRODUCT: process.env.SPINOSA_PRODUCT ?? undefined,
+  SPINOSA_HOME: process.env.SPINOSA_HOME ?? undefined,
+  SPINOSA_PRINT_LOGS: process.env.SPINOSA_PRINT_LOGS ?? undefined,
+  SPINOSA_LOG_LEVEL: process.env.SPINOSA_LOG_LEVEL ?? undefined,
+  BUN_VERSION: process.env.BUN_VERSION ?? undefined,
+})
 
 function show(out: string) {
   const text = out.trimStart()
@@ -117,15 +132,19 @@ const cli = yargs(args)
 
 try {
   if (args.includes("-h") || args.includes("--help")) {
+    bootLog("kernel.help", "showing help")
     await cli.parse(args, (err: Error | undefined, _argv: unknown, out: string) => {
       if (err) throw err
       if (!out) return
       show(out)
     })
   } else {
+    bootLog("kernel.parse", "parsing yargs command")
     await cli.parse()
+    bootLog("kernel.parse.done", "yargs command finished")
   }
 } catch (e) {
+  bootLog("kernel.error", "unhandled error", { error: String(e) })
   const formatted = FormatError(e)
   if (formatted) UI.error(formatted)
   if (formatted === undefined) {
@@ -134,6 +153,7 @@ try {
   }
   process.exitCode = 1
 } finally {
+  bootLog("kernel.exit", "exiting process")
   // Some subprocesses don't react properly to SIGTERM and similar signals.
   // Most notably, some docker-container-based MCP servers don't handle such signals unless
   // run using `docker run --init`.

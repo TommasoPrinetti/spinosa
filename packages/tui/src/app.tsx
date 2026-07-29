@@ -1,3 +1,4 @@
+import { bootLog } from "@spinosa/kernel-core/observability/boot-log"
 import { render, TimeToFirstDraw, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui"
 import { Deferred, Effect } from "effect"
@@ -234,10 +235,13 @@ function isVersionGreater(left: string, right: string) {
 }
 
 export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
+  const t0 = Date.now()
+  bootLog("tui.effect.run", "Effect.fn Tui.run entered")
   const global = yield* Global.Service
   const exit = { epilogue: undefined as string | undefined, reason: undefined as unknown }
   const result = yield* Effect.scoped(
     Effect.gen(function* () {
+      bootLog("tui.renderer", "creating CLI renderer")
       const renderer = yield* Effect.acquireRelease(
         Effect.tryPromise({
           try: () =>
@@ -261,6 +265,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
             destroyRenderer(renderer)
           }),
       )
+      bootLog("tui.renderer.created", "CLI renderer created", { elapsedMs: Date.now() - t0 })
       yield* Effect.promise(async () => {
         // Platform-specific: Bun FFI to kernel32.dll (Windows only).
         const { win32DisableProcessedInput } = await import("./terminal-win32")
@@ -296,6 +301,8 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
 
       yield* Effect.tryPromise(async () => {
         // Prewarm palette before ThemeProvider mounts so `system` theme avoids a first-paint fallback flash.
+        const t1 = Date.now()
+        bootLog("tui.render.start", "calling render()", { elapsedMs: t1 - t0 })
         void renderer.getPalette({ size: 16 }).catch(() => undefined)
         const mode = (await renderer.waitForThemeMode(1000)) ?? "dark"
         if (renderer.isDestroyed) return
@@ -423,7 +430,9 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
           )
         }, renderer)
       })
+      bootLog("tui.render.done", "render() call returned, awaiting shutdown")
       yield* Deferred.await(shutdown)
+      bootLog("tui.shutdown", "TUI shutdown signal received", { totalMs: Date.now() - t0 })
       return { epilogue: exit.epilogue, reason: exit.reason }
     }),
   )

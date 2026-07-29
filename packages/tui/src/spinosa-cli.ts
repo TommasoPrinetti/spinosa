@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import { existsSync, statSync } from "node:fs"
 import path from "node:path"
+import { bootLog } from "@spinosa/kernel-core/observability/boot-log"
 import {
   addFiles,
   createWorkspace,
@@ -261,6 +262,7 @@ async function runWeb(parsed: ParsedArgs, io: SpinosaCliIo): Promise<number> {
 }
 
 export async function runSpinosaCli(args: string[], io?: SpinosaCliIo): Promise<number> {
+  bootLog("spinosa-cli.run", "spinosa-cli invoked", { args: args.join(" "), pid: process.pid })
   const { command, rest } = splitSpinosaCliCommand(args)
   try {
     if (command === "help" || command === "--help" || command === "-h" || rest.includes("--help") || rest.includes("-h")) {
@@ -310,5 +312,7 @@ export async function runSpinosaCli(args: string[], io?: SpinosaCliIo): Promise<
 }
 
 if (import.meta.main) {
-  process.exit(await runSpinosaCli(process.argv.slice(2)))
+  const argv = process.argv.slice(2)
+  bootLog("spinosa-cli.main", "direct entry", { argv: argv.join(" ") })
+  process.exit(await runSpinosaCli(argv))
 }
