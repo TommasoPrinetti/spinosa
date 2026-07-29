@@ -1,3 +1,4 @@
+import { bootLog } from "@spinosa/kernel-core/observability/boot-log"
 import { LayerNode } from "@spinosa/kernel-core/effect/layer-node"
 import { makeGlobalNode, Node } from "@spinosa/kernel-core/effect/app-node"
 import { GlobalBus } from "@/bus/global"
@@ -44,6 +45,8 @@ const layer: Layer.Layer<Service, never, Project.Service | InstanceBootstrap.Ser
 
     const boot = (input: LoadInput & { directory: string }) =>
       Effect.gen(function* () {
+        bootLog("instance-store.boot", "InstanceStore.boot starting", { directory: input.directory })
+        const t1 = Date.now()
         const ctx: InstanceContext =
           input.project && input.worktree
             ? {
@@ -58,7 +61,11 @@ const layer: Layer.Layer<Service, never, Project.Service | InstanceBootstrap.Ser
                   project: result.project,
                 })),
               )
+        bootLog("instance-store.boot.project", "project resolved", { elapsedMs: Date.now() - t1, worktree: ctx.worktree })
+        bootLog("instance-store.boot.bootstrap", "running bootstrap.run")
+        const t2 = Date.now()
         yield* bootstrap.run.pipe(Effect.provideService(InstanceRef, ctx))
+        bootLog("instance-store.boot.bootstrap.done", "bootstrap.run completed", { elapsedMs: Date.now() - t2 })
         return ctx
       }).pipe(Effect.withSpan("InstanceStore.boot"))
 

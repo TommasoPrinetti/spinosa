@@ -1,3 +1,11 @@
+import "@opentui/solid/preload"
+// Must be above all other imports — registers a Bun plugin that transforms
+// Solid JSX through babel-preset-solid with moduleName: "@opentui/solid".
+// Without it, Bun's native JSX transform uses solid-js/h/jsx-runtime which
+// creates standard DOM VNodes instead of OpenTUI Renderable nodes, producing
+// a blank TUI. This only triggers when bunfig.toml is NOT loaded (i.e. when
+// CWD ≠ packages/spinosa-kernel, which happens in the global spinosa command
+// since bun loads bunfig.toml relative to CWD, not the entry file).
 import yargs from "yargs"
 import { hideBin } from "yargs/helpers"
 import { RunCommand } from "./cli/cmd/run"

@@ -15,6 +15,11 @@ import { bootLog } from "@spinosa/kernel-core/observability/boot-log"
 Heap.start()
 bootLog("worker.init", "TUI background worker started", { pid: process.pid })
 
+// Heartbeat to prove event loop is alive
+setInterval(() => {
+  bootLog("worker.alive", "worker event loop running", { rss: process.memoryUsage().rss })
+}, 2000)
+
 let fatal = false
 const failWorker = (error: unknown) => {
   if (fatal) return
@@ -74,8 +79,23 @@ export const rpc = {
   },
   async checkUpgrade(input: { directory: string }) {
     bootLog("worker.checkUpgrade", "checking for upgrade", { directory: input.directory })
-    await InstanceRuntime.load({ directory: input.directory })
-    await upgrade().catch(() => {})
+    const t1 = Date.now()
+    bootLog("worker.checkUpgrade.load.start", "InstanceRuntime.load starting")
+    try {
+      await InstanceRuntime.load({ directory: input.directory })
+      bootLog("worker.checkUpgrade.load.done", "InstanceRuntime.load completed", { elapsedMs: Date.now() - t1 })
+    } catch (e) {
+      bootLog("worker.checkUpgrade.load.error", "InstanceRuntime.load failed", { error: String(e) })
+    }
+    const t2 = Date.now()
+    bootLog("worker.checkUpgrade.upgrade.start", "upgrade() starting")
+    try {
+      await upgrade()
+      bootLog("worker.checkUpgrade.upgrade.done", "upgrade() completed", { elapsedMs: Date.now() - t2 })
+    } catch (e) {
+      bootLog("worker.checkUpgrade.upgrade.error", "upgrade() failed, suppressed", { error: String(e) })
+    }
+    bootLog("worker.checkUpgrade.done", "checkUpgrade finished", { totalMs: Date.now() - t1 })
   },
   async reload() {
     await AppRuntime.runPromise(

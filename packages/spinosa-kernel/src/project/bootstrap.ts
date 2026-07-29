@@ -1,3 +1,4 @@
+import { bootLog } from "@spinosa/kernel-core/observability/boot-log"
 import { makeGlobalNode } from "@spinosa/kernel-core/effect/app-node"
 import { Plugin } from "../plugin"
 import { Format } from "../format"
@@ -32,17 +33,30 @@ const layer = Layer.effect(
     const run = Effect.gen(function* () {
       const ctx = yield* InstanceState.context
       yield* Effect.logInfo("bootstrapping", { directory: ctx.directory })
+      const t0 = Date.now()
+
       // everything depends on config so eager load it for nice traces
+      const t1 = Date.now()
       yield* config.get()
+      bootLog("bootstrap.config", "config.get() done", { elapsedMs: Date.now() - t1 })
+
       // Plugin can mutate config so it has to be initialized before anything else.
+      const t2 = Date.now()
       yield* plugin.init()
+      bootLog("bootstrap.plugin", "plugin.init() done", { elapsedMs: Date.now() - t2 })
+
       // Each service self-manages its own slow work via Effect.forkScoped against
       // its per-instance state scope. We just await materialization here.
+      const t3 = Date.now()
+      bootLog("bootstrap.init.start", "init all starting")
       yield* Effect.forEach(
         [lsp, shareNext, format, vcs, snapshot, project],
         (s) => s.init().pipe(Effect.catchCause((cause) => Effect.logWarning("init failed", { cause }))),
         { concurrency: "unbounded", discard: true },
       ).pipe(Effect.withSpan("InstanceBootstrap.init"))
+      bootLog("bootstrap.init.done", "all service inits completed", { elapsedMs: Date.now() - t3 })
+
+      bootLog("bootstrap.run.done", "InstanceBootstrap.run completed", { totalMs: Date.now() - t0 })
     }).pipe(Effect.withSpan("InstanceBootstrap"))
 
     return Service.of({ run })
