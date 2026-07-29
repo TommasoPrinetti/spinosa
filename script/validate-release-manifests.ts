@@ -8,6 +8,7 @@ const dist = path.join(root, "packages/spinosa-kernel/dist")
 const version = (await Bun.file(path.join(root, "package.json")).json()).version
 const manifests = new Map<string, string>()
 const allowPartial = process.argv.includes("--allow-partial")
+const platformOnly = process.argv.includes("--platform-only")
 
 for (const relativePath of new Bun.Glob("*/package.json").scanSync({ cwd: dist })) {
   const manifest = await Bun.file(path.join(dist, relativePath)).json()
@@ -19,7 +20,8 @@ for (const relativePath of new Bun.Glob("*/package.json").scanSync({ cwd: dist }
   manifests.set(manifest.name, relativePath)
 }
 
-const missing = APPROVED_PUBLISH_PACKAGES.filter((name) => !manifests.has(name))
+const expectedPackages = platformOnly ? APPROVED_PUBLISH_PACKAGES.slice(1) : APPROVED_PUBLISH_PACKAGES
+const missing = expectedPackages.filter((name) => !manifests.has(name))
 const unexpected = [...manifests.keys()].filter((name) => !APPROVED_PUBLISH_PACKAGES.includes(name))
 if (!manifests.size) {
   console.error("No release manifests found")

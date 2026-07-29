@@ -50,7 +50,6 @@
     "./component/spinner": "./src/component/spinner.tsx"
   },
   "dependencies": {
-    "@img/sharp-darwin-arm64": "0.35.3",
     "@napi-rs/canvas": "1.0.2",
     "@spinosa/kernel-core": "workspace:*",
     "@spinosa/core": "workspace:*",
@@ -68,6 +67,7 @@
     "fuzzysort": "catalog:",
     "markitdown-ts": "0.0.10",
     "open": "10.1.2",
+    "onnxruntime-node": "1.23.2",
     "opentui-spinner": "catalog:",
     "pdfjs-dist": "4.9.155",
     "ppu-paddle-ocr": "6.0.0",

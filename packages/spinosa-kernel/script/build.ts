@@ -5,7 +5,12 @@ import fs from "fs"
 import path from "path"
 import { fileURLToPath } from "url"
 import { createSolidTransformPlugin } from "@opentui/solid/bun-plugin"
-import { KERNEL_RELEASE_TARGETS, createPlatformPackageManifest, platformPackageName } from "../../../script/npm-release-config"
+import {
+  KERNEL_RELEASE_TARGETS,
+  createPlatformPackageManifest,
+  platformPackageName,
+  platformPackageSetErrors,
+} from "../../../script/npm-release-config"
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -82,9 +87,7 @@ function packageDirectory(name: string) {
 
 const binaries: Record<string, string> = {}
 if (!skipInstall) {
-  await $`bun install --os="*" --cpu="*" @opentui/core@${pkg.dependencies["@opentui/core"]}`
-  await $`bun install --os="*" --cpu="*" @parcel/watcher@${pkg.dependencies["@parcel/watcher"]}`
-  await $`bun install --os="*" --cpu="*" @ff-labs/fff-bun@${pkg.dependencies["@ff-labs/fff-bun"]}`
+  await $`bun install --frozen-lockfile --os="*" --cpu="*"`
 }
 for (const item of targets) {
   const packageName = platformPackageName(pkg.name, item)
@@ -110,7 +113,7 @@ for (const item of targets) {
   const bunfsRoot = item.os === "win32" ? "B:/~BUN/root/" : "/$bunfs/root/"
   const workerRelativePath = path.relative(dir, parserWorker).replaceAll("\\", "/")
 
-  await Bun.build({
+  const buildResult = await Bun.build({
     conditions: ["bun", "node"],
     tsconfig: "./tsconfig.json",
     plugins: [plugin],
@@ -144,10 +147,16 @@ for (const item of targets) {
       ...(item.os === "linux" ? { "process.env.OPENTUI_LIBC": JSON.stringify(item.abi ?? "glibc") } : {}),
     },
   })
+  if (!buildResult.success) {
+    throw new AggregateError(buildResult.logs, `Failed to build ${packageName}`)
+  }
+  const binaryPath = `dist/${directory}/bin/spinosa`
+  if (!fs.existsSync(binaryPath) || !fs.statSync(binaryPath).isFile()) {
+    throw new Error(`Build did not produce ${binaryPath}`)
+  }
 
   // Smoke test: only run if binary is for current platform
   if (item.os === process.platform && item.arch === process.arch && !item.abi) {
-    const binaryPath = `dist/${directory}/bin/spinosa`
     console.log(`Running smoke test: ${binaryPath} --version`)
     try {
       const versionOutput = await $`${binaryPath} --version`.text()
@@ -165,6 +174,11 @@ for (const item of targets) {
     Bun.write(`dist/${directory}/package.json`, JSON.stringify(createPlatformPackageManifest(pkg.name, Script.version, item), null, 2)),
   ])
   binaries[packageName] = Script.version
+}
+
+if (!singleFlag) {
+  const errors = platformPackageSetErrors(Object.keys(binaries))
+  if (errors.length) throw new Error(`Incomplete platform build: ${errors.join("; ")}`)
 }
 
 if (Script.release) {

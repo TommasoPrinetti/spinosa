@@ -29,6 +29,8 @@ describe("Spinosa distribution layout", () => {
     expect(build).toContain('outfile: `dist/${directory}/bin/spinosa`')
     expect(build).toContain("createPlatformPackageManifest")
     expect(build).toContain("platformPackageName")
+    expect(build).toContain("if (!buildResult.success)")
+    expect(build).toContain("fs.statSync(binaryPath).isFile()")
     expect(launcher).toStartWith("#!/usr/bin/env bun\n")
     expect(launcher).toContain("packageNameForPlatform")
     expect(launcher).not.toContain("SPINOSA_BIN_PATH")

@@ -5,6 +5,7 @@ import {
   createKernelPackageManifest,
   createPlatformPackageManifest,
   npmTagForVersion,
+  platformPackageSetErrors,
   platformPackageName,
   publishManifestErrors,
 } from "./npm-release-config"
@@ -31,6 +32,16 @@ describe("npm release configuration", () => {
     )
   })
 
+  test("rejects incomplete or unexpected platform package sets", () => {
+    expect(platformPackageSetErrors(APPROVED_PUBLISH_PACKAGES.slice(1))).toEqual([])
+    expect(platformPackageSetErrors(APPROVED_PUBLISH_PACKAGES.slice(2))).toEqual([
+      "missing platform packages: @spinosa/kernel-darwin-arm64",
+    ])
+    expect(platformPackageSetErrors([...APPROVED_PUBLISH_PACKAGES.slice(1), "@spinosa/kernel-windows-x64"])).toEqual([
+      "unexpected platform packages: @spinosa/kernel-windows-x64",
+    ])
+  })
+
   test("maps only supported product versions to npm dist-tags", () => {
     expect(npmTagForVersion("1.2.3")).toBe("latest")
     expect(npmTagForVersion("1.2.3-beta.4")).toBe("beta")
@@ -49,6 +60,35 @@ describe("npm release configuration", () => {
     expect(manifest.bin).toEqual({ spinosa: "./bin/spinosa" })
     expect(manifest.files).toEqual(["bin", "README.md", "LICENSE"])
     expect("scripts" in manifest).toBe(false)
+  })
+
+  test("declares explicit libc compatibility for Linux packages", () => {
+    const glibc = createPlatformPackageManifest("@spinosa/kernel", "1.2.3-beta.4", {
+      os: "linux",
+      arch: "x64",
+    })
+    const musl = createPlatformPackageManifest("@spinosa/kernel", "1.2.3-beta.4", {
+      os: "linux",
+      arch: "x64",
+      abi: "musl",
+    })
+    const darwin = createPlatformPackageManifest("@spinosa/kernel", "1.2.3-beta.4", {
+      os: "darwin",
+      arch: "arm64",
+    })
+    expect(glibc.libc).toEqual(["glibc"])
+    expect(musl.libc).toEqual(["musl"])
+    expect("libc" in darwin).toBe(false)
+  })
+
+  test("keeps native compile dependencies portable across the target matrix", async () => {
+    const [rootManifest, tuiManifest] = await Promise.all([
+      Bun.file(new URL("../package.json", import.meta.url)).json(),
+      Bun.file(new URL("../packages/tui/package.json", import.meta.url)).json(),
+    ])
+    expect(Object.keys(tuiManifest.dependencies).filter((name) => name.startsWith("@img/sharp-"))).toEqual([])
+    expect(tuiManifest.dependencies["onnxruntime-node"]).toBe("1.23.2")
+    expect(rootManifest.overrides["onnxruntime-node"]).toBe("1.23.2")
   })
 
   test("rejects workspace and git dependency leakage", () => {

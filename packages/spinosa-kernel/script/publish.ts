@@ -6,7 +6,13 @@ import { fileURLToPath } from "url"
 import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { APPROVED_PUBLISH_PACKAGES, createKernelPackageManifest, publishManifestErrors } from "../../../script/npm-release-config"
+import {
+  APPROVED_PUBLISH_PACKAGES,
+  createKernelPackageManifest,
+  platformPackageSetErrors,
+  publishManifestErrors,
+} from "../../../script/npm-release-config"
+import { assertPlatformPackagesPublished } from "../../../script/npm-registry"
 
 const dir = fileURLToPath(new URL("..", import.meta.url))
 process.chdir(dir)
@@ -18,8 +24,20 @@ function packageDirectory(name: string) {
   return name.startsWith("@spinosa/") ? name.slice("@spinosa/".length) : name
 }
 
+async function registryVersion(name: string, version: string) {
+  const specifier = `${name}@${version}`
+  const result = await $`npm view ${specifier} version --json --registry=https://registry.npmjs.org`.quiet().nothrow()
+  if (result.exitCode !== 0) return
+  try {
+    const actual = JSON.parse(result.text())
+    return typeof actual === "string" ? actual : undefined
+  } catch {
+    return
+  }
+}
+
 async function published(name: string, version: string) {
-  return (await $`npm view ${name}@${version} version`.nothrow()).exitCode === 0
+  return (await registryVersion(name, version)) === version
 }
 
 async function publish(dir: string, name: string, version: string) {
@@ -44,13 +62,8 @@ for (const filepath of new Bun.Glob("*/package.json").scanSync({
   binaries[manifest.name] = manifest.version
 }
 console.log("binaries", binaries)
-const expectedPlatformPackages = APPROVED_PUBLISH_PACKAGES.slice(1).sort()
-const actualPlatformPackages = Object.keys(binaries).sort()
-if (JSON.stringify(actualPlatformPackages) !== JSON.stringify(expectedPlatformPackages)) {
-  throw new Error(
-    `Platform package set does not match approved release boundary.\nExpected: ${expectedPlatformPackages.join(", ")}\nActual: ${actualPlatformPackages.join(", ")}`,
-  )
-}
+const platformSetErrors = platformPackageSetErrors(Object.keys(binaries))
+if (platformSetErrors.length) throw new Error(`Platform package set mismatch: ${platformSetErrors.join("; ")}`)
 const version = Object.values(binaries)[0]
 if (!version) throw new Error("No platform packages found in dist")
 
@@ -70,6 +83,10 @@ const tasks = Object.entries(binaries).map(async ([name]) => {
   await publish(`./dist/${packageDirectory(name)}`, name, binaries[name])
 })
 await Promise.all(tasks)
+await assertPlatformPackagesPublished(APPROVED_PUBLISH_PACKAGES.slice(1), version, registryVersion, {
+  attempts: 6,
+  retryDelayMs: 5_000,
+})
 await publish(mainDirectory, pkg.name, version)
 
 const image = "ghcr.io/medialab/spinosa"

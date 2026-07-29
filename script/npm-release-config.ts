@@ -34,6 +34,18 @@ export const APPROVED_PUBLISH_PACKAGES = [
   ...KERNEL_RELEASE_TARGETS.map((target) => platformPackageName("@spinosa/kernel", target)),
 ]
 
+export function platformPackageSetErrors(actualNames: string[]) {
+  const expectedNames = APPROVED_PUBLISH_PACKAGES.slice(1)
+  const actual = new Set(actualNames)
+  const expected = new Set(expectedNames)
+  const errors: string[] = []
+  const missing = expectedNames.filter((name) => !actual.has(name))
+  const unexpected = actualNames.filter((name) => !expected.has(name))
+  if (missing.length) errors.push(`missing platform packages: ${missing.join(", ")}`)
+  if (unexpected.length) errors.push(`unexpected platform packages: ${unexpected.join(", ")}`)
+  return errors
+}
+
 export const NPM_PACKAGE_METADATA = {
   license: "MIT",
   repository: {
@@ -60,7 +72,7 @@ export function createPlatformPackageManifest(baseName: string, version: string,
     files: ["bin", "README.md", "LICENSE"],
     os: [target.os],
     cpu: [target.arch],
-    ...(target.abi ? { libc: [target.abi] } : {}),
+    ...(target.os === "linux" ? { libc: [target.abi ?? "glibc"] } : {}),
   }
 }
 
@@ -127,7 +139,7 @@ export function publishManifestErrors(manifest: Record<string, any>, expectedVer
     if (target) {
       if (JSON.stringify(manifest.os) !== JSON.stringify([target.os])) errors.push(`os must equal ${target.os}`)
       if (JSON.stringify(manifest.cpu) !== JSON.stringify([target.arch])) errors.push(`cpu must equal ${target.arch}`)
-      const expectedLibc = target.abi ? [target.abi] : undefined
+      const expectedLibc = target.os === "linux" ? [target.abi ?? "glibc"] : undefined
       if (JSON.stringify(manifest.libc) !== JSON.stringify(expectedLibc)) {
         errors.push(`libc must equal ${target.abi ?? "undefined"}`)
       }
