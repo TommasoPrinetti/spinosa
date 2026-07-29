@@ -1,14 +1,15 @@
 import type { Argv } from "yargs"
 import * as prompts from "@clack/prompts"
 import { UI } from "../ui"
-import { selfManagedMessage } from "../../installation"
+import { Installation } from "@/installation"
+import { InstallationVersion } from "@spinosa/kernel-core/installation/version"
 
 export const UpgradeCommand = {
   command: "upgrade [target]",
-  describe: "show how this local Spinosa build is updated",
+  describe: "check for and install Spinosa updates",
   builder: (yargs: Argv) =>
     yargs.positional("target", {
-      describe: "requested version (handled by your Spinosa distribution)",
+      describe: "target version",
       type: "string",
     }),
   handler: async (args: { target?: string }) => {
@@ -16,8 +17,39 @@ export const UpgradeCommand = {
     UI.println(UI.logo(" "))
     UI.empty()
     prompts.intro("Spinosa updates")
-    prompts.log.info(selfManagedMessage)
-    if (args.target) prompts.log.info(`Requested version: ${args.target}`)
-    prompts.outro("No upstream package manager was contacted.")
+
+    const method = await Installation.method()
+    let latest: string
+    if (args.target) {
+      latest = args.target
+    } else {
+      prompts.log.step("Checking for updates...")
+      latest = await Installation.latest(method)
+    }
+
+    if (!latest || latest === InstallationVersion) {
+      prompts.log.info(`Already up to date (v${InstallationVersion})`)
+      prompts.outro("No update needed.")
+      return
+    }
+
+    prompts.log.info(`Current: v${InstallationVersion} → Latest: v${latest}`)
+    const shouldUpgrade = await prompts.confirm({
+      message: "Upgrade now?",
+    })
+    if (!shouldUpgrade) {
+      prompts.outro("Upgrade skipped.")
+      return
+    }
+
+    prompts.log.step("Upgrading...")
+    try {
+      await Installation.upgrade(method, latest)
+      prompts.log.success(`Upgraded to v${latest}`)
+      prompts.outro("Restart Spinosa to use the new version.")
+    } catch {
+      prompts.log.error("Upgrade failed. Try reinstalling from https://spinosa.ai")
+      prompts.outro("Upgrade failed.")
+    }
   },
 }
