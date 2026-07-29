@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "migratedAt": "2026-07-29T22:23:51.519Z",
+  "migratedAt": "2026-07-29T22:52:32.701Z",
   "conflicts": [
     {
       "source": "../../.opencode",

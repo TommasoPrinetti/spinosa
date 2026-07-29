@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ── spinosa — Bootstrap launcher ────────────────────────────────────────────
-# Resolves Spinosa root and Bun runtime, then dispatches to TypeScript CLI
-# or TUI. All command logic lives in packages/tui/src/spinosa-cli.ts.
+# Resolves Spinosa root and Bun runtime, then dispatches to kernel CLI
+# or TUI. All command logic lives in packages/spinosa-kernel/src/index.ts.
 set -euo pipefail
 
 _verbose=false
@@ -66,7 +66,7 @@ esac
 runtime_healthy() {
   [[ -n "$RESOLVED_ROOT" && -n "$BUN" ]] || return 1
   SPINOSA_TEMPLATE_ROOT="$RESOLVED_ROOT" \
-    "$BUN" run "${RESOLVED_ROOT}/packages/tui/src/spinosa-cli.ts" version >/dev/null 2>&1
+    "$BUN" run "${RESOLVED_ROOT}/packages/spinosa-kernel/src/index.ts" version >/dev/null 2>&1
 }
 
 repair_and_restart() {
@@ -106,14 +106,14 @@ done
 launcher_command="${launcher_args[$command_index]:-}"
 dispatch=false
 case "$launcher_command" in
-  help|--help|-h|version|--version|add|update|doctor|upgrade|uninstall|status|list|startup-autoclean|autoclean) dispatch=true ;;
+  help|--help|-h|version|--version|add|update|doctor|upgrade|uninstall|status|list|startup-autoclean|autoclean|models|stats|export|import|session|plugin|plug|db|providers|auth|agent|mcp|debug|web|completion) dispatch=true ;;
   new|create) [[ $(( $# - command_index )) -gt 1 ]] && dispatch=true ;;
 esac
 if [[ "$dispatch" == "true" ]]; then
   [[ -z "$RESOLVED_ROOT" || -z "$BUN" ]] && { echo "Error: Spinosa runtime not found. Reinstall Spinosa." >&2; exit 1; }
-  _btlog dispatch "dispatcing to spinosa-cli for command: $launcher_command"
+  _btlog dispatch "dispatching to kernel for command: $launcher_command"
   export SPINOSA_TEMPLATE_ROOT="$RESOLVED_ROOT"
-  exec "$BUN" run "${RESOLVED_ROOT}/packages/tui/src/spinosa-cli.ts" "$@"
+  exec "$BUN" run "${RESOLVED_ROOT}/packages/spinosa-kernel/src/index.ts" "$@"
 fi
 
 # Unknown command — reject instead of silently falling through to TUI
@@ -127,16 +127,8 @@ fi
 if [[ -d "${RESOLVED_ROOT}/packages/tui/src" && -n "$BUN" ]]; then
   _btlog tui "running preflight check"
   export SPINOSA_TEMPLATE_ROOT="$RESOLVED_ROOT"
-  if "$BUN" run "${RESOLVED_ROOT}/packages/tui/src/spinosa-cli.ts" preflight; then
-    :
-  else
-    preflight_status=$?
-    _btlog preflight "preflight exited with status $preflight_status"
-    [[ "$preflight_status" -eq 10 ]] && exit 0
-    [[ "$preflight_status" -eq 11 ]] && exit 0
-    exit "$preflight_status"
-  fi
-  _btlog tui "preflight passed, exec'ing kernel"
+  SPINOSA_TEMPLATE_ROOT="$RESOLVED_ROOT" \
+    "$BUN" run "${RESOLVED_ROOT}/packages/spinosa-kernel/src/index.ts" version >/dev/null 2>&1 || true
   exec "$BUN" run "${RESOLVED_ROOT}/packages/spinosa-kernel/src/index.ts" "$@"
 fi
 

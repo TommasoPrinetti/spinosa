@@ -211,7 +211,7 @@ describe("install and release flow", () => {
     expect(installer.indexOf('install_bun_dependencies "$fw_root"')).toBeLessThan(installer.indexOf('mv "$INSTALL_STAGE_DIR" "$version_dir"'))
     expect(installer).toContain('mv "${INSTALL_BACKUP_DIR}" "${SPINOSA_HOME}/versions/${VERSION}"')
     expect(installer).toContain('install_args+=(--force)')
-    expect(installer).toContain('spinosa-cli.ts" version')
+    expect(installer).toContain('src/index.ts" --version')
   })
 
   test("installer repair preserves metadata and removes only broken runtime state", async () => {
@@ -308,8 +308,8 @@ describe("install and release flow", () => {
     const launcher = await Bun.file(path.join(repoRoot, "workspace-template", ".bin", "spinosa")).text()
     expect(launcher).toContain('"${SCRIPT_DIR}/../versions"')
     expect(launcher).toContain("export SPINOSA_HOME")
-    expect(launcher).toContain('spinosa-cli.ts" preflight')
-    expect(launcher).toContain('[[ "$preflight_status" -eq 10 ]] && exit 0')
+    expect(launcher).toContain('src/index.ts" "$@"')
+    expect(launcher).toContain('"$BUN" run "${RESOLVED_ROOT}/packages/spinosa-kernel/src/index.ts" version')
     expect(launcher).toContain('launcher_command="${launcher_args[$command_index]:-}"')
   })
 

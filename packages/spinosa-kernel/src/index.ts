@@ -36,6 +36,14 @@ import { SessionCommand } from "./cli/cmd/session"
 import { DbCommand } from "./cli/cmd/db"
 import { errorMessage } from "./util/error"
 import { PluginCommand } from "./cli/cmd/plug"
+import { WorkspaceNewCommand } from "./cli/cmd/workspace-new"
+import { WorkspaceAddCommand } from "./cli/cmd/workspace-add"
+import { WorkspaceUpdateCommand } from "./cli/cmd/workspace-update"
+import { WorkspaceStatusCommand } from "./cli/cmd/workspace-status"
+import { WorkspaceListCommand } from "./cli/cmd/workspace-list"
+import { DoctorCommand } from "./cli/cmd/doctor"
+import { StartupAutocleanCommand } from "./cli/cmd/startup-autoclean"
+import { VersionCommand } from "./cli/cmd/version"
 import { Heap } from "./cli/heap"
 import { bootLog } from "@spinosa/kernel-core/observability/boot-log"
 
@@ -129,6 +137,14 @@ const cli = yargs(args)
   .command(SessionCommand)
   .command(PluginCommand)
   .command(DbCommand)
+  .command(WorkspaceNewCommand)
+  .command(WorkspaceAddCommand)
+  .command(WorkspaceUpdateCommand)
+  .command(WorkspaceStatusCommand)
+  .command(WorkspaceListCommand)
+  .command(DoctorCommand)
+  .command(StartupAutocleanCommand)
+  .command(VersionCommand)
   .fail((msg, err) => {
     if (
       msg?.startsWith("Unknown argument") ||
