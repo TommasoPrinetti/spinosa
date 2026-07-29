@@ -9,7 +9,7 @@
 | `@ff-labs/fff-bun` | 0.9.3 | `download.ts` — native binary download path fix for Bun | Not upstreamed |
 | `@modelcontextprotocol/sdk` | 1.29.0 | Client class — Bun runtime compatibility (28KB, largest patch) | Not upstreamed |
 | `@npmcli/agent` | 4.0.2 | `agents.js` — proxy/agent resolution fix for Bun | Not upstreamed |
-| `@opentui/solid` | 0.3.4 | Solid reconciler — reactive text attributes now clear stale bold/style flags | Not upstreamed |
+| `@opentui/solid` | 0.3.4 | Solid reconciler — reactive text attributes now clear stale bold/style flags; add jsx-runtime.js re-export for Bun's built-in JSX transform | Not upstreamed |
 | `@pierre/trees` | 1.0.0-beta.4 | `FileTreeController.js` — tree rendering crash fix | Not upstreamed |
 | `@silvia-odwyer/photon-node` | 0.3.4 | `photon_rs.js` — native addon loading for Bun | Not upstreamed |
 | `@standard-community/standard-openapi` | 0.2.9 | `convert.js` — OpenAPI schema conversion fix | Not upstreamed |

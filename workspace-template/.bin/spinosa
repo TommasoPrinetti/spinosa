@@ -99,7 +99,7 @@ if [[ "$dispatch" == "true" ]]; then
 fi
 
 # Unknown command — reject instead of silently falling through to TUI
-if [[ -n "$launcher_command" && "$launcher_command" != "new" && "$launcher_command" != "create" ]]; then
+if [[ -n "$launcher_command" && "$launcher_command" != "new" && "$launcher_command" != "create" && "$launcher_command" != "tui" ]]; then
   echo "Error: Unknown Spinosa command: ${launcher_command}" >&2
   echo "Run 'spinosa help' for usage." >&2
   exit 1
@@ -113,9 +113,10 @@ if [[ -d "${RESOLVED_ROOT}/packages/tui/src" && -n "$BUN" ]]; then
   else
     preflight_status=$?
     [[ "$preflight_status" -eq 10 ]] && exit 0
+    [[ "$preflight_status" -eq 11 ]] && exit 0
     exit "$preflight_status"
   fi
-  exec "$BUN" run "${RESOLVED_ROOT}/packages/tui/src/spinosa-cli.ts" "$@"
+  exec "$BUN" run "${RESOLVED_ROOT}/packages/spinosa-kernel/src/index.ts" "$@"
 fi
 
 echo "Error: Spinosa not found. Run the installer or re-install dependencies." >&2

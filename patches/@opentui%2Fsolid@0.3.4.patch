@@ -1,4 +1,5 @@
 diff --git a/index.js b/index.js
+index e83f544..0e7d926 100644
 --- a/index.js
 +++ b/index.js
 @@ -577,7 +577,9 @@ var {
@@ -12,3 +13,33 @@ diff --git a/index.js b/index.js
          node.fg = value.fg ? parseColor(value.fg) : node.fg;
          node.bg = value.bg ? parseColor(value.bg) : node.bg;
          return;
+diff --git a/jsx-runtime.js b/jsx-runtime.js
+new file mode 100644
+index 0000000..1016a3b
+--- /dev/null
++++ b/jsx-runtime.js
+@@ -0,0 +1 @@
++export { jsx, jsxs, jsxDEV, Fragment } from "solid-js/h/jsx-runtime";
+diff --git a/package.json b/package.json
+index 186383a..befe408 100644
+--- a/package.json
++++ b/package.json
+@@ -38,8 +38,16 @@
+       "import": "./components.js",
+       "require": "./components.js"
+     },
+-    "./jsx-runtime": "./jsx-runtime.d.ts",
+-    "./jsx-dev-runtime": "./jsx-runtime.d.ts"
++    "./jsx-runtime": {
++      "types": "./jsx-runtime.d.ts",
++      "import": "./jsx-runtime.js",
++      "require": "./jsx-runtime.js"
++    },
++    "./jsx-dev-runtime": {
++      "types": "./jsx-runtime.d.ts",
++      "import": "./jsx-runtime.js",
++      "require": "./jsx-runtime.js"
++    }
+   },
+   "dependencies": {
+     "@babel/core": "7.28.0",
