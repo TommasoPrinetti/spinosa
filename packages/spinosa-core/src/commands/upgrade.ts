@@ -309,11 +309,15 @@ export async function upgradeFramework(
   })
   if (result.status !== 0) {
     rmSync(tmpdir, { recursive: true, force: true })
-    const stderr = typeof result.stderr === "string"
-      ? result.stderr.trim()
-      : Buffer.isBuffer(result.stderr)
-        ? result.stderr.toString("utf8").trim()
-        : ""
+    // With stdio "inherit", stderr is null; with "pipe" it is Buffer. Avoid
+    // typeof narrowing that collapses to `never` under the union spawn options.
+    const rawStderr = result.stderr as Buffer | string | null | undefined
+    const stderr =
+      rawStderr == null
+        ? ""
+        : Buffer.isBuffer(rawStderr)
+          ? rawStderr.toString("utf8").trim()
+          : String(rawStderr).trim()
     const detail = stderr
       || (result.error ? result.error.message : "")
       || `installer exited with status ${result.status ?? "unknown"}`
