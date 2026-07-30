@@ -10,11 +10,14 @@ process.env.SPINOSA_PRODUCT = "1"
 process.env.SPINOSA_TEMPLATE_ROOT ??= repoRoot
 
 const args = process.argv.slice(2)
-const child = Bun.spawn([process.execPath, "run", kernelEntry, ...args], {
+const child = Bun.spawn(
+  [process.execPath, "--preload", "@opentui/solid/preload", "run", kernelEntry, ...args],
+  {
   cwd: kernelDirectory,
   stdin: "inherit",
   stdout: "inherit",
   stderr: "inherit",
   env: process.env,
-})
+},
+)
 process.exitCode = await child.exited

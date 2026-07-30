@@ -1,3 +1,5 @@
+preload = ["@opentui/solid/preload"]
+
 [install]
 exact = true
 minimumReleaseAge = 259200

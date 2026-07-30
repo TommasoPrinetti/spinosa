@@ -310,6 +310,7 @@ describe("install and release flow", () => {
     const launcher = await Bun.file(path.join(repoRoot, "workspace-template", ".bin", "spinosa")).text()
     expect(launcher).toContain('"${SCRIPT_DIR}/../versions"')
     expect(launcher).toContain("export SPINOSA_HOME")
+    expect(launcher).toContain('--preload "@opentui/solid/preload"')
     expect(launcher).toContain('src/index.ts" "$@"')
     expect(launcher).toContain('"$BUN" run "${RESOLVED_ROOT}/packages/spinosa-kernel/src/index.ts" version')
     expect(launcher).toContain('launcher_command="${launcher_args[$command_index]:-}"')

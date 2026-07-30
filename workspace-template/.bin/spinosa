@@ -140,13 +140,16 @@ fi
 
 if [[ "$tui_launch" == "true" && -d "${RESOLVED_ROOT}/packages/tui/src" && -n "$BUN" ]]; then
   export SPINOSA_TEMPLATE_ROOT="$RESOLVED_ROOT"
-  exec "$BUN" run "${RESOLVED_ROOT}/packages/spinosa-kernel/src/index.ts" "$@"
+  # --preload must be a Bun CLI flag: bunfig.toml is loaded from CWD (the
+  # caller's project), not from the kernel package. Without this, Solid JSX
+  # compiles to DOM VNodes and the TUI paints a blank black screen.
+  exec "$BUN" --preload "@opentui/solid/preload" run "${RESOLVED_ROOT}/packages/spinosa-kernel/src/index.ts" "$@"
 fi
 
 if [[ -n "$RESOLVED_ROOT" && -n "$BUN" ]]; then
   _btlog dispatch "dispatching to kernel for command: ${launcher_command:-<default>}"
   export SPINOSA_TEMPLATE_ROOT="$RESOLVED_ROOT"
-  exec "$BUN" run "${RESOLVED_ROOT}/packages/spinosa-kernel/src/index.ts" "$@"
+  exec "$BUN" --preload "@opentui/solid/preload" run "${RESOLVED_ROOT}/packages/spinosa-kernel/src/index.ts" "$@"
 fi
 
 _btlog tui "failed: RESOLVED_ROOT or BUN not found (${RESOLVED_ROOT:-unset}, ${BUN:-unset})"

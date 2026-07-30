@@ -36,6 +36,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Shellcheck passes on `install.sh` (legacy shim detection uses explicit disable comments).
 - `bun install` catalog entry for `@effect/platform-node-shared` restored.
 
+## [1.0.3-beta.3] — 2026-07-30
+
+### Fixed
+
+- Installed `spinosa` launcher passes `bun --preload @opentui/solid/preload` so the TUI renders when launched from a project directory (was a blank black screen because root `bunfig.toml` has no OpenTUI preload).
+
 ## [1.0.3-beta.2] — 2026-07-30
 
 ### Changed
