@@ -1,3 +1,12 @@
+/**
+ * Launch preflight for the Spinosa TUI.
+ *
+ * This module runs before the TUI starts. It checks for framework updates,
+ * prints user-facing status lines, and can install an upgrade.
+ *
+ * Exit code 10 means "restart the launcher". The bash shim and spinosa-cli
+ * re-exec when they see this code.
+ */
 import path from "node:path"
 import { homedir } from "node:os"
 import { confirmPrompt } from "../utils/confirm"
@@ -11,11 +20,32 @@ import {
   type UpgradeResult,
 } from "./upgrade"
 
+/** Kernel exits with this code when launch preflight installed an upgrade. */
 export const PREFLIGHT_RESTART_EXIT_CODE = 10
+
+/** Legacy env var. Preflight now runs only in the kernel TUI. */
 export const SPINOSA_PREFLIGHT_DONE_ENV = "SPINOSA_PREFLIGHT_DONE"
 
+/** User-facing line printed before the remote version check. */
+export const LAUNCH_STATUS_CHECKING = "checking for updates..."
+
+/** User-facing line printed when the installed version is current. */
+export const LAUNCH_STATUS_NO_UPDATES = "no updates available"
+
+/** User-facing line printed immediately before the TUI starts. */
+export const LAUNCH_STATUS_LAUNCHING = "launching TUI..."
+
+/** Minimum time to show the checking phase. Override with SPINOSA_LAUNCH_STATUS_MIN_MS=0 in tests. */
+export function launchStatusMinMs(): number {
+  const raw = process.env.SPINOSA_LAUNCH_STATUS_MIN_MS
+  if (raw === "0") return 0
+  const parsed = raw ? Number(raw) : Number.NaN
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 1000
+}
+
+/** Skip the upgrade check after a launch-time upgrade re-exec. */
 export function shouldSkipLaunchPreflight(): boolean {
-  return process.env.SPINOSA_UPGRADE_REEXEC === "1" || process.env[SPINOSA_PREFLIGHT_DONE_ENV] === "1"
+  return process.env.SPINOSA_UPGRADE_REEXEC === "1"
 }
 
 export interface PreflightDependencies {
@@ -26,6 +56,9 @@ export interface PreflightDependencies {
   confirm(question: string, defaultYes?: boolean): Promise<boolean>
   frameworkRoot(version: string): string
   out(message: string): void
+  now(): number
+  sleep(ms: number): Promise<void>
+  statusMinMs(): number
 }
 
 const defaults: PreflightDependencies = {
@@ -36,16 +69,43 @@ const defaults: PreflightDependencies = {
   confirm: (question, defaultYes) => confirmPrompt(question, defaultYes),
   frameworkRoot: (version) => path.join(process.env.SPINOSA_HOME ?? path.join(homedir(), ".spinosa"), "versions", version),
   out: (message) => process.stdout.write(`${message}\n`),
+  now: () => Date.now(),
+  sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  statusMinMs: launchStatusMinMs,
 }
 
+/** Wait until the checking phase has been visible for statusMinMs. */
+async function waitForStatusMin(deps: PreflightDependencies, startedAt: number): Promise<void> {
+  const elapsed = deps.now() - startedAt
+  const remaining = deps.statusMinMs() - elapsed
+  if (remaining > 0) await deps.sleep(remaining)
+}
+
+/** Print the final launch line before the TUI worker starts. */
+export function printLaunchingTui(out: (message: string) => void = defaults.out): void {
+  out(LAUNCH_STATUS_LAUNCHING)
+}
+
+/**
+ * Check for updates before the TUI opens.
+ * Returns "restart" when an upgrade was installed and the launcher must re-exec.
+ */
 export async function runLaunchPreflight(deps: PreflightDependencies = defaults): Promise<"continue" | "restart"> {
+  const startedAt = deps.now()
   spinosaLogInfo("preflight", `preflight check started (pid=${process.pid})`)
+  deps.out(LAUNCH_STATUS_CHECKING)
+
   const available = await deps.checkUpgradeAvailable()
   spinosaLogInfo("preflight", `upgrade check: available=${available.available} latest=${available.latestVersion ?? "none"}`)
+
   if (!available.available || !available.latestVersion) {
+    await waitForStatusMin(deps, startedAt)
+    deps.out(LAUNCH_STATUS_NO_UPDATES)
     spinosaLogInfo("preflight", "no upgrade needed, continuing")
     return "continue"
   }
+
+  await waitForStatusMin(deps, startedAt)
 
   const current = available.currentVersion ? ` (current \x1b[32mv${available.currentVersion}\x1b[0m)` : ""
   if (!(await deps.confirm(`✨ \x1b[1mSpinosa v${available.latestVersion}\x1b[0m is available${current}. Upgrade now?`, true))) {

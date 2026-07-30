@@ -6,3 +6,18 @@ This package owns workspace, corpus, import, artifact, and application-domain co
 - Keep filesystem writes atomic and workspace-compatible.
 - Add focused Bun tests for every behavior change.
 - Put research state transitions in @spinosa/runtime, not here.
+
+## Upgrade and launch
+
+| Module | Role |
+| ------ | ---- |
+| `commands/upgrade.ts` | `upgradeFramework()`, `checkUpgradeAvailable()`, version cache |
+| `commands/preflight.ts` | `runLaunchPreflight()`, launch status lines, exit code `10` |
+| `utils/version.ts` | `compareFrameworkVersions()`, `releaseChannel()`, `parseInstallPinnedVersion()` |
+| `system/channels.ts` | Reads `beta: true\|false` from `~/.spinosa/metadata/config.yaml` |
+
+Kernel commands `upgrade` and `preflight` are thin wrappers. Launch preflight runs in `packages/spinosa-kernel/src/cli/cmd/tui.ts` before the TUI starts. Do not add a second preflight path in the bash launcher.
+
+## Release
+
+Product version source: root `package.json`. Sync with `bun script/set-version.ts <version>`. See `RELEASE_GUIDE.md`.

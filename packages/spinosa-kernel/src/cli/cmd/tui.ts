@@ -18,6 +18,7 @@ import { bootLog } from "@spinosa/kernel-core/observability/boot-log"
 import { Flag } from "@spinosa/kernel-core/flag/flag"
 import {
   PREFLIGHT_RESTART_EXIT_CODE,
+  printLaunchingTui,
   runLaunchPreflight,
   shouldSkipLaunchPreflight,
 } from "@spinosa/core/commands/preflight"
@@ -81,12 +82,12 @@ export function resolveThreadDirectory(project?: string, envPWD = process.env.PW
 
 export const TuiThreadCommand = cmd({
   command: "$0 [project]",
-  describe: "start opencode tui",
+  describe: "start the Spinosa TUI",
   builder: (yargs) =>
     withNetworkOptions(yargs)
       .positional("project", {
         type: "string",
-        describe: "path to start opencode in",
+        describe: "path to start Spinosa in",
       })
       .option("model", {
         type: "string",
@@ -242,6 +243,8 @@ export const TuiThreadCommand = cmd({
 
       const prompt = await input(args.prompt)
 
+      // Launch preflight: check for updates, print status lines, optional upgrade.
+      // Exit 10 tells the bash shim or spinosa-cli to re-exec after an upgrade.
       if (!Flag.SPINOSA_DISABLE_AUTOUPDATE && !shouldSkipLaunchPreflight()) {
         try {
           const preflight = await runLaunchPreflight()
@@ -253,6 +256,8 @@ export const TuiThreadCommand = cmd({
           process.exit(1)
         }
       }
+
+      printLaunchingTui()
 
       const config = await TuiConfig.get()
 

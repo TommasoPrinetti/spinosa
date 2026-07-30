@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import {
+  LAUNCH_STATUS_CHECKING,
+  LAUNCH_STATUS_LAUNCHING,
+  LAUNCH_STATUS_NO_UPDATES,
   runLaunchPreflight,
   shouldSkipLaunchPreflight,
   SPINOSA_PREFLIGHT_DONE_ENV,
@@ -9,6 +12,7 @@ import {
 function dependencies(overrides: Partial<PreflightDependencies> = {}) {
   const output: string[] = []
   const updated: string[] = []
+  let clock = 0
   const deps: PreflightDependencies = {
     checkUpgradeAvailable: async () => ({ available: false }),
     upgradeFramework: async () => ({ success: true, newVersion: "1.1.0", workspaceUpgradesNeeded: [] }),
@@ -20,6 +24,9 @@ function dependencies(overrides: Partial<PreflightDependencies> = {}) {
     confirm: async () => false,
     frameworkRoot: (version) => `/home/versions/${version}`,
     out: (message) => output.push(message),
+    now: () => clock,
+    sleep: async (ms) => { clock += ms },
+    statusMinMs: () => 1000,
     ...overrides,
   }
   return { deps, output, updated }
@@ -30,7 +37,22 @@ describe("launch preflight", () => {
     const { deps, output } = dependencies()
 
     expect(await runLaunchPreflight(deps)).toBe("continue")
-    expect(output).toEqual([])
+    expect(output).toEqual([LAUNCH_STATUS_CHECKING, LAUNCH_STATUS_NO_UPDATES])
+  })
+
+  test("waits for the status cooldown before reporting no updates", async () => {
+    let checkedAt = -1
+    const { deps, output } = dependencies({
+      checkUpgradeAvailable: async () => {
+        checkedAt = deps.now()
+        return { available: false }
+      },
+    })
+
+    expect(await runLaunchPreflight(deps)).toBe("continue")
+    expect(checkedAt).toBe(0)
+    expect(deps.now()).toBe(1000)
+    expect(output).toEqual([LAUNCH_STATUS_CHECKING, LAUNCH_STATUS_NO_UPDATES])
   })
 
   test("continues when the user declines an available upgrade", async () => {
@@ -72,7 +94,7 @@ describe("launch preflight", () => {
     })
 
     await expect(runLaunchPreflight(deps)).rejects.toThrow("Spinosa upgrade failed")
-    expect(output).toEqual([])
+    expect(output).toEqual([LAUNCH_STATUS_CHECKING])
   })
 
   test("still requests a fresh launch when one workspace update throws", async () => {
@@ -103,12 +125,6 @@ describe("shouldSkipLaunchPreflight", () => {
     else process.env[SPINOSA_PREFLIGHT_DONE_ENV] = previous.done
   })
 
-  test("skips when launcher already ran preflight", () => {
-    delete process.env.SPINOSA_UPGRADE_REEXEC
-    process.env[SPINOSA_PREFLIGHT_DONE_ENV] = "1"
-    expect(shouldSkipLaunchPreflight()).toBe(true)
-  })
-
   test("skips after upgrade re-exec", () => {
     process.env.SPINOSA_UPGRADE_REEXEC = "1"
     delete process.env[SPINOSA_PREFLIGHT_DONE_ENV]
@@ -119,5 +135,11 @@ describe("shouldSkipLaunchPreflight", () => {
     delete process.env.SPINOSA_UPGRADE_REEXEC
     delete process.env[SPINOSA_PREFLIGHT_DONE_ENV]
     expect(shouldSkipLaunchPreflight()).toBe(false)
+  })
+})
+
+describe("launch status constants", () => {
+  test("exports stable launch status lines", () => {
+    expect(LAUNCH_STATUS_LAUNCHING).toBe("launching TUI...")
   })
 })

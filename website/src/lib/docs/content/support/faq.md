@@ -56,7 +56,7 @@ Rephrase using alternative words, names, or dates. If it persists, try re-indexi
 ## Maintenance
 
 **How do I update Spinosa?**
-`spinosa upgrade` updates the CLI. The TUI checks for updates on every start and prompts you.
+Run `spinosa upgrade` to install the latest release. When you launch `spinosa` or run `bun run dev`, you will see `checking for updates...` before the TUI opens. Use `spinosa upgrade --check` to check without installing.
 
 **How do I clean up stale workspace entries?**
 Open the workspace picker (`W`) and click **Delete stale** in the top header. This removes entries pointing to deleted folders.

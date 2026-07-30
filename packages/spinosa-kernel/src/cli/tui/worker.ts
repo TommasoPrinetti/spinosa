@@ -77,7 +77,8 @@ export const rpc = {
     return { url }
   },
   async checkUpgrade(input: { directory: string }) {
-    bootLog("worker.checkUpgrade", "loading instance (upgrade handled by launch preflight)", { directory: input.directory })
+    // Legacy RPC name. Launch preflight in cmd/tui.ts handles framework upgrades.
+    bootLog("worker.checkUpgrade", "loading instance", { directory: input.directory })
     try {
       await InstanceRuntime.load({ directory: input.directory })
     } catch (e) {

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Legacy release entrypoint — prefer `bun run release:beta` or `bun run release:stable`.
-# This wrapper pins an explicit version without incrementing semver.
+# Legacy release entrypoint for an explicit version (no semver bump).
+# Prefer: bun run release:beta:patch or bun run release:stable:patch
 set -euo pipefail
 
 if [ $# -ne 1 ]; then

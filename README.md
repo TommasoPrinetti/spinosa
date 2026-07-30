@@ -100,7 +100,7 @@ Press `K` to connect your preferred AI provider (local via Ollama/oMLX, or cloud
 | Launch the TUI | `spinosa` |
 | Create a workspace from the terminal | `spinosa create ~/research/papers` |
 | Add more files | `spinosa add ~/research/more-papers` |
-| Update the framework | `spinosa upgrade` |
+| Update the framework | `spinosa upgrade` (checks on launch; prompts when newer) |
 | List workspaces | `spinosa list` |
 | Check system health | `spinosa doctor` |
 

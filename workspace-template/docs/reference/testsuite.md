@@ -2,7 +2,7 @@
 
 Production-grade gate before marking a version **releaseable**. Run this on every release candidate (patch, minor, or major). Do not publish until every **blocking** item passes.
 
-**Related docs:** [CLI reference](cli.md), [RELEASE_GUIDE.md](../../RELEASE_GUIDE.md) (packaging/publish steps).
+**Related docs:** [CLI reference](cli.md), [RELEASE_GUIDE.md](../../../RELEASE_GUIDE.md) (packaging/publish steps).
 
 ---
 
@@ -105,9 +105,15 @@ Run from repo root before pushing a release tag:
 ```bash
 cd /path/to/spinosa-main
 
-# Syntax
+# Release validation (typecheck + core release tests)
+bun run release:validate
+
+# Shell syntax
 bash -n install.sh
 bash -n workspace-template/.bin/spinosa
+
+# Installer smoke tests
+bun run test:installer
 
 # Spinosa TUI flow tests
 (cd packages/tui && bun test test/spinosa)
@@ -362,14 +368,14 @@ If the Hermes workspace template changed, verify the doctor advisory still point
 
 ## Phase F — Linux VM (blocking for 1.0)
 
-See RELEASE_GUIDE §9. Summary:
+See [RELEASE_GUIDE.md](../../../RELEASE_GUIDE.md) § Linux VM testdrive. Summary:
 
 1. `curl | bash` install on Ubuntu 22.04+ (amd64 or arm64)
 2. `spinosa version` / `spinosa doctor`
 3. Copy TEST-VAULT: `rsync -avz mac-host:~/Downloads/TEST-VAULT/ /tmp/TEST-VAULT/`
 4. Run `SPINOSA_TEST_VAULT=/tmp/TEST-VAULT bash .bin/test-new-test-vault.sh` (subset gate)
 5. Optional: `SPINOSA_TEST_VAULT_SCOPE=mixed|full` on VM before major releases
-6. Edge matrix: PDF-only, JPG-only, empty dir, unicode filenames — build subsets under `/tmp/TEST-VAULT/` (see RELEASE_GUIDE §9c); always pass `--cli other --launch copy`
+6. Edge matrix: PDF-only, JPG-only, empty dir, unicode filenames — build subsets under `/tmp/TEST-VAULT/`; always pass `--cli other --launch copy`
 
 **Linux-specific:** if RapidOCR fails import, install `libgl1` and re-run doctor.
 
@@ -377,20 +383,27 @@ See RELEASE_GUIDE §9. Summary:
 
 ## Phase G — GitHub release (blocking, post-publish)
 
+`release:verify-remote` runs automatically at the end of every release. Confirm manually if needed:
+
 ```bash
-curl -sL "https://api.github.com/repos/medialab/spinosa/releases/tags/vX.Y.Z" | \
-  python3 -c "import json,sys; r=json.load(sys.stdin); [print(a['name'], a['state'], a['size']) for a in r['assets']]"
+VERSION="X.Y.Z"
+# Immutable version release — three assets
+gh release view "v${VERSION}" --json assets \
+  | python3 -c "import sys,json; [print(a['name']) for a in json.load(sys.stdin)['assets']]"
+# Expected: checksums.txt, install.sh, spinosa-v${VERSION}.tar.gz
+
+# Version-release checksums must list both files
+curl -fsSL "https://github.com/medialab/spinosa/releases/download/v${VERSION}/checksums.txt"
+
+# Rolling channel installer
+curl -fsSL "https://github.com/medialab/spinosa/releases/download/beta/install.sh" | grep PINNED_VERSION
+# Must show PINNED_VERSION="${VERSION}"
 ```
 
-**Two assets**, all `uploaded`:
-
-- `install.sh`
-- `checksums.txt`
-
-### G1. Latest pointer smoke test
+### G1. Rolling channel smoke test
 
 ```bash
-curl -fsSL https://github.com/medialab/spinosa/releases/latest/download/install.sh | head -6 | grep PINNED_VERSION
+curl -fsSL https://github.com/medialab/spinosa/releases/download/beta/install.sh | grep PINNED_VERSION
 ```
 
 Must show `PINNED_VERSION="X.Y.Z"` for the release you just shipped.

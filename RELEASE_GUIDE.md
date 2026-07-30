@@ -1,186 +1,158 @@
 # Spinosa Framework Release Guide
 
-> Read this before cutting a release.
+> Maintainer reference for cutting and publishing Spinosa releases. Read this before tagging.
 
 ---
 
-> **⚠️ First choice: `bash script/release.sh vX.Y.Z[-beta.N]`** — the script handles everything below in one shot and is less error-prone. Use the manual steps only when you need to deviate from the standard flow.
+## Quick start
 
----
-
-## Release channels
-
-| Channel | Audience | GitHub endpoint | `spinosa upgrade` |
-| ------- | -------- | --------------- | ----------------- |
-| **Stable** | Production users | `releases/download/stable/install.sh` | `spinosa upgrade` (default) |
-| **Beta** | Maintainers, testers | `releases/download/beta/install.sh` | `spinosa upgrade --channel beta` |
-
-Publishing a beta never changes the stable endpoint.
-
----
-
-## Version naming
-
-| Channel | Format | Example tag | `PINNED_VERSION` in `install.sh` |
-| ------- | ------ | ----------- | -------------------------------- |
-| Stable | `X.Y.Z` | `v0.7.7` | `0.7.7` |
-| Beta | `X.Y.Z-<prerelease>` | `v0.8.0-beta.1` | `0.8.0-beta.1` |
-
-The canonical version lives in `package.json`. `PINNED_VERSION` in `install.sh` must match after publishing.
-
----
-
-## Prerequisites
-
-- `gh` CLI installed and authenticated (`gh auth status`)
-- Clean working tree (`git status --porcelain`)
-- `bash`, `shasum` available
-
----
-
-## Release script
-
-Preferred flow (increments semver automatically):
+**Preferred:** use `release-it` — it bumps semver, syncs version files, builds assets, publishes to GitHub, syncs the rolling channel, and verifies the live installer.
 
 ```bash
-# Beta prerelease bump (from beta branch)
-bun run release:beta:patch
+# Beta prerelease (from beta branch)
+bun run release:beta:patch    # or :minor
 
 # Stable release (from main branch)
-bun run release:stable:patch
+bun run release:stable:patch    # or :minor / :major
 ```
 
-`release-it` handles version bumping, git commit/tag, GitHub release assets, rolling channel sync, and remote verification via hooks in `.release-it.json`.
-
-Legacy explicit-version flow (republish a specific version without incrementing):
+**Republish a specific version** without incrementing semver (e.g. fix a broken channel asset):
 
 ```bash
 bash script/release.sh v1.0.2-beta.14
 ```
 
-Creates the GitHub Release, uploads `install.sh`, the immutable source archive, and `checksums.txt`, then syncs the rolling channel tag.
+Both flows require a **clean working tree**, branch `main` or `beta`, and `gh` authenticated (`gh auth status`).
 
 ---
 
-## Manual steps (if you want to understand what happens)
+## How releases work
 
-### 1. Bump version
+Spinosa publishes **two kinds** of GitHub releases for every version:
+
+| Release | Tag | Assets | Purpose |
+| ------- | --- | ------ | ------- |
+| **Immutable version** | `vX.Y.Z` or `vX.Y.Z-beta.N` | `install.sh`, `spinosa-v{VERSION}.tar.gz`, `checksums.txt` | Exact install/upgrade target; tarball is the source bundle |
+| **Rolling channel** | `stable` or `beta` | `install.sh`, `checksums.txt` | Always points at the newest release on that channel |
+
+| Channel | Audience | Install URL | Upgrade default |
+| ------- | -------- | ----------- | --------------- |
+| **Stable** | Production users | `releases/download/stable/install.sh` | `spinosa upgrade` |
+| **Beta** | Maintainers, testers | `releases/download/beta/install.sh` | `spinosa upgrade --channel beta` |
+
+Publishing a beta **never** moves the `stable` rolling tag.
+
+### Version source of truth
+
+The canonical product version lives in **root `package.json`**. Before every release, `script/set-version.ts` synchronizes:
+
+- `package.json` → `"version"`
+- `install.sh` → `PINNED_VERSION`
 
 ```bash
-# Edit package.json
-jq '.version' package.json   # verify
-# Or: npm version 0.8.0-beta.1 --no-git-tag-version
+# Manual sync (normally handled by release-it after:bump hook)
+bun script/set-version.ts 1.0.2-beta.14
 ```
 
-### 2. Update install.sh `PINNED_VERSION`
+Internal upstream package versions (`@spinosa/kernel-core`, `@spinosa/core`, etc.) are **independent** — this script does not touch them.
 
-```bash
-sed -i '' 's/^PINNED_VERSION=".*"/PINNED_VERSION="0.8.0-beta.1"/' install.sh
+### Version naming
+
+| Channel | Format | Example tag | `PINNED_VERSION` |
+| ------- | ------ | ----------- | ---------------- |
+| Stable | `X.Y.Z` | `v1.0.0` | `1.0.0` |
+| Beta | `X.Y.Z-<prerelease>` | `v1.0.2-beta.14` | `1.0.2-beta.14` |
+
+Channel is inferred from the version string (`releaseChannel()` in `@spinosa/core`).
+
+---
+
+## Release pipeline
+
+Hooks are defined in `.release-it.json`. Both `release-it` and `script/release.sh` run the same stages.
+
+```mermaid
+flowchart LR
+  validate[release:validate]
+  bump[semver bump + set-version]
+  build[release:build]
+  verifyLocal[release:verify-local]
+  ghRelease[GitHub release vX.Y.Z]
+  channel[release:publish-channel]
+  verifyRemote[release:verify-remote]
+
+  validate --> bump --> build --> verifyLocal --> ghRelease --> channel --> verifyRemote
 ```
 
-### 3. Run pre-release checks
+| Stage | Script | What it checks |
+| ----- | ------ | -------------- |
+| Validate | `bun script/release/validate.ts` | Branch `main`/`beta`, clean tree, `bun run typecheck`, core release tests |
+| Sync version | `bun script/set-version.ts ${version}` | `package.json` + `install.sh` PINNED_VERSION match |
+| Build | `bun script/release/build.ts ${version}` | Stage `dist/v{VERSION}/` and `dist/{channel}/` installers + checksums + tarball |
+| Verify local | `bun script/release/verify-local.ts ${version}` | All three version-release assets exist; checksums include both files |
+| GitHub release | `release-it` or `gh release create` | Upload immutable version assets |
+| Publish channel | `bun script/release/publish-channel.ts ${version}` | Force-push rolling `stable`/`beta` tag; upload channel installer |
+| Verify remote | `bun script/release/verify-remote.ts ${version}` | Live rolling installer `PINNED_VERSION` matches published version |
+
+Run individual stages manually when debugging:
 
 ```bash
+bun run release:validate
+bun script/set-version.ts 1.0.2-beta.14
+bun script/release/build.ts 1.0.2-beta.14
+bun script/release/verify-local.ts 1.0.2-beta.14
+# ... publish ...
+bun script/release/publish-channel.ts 1.0.2-beta.14
+bun script/release/verify-remote.ts 1.0.2-beta.14
+```
+
+### What `release:build` produces
+
+```
+dist/v{VERSION}/
+  install.sh              # PINNED_TAG=v{VERSION}
+  spinosa-v{VERSION}.tar.gz
+  checksums.txt           # both install.sh AND tarball (required)
+
+dist/{stable|beta}/
+  install.sh              # PINNED_TAG=stable|beta (rolling)
+  checksums.txt           # install.sh only
+```
+
+The version-release `checksums.txt` **must** list both `install.sh` and `spinosa-v{VERSION}.tar.gz`. If the tarball entry is missing, installs and upgrades abort with `spinosa-v{VERSION}.tar.gz not found in checksums file`.
+
+---
+
+## Prerequisites
+
+- `gh` CLI installed and authenticated
+- `bun` (repo uses `bun@1.3.14`)
+- Clean working tree (`git status --porcelain` empty)
+- `bash`, `shasum` available
+- `GITHUB_TOKEN` or `GH_TOKEN` set for channel publish/verify (optional for verify-remote — falls back to anonymous curl)
+
+---
+
+## Pre-release validation
+
+Before cutting a release, run the full maintainer gate:
+
+```bash
+# Automated release gate (same as release:validate)
+bun run release:validate
+
+# Shell syntax
 bash -n install.sh
 bash -n workspace-template/.bin/spinosa
+
+# Installer smoke tests
+bun run test:installer
+
+# Broader TUI / Spinosa flow tests
 (cd packages/tui && bun test test/spinosa)
 ```
 
-### 4. Commit
-
-```bash
-git add -A
-git commit -m "release: v0.8.0-beta.1"
-```
-
-### 5. Prepare assets
-
-```bash
-VERSION="0.8.0-beta.18"
-DIST="dist/v${VERSION}"
-mkdir -p "$DIST"
-git tag "v${VERSION}"
-
-cp install.sh "${DIST}/install.sh"
-sed -i '' 's/^PINNED_VERSION=".*"/PINNED_VERSION="'"${VERSION}"'"/' "${DIST}/install.sh"
-sed -i '' 's/^PINNED_TAG=".*"/PINNED_TAG="v'"${VERSION}"'"/' "${DIST}/install.sh"
-git archive --format=tar.gz --prefix="spinosa-${VERSION}/" \
-  -o "${DIST}/spinosa-v${VERSION}.tar.gz" "v${VERSION}"
-(cd "$DIST" && shasum -a 256 install.sh "spinosa-v${VERSION}.tar.gz" \
-  | awk '{print $1"  "$2}' > checksums.txt)
-```
-
-### 6. Create GitHub Release
-
-```bash
-gh release create "v${VERSION}" \
-  --title "Spinosa v${VERSION}" \
-  --generate-notes \
-  $([[ "$VERSION" == *-* ]] && echo "--prerelease") \
-  "dist/v${VERSION}/install.sh" \
-  "dist/v${VERSION}/spinosa-v${VERSION}.tar.gz" \
-  "dist/v${VERSION}/checksums.txt"
-```
-
-### 7. Verify release assets
-
-Check that the specific-version release has all three required assets:
-
-```bash
-gh release view "v${VERSION}" --json assets \
-  | python3 -c "import sys,json; [print(a['name']) for a in json.load(sys.stdin)['assets']]"
-# Expected:
-#   checksums.txt
-#   install.sh
-#   spinosa-v${VERSION}.tar.gz
-```
-
-Check that `checksums.txt` on the release contains **both** `install.sh` and the tarball:
-
-```bash
-/usr/bin/curl -sL "https://github.com/medialab/spinosa/releases/download/v${VERSION}/checksums.txt"
-# Expected: 2 lines — one for install.sh, one for spinosa-v${VERSION}.tar.gz
-```
-
-If the tarball or its checksum is missing, the installer will abort with
-`spinosa-v{VERSION}.tar.gz not found in checksums file` and the upgrade fails.
-
-### 8. Sync rolling channel
-
-```bash
-# Stable
-CHANNEL="stable"
-# Beta
-CHANNEL="beta"
-
-SHA=$(git rev-parse HEAD)
-git tag -f "$CHANNEL" "$SHA"
-git push origin "refs/tags/${CHANNEL}:refs/tags/${CHANNEL}" --force
-
-# Prepare channel installer (PINNED_TAG = channel name for upgrade resolution)
-CHANNEL_DIST="dist/${CHANNEL}"
-mkdir -p "$CHANNEL_DIST"
-cp install.sh "${CHANNEL_DIST}/install.sh"
-sed -i '' 's/^PINNED_VERSION=".*"/PINNED_VERSION="'"${VERSION}"'"/' "${CHANNEL_DIST}/install.sh"
-sed -i '' 's/^PINNED_TAG=".*"/PINNED_TAG="'"${CHANNEL}"'"/' "${CHANNEL_DIST}/install.sh"
-(cd "$CHANNEL_DIST" && shasum -a 256 install.sh | awk '{print $1"  "$2}' > checksums.txt)
-
-gh release upload "$CHANNEL" \
-  "dist/${CHANNEL}/install.sh" \
-  "dist/${CHANNEL}/checksums.txt" --clobber
-
-gh release edit "$CHANNEL" \
-  --title "Spinosa v${VERSION} (${CHANNEL})" \
-  --notes "Rolling ${CHANNEL} channel — points to v${VERSION}" \
-  $([[ "$VERSION" == *-* ]] && echo "--prerelease" || true)
-```
-
-### 9. Verify channel
-
-```bash
-curl -fsSL "https://github.com/medialab/spinosa/releases/download/${CHANNEL}/install.sh" | grep PINNED_VERSION
-# Must show the version you just published
-```
+For the full interactive + VM matrix, see `workspace-template/docs/reference/testsuite.md`.
 
 ---
 
@@ -193,16 +165,97 @@ Run on a **fresh Linux VM** (Ubuntu 22.04+, amd64 or arm64) before a **stable** 
 curl -fsSL https://github.com/medialab/spinosa/releases/download/beta/install.sh | bash
 source ~/.bashrc
 spinosa version
+spinosa doctor
 ```
+
+---
+
+## Post-publish verification
+
+### Version release assets
+
+```bash
+VERSION="1.0.2-beta.14"
+gh release view "v${VERSION}" --json assets \
+  | python3 -c "import sys,json; [print(a['name']) for a in json.load(sys.stdin)['assets']]"
+# Expected: checksums.txt, install.sh, spinosa-v${VERSION}.tar.gz
+```
+
+```bash
+curl -fsSL "https://github.com/medialab/spinosa/releases/download/v${VERSION}/checksums.txt"
+# Expected: 2 lines — install.sh and spinosa-v${VERSION}.tar.gz
+```
+
+### Rolling channel
+
+```bash
+CHANNEL="beta"   # or stable
+curl -fsSL "https://github.com/medialab/spinosa/releases/download/${CHANNEL}/install.sh" | grep PINNED_VERSION
+# Must show the version you just published
+```
+
+`release:verify-remote` runs this check automatically at the end of every release.
+
+---
+
+## Upgrade architecture (maintainer context)
+
+User-facing upgrades are centralized in `@spinosa/core`:
+
+| Concern | Location |
+| ------- | -------- |
+| Upgrade engine | `upgradeFramework()` in `packages/spinosa-core/src/commands/upgrade.ts` |
+| Launch-time check | `runLaunchPreflight()` in `packages/spinosa-core/src/commands/preflight.ts` |
+| CLI entry points | `spinosa upgrade`, `spinosa preflight` (kernel commands) |
+| Version comparison | `compareFrameworkVersions()` |
+| Channel config | `beta: true\|false` in `~/.spinosa/metadata/config.yaml` |
+
+**Launch flow:** when you run `spinosa` (no args) or `bun run dev`, the kernel TUI runs `runLaunchPreflight()` once, prints `checking for updates...` / `no updates available` (1s minimum), then `launching TUI...`. If preflight upgrades and requests a restart, it exits with code `10` and the launcher / `spinosa-cli` re-execs. The TUI does not own upgrade networking or installation.
+
+**Dev tree:** `bun run dev` skips the bash launcher; the kernel TUI runs preflight inline. Dev builds (`installedVersion === "dev"`) skip the network upgrade check.
+
+Disable launch-time checks: `SPINOSA_NO_UPGRADE_CHECK=1` or `auto_upgrade: false` in config.
 
 ---
 
 ## Gotchas
 
-- **Clean tree required:** commit before tagging; the GitHub auto-tarball reflects the tagged commit.
-- **`PINNED_VERSION` must match:** the installer pins the version — if it doesn't match the tag, install breaks.
-- **`dist/` is gitignored:** release assets live in `dist/vX.Y.Z/` — never committed.
+- **Clean tree required:** commit before tagging; the tarball is built from `HEAD`.
+- **`PINNED_VERSION` must match:** use `set-version.ts` — never hand-edit one file without the other.
+- **`dist/` is gitignored:** release assets live in `dist/vX.Y.Z/` and `dist/{channel}/` — never committed.
 - **Beta does not move `stable`:** only stable releases refresh the rolling `stable` endpoint.
-- **GitHub Actions are disabled** for releases — everything runs locally via `gh`.
-- **`checksums.txt` needs *both* entries on the version release** — the specific-version release (e.g. `v1.0.2-beta.3`) must have `checksums.txt` containing BOTH `install.sh` AND `spinosa-v{VERSION}.tar.gz`. If the tarball is missing from checksums.txt, the installer aborts with `spinosa-v{VERSION}.tar.gz not found in checksums file`. The channel release (e.g. `beta`) only needs `install.sh` in its checksums.txt — the tarball lives on the version release, not the channel.
-- **Always run step 7 verification** before declaring a release done — curl the live checksums.txt to confirm both entries are present.
+- **GitHub Actions are disabled** for framework releases — everything runs locally via `release-it` / `gh`.
+- **Version-release checksums need both entries** — always curl the live `checksums.txt` before declaring a release done.
+- **Channel-release checksums are install.sh only** — the tarball lives on the immutable version release, not the rolling channel.
+- **Republishing:** `script/release.sh` commits version sync changes if needed, then runs the full pipeline.
+
+---
+
+## Legacy manual publish (reference only)
+
+Use the automated flows above. These steps document what the scripts do internally.
+
+<details>
+<summary>Manual asset staging</summary>
+
+```bash
+VERSION="1.0.2-beta.14"
+bun script/set-version.ts "$VERSION"
+bun script/release/build.ts "$VERSION"
+bun script/release/verify-local.ts "$VERSION"
+
+TAG="v${VERSION}"
+git tag "$TAG"   # if not already tagged
+gh release create "$TAG" \
+  --title "Spinosa v${VERSION}" \
+  --generate-notes \
+  $([[ "$VERSION" == *-* ]] && echo --prerelease) \
+  "dist/v${VERSION}/install.sh" \
+  "dist/v${VERSION}/spinosa-v${VERSION}.tar.gz" \
+  "dist/v${VERSION}/checksums.txt"
+
+bun script/release/publish-channel.ts "$VERSION"
+bun script/release/verify-remote.ts "$VERSION"
+```
+
+</details>

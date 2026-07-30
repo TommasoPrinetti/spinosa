@@ -1,4 +1,14 @@
-# opencode database guide
+# Spinosa kernel (inherited upstream)
+
+This package contains the Spinosa kernel. It includes inherited upstream code for sessions, providers, and the CLI router.
+
+**Spinosa product CLI:** see `src/cli/AGENTS.md` for launch flow, preflight, and TUI routing.
+
+**Spinosa core domain:** see `packages/spinosa-core/AGENTS.md` for upgrade and workspace logic.
+
+---
+
+# Kernel database guide
 
 ## Database
 
@@ -7,10 +17,10 @@
 
 ## Development server
 
-- Running `bun dev` from `packages/opencode` starts the live interactive TUI. Do not run it as a blocking foreground command when you need to inspect the result.
-- Start it in `tmux` instead: `tmux new-session -d -s opencode-dev 'bun dev'`.
-- Capture the current TUI output with: `tmux capture-pane -pt opencode-dev`.
-- Stop the session explicitly when done: `tmux kill-session -t opencode-dev`.
+- Running `bun run dev` from the repo root starts the live interactive TUI through `packages/spinosa-cli`. Do not run it as a blocking foreground command when you need to inspect the result.
+- Start it in `tmux` instead: `tmux new-session -d -s spinosa-dev 'bun run dev'`.
+- Capture the current TUI output with: `tmux capture-pane -pt spinosa-dev`.
+- Stop the session explicitly when done: `tmux kill-session -t spinosa-dev`.
 
 # Module shape
 

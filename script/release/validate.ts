@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+// Pre-release gate: branch, clean tree, typecheck, core release tests.
 import { resolve } from "node:path"
 import { $ } from "bun"
 

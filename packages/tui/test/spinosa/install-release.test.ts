@@ -314,7 +314,7 @@ describe("install and release flow", () => {
     expect(launcher).toContain('src/index.ts" "$@"')
     expect(launcher).toContain('"$BUN" run "${RESOLVED_ROOT}/packages/spinosa-kernel/src/index.ts" version')
     expect(launcher).toContain('launcher_command="${launcher_args[$command_index]:-}"')
-    expect(launcher).toContain("SPINOSA_PREFLIGHT_DONE=1")
+    expect(launcher).toContain("SPINOSA_UPGRADE_REEXEC=1")
     expect(launcher).toContain("tui_launch=true")
   })
 

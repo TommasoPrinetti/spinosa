@@ -360,8 +360,12 @@ export async function checkUpgradeAvailable(): Promise<AutoUpgradeResult> {
   }
 
   const fwRoot = resolveFrameworkRoot()
+  // Use SPINOSA_TEMPLATE_ROOT when the dev tree has a product version in package.json.
   const installedVersion = installedReleaseVersion(fwRoot)
-  if (installedVersion === "dev" || !installedVersion) {
+    || (process.env.SPINOSA_TEMPLATE_ROOT
+      ? installedReleaseVersion(process.env.SPINOSA_TEMPLATE_ROOT)
+      : "")
+  if (!installedVersion) {
     return { available: false }
   }
 

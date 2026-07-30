@@ -71,15 +71,27 @@ spinosa update --force     # Override user modifications
 
 ### spinosa upgrade
 
-Upgrade the Spinosa CLI to the latest version.
+Upgrade the globally installed Spinosa CLI. Downloads the installer, verifies checksums, and optionally updates registered workspaces.
 
 ```bash
-spinosa upgrade                 # Latest stable
-spinosa upgrade --channel beta  # Beta channel
-spinosa upgrade --version 1.0.0 # Specific version
+spinosa upgrade                    # Latest on your configured channel
+spinosa upgrade --channel beta     # Beta channel (also saves preference to config)
+spinosa upgrade 1.0.0              # Specific version
+spinosa upgrade --check            # Check only — no install
+spinosa upgrade --yes              # Skip confirmation prompts
 ```
 
-Downloads the installer and verifies checksums automatically. Prompts for confirmation before upgrading.
+Channel preference is stored in `~/.spinosa/metadata/config.yaml` as `beta: true|false`. Disable automatic launch-time checks with `auto_upgrade: false` in the same file, or `SPINOSA_NO_UPGRADE_CHECK=1`.
+
+When you run `spinosa` with no arguments, Spinosa checks for upgrades **before** opening the TUI:
+
+```
+checking for updates...
+no updates available
+launching TUI...
+```
+
+The check phase stays visible for at least one second so the status is readable. If a newer version is available, you are prompted to upgrade instead of seeing `no updates available`.
 
 ## Maintenance
 
@@ -118,6 +130,7 @@ During `spinosa create` and `spinosa add`, files are classified automatically:
 | Variable | Purpose |
 |----------|---------|
 | `SPINOSA_HOME` | Override install directory (default: `~/.spinosa`) |
+| `SPINOSA_NO_UPGRADE_CHECK=1` | Skip launch-time and background upgrade checks |
 | `NO_COLOR=1` | Disable ANSI colors |
 | `USE_GUM=1` | Use gum for enhanced menus |
 | `SPINOSA_NO_EMOJI=1` | Disable emoji |

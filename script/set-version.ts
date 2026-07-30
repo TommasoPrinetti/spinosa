@@ -1,12 +1,9 @@
 #!/usr/bin/env bun
-// script/set-version.ts — Synchronize the canonical Spinosa product version
-// across all release-bearing files.
+// Sync the product version across release-bearing files.
+// Updates root package.json and install.sh PINNED_VERSION only.
+// Does not change internal @spinosa/* package versions.
 //
-// Usage:  bun script/set-version.ts 1.0.2-beta.14
-//
-// This script updates only the files that must mirror the product version.
-// Internal upstream package versions (e.g. @spinosa/kernel-core, @spinosa/core)
-// remain independent and are NOT modified by this script.
+// Usage: bun script/set-version.ts 1.0.2-beta.14
 
 import { readFileSync, writeFileSync, existsSync } from "node:fs"
 import { resolve } from "node:path"

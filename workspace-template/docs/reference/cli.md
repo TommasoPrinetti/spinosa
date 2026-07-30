@@ -53,16 +53,17 @@ Upgrade the **globally installed CLI** to the latest release on a channel. Downl
 | `beta: true` | Rolling GitHub `beta` prerelease |
 
 ```bash
-spinosa upgrade --yes                    # stable latest
-spinosa upgrade --channel beta --yes     # beta latest
-spinosa upgrade --version 0.8.0-beta.1   # pin a specific tag
+spinosa upgrade --yes                    # latest on configured channel
+spinosa upgrade --channel beta --yes     # beta latest (saves preference)
+spinosa upgrade 0.8.0-beta.1 --yes       # pin a specific version
+spinosa upgrade --check                  # check only — no install
 ```
 
 Stable install URL: `https://github.com/medialab/spinosa/releases/download/stable/install.sh`
 Beta install URL: `https://github.com/medialab/spinosa/releases/download/beta/install.sh`
 Exact install URL: `https://github.com/medialab/spinosa/releases/download/vX.Y.Z/install.sh`
 
-Set the channel for channel-less upgrade tooling in `~/.spinosa/metadata/config.yaml`: `beta: true` tracks beta prereleases, `beta: false` tracks stable releases. `SPINOSA_RELEASE_CHANNEL=beta|stable` remains an environment override.
+Set the channel for channel-less upgrade tooling in `~/.spinosa/metadata/config.yaml`: `beta: true` tracks beta prereleases, `beta: false` tracks stable releases. `SPINOSA_RELEASE_CHANNEL=beta|stable` remains an environment override. Set `auto_upgrade: false` to disable launch-time upgrade checks.
 
 This updates `~/.spinosa/` (framework runtime). It does **not** update files inside your workspace folders.
 
@@ -136,6 +137,27 @@ Spinosa has **three layers**. Use the right command for each:
 | Workspace framework | `spinosa update` | `AGENTS.md`, `.agents/`, `.bin/`, `docs/`, maps templates, etc. |
 | Vendor integration | automatic on `update` + manual Hermes merge | `.opencode/`, `.claude/`, `.codex/`, `.hermes/skills/`; merge `workspace.config.yaml` → `~/.hermes/config.yaml` |
 
+### Launch-time upgrade check
+
+Running `spinosa` with no arguments (or `bun run dev`) triggers a **preflight** upgrade check before the TUI opens:
+
+```
+checking for updates...
+no updates available
+launching TUI...
+```
+
+The check phase stays visible for at least one second. If a newer version is available, you are prompted to upgrade instead of seeing `no updates available`.
+
+1. Spinosa compares your installed version against the release channel (`beta: true|false` in `~/.spinosa/metadata/config.yaml`).
+2. If a newer version is available, you are prompted to upgrade (`[Y/n]`).
+3. On accept, Spinosa installs the update, optionally updates registered workspaces, then re-launches automatically.
+4. If you are already up to date, the lines above appear and the TUI starts.
+
+`bun run dev` uses the same kernel launch path as `spinosa`, so pre-release testing exercises the same upgrade flow against the version in root `package.json`.
+
+The TUI itself does not download or install upgrades. Disable launch checks with `auto_upgrade: false` in config or `SPINOSA_NO_UPGRADE_CHECK=1`.
+
 Typical flow after a new release:
 
 ```bash
@@ -189,4 +211,5 @@ PDFs are automatically classified as text-based (routed to MarkItDown) or image-
 | `NO_COLOR=1` | Disable ANSI colors in output |
 | `SPINOSA_HOME` | Override the installation directory (default: `~/.spinosa`) |
 | `SPINOSA_BIN_DIR` | Override the shim directory on PATH (default: `~/.local/bin`) |
+| `SPINOSA_NO_UPGRADE_CHECK=1` | Skip launch-time upgrade checks |
 | `SPINOSA_NO_EMOJI=1` | Disable emoji in output |

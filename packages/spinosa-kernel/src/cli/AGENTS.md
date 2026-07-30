@@ -1,81 +1,73 @@
-# Spinosa CLI Layer (V1 yargs)
+# Spinosa kernel CLI
 
-`packages/opencode/src/cli/` is the legacy yargs command surface for the shipped `opencode` binary. It hosts TUI **adapters**, not the canonical UI (that is `@spinosa/tui`).
+`packages/spinosa-kernel/src/cli/` is the yargs command surface for the Spinosa kernel binary.
 
-CONTRIBUTING.md still mentions `cli/cmd/tui/` — that directory was removed. UI lives in `packages/tui`.
+The terminal application lives in `packages/tui`. Do not add full TUI features here.
 
-## Command entry
+## Entry points
 
-- `src/index.ts` (via `src/cli/index.ts`) — yargs router
-- Commands in `src/cli/cmd/*.ts`
+| Entry | File | Role |
+| ----- | ---- | ---- |
+| Kernel router | `src/index.ts` | Registers commands, handles argv |
+| Product dev | `packages/spinosa-cli/src/index.ts` | `bun run dev` — spawns kernel, re-execs on preflight exit `10` |
+| Installed shim | `workspace-template/.bin/spinosa` | Resolves framework root, spawns kernel, re-execs on exit `10` |
 
-## TUI routing (three paths)
+## TUI launch flow
 
-### 1. Full TUI (canonical app)
+Default command (`spinosa` with no args) runs `cmd/tui.ts`.
+
+1. `runLaunchPreflight()` in `@spinosa/core/commands/preflight` checks for updates.
+2. The terminal prints status lines. Then `printLaunchingTui()` prints `launching TUI...`.
+3. `cli/tui/layer.ts` starts `@spinosa/tui`.
+4. `cli/tui/worker.ts` hosts the in-process server for fetch and events.
+
+Preflight runs once per launch. Skip the check when `SPINOSA_UPGRADE_REEXEC=1` (after a successful launch-time upgrade).
+
+## Launch and upgrade commands
+
+| Command | File | Role |
+| ------- | ---- | ---- |
+| Default TUI | `cmd/tui.ts` | Launch preflight + full TUI |
+| `preflight` | `cmd/preflight.ts` | Manual preflight (tests, scripts) |
+| `upgrade` | `cmd/upgrade.ts` | CLI wrapper around `upgradeFramework()` |
+
+Upgrade logic lives in `@spinosa/core/commands/upgrade`. Do not duplicate it in the kernel or TUI.
+
+## Other TUI paths
 
 | Trigger | File | Flow |
 | ------- | ---- | ---- |
-| `opencode` (default) | `cmd/tui.ts` | → `cli/tui/layer.ts` → `@spinosa/tui` `run()` |
-| `opencode attach` | `cmd/attach.ts` | Full TUI unless `--mini` |
-| `opencode web` | `cmd/web.ts` | Server + browser (not terminal) |
+| `spinosa attach` | `cmd/attach.ts` | Full TUI unless `--mini` |
+| `spinosa web` | `cmd/web.ts` | Server + browser |
+| `spinosa --mini` | `cmd/run.ts` | Lightweight split-footer mode |
+| `spinosa run` | `cmd/run.ts` | Batch or mini interactive |
+| `spinosa serve` | `cmd/serve.ts` | Headless API server |
 
-Worker/RPC: `cli/tui/worker.ts` — embedded server for in-process fetch/events.
-
-### 2. Mini TUI (lightweight)
-
-| Trigger | File | Flow |
-| ------- | ---- | ---- |
-| `opencode --mini` | `cmd/run.ts` | `runMini()` in same file |
-| `opencode run` | `cmd/run.ts` | Split-footer direct mode |
-| `attach --mini` | `cmd/attach.ts` | Mini path |
-
-Mini TUI lives in `cmd/run/` — **not** the full `packages/tui` app tree. It reuses TUI primitives (`@spinosa/tui/keymap`, editor, spinner, config, theme).
-
-### 3. Headless / server
-
-| Command | File |
-| ------- | ---- |
-| `serve` | `cmd/serve.ts` |
-| `run` (non-mini batch) | `cmd/run.ts` |
-
-## Host adapters (stay in opencode)
+## Host adapters (stay in kernel)
 
 ```txt
 cli/tui/
-  layer.ts              wires transport + Effect layer for full TUI
+  layer.ts              transport + Effect layer for full TUI
   worker.ts             in-process server worker
   validate-session.ts   session validation helper
 ```
 
-Config discovery: `src/config/tui.ts`, `tui-migrate.ts`, `tui-host-attention.ts`
-
-Compatibility re-exports (prefer `@spinosa/tui` subpaths for new code):
-
-- `src/cli/logo.ts` → `@spinosa/tui/logo`
-- `src/util/locale.ts`, `error.ts`, `parsers-config.ts` → `@spinosa/tui/util/*`
-
-## Other notable commands
-
-`cmd/acp.ts`, `cmd/auth.ts`, `cmd/mcp.ts`, `cmd/models.ts`, `cmd/stats.ts`, `cmd/pr.ts`, `cmd/github.ts`, `cmd/export.ts`, `cmd/import.ts`, `cmd/session.ts`, `cmd/uninstall.ts`, `cmd/upgrade.ts`, `cmd/debug/`
-
-## V2 parallel
-
-`packages/cli` (`lildax`) is the Effect-based preview CLI. Default command also launches `@spinosa/tui` but through daemon transport — see `packages/cli/AGENTS.md`.
-
-Do not duplicate TUI features here when fixing terminal UI — edit `packages/tui`.
+Config: `src/config/tui.ts`, `tui-migrate.ts`, `tui-host-attention.ts`
 
 ## Dev
 
-From `packages/opencode`:
+From repo root:
 
 ```bash
-bun dev              # interactive TUI — use tmux (see packages/opencode/AGENTS.md)
-bun dev serve        # headless API
-bun dev .            # TUI against repo root
+bun run dev              # same launch path as installed spinosa
+bun run dev serve        # headless API
 ```
+
+`bun run dev` sets `SPINOSA_TEMPLATE_ROOT` to the repo root. Preflight compares root `package.json` to the remote channel.
 
 ## Related docs
 
-- `packages/tui/AGENTS.md` — canonical terminal application
-- `packages/opencode/AGENTS.md` — Effect module shape, database, tmux dev
-- `specs/tui-package.md` — extraction spec
+- `packages/tui/AGENTS.md` — terminal application
+- `packages/spinosa-core/AGENTS.md` — upgrade engine and preflight
+- `RELEASE_GUIDE.md` — maintainer release pipeline
+- `packages/spinosa-kernel/AGENTS.md` — inherited kernel internals (Effect, database)

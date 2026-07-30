@@ -47,3 +47,12 @@ Small, concrete requests are easier to evaluate and ship than broad redesigns.
 - For docs and templates, verify the files render cleanly and any YAML parses correctly.
 - Do not claim a change is complete without some form of validation.
 
+## Releases (maintainers)
+
+Framework releases are cut locally — not via GitHub Actions. See [RELEASE_GUIDE.md](RELEASE_GUIDE.md) for the full pipeline.
+
+- **Version sync:** `bun script/set-version.ts <version>` updates root `package.json` and `install.sh` `PINNED_VERSION`.
+- **Standard release:** `bun run release:beta:patch` or `bun run release:stable:patch` (uses `release-it` + hooks in `.release-it.json`).
+- **Republish explicit version:** `bash script/release.sh vX.Y.Z`.
+- **Pre-release gate:** `bun run release:validate` plus the matrix in `workspace-template/docs/reference/testsuite.md`.
+

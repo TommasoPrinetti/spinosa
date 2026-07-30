@@ -6,6 +6,19 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 **Release policy:** versions are published only with explicit maintainer approval.
 
+## [Unreleased]
+
+### Changed
+
+- Launch preflight is unified in the kernel TUI. `spinosa` and `bun run dev` use the same path. Both print `checking for updates...`, `no updates available` (1 second minimum), then `launching TUI...`.
+- Upgrade engine, launch preflight, and version sync are consolidated in `@spinosa/core`. The bash launcher no longer runs a separate preflight subprocess.
+- Release docs rewritten: `RELEASE_GUIDE.md` documents the `release-it` pipeline, `script/set-version.ts`, and rolling channel publish steps. Maintainer docs updated in `CONTRIBUTING.md`, `workspace-template/docs/reference/cli.md`, and the website CLI reference.
+
+### Fixed
+
+- `bun run dev` now runs the same upgrade check as `spinosa` when root `package.json` has a product version.
+- After a launch-time upgrade, `spinosa-cli` and the bash launcher re-exec on exit code `10`.
+
 ## [1.0.2-beta.2] — 2026-07-28
 
 ### Fixed

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# ── spinosa — Bootstrap launcher ────────────────────────────────────────────
-# Resolves Spinosa root and Bun runtime, then dispatches to kernel CLI
-# or TUI. All command logic lives in packages/spinosa-kernel/src/index.ts.
+# Spinosa bootstrap launcher.
+# Resolves the framework root and Bun runtime, then starts the kernel CLI.
+# Command logic lives in packages/spinosa-kernel/src/index.ts.
+# TUI launch preflight runs inside the kernel (cmd/tui.ts), not in this script.
 set -euo pipefail
 
 _verbose=false
@@ -141,26 +142,18 @@ fi
 
 if [[ "$tui_launch" == "true" && -d "${RESOLVED_ROOT}/packages/tui/src" && -n "$BUN" ]]; then
   export SPINOSA_TEMPLATE_ROOT="$RESOLVED_ROOT"
-  PREFLIGHT_RESTART_EXIT_CODE=10
-  if [[ "${SPINOSA_UPGRADE_REEXEC:-}" != "1" && "${SPINOSA_PREFLIGHT_DONE:-}" != "1" ]]; then
-    _btlog tui "running preflight check"
-    set +e
-    SPINOSA_TEMPLATE_ROOT="$RESOLVED_ROOT" \
-      "$BUN" run "${RESOLVED_ROOT}/packages/spinosa-kernel/src/index.ts" preflight
-    preflight_exit=$?
-    set -e
-    if [[ "$preflight_exit" -eq "$PREFLIGHT_RESTART_EXIT_CODE" ]]; then
-      _btlog tui "preflight requested restart after upgrade"
-      export SPINOSA_UPGRADE_REEXEC=1
-      exec "$0" "$@"
-    elif [[ "$preflight_exit" -ne 0 ]]; then
-      exit "$preflight_exit"
-    fi
-    export SPINOSA_PREFLIGHT_DONE=1
-  else
-    _btlog tui "skipping launcher preflight (already done or re-exec)"
+  # Kernel TUI runs launch preflight. Exit 10 means re-exec after upgrade.
+  set +e
+  SPINOSA_TEMPLATE_ROOT="$RESOLVED_ROOT" \
+    "$BUN" run "${RESOLVED_ROOT}/packages/spinosa-kernel/src/index.ts" "$@"
+  exit_code=$?
+  set -e
+  if [[ "$exit_code" -eq 10 ]]; then
+    _btlog tui "kernel requested restart after upgrade"
+    export SPINOSA_UPGRADE_REEXEC=1
+    exec "$0" "$@"
   fi
-  exec "$BUN" run "${RESOLVED_ROOT}/packages/spinosa-kernel/src/index.ts" "$@"
+  exit "$exit_code"
 fi
 
 if [[ -n "$RESOLVED_ROOT" && -n "$BUN" ]]; then

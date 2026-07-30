@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import {
+  LAUNCH_STATUS_CHECKING,
+  LAUNCH_STATUS_NO_UPDATES,
   runLaunchPreflight,
   type PreflightDependencies,
 } from "../../src/spinosa-cli/commands/preflight"
@@ -7,6 +9,7 @@ import {
 function dependencies(overrides: Partial<PreflightDependencies> = {}) {
   const output: string[] = []
   const updated: string[] = []
+  let clock = 0
   const deps: PreflightDependencies = {
     checkUpgradeAvailable: async () => ({ available: false }),
     upgradeFramework: async () => ({ success: true, newVersion: "1.1.0", workspaceUpgradesNeeded: [] }),
@@ -18,6 +21,9 @@ function dependencies(overrides: Partial<PreflightDependencies> = {}) {
     confirm: async () => false,
     frameworkRoot: (version) => `/home/versions/${version}`,
     out: (message) => output.push(message),
+    now: () => clock,
+    sleep: async (ms) => { clock += ms },
+    statusMinMs: () => 0,
     ...overrides,
   }
   return { deps, output, updated }
@@ -28,7 +34,7 @@ describe("launch preflight", () => {
     const { deps, output } = dependencies()
 
     expect(await runLaunchPreflight(deps)).toBe("continue")
-    expect(output).toEqual([])
+    expect(output).toEqual([LAUNCH_STATUS_CHECKING, LAUNCH_STATUS_NO_UPDATES])
   })
 
   test("continues when the user declines an available upgrade", async () => {
@@ -70,7 +76,7 @@ describe("launch preflight", () => {
     })
 
     await expect(runLaunchPreflight(deps)).rejects.toThrow("Spinosa upgrade failed")
-    expect(output).toEqual([])
+    expect(output).toEqual([LAUNCH_STATUS_CHECKING])
   })
 
   test("still requests a fresh launch when one workspace update throws", async () => {
