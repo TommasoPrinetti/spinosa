@@ -22,7 +22,7 @@ import { runUninstall } from "./spinosa-cli/commands/uninstall"
 import { runStatus } from "./spinosa-cli/commands/status"
 import { runList } from "./spinosa-cli/commands/list"
 import { runStartupAutoclean } from "./spinosa-cli/commands/startup-autoclean"
-import { PREFLIGHT_RESTART_EXIT_CODE, runLaunchPreflight } from "./spinosa-cli/commands/preflight"
+import { runLaunchPreflight } from "./spinosa-cli/commands/preflight"
 
 export { parseSpinosaCliArgs }
 
@@ -249,7 +249,8 @@ export async function runSpinosaCli(args: string[], io?: SpinosaCliIo): Promise<
       case "autoclean":
         return await runStartupAutoclean({ io: resolvedIo, dryRun: parsed.flags.has("dry-run") })
       case "preflight":
-        return await runLaunchPreflight() === "restart" ? PREFLIGHT_RESTART_EXIT_CODE : 0
+        await runLaunchPreflight()
+        return 0
       case "web":
         return await runWeb(parsed, resolvedIo)
       case "version":

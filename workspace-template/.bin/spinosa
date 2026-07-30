@@ -140,18 +140,7 @@ fi
 
 if [[ "$tui_launch" == "true" && -d "${RESOLVED_ROOT}/packages/tui/src" && -n "$BUN" ]]; then
   export SPINOSA_TEMPLATE_ROOT="$RESOLVED_ROOT"
-  # Kernel TUI runs launch preflight. Exit 10 means re-exec after upgrade.
-  set +e
-  SPINOSA_TEMPLATE_ROOT="$RESOLVED_ROOT" \
-    "$BUN" run "${RESOLVED_ROOT}/packages/spinosa-kernel/src/index.ts" "$@"
-  exit_code=$?
-  set -e
-  if [[ "$exit_code" -eq 10 ]]; then
-    _btlog tui "kernel requested restart after upgrade"
-    export SPINOSA_UPGRADE_REEXEC=1
-    exec "$0" "$@"
-  fi
-  exit "$exit_code"
+  exec "$BUN" run "${RESOLVED_ROOT}/packages/spinosa-kernel/src/index.ts" "$@"
 fi
 
 if [[ -n "$RESOLVED_ROOT" && -n "$BUN" ]]; then

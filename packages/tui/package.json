@@ -60,6 +60,7 @@
     "@opentui/core": "catalog:",
     "@opentui/keymap": "catalog:",
     "@opentui/solid": "catalog:",
+    "opentui-spinner": "catalog:",
     "clipboardy": "4.0.0",
     "diff": "catalog:",
     "effect": "catalog:",

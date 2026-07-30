@@ -482,6 +482,7 @@
         "effect": "catalog:",
         "fuzzysort": "catalog:",
         "open": "10.1.2",
+        "opentui-spinner": "catalog:",
         "remeda": "catalog:",
         "solid-js": "catalog:",
         "strip-ansi": "7.1.2",

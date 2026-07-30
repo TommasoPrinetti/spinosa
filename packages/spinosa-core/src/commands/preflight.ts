@@ -4,8 +4,8 @@
  * This module runs before the TUI starts. It checks for framework updates,
  * prints user-facing status lines, and can install an upgrade.
  *
- * Exit code 10 means "restart the launcher". The bash shim and spinosa-cli
- * re-exec when they see this code.
+ * Returns "exit" after a successful launch-time upgrade so the launcher can
+ * stop without auto-starting the TUI.
  */
 import path from "node:path"
 import { homedir } from "node:os"
@@ -19,9 +19,6 @@ import {
   type UpgradeResult,
 } from "./upgrade"
 
-/** Kernel exits with this code when launch preflight installed an upgrade. */
-export const PREFLIGHT_RESTART_EXIT_CODE = 10
-
 /** User-facing line printed before the remote version check. */
 export const LAUNCH_STATUS_CHECKING = "checking for updates..."
 
@@ -31,13 +28,8 @@ export const LAUNCH_STATUS_NO_UPDATES = "no updates available"
 /** User-facing line printed immediately before the TUI starts. */
 export const LAUNCH_STATUS_LAUNCHING = "launching TUI..."
 
-/** User-facing line printed when launch preflight requests a restart. */
-export const LAUNCH_STATUS_RESTARTING = "restarting with updated Spinosa..."
-
-/** Skip the upgrade check after a launch-time upgrade re-exec. */
-export function shouldSkipLaunchPreflight(): boolean {
-  return process.env.SPINOSA_UPGRADE_REEXEC === "1"
-}
+/** User-facing line printed after a successful launch-time upgrade. */
+export const LAUNCH_STATUS_UPGRADE_DONE = "upgrade complete — run spinosa again to launch"
 
 export interface PreflightDependencies {
   checkUpgradeAvailable(): Promise<AutoUpgradeResult>
@@ -64,9 +56,9 @@ export function printLaunchingTui(out: (message: string) => void = defaults.out)
 
 /**
  * Check for updates before the TUI opens.
- * Returns "restart" when an upgrade was installed and the launcher must re-exec.
+ * Returns "exit" when an upgrade was installed and the launcher should stop.
  */
-export async function runLaunchPreflight(deps: PreflightDependencies = defaults): Promise<"continue" | "restart"> {
+export async function runLaunchPreflight(deps: PreflightDependencies = defaults): Promise<"continue" | "exit"> {
   spinosaLogInfo("preflight", `preflight check started (pid=${process.pid})`)
   deps.out(LAUNCH_STATUS_CHECKING)
 
@@ -111,6 +103,6 @@ export async function runLaunchPreflight(deps: PreflightDependencies = defaults)
     if (failed > 0) deps.out(`⚠ ${failed} workspace update(s) failed; run 'spinosa update <workspace>' to retry.`)
   }
 
-  deps.out(LAUNCH_STATUS_RESTARTING)
-  return "restart"
+  deps.out(LAUNCH_STATUS_UPGRADE_DONE)
+  return "exit"
 }

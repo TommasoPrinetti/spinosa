@@ -3,10 +3,8 @@ export {
   LAUNCH_STATUS_CHECKING,
   LAUNCH_STATUS_LAUNCHING,
   LAUNCH_STATUS_NO_UPDATES,
-  LAUNCH_STATUS_RESTARTING,
-  PREFLIGHT_RESTART_EXIT_CODE,
+  LAUNCH_STATUS_UPGRADE_DONE,
   printLaunchingTui,
   runLaunchPreflight,
-  shouldSkipLaunchPreflight,
   type PreflightDependencies,
 } from "@spinosa/core/commands/preflight"

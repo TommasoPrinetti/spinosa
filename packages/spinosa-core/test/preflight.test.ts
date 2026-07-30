@@ -1,11 +1,10 @@
-import { afterEach, describe, expect, test } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import {
   LAUNCH_STATUS_CHECKING,
   LAUNCH_STATUS_LAUNCHING,
   LAUNCH_STATUS_NO_UPDATES,
-  LAUNCH_STATUS_RESTARTING,
+  LAUNCH_STATUS_UPGRADE_DONE,
   runLaunchPreflight,
-  shouldSkipLaunchPreflight,
   type PreflightDependencies,
 } from "../src/commands/preflight"
 
@@ -50,7 +49,7 @@ describe("launch preflight", () => {
     expect(questions).toEqual(["✨ \x1b[1mSpinosa v1.1.0\x1b[0m is available (current \x1b[32mv1.0.0\x1b[0m). Upgrade now?"])
   })
 
-  test("upgrades only outdated workspaces and requests a fresh launch", async () => {
+  test("upgrades outdated workspaces and exits without auto-launching", async () => {
     const answers = [true, true]
     const roots: string[] = []
     const { deps, output, updated } = dependencies({
@@ -63,10 +62,10 @@ describe("launch preflight", () => {
       },
     })
 
-    expect(await runLaunchPreflight(deps)).toBe("restart")
+    expect(await runLaunchPreflight(deps)).toBe("exit")
     expect(updated).toEqual(["/work/alpha", "/work/beta"])
     expect(roots).toEqual(["/home/versions/1.1.0", "/home/versions/1.1.0"])
-    expect(output.at(-1)).toBe(LAUNCH_STATUS_RESTARTING)
+    expect(output.at(-1)).toBe(LAUNCH_STATUS_UPGRADE_DONE)
   })
 
   test("does not claim success when the framework upgrade fails", async () => {
@@ -80,7 +79,7 @@ describe("launch preflight", () => {
     expect(output).toEqual([LAUNCH_STATUS_CHECKING])
   })
 
-  test("still requests a fresh launch when one workspace update throws", async () => {
+  test("still exits cleanly when one workspace update throws", async () => {
     const answers = [true, true]
     const { deps, output } = dependencies({
       checkUpgradeAvailable: async () => ({ available: true, currentVersion: "1.0.0", latestVersion: "1.1.0" }),
@@ -93,30 +92,9 @@ describe("launch preflight", () => {
       updateWorkspace: async () => { throw new Error("workspace is missing") },
     })
 
-    expect(await runLaunchPreflight(deps)).toBe("restart")
+    expect(await runLaunchPreflight(deps)).toBe("exit")
     expect(output).toContain("⚠ Could not update missing: workspace is missing")
-    expect(output.at(-1)).toBe(LAUNCH_STATUS_RESTARTING)
-  })
-})
-
-describe("shouldSkipLaunchPreflight", () => {
-  const previous = {
-    reexec: process.env.SPINOSA_UPGRADE_REEXEC,
-  }
-
-  afterEach(() => {
-    if (previous.reexec === undefined) delete process.env.SPINOSA_UPGRADE_REEXEC
-    else process.env.SPINOSA_UPGRADE_REEXEC = previous.reexec
-  })
-
-  test("skips after upgrade re-exec", () => {
-    process.env.SPINOSA_UPGRADE_REEXEC = "1"
-    expect(shouldSkipLaunchPreflight()).toBe(true)
-  })
-
-  test("runs when no skip env vars are set", () => {
-    delete process.env.SPINOSA_UPGRADE_REEXEC
-    expect(shouldSkipLaunchPreflight()).toBe(false)
+    expect(output.at(-1)).toBe(LAUNCH_STATUS_UPGRADE_DONE)
   })
 })
 

@@ -21,7 +21,7 @@ Default command (`spinosa` with no args) runs `cmd/tui.ts`.
 3. `cli/tui/layer.ts` starts `@spinosa/tui`.
 4. `cli/tui/worker.ts` hosts the in-process server for fetch and events.
 
-Preflight runs once per launch. Skip the check when `SPINOSA_UPGRADE_REEXEC=1` (after a successful launch-time upgrade).
+Preflight runs once per launch. After a successful launch-time upgrade it exits cleanly and the user relaunches manually.
 
 ## Launch and upgrade commands
 

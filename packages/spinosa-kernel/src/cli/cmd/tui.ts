@@ -17,10 +17,8 @@ import { win32InstallCtrlCGuard } from "@spinosa/tui/terminal-win32"
 import { bootLog } from "@spinosa/kernel-core/observability/boot-log"
 import { Flag } from "@spinosa/kernel-core/flag/flag"
 import {
-  PREFLIGHT_RESTART_EXIT_CODE,
   printLaunchingTui,
   runLaunchPreflight,
-  shouldSkipLaunchPreflight,
 } from "@spinosa/core/commands/preflight"
 
 declare global {
@@ -226,11 +224,11 @@ export const TuiThreadCommand = cmd({
 
       // Launch preflight before spawning the worker so an accepted upgrade does not
       // start background infrastructure from the previous installation.
-      if (!Flag.SPINOSA_DISABLE_AUTOUPDATE && !shouldSkipLaunchPreflight()) {
+      if (!Flag.SPINOSA_DISABLE_AUTOUPDATE) {
         try {
           const preflight = await runLaunchPreflight()
-          if (preflight === "restart") {
-            process.exit(PREFLIGHT_RESTART_EXIT_CODE)
+          if (preflight === "exit") {
+            process.exit(0)
           }
         } catch (error) {
           process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`)
