@@ -71,6 +71,13 @@ export function normalizeRoute(route: RouteNavigateInput): Route {
   if (route.type === "global" || route.type === "onboarding" || route.type === "add-files" || route.type === "visualizer") {
     return route
   }
+  if (route.type === "plugin") {
+    return {
+      type: "plugin",
+      id: route.id,
+      data: route.data,
+    }
+  }
   if (route.type === "workspace") {
     return {
       type: "workspace",

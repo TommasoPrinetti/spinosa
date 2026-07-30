@@ -132,7 +132,6 @@ During `spinosa create` and `spinosa add`, files are classified automatically:
 | `SPINOSA_HOME` | Override install directory (default: `~/.spinosa`) |
 | `SPINOSA_NO_UPGRADE_CHECK=1` | Skip launch-time and background upgrade checks |
 | `NO_COLOR=1` | Disable ANSI colors |
-| `USE_GUM=1` | Use gum for enhanced menus |
 | `SPINOSA_NO_EMOJI=1` | Disable emoji |
 
 ## Common tasks

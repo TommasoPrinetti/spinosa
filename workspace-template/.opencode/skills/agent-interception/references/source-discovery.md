@@ -10,7 +10,7 @@ description: Log locations and discovery commands for OpenCode and Codex CLI ses
 
 ```bash
 # Export a specific session as JSON
-opencode export <session_id> 2>/dev/null
+spinosa export <session_id> 2>/dev/null
 
 # Find session IDs from the local database
 sqlite3 ~/.local/share/opencode/opencode.db \
@@ -18,7 +18,7 @@ sqlite3 ~/.local/share/opencode/opencode.db \
    FROM session ORDER BY time_created DESC LIMIT 10;"
 
 # Redirect to file
-opencode export <session_id> > session-export.json
+spinosa export <session_id> > session-export.json
 ```
 
 ### Plugin capture logs
@@ -94,6 +94,6 @@ This is useful for mapping session IDs to agent names and operations, but does n
 | When | Check first | Fallback |
 |------|-------------|----------|
 | Spinosa project | `.logs/session_metrics.tsv` or `.spinosa/archive/session_metrics_*.tsv`, then Codex rollouts | OpenCode export |
-| Recent session | `ls -t ~/.codex/sessions/**/**/*.jsonl \| head -1` | `opencode export --last 1` |
-| Date-specific | Codex `~/.codex/sessions/YYYY/MM/DD/` | OpenCode `--last N` |
+| Recent session | `ls -t ~/.codex/sessions/**/**/*.jsonl \| head -1` | `spinosa export` |
+| Date-specific | Codex `~/.codex/sessions/YYYY/MM/DD/` | `spinosa export <session_id>` |
 | Generic / unknown | Ask user for session ID or date range | Scan Codex rollouts by recency |

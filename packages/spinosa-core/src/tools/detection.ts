@@ -34,7 +34,7 @@ const LLM_COMMANDS = [
   { label: "Gemini", command: "gemini" },
   { label: "OpenAI", command: "openai" },
   { label: "Codex CLI", command: "codex" },
-  { label: "Spinosa", command: "opencode" },
+  { label: "Spinosa", command: "spinosa" },
 ] as const
 
 export function detectLlmTools(): string[] {

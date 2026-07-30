@@ -10,7 +10,7 @@ Open a terminal and run:
 # Beta — current development / prerelease channel (recommended while Spinosa is in beta)
 curl -fsSL https://github.com/medialab/spinosa/releases/download/beta/install.sh | bash
 
-# Stable — production channel
+# Stable — production channel (when published)
 # curl -fsSL https://github.com/medialab/spinosa/releases/download/stable/install.sh | bash
 ```
 

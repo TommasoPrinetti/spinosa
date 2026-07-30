@@ -175,7 +175,7 @@ export async function runStartup(
 ): Promise<{ prompt: string; launchCommand: string }> {
   const { workspacePath, frameworkRoot, preferredCli, projectName, sourceLocation } = options
   spinosaLogInfo("startup", `workspacePath=${workspacePath} projectName=${projectName}`)
-  const cli = preferredCli ?? "opencode"
+  const cli = preferredCli ?? "spinosa"
   const title = projectName ?? path.basename(workspacePath)
 
   const prompt = await generateStartupPrompt(
@@ -195,7 +195,7 @@ export async function runStartupWithHandoff(
   options: StartupOptions & { launch?: "copy" | "run" },
 ): Promise<{ prompt: string; launchCommand: string; handoffResult: "prompt_copied" | "prompt_ready" | "launch_command_copied" | "launch_command_ready" | "run_requested" | "run_failed_command_copied" | "run_failed_command_ready" }> {
   const { prompt, launchCommand } = await runStartup(options)
-  const cli = options.preferredCli ?? "opencode"
+  const cli = options.preferredCli ?? "spinosa"
 
   let handoffResult: "prompt_copied" | "prompt_ready" | "launch_command_copied" | "launch_command_ready" | "run_requested" | "run_failed_command_copied" | "run_failed_command_ready" = "prompt_copied"
 

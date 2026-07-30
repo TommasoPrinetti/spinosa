@@ -636,7 +636,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
   )
 
   // When the provider dialog is dismissed without selecting a provider,
-  // auto-select the free Spinosa default (Spinosa Zen)
+  // auto-select the free Spinosa default (OpenCode Zen)
   createEffect(() => {
     if (
       tuiReady() &&

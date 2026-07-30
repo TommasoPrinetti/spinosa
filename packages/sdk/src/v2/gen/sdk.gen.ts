@@ -1353,9 +1353,9 @@ export class Global extends HeyApiClient {
   }
 
   /**
-   * Upgrade opencode
+   * Upgrade spinosa
    *
-   * Upgrade opencode to the specified version or latest if not specified.
+   * Upgrade spinosa to the specified version or latest if not specified.
    */
   public upgrade<ThrowOnError extends boolean = false>(
     parameters?: {

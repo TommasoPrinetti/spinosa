@@ -14,7 +14,7 @@ Triggers: "collect evidence from agent conversations", "show me what the agent d
 ## Operating rules
 
 - This skill inspects logs already on disk. It does not install live hooks or plugins unless `--setup` is passed.
-- Always check `~/.codex/sessions/` and `opencode export` availability before picking a source path.
+- Always check `~/.codex/sessions/` and `spinosa export` availability before picking a source path.
 - Runtime-detection order: OpenCode export (if available) → Codex rollout files → Spinosa session metrics.
 - Normalize tool names to the unified schema (OpenCode tool names are canonical; Codex `exec_command` → `bash`).
 - Label all coverage estimates as heuristic. Never claim exact % without deterministic evidence.
@@ -41,7 +41,7 @@ For Codex rollouts:
 
 For OpenCode exports:
 ```bash
-opencode export <session_id> 2>/dev/null
+spinosa export <session_id> 2>/dev/null
 ```
 
 ### 3. Extract normalized events
@@ -55,7 +55,7 @@ bash ~/.agents/skills/agent-interception/scripts/extract-codex.sh \
 
 For OpenCode, use `scripts/extract-opencode.sh`:
 ```bash
-opencode export --session <id> 2>/dev/null \
+spinosa export <session_id> 2>/dev/null \
   | bash ~/.agents/skills/agent-interception/scripts/extract-opencode.sh \
   > /tmp/agent-events.jsonl
 ```

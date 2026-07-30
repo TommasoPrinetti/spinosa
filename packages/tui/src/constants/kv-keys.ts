@@ -23,8 +23,6 @@ export const KV = {
   LAST_SESSION_ID: "spinosa_last_session_id" as const,
   /** Last goal artifact path, used for navigation. */
   LAST_GOAL_PATH: "spinosa_last_goal_path" as const,
-  /** Previous route type stored before workspace picker navigation. */
-  PICKER_PREVIOUS_ROUTE: "spinosa_picker_previous_route" as const,
 
   // ── Session list & filtering ─────────────────────────────────
   /** When false, sessions are listed project-wide instead of by directory. */

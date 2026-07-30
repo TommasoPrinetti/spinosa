@@ -165,7 +165,7 @@ const TIPS: Tip[] = [
   (shortcuts) => press(shortcuts.agentCycle(), "to cycle between Build and Plan agents"),
   "Use {highlight}/undo{/highlight} to revert the last message and file changes",
   "Use {highlight}/redo{/highlight} to restore previously undone messages and file changes",
-  "Run {highlight}/share{/highlight} to create a public link to your conversation at github.com/medialab/spinosa",
+  "Run {highlight}/share{/highlight} to create a public link to your conversation",
   "Drag and drop images or PDFs into the terminal to add them as context",
   (shortcuts) => press(shortcuts.inputPaste(), "to paste images from your clipboard into the prompt"),
   (shortcuts) => `Use ${commandText("/editor", shortcuts.editorOpen())} to compose messages in your external editor`,
@@ -240,10 +240,6 @@ const TIPS: Tip[] = [
   "Run {highlight}spinosa upgrade{/highlight} to update to the latest version",
   "Run {highlight}spinosa auth list{/highlight} to see all configured providers",
   "Run {highlight}spinosa agent create{/highlight} for guided agent creation",
-  "Use {highlight}/spinosa{/highlight} in GitHub issues/PRs to trigger AI actions",
-  "Run {highlight}spinosa github install{/highlight} to set up the GitHub workflow",
-  "Comment {highlight}/spinosa fix this{/highlight} on issues to auto-create PRs",
-  "Comment {highlight}/oc{/highlight} on PR code lines for targeted code reviews",
   'Use {highlight}"theme": "system"{/highlight} to match your terminal\'s colors',
   "Create JSON theme files in {highlight}.spinosa/themes/{/highlight} directory",
   "Themes support dark/light variants for both modes",
@@ -267,14 +263,9 @@ const TIPS: Tip[] = [
   (shortcuts) => press(shortcuts.messagesToggleConceal(), "to toggle code block visibility in messages"),
   (shortcuts) => `Use ${commandText("/status", shortcuts.statusView())} to see system status info`,
   "Enable {highlight}scroll_acceleration{/highlight} in {highlight}tui.json{/highlight} for smooth macOS-style scrolling",
-  (shortcuts) =>
-    shortcuts.commandList()
-      ? `Toggle username display in chat via the command palette (${shortcutText(shortcuts.commandList())})`
-      : "Toggle username display in chat via the command palette",
   "Install with {highlight}curl -fsSL https://github.com/medialab/spinosa/releases/download/beta/install.sh | bash{/highlight}",
-  "Use {highlight}/connect{/highlight} with Spinosa Zen for curated, tested models",
+  "Use {highlight}/connect{/highlight} with OpenCode Zen for curated, tested models",
   "Commit your project's {highlight}AGENTS.md{/highlight} file to Git for team sharing",
-  "Use {highlight}/review{/highlight} to review uncommitted changes, branches, or PRs",
   (shortcuts) => `Use ${commandText("/help", shortcuts.helpShow())} to show the help dialog`,
   "Use {highlight}/rename{/highlight} to rename the current session",
 ]

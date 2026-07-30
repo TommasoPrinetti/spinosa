@@ -4,6 +4,8 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import {
   setReleaseChannel,
+  setAutoUpgrade,
+  readAutoUpgrade,
   spinosaBetaToggleChannel,
   spinosaReleaseChannel,
 } from "../src/system/channels"
@@ -62,5 +64,28 @@ describe("release channel config", () => {
     expect(spinosaBetaToggleChannel("false")).toBe("stable")
     expect(spinosaBetaToggleChannel("1")).toBe("beta")
     expect(spinosaBetaToggleChannel("0")).toBe("stable")
+  })
+})
+
+describe("auto_upgrade config", () => {
+  test("missing auto_upgrade means enabled", async () => {
+    resetTestHome()
+    writeFileSync(path.join(testHome, "metadata", "config.yaml"), "beta: true\n")
+    expect(await readAutoUpgrade()).toBe(true)
+  })
+
+  test("auto_upgrade false disables", async () => {
+    resetTestHome()
+    await setAutoUpgrade(false)
+    const config = await Bun.file(path.join(testHome, "metadata", "config.yaml")).text()
+    expect(config).toContain("auto_upgrade: false")
+    expect(await readAutoUpgrade()).toBe(false)
+  })
+
+  test("setAutoUpgrade true writes enabled", async () => {
+    resetTestHome()
+    await setAutoUpgrade(false)
+    await setAutoUpgrade(true)
+    expect(await readAutoUpgrade()).toBe(true)
   })
 })

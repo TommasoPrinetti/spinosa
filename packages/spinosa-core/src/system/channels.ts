@@ -103,6 +103,35 @@ export async function setReleaseChannel(channel: ReleaseChannel): Promise<void> 
   })
 }
 
+/** `auto_upgrade: false` disables launch checks; anything else / missing = enabled. */
+export async function readAutoUpgrade(): Promise<boolean> {
+  const value = await readConfigValue(spinosaConfigFile(), "auto_upgrade")
+  return value !== "false"
+}
+
+export async function setAutoUpgrade(enabled: boolean): Promise<void> {
+  const configPath = spinosaConfigFile()
+  const configDir = path.dirname(configPath)
+
+  mkdirSync(configDir, { recursive: true })
+
+  const file = Bun.file(configPath)
+  if (!(await file.exists())) {
+    await writeYamlConfig(
+      configPath,
+      (document) => {
+        document.set("auto_upgrade", enabled)
+      },
+      "auto_upgrade: true\n",
+    )
+    return
+  }
+
+  await writeYamlConfig(configPath, (document) => {
+    document.set("auto_upgrade", enabled)
+  })
+}
+
 export async function resolvePinnedVersionFromInstaller(url: string): Promise<string | undefined> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)

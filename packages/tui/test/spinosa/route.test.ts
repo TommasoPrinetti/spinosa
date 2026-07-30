@@ -13,6 +13,14 @@ describe("normalizeRoute", () => {
     expect("prompt" in next).toBe(false)
   })
 
+  test("preserves plugin routes for feature plugins", () => {
+    expect(normalizeRoute({ type: "plugin", id: "diff-viewer", data: { path: "a" } })).toEqual({
+      type: "plugin",
+      id: "diff-viewer",
+      data: { path: "a" },
+    })
+  })
+
   test("normalizes unknown runtime routes to the global", () => {
     expect(normalizeRoute({ type: "future-route" } as never)).toEqual({ type: "global" })
   })
