@@ -86,6 +86,7 @@
     "@spinosa/schema": "workspace:*",
     "@spinosa/script": "workspace:*",
     "@spinosa/sdk": "workspace:*",
+    "@spinosa/core": "workspace:*",
     "@spinosa/server": "workspace:*",
     "@spinosa/tui": "workspace:*",
     "@openrouter/ai-sdk-provider": "2.9.0",
