@@ -36,6 +36,26 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Shellcheck passes on `install.sh` (legacy shim detection uses explicit disable comments).
 - `bun install` catalog entry for `@effect/platform-node-shared` restored.
 
+## [1.0.3-beta.2] — 2026-07-30
+
+### Changed
+
+- Settings writes real `auto_upgrade` in `~/.spinosa/metadata/config.yaml` (removed unused `autoupdate` / skipped-version theater).
+- Product identity leftovers rebranded to Spinosa; OpenCode Zen and OpenCode Go providers kept as-is.
+- Worktree branch prefix is `spinosa/` instead of `opencode/`.
+- Local patch installer also installs the user-facing shim into `SPINOSA_BIN_DIR` (default `~/.local/bin`).
+
+### Removed
+
+- `spinosa github` and `spinosa acp` from the product CLI (quarantined under `script/orphan/`).
+- Fake tips for github install, `/review`, and related OpenCode leftovers.
+
+### Fixed
+
+- TUI picker Escape restores the previous route; failed workspace opens roll back path/KV.
+- Skills and docs use `spinosa export` (no unsupported `--session`/`--last`).
+- Stable channel UI notes that the rolling channel may be unavailable until published.
+
 ## [1.0.3-beta.1] — 2026-07-30
 
 ### Changed
