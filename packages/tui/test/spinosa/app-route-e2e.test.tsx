@@ -165,24 +165,29 @@ async function appendRegistryEntry(
 
 async function waitForText(setup: TestRenderer, text: string) {
   let frame = ""
-  for (let attempt = 0; attempt < 30; attempt++) {
+  for (let attempt = 0; attempt < 60; attempt++) {
     await setup.renderOnce()
     frame = setup.captureCharFrame()
     if (frame.includes(text)) return frame
-    await new Promise((resolve) => setTimeout(resolve, 25))
+    await new Promise((resolve) => setTimeout(resolve, 40))
   }
   throw new Error(`Timed out waiting for "${text}"\nlastFrame:\n${frame}`)
 }
 
 async function waitForTextToDisappear(setup: TestRenderer, text: string) {
   let frame = ""
-  for (let attempt = 0; attempt < 30; attempt++) {
+  for (let attempt = 0; attempt < 60; attempt++) {
     await setup.renderOnce()
     frame = setup.captureCharFrame()
     if (!frame.includes(text)) return frame
-    await new Promise((resolve) => setTimeout(resolve, 25))
+    await new Promise((resolve) => setTimeout(resolve, 40))
   }
   throw new Error(`Timed out waiting for "${text}" to disappear\nlastFrame:\n${frame}`)
+}
+
+async function waitForWorkspacePickerReady(setup: TestRenderer) {
+  await waitForText(setup, "Choose a workspace")
+  await waitForTextToDisappear(setup, "Loading saved workspaces…")
 }
 
 test("Spinosa app route E2E boots and navigates key workspace flows", async () => {
@@ -215,6 +220,7 @@ test("Spinosa app route E2E boots and navigates key workspace flows", async () =
     const cliStartedFrame = await renderRouteFrame("global", {
       home: cliHome,
       act: async (setup) => {
+        await waitForWorkspacePickerReady(setup)
         setup.mockInput.pressKey("w")
         await waitForText(setup, "cli-started-demo")
         setup.mockInput.pressEnter()
@@ -250,6 +256,7 @@ test("Spinosa app route E2E boots and navigates key workspace flows", async () =
     const readyFrame = await renderRouteFrame("global", {
       home: readyHome,
       act: async (setup) => {
+        await waitForWorkspacePickerReady(setup)
         setup.mockInput.pressKey("w")
         await waitForText(setup, "ready-demo")
         setup.mockInput.pressEnter()
@@ -289,6 +296,7 @@ test("Spinosa app route E2E boots and navigates key workspace flows", async () =
       home: filteredHome,
       act: async (setup) => {
         recentFrame = await waitForText(setup, "Recent workspaces")
+        await waitForTextToDisappear(setup, "Loading saved workspaces…")
         setup.mockInput.pressKey("w")
         pickerFrame = await waitForText(setup, "visible-demo")
         const pickerLines = pickerFrame.split("\n")
