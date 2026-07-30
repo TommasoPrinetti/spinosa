@@ -144,7 +144,7 @@ export async function createWorkspace(options: CreateWorkspaceOptions): Promise<
 
     // ── Step 3: Create user-state directories (with .gitkeep) ──────────
     progress("Creating user-state directories...")
-    for (const dir of ["raw", "maps", "logs", "agent_reports", ".trash"]) {
+    for (const dir of ["raw", "maps", ".logs", "agent_reports", ".trash"]) {
       throwIfSpinosaCancelled(shouldAbort)
       mkdirSync(path.join(workspacePath, dir), { recursive: true })
       writeFileSync(path.join(workspacePath, dir, ".gitkeep"), "", "utf-8")

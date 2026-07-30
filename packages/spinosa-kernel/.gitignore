@@ -6,3 +6,5 @@ app.log
 script/build-*.ts
 temporary-*.md
 .artifacts
+.spinosa-migration-report.json
+.spinosa/

@@ -11,7 +11,7 @@ connects_to:
   - system/AGENTS.md
   - maps/AGENTS.md
   - raw/AGENTS.md
-  - logs/AGENTS.md
+  - .logs/AGENTS.md
   - agent_reports/AGENTS.md
   - .trash/AGENTS.md
   - .spinosa/memory/AGENTS.md
@@ -25,7 +25,7 @@ generated_by: orchestrator-contract-fix
 - **`.spinosa/memory/AGENTS.md`** — Rules for the orchestrator's working memory. Read when you need to persist session context between routes.
 - **`.trash/AGENTS.md`** — Rules for retired and archived files. Read when cleaning up stale artifacts or moving files out of the corpus.
 - **`agent_reports/AGENTS.md`** — Conventions for durable reports, evidence packets, and verification notes. Read before writing any artifact to `agent_reports/`.
-- **`logs/AGENTS.md`** — Processing logs and framework state tracking. Read when investigating import or processing failures.
+- **`.logs/AGENTS.md`** — Processing logs and framework state tracking. Read when investigating import or processing failures.
 - **`maps/AGENTS.md`** — Navigation map structure and conventions. Read before writing or updating maps during indexing.
 - **`raw/AGENTS.md`** — Rules for raw source copies and corpus files. Read before modifying raw file headers or validating corpus integrity.
 - **`system/AGENTS.md`** — System context, configuration, and dictionary management. Read when updating workspace metadata or the master dictionary.

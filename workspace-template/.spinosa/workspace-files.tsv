@@ -29,8 +29,8 @@ raw/.gitkeep	framework	replace_if_unmodified
 maps/AGENTS.md	framework	replace_if_unmodified
 maps/map_template.md	framework	replace_if_unmodified
 maps/.gitkeep	framework	replace_if_unmodified
-logs/AGENTS.md	framework	replace_if_unmodified
-logs/.gitkeep	framework	replace_if_unmodified
+.logs/AGENTS.md	framework	replace_if_unmodified
+.logs/.gitkeep	framework	replace_if_unmodified
 agent_reports/AGENTS.md	framework	replace_if_unmodified
 agent_reports/.gitkeep	framework	replace_if_unmodified
 docs/FAQ.md	framework	replace_if_unmodified

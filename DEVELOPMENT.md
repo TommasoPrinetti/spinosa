@@ -3,7 +3,7 @@
 ## Quick Start
 
 ```bash
-cd ~/Documents/spinosa-main
+cd /path/to/spinosa
 bun run dev
 ```
 
@@ -12,7 +12,7 @@ This runs the TUI from source (`packages/opencode/src/index.ts`). Edit any file 
 ### Alternative: run via the spinosa shim (dev mode)
 
 ```bash
-cd ~/Documents/spinosa-main
+cd /path/to/spinosa
 SPINOSA_HOME=~/.spinosa ./workspace-template/.bin/spinosa
 ```
 

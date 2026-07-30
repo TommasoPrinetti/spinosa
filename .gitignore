@@ -89,6 +89,14 @@ local:/
 *.jsonl
 *.bak
 
+# Workspace operational log output (never commit runtime traces)
+**/.logs/*
+!workspace-template/.logs/
+!workspace-template/.logs/**
+
+# Legacy visible logs/ dir from older workspaces (runtime output only)
+logs/**
+
 # Prevent workspace data files from being accidentally committed
 workspace-template/raw/*.log
 workspace-template/raw/*.tsv
