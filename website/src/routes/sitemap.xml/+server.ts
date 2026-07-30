@@ -1,4 +1,4 @@
-const BASE = 'https://medialab.github.io/spinosa';
+const BASE = 'https://spinosa.medialab.sciencespo.fr';
 
 const pages = [
 	{ path: '', priority: '1.0', changefreq: 'weekly' },

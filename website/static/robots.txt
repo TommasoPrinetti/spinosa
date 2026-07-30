@@ -3,4 +3,4 @@ Allow: /
 Disallow: /install/
 Disallow: /install
 
-Sitemap: https://medialab.github.io/spinosa/sitemap.xml
+Sitemap: https://spinosa.medialab.sciencespo.fr/sitemap.xml

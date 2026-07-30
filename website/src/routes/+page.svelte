@@ -84,7 +84,7 @@
 			"applicationCategory": "DataScience",
 			"operatingSystem": "macOS, Linux",
 			"description": "Spinosa turns research documents into a local workspace you can chat with. AI agents search your files, draft answers, and verify every claim against the original text.",
-			"url": "https://medialab.github.io/spinosa/",
+			"url": `${origin}${base}/`,
 			"author": {
 				"@type": "Organization",
 				"name": "medialab",

@@ -14,7 +14,7 @@ const config = {
 			strict: true
 		}),
 		paths: {
-			base: '/spinosa'
+			base: process.env.BASE_PATH ?? ''
 		},
 		prerender: {
 			handleHttpError: 'warn'

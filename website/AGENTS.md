@@ -30,4 +30,4 @@ Order: `lint` then `check`. No test framework.
 
 Auto-deployed to GitHub Pages on push to `main` when `website/` changes. Beta releases do not trigger this workflow.
 
-Site URL: `https://medialab.github.io/spinosa/`
+Site URL: `https://spinosa.medialab.sciencespo.fr/`
