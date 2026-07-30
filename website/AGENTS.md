@@ -28,4 +28,6 @@ Order: `lint` then `check`. No test framework.
 
 ## Deployment
 
-Manual only. Build locally with `bun run build` from `website/`. There is no GitHub Actions deploy pipeline.
+Auto-deployed to GitHub Pages on push to `main` when `website/` changes. Beta releases do not trigger this workflow.
+
+Site URL: `https://medialab.github.io/spinosa/`
