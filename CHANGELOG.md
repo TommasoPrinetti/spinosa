@@ -55,6 +55,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - TUI picker Escape restores the previous route; failed workspace opens roll back path/KV.
 - Skills and docs use `spinosa export` (no unsupported `--session`/`--last`).
 - Stable channel UI notes that the rolling channel may be unavailable until published.
+- `spinosa uninstall` now exits with an error for a non-Spinosa `SPINOSA_HOME` instead of treating it as success.
 
 ## [1.0.3-beta.1] — 2026-07-30
 

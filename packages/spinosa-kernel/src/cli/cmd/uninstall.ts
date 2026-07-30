@@ -40,17 +40,23 @@ export const UninstallCommand = {
 
     const home = spinosaHome()
     const skipConfirm = args.yes || args.force
-    const frameworkTargets: UninstallTarget[] = []
     const validationError = validateSpinosaHome(home)
-    const markerError = validationError ? undefined : verifySpinosaInstallMarker(home)
-
     if (validationError) {
-      prompts.log.warn(`Framework home skipped: ${validationError} (${home})`)
-    } else if (markerError) {
-      prompts.log.warn(`Framework home skipped: ${markerError}`)
-    } else {
-      frameworkTargets.push(...frameworkRuntimeTargets(home), ...launcherShimTargets())
+      prompts.log.error(`${validationError} (${home})`)
+      prompts.outro("Aborted")
+      process.exit(1)
     }
+    const markerError = verifySpinosaInstallMarker(home)
+    if (markerError) {
+      prompts.log.error(markerError)
+      prompts.outro("Aborted")
+      process.exit(1)
+    }
+
+    const frameworkTargets: UninstallTarget[] = [
+      ...frameworkRuntimeTargets(home),
+      ...launcherShimTargets(),
+    ]
 
     const xdgTargets = [
       { path: Global.Path.data, label: "Application data", keep: args.keepData },
@@ -71,7 +77,7 @@ export const UninstallCommand = {
       if (target.exists) prompts.log.info(`${target.keep ? "○ keeping" : "✓ removing"} ${target.label}: ${target.path}`)
     }
 
-    if (!frameworkTargets.length && !present.some((t) => t.exists && !t.keep)) {
+    if (!present.some((t) => t.exists && !t.keep)) {
       prompts.outro("Nothing to uninstall.")
       return
     }
@@ -91,9 +97,7 @@ export const UninstallCommand = {
       return
     }
 
-    if (frameworkTargets.length) {
-      removeUninstallTargets(frameworkTargets)
-    }
+    removeUninstallTargets(frameworkTargets)
 
     for (const target of present) {
       if (!target.exists || target.keep) continue
@@ -101,10 +105,6 @@ export const UninstallCommand = {
       await fs.rm(target.path, { recursive: true, force: true })
     }
 
-    prompts.outro(
-      validationError || markerError
-        ? "Application files removed. Framework home was not a valid Spinosa install."
-        : "Spinosa uninstalled. Workspace folders and ~/.spinosa/metadata/ were left in place.",
-    )
+    prompts.outro("Spinosa uninstalled. Workspace folders and ~/.spinosa/metadata/ were left in place.")
   },
 }
