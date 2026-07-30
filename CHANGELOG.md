@@ -6,7 +6,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 **Release policy:** versions are published only with explicit maintainer approval.
 
-## [Unreleased]
+## [1.0.2-beta.15] — 2026-07-30
 
 ### Changed
 
@@ -18,6 +18,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - `bun run dev` now runs the same upgrade check as `spinosa` when root `package.json` has a product version.
 - After a launch-time upgrade, `spinosa-cli` and the bash launcher re-exec on exit code `10`.
+- Release validation runs GitHub helper tests outside the root `bunfig` guard.
 
 ## [1.0.2-beta.2] — 2026-07-28
 
