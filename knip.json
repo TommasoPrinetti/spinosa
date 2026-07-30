@@ -10,13 +10,13 @@
     "script/publish-tui.ts",
     "script/set-version.ts",
     "script/typecheck-all.ts",
-    "script/release/build.ts",
+    "script/release/index.ts",
+    "script/release/stages.ts",
+    "script/release/state.ts",
+    "script/release/bump.ts",
     "script/release/github.ts",
-    "script/release/publish-channel.ts",
-    "script/release/republish.ts",
-    "script/release/validate.ts",
-    "script/release/verify-local.ts",
-    "script/release/verify-remote.ts",
+    "script/release/lib.ts",
+    "script/release/reporter.ts",
     "script/generate-patches-md.ts",
     "workspace-template/.bin/spinosa"
   ],
@@ -113,8 +113,7 @@
     "zx"
   ],
   "ignoreIssues": {
-    "packages/spinosa-kernel/package.json": ["exports"],
-    "script/release/republish.ts": ["unresolved"]
+    "packages/spinosa-kernel/package.json": ["exports"]
   },
   "rules": {
     "binaries": "off",

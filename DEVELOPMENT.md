@@ -87,11 +87,12 @@ bun run --cwd packages/tui test:spinosa
 
 ## Publishing
 
-See `RELEASE_GUIDE.md`. Framework releases use `release-it` and run validation locally:
+See `RELEASE_GUIDE.md`. Framework releases use the local Bun pipeline:
 
 ```bash
 bun run release:validate      # branch, clean tree, quality gate
 bun run release:beta:patch    # or release:stable:patch
+bun run release:resume        # continue after a mid-release failure
 ```
 
 Republish an explicit version without a semver bump:

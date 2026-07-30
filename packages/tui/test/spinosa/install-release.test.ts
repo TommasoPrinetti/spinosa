@@ -193,15 +193,14 @@ describe("install and release flow", () => {
     expect(result.stderr.toString()).toContain("command timed out after 1s")
   })
 
-  test("local release script publishes versioned and rolling channel assets", async () => {
-    const buildScript = await Bun.file(path.join(repoRoot, "script", "release", "build.ts")).text()
-    const publishScript = await Bun.file(path.join(repoRoot, "script", "release", "publish-channel.ts")).text()
-    expect(publishScript).toContain("publishRollingChannelRelease")
-    expect(buildScript).toContain("dist/${channel}")
-    expect(buildScript).toContain("channelInstallerPath")
-    expect(buildScript).toContain("git archive --format=tar.gz")
-    expect(buildScript).toContain("checksums.txt")
-    expect(buildScript).toContain("shasum -a 256 install.sh")
+  test("local release pipeline builds versioned and rolling channel assets", async () => {
+    const stages = await Bun.file(path.join(repoRoot, "script", "release", "stages.ts")).text()
+    const github = await Bun.file(path.join(repoRoot, "script", "release", "github.ts")).text()
+    expect(stages).toContain("publishRollingChannelRelease")
+    expect(stages).toContain("git archive --format=tar.gz")
+    expect(stages).toContain("checksums.txt")
+    expect(stages).toContain("shasum -a 256 install.sh")
+    expect(github).toContain("publishRollingChannelRelease")
   })
 
   test("installer uses one global lock and stages before replacing a version", async () => {

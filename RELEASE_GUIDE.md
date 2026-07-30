@@ -1,253 +1,119 @@
-# Spinosa Framework Release Guide
-
-> Maintainer reference for cutting and publishing Spinosa releases. Read this before tagging.
-
----
+# Spinosa Release Guide
 
 ## Quick start
 
-**Preferred:** use `release-it` — it bumps semver, syncs version files, builds assets, publishes to GitHub, syncs the rolling channel, and verifies the live installer.
-
 ```bash
-# Beta prerelease (from beta branch)
-bun run release:beta:patch    # or :minor
+export GH_TOKEN=$(gh auth token)   # auto-detected if gh is logged in
+
+# Beta release (from beta branch)
+bun run release:beta:patch
 
 # Stable release (from main branch)
-bun run release:stable:patch    # or :minor / :major
+bun run release:stable:patch
+
+# Preview without side effects
+bun run release beta patch --dry-run
 ```
 
-**Republish a specific version** without incrementing semver (e.g. fix a broken channel asset):
-
-```bash
-bun run release:republish -- v1.0.2-beta.14
-```
-
-Both flows require a **clean working tree**, branch `main` or `beta`, and `gh` authenticated (`gh auth status`).
+Requirements: clean tree, branch `main` or `beta`, `gh` authenticated.
 
 ---
 
-## How releases work
+## Commands
 
-Spinosa publishes **two kinds** of GitHub releases for every version:
-
-| Release | Tag | Assets | Purpose |
-| ------- | --- | ------ | ------- |
-| **Immutable version** | `vX.Y.Z` or `vX.Y.Z-beta.N` | `install.sh`, `spinosa-v{VERSION}.tar.gz`, `checksums.txt` | Exact install/upgrade target; tarball is the source bundle |
-| **Rolling channel** | `stable` or `beta` | `install.sh`, `checksums.txt` | Always points at the newest release on that channel |
-
-| Channel | Audience | Install URL | Upgrade default |
-| ------- | -------- | ----------- | --------------- |
-| **Stable** | Production users | `releases/download/stable/install.sh` | `spinosa upgrade` |
-| **Beta** | Maintainers, testers | `releases/download/beta/install.sh` | `spinosa upgrade --channel beta` |
-
-Publishing a beta **never** moves the `stable` rolling tag.
-
-### Version source of truth
-
-The canonical product version lives in **root `package.json`**. Before every release, `script/set-version.ts` synchronizes:
-
-- `package.json` → `"version"`
-- `install.sh` → `PINNED_VERSION`
-
-```bash
-# Manual sync (normally handled by release-it after:bump hook)
-bun script/set-version.ts 1.0.2-beta.14
-```
-
-Internal upstream package versions (`@spinosa/kernel-core`, `@spinosa/core`, etc.) are **independent** — this script does not touch them.
-
-### Version naming
-
-| Channel | Format | Example tag | `PINNED_VERSION` |
-| ------- | ------ | ----------- | ---------------- |
-| Stable | `X.Y.Z` | `v1.0.0` | `1.0.0` |
-| Beta | `X.Y.Z-<prerelease>` | `v1.0.2-beta.14` | `1.0.2-beta.14` |
-
-Channel is inferred from the version string (`releaseChannel()` in `@spinosa/core`).
+| Command | Purpose |
+| ------- | ------- |
+| `bun run release:beta:patch` | Bump beta prerelease and publish |
+| `bun run release:beta:minor` | Bump beta minor series |
+| `bun run release:stable:patch` | Stable patch release |
+| `bun run release:validate` | Preflight only (branch + quality) |
+| `bun run release plan beta patch` | Show version bump without publishing |
+| `bun run release:resume` | Resume the latest incomplete release |
+| `bun run release:republish -- vX.Y.Z` | Republish an existing version |
 
 ---
 
-## Release pipeline
+## Pipeline
 
-Hooks are defined in `.release-it.json`. Both `release-it` and `bun run release:republish` run the same stages.
+One orchestrator: `script/release/index.ts`
 
-```mermaid
-flowchart LR
-  validate[release:validate]
-  bump[semver bump + set-version]
-  build[release:build]
-  verifyLocal[release:verify-local]
-  ghRelease[GitHub release vX.Y.Z]
-  channel[release:publish-channel]
-  verifyRemote[release:verify-remote]
-
-  validate --> bump --> build --> verifyLocal --> ghRelease --> channel --> verifyRemote
+```text
+Spinosa release → v1.0.3-beta.1 (beta)
+────────────────────────────────────────
+… preflight
+✓ preflight (42.1s)
+… bump
+✓ bump (1.2s) — 1.0.3-beta.0 → 1.0.3-beta.1
+… build
+✓ build (3.4s)
+… verify-local
+✓ verify-local (0.2s)
+… git-tag
+✓ git-tag (1.8s)
+… publish-version
+✓ publish-version (4.5s)
+… channel
+✓ channel (2.1s)
+… verify-remote
+✓ verify-remote (1.3s)
+────────────────────────────────────────
+✓ Released Spinosa v1.0.3-beta.1 (beta)
 ```
 
-| Stage | Script | What it checks |
-| ----- | ------ | -------------- |
-| Validate | `bun script/release/validate.ts` | Branch `main`/`beta`, clean tree, `bun run quality` |
-| Sync version | `bun script/set-version.ts ${version}` | `package.json` + `install.sh` PINNED_VERSION match |
-| Build | `bun script/release/build.ts ${version}` | Stage `dist/v{VERSION}/` and `dist/{channel}/` installers + checksums + tarball |
-| Verify local | `bun script/release/verify-local.ts ${version}` | Version + channel installers exist; `PINNED_VERSION` matches; checksums hash both files |
-| GitHub release | `release-it` or `gh release create` | Upload immutable version assets |
-| Publish channel | `bun script/release/publish-channel.ts ${version}` | Force-push rolling `stable`/`beta` tag; upload channel installer |
-| Verify remote | `bun script/release/verify-remote.ts ${version}` | Live rolling **and** versioned installers serve the correct `PINNED_VERSION` |
+State is tracked in `dist/v{VERSION}/.release-state.json` so releases can be resumed.
 
-Run individual stages manually when debugging:
+### Stages
 
-```bash
-bun run release:validate
-bun script/set-version.ts 1.0.2-beta.14
-bun script/release/build.ts 1.0.2-beta.14
-bun script/release/verify-local.ts 1.0.2-beta.14
-# ... publish ...
-bun script/release/publish-channel.ts 1.0.2-beta.14
-bun script/release/verify-remote.ts 1.0.2-beta.14
-```
-
-### What `release:build` produces
-
-```
-dist/v{VERSION}/
-  install.sh              # PINNED_TAG=v{VERSION}
-  spinosa-v{VERSION}.tar.gz
-  checksums.txt           # both install.sh AND tarball (required)
-
-dist/{stable|beta}/
-  install.sh              # PINNED_TAG=stable|beta (rolling)
-  checksums.txt           # install.sh only
-```
-
-The version-release `checksums.txt` **must** list both `install.sh` and `spinosa-v{VERSION}.tar.gz`. If the tarball entry is missing, installs and upgrades abort with `spinosa-v{VERSION}.tar.gz not found in checksums file`.
+1. **preflight** — branch, clean tree, `bun run quality`
+2. **bump** — sync `package.json` + `install.sh`, commit, push
+3. **build** — stage installers, tarball, checksums
+4. **verify-local** — pins and checksums
+5. **git-tag** — push `v{VERSION}` tag
+6. **publish-version** — GitHub release + assets
+7. **channel** — sync rolling `beta`/`stable` tag + installer
+8. **verify-remote** — live installer pin check
 
 ---
 
-## Prerequisites
+## Recovery
 
-- `gh` CLI installed and authenticated
-- `bun` (repo uses `bun@1.3.14`)
-- Clean working tree (`git status --porcelain` empty)
-- `bash`, `shasum` available
-- `GITHUB_TOKEN` or `GH_TOKEN` set for channel publish/verify (optional for verify-remote — falls back to anonymous curl)
-
----
-
-## Pre-release validation
-
-Before cutting a release, run the full maintainer gate:
+If a release fails mid-way:
 
 ```bash
-bun run release:validate    # branch, clean tree, bun run quality
+export GH_TOKEN=$(gh auth token)
+bun run release:resume
 ```
 
-`bun run quality` runs: typecheck all packages, dependency-cruiser, knip, syncpack, shellcheck, core tests, TUI tests, and installer bats. Requires `shellcheck` (`brew install shellcheck`).
-
-For the full interactive + VM matrix, see `workspace-template/docs/reference/testsuite.md`.
-
----
-
-## Linux VM testdrive (pre-stable validation)
-
-Run on a **fresh Linux VM** (Ubuntu 22.04+, amd64 or arm64) before a **stable** release.
+Resume a specific version from a stage:
 
 ```bash
-# Inside the VM
-curl -fsSL https://github.com/medialab/spinosa/releases/download/beta/install.sh | bash
-source ~/.bashrc
-spinosa version
-spinosa doctor
+bun run release resume 1.0.3-beta.1 --from channel
+```
+
+Republish without bumping:
+
+```bash
+bun run release:republish -- v1.0.3-beta.1
 ```
 
 ---
 
-## Post-publish verification
+## What gets published
 
-### Version release assets
+| Release | Tag | Assets |
+| ------- | --- | ------ |
+| Immutable version | `vX.Y.Z` | `install.sh`, tarball, `checksums.txt` |
+| Rolling channel | `stable` or `beta` | `install.sh`, `checksums.txt` |
 
-```bash
-VERSION="1.0.2-beta.14"
-gh release view "v${VERSION}" --json assets \
-  | python3 -c "import sys,json; [print(a['name']) for a in json.load(sys.stdin)['assets']]"
-# Expected: checksums.txt, install.sh, spinosa-v${VERSION}.tar.gz
-```
+Beta never moves the `stable` rolling tag.
 
-```bash
-curl -fsSL "https://github.com/medialab/spinosa/releases/download/v${VERSION}/checksums.txt"
-# Expected: 2 lines — install.sh and spinosa-v${VERSION}.tar.gz
-```
-
-### Rolling channel
-
-```bash
-CHANNEL="beta"   # or stable
-curl -fsSL "https://github.com/medialab/spinosa/releases/download/${CHANNEL}/install.sh" | grep PINNED_VERSION
-# Must show the version you just published
-```
-
-`release:verify-remote` runs this check automatically at the end of every release.
-
----
-
-## Upgrade architecture (maintainer context)
-
-User-facing upgrades are centralized in `@spinosa/core`:
-
-| Concern | Location |
-| ------- | -------- |
-| Upgrade engine | `upgradeFramework()` in `packages/spinosa-core/src/commands/upgrade.ts` |
-| Launch-time check | `runLaunchPreflight()` in `packages/spinosa-core/src/commands/preflight.ts` |
-| CLI entry points | `spinosa upgrade`, `spinosa preflight` (kernel commands) |
-| Version comparison | `compareFrameworkVersions()` |
-| Channel config | `beta: true\|false` in `~/.spinosa/metadata/config.yaml` |
-
-**Launch flow:** when you run `spinosa` (no args) or `bun run dev`, the kernel runs `runLaunchPreflight()` **before** spawning the TUI worker. It prints `checking for updates...` / `no updates available`, then `launching TUI...`. If preflight upgrades and requests a restart, it exits with code `10` and the launcher / `spinosa-cli` re-execs. The TUI does not own upgrade networking or installation.
-
-**Dev tree:** `bun run dev` uses `packages/spinosa-cli` to spawn the kernel with `SPINOSA_TEMPLATE_ROOT` set to the repo root. Dev builds (`installedVersion === "dev"`) skip the network upgrade check.
-
-Disable launch-time checks: `SPINOSA_NO_UPGRADE_CHECK=1` or `auto_upgrade: false` in config.
+Version source of truth: root `package.json`. `bun script/set-version.ts` syncs `install.sh` `PINNED_VERSION`.
 
 ---
 
 ## Gotchas
 
-- **Clean tree required:** commit before tagging; the tarball is built from `HEAD`.
-- **`PINNED_VERSION` must match:** use `set-version.ts` — never hand-edit one file without the other.
-- **`dist/` is gitignored:** release assets live in `dist/vX.Y.Z/` and `dist/{channel}/` — never committed.
-- **Beta does not move `stable`:** only stable releases refresh the rolling `stable` endpoint.
-- **GitHub Actions are disabled** for framework releases — everything runs locally via `release-it` / `gh`. There is no CI quality workflow; `bun run quality` is the gate.
-- **Patch audit:** run `bun run patches:generate` after editing `patchedDependencies` in root `package.json`.
-- **Version-release checksums need both entries** — always curl the live `checksums.txt` before declaring a release done.
-- **Channel-release checksums are install.sh only** — the tarball lives on the immutable version release, not the rolling channel.
-- **Republishing:** `bun run release:republish -- vX.Y.Z` commits version sync changes if needed, then runs the full pipeline.
-
----
-
-## Legacy manual publish (reference only)
-
-Use the automated flows above. These steps document what the scripts do internally.
-
-<details>
-<summary>Manual asset staging</summary>
-
-```bash
-VERSION="1.0.2-beta.14"
-bun script/set-version.ts "$VERSION"
-bun script/release/build.ts "$VERSION"
-bun script/release/verify-local.ts "$VERSION"
-
-TAG="v${VERSION}"
-git tag "$TAG"   # if not already tagged
-gh release create "$TAG" \
-  --title "Spinosa v${VERSION}" \
-  --generate-notes \
-  $([[ "$VERSION" == *-* ]] && echo --prerelease) \
-  "dist/v${VERSION}/install.sh" \
-  "dist/v${VERSION}/spinosa-v${VERSION}.tar.gz" \
-  "dist/v${VERSION}/checksums.txt"
-
-bun script/release/publish-channel.ts "$VERSION"
-bun script/release/verify-remote.ts "$VERSION"
-```
-
-</details>
+- Commit before releasing — tarball is built from `HEAD`.
+- `dist/` is gitignored; state file lives at `dist/v{VERSION}/.release-state.json`.
+- Push beta with `git push origin HEAD:refs/heads/beta` if a local `beta` tag causes ref ambiguity.
+- Docs website deploys via GitHub Actions on `main` only (not beta).
