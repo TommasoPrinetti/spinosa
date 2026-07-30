@@ -13,9 +13,11 @@
     "script/release/build.ts",
     "script/release/github.ts",
     "script/release/publish-channel.ts",
+    "script/release/republish.ts",
     "script/release/validate.ts",
     "script/release/verify-local.ts",
     "script/release/verify-remote.ts",
+    "script/generate-patches-md.ts",
     "workspace-template/.bin/spinosa"
   ],
   "project": [
@@ -111,7 +113,8 @@
     "zx"
   ],
   "ignoreIssues": {
-    "packages/spinosa-kernel/package.json": ["exports"]
+    "packages/spinosa-kernel/package.json": ["exports"],
+    "script/release/republish.ts": ["unresolved"]
   },
   "rules": {
     "binaries": "off",
