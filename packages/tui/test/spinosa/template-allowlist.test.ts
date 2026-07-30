@@ -1,10 +1,11 @@
-import { describe, expect, test, beforeAll, afterAll } from "bun:test"
+import { describe, expect, test, beforeAll, afterAll, afterEach } from "bun:test"
 import { existsSync, mkdtempSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 
 import { readFrameworkFilesTsv } from "@spinosa/core/framework/manifest"
 import { createWorkspace } from "@spinosa/core/commands/create"
+import { cleanupCreatedWorkspaces, trackCreatedWorkspace } from "../fixture/spinosa-test-home"
 
 const repoRoot = path.resolve(import.meta.dir, "../../../..")
 
@@ -61,6 +62,10 @@ afterAll(() => {
   rmSync(testRoot, { recursive: true, force: true })
 })
 
+afterEach(async () => {
+  await cleanupCreatedWorkspaces()
+})
+
 describe("workspace template allowlist", () => {
   test("createWorkspace copies only manifest-declared files plus workspace marker", async () => {
     const root = frameworkRoot()
@@ -81,6 +86,7 @@ describe("workspace template allowlist", () => {
       workspaceName: "allowlist-test",
     })
     expect(result.success).toBe(true)
+    trackCreatedWorkspace(result.workspacePath)
 
     const copiedFiles = listWorkspaceFiles(result.workspacePath)
     const unexpected = copiedFiles.filter(

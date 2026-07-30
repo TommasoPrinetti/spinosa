@@ -1,4 +1,4 @@
-import { describe, expect, test, beforeAll, afterAll } from "bun:test"
+import { describe, expect, test, beforeAll, afterAll, afterEach } from "bun:test"
 import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync, realpathSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
@@ -8,6 +8,7 @@ import { createWorkspace } from "@spinosa/core/commands/create"
 import { validateWorkspace } from "@spinosa/core/workspace/registry"
 import { readWorkspaceMeta } from "@spinosa/core/workspace/meta"
 import { writeWorkspaceStatus } from "@spinosa/core/workspace/meta"
+import { cleanupCreatedWorkspaces, trackCreatedWorkspace } from "../fixture/spinosa-test-home"
 
 const repoRoot = path.resolve(import.meta.dir, "../../../..")
 
@@ -31,6 +32,16 @@ afterAll(() => {
   rmSync(testRoot, { recursive: true, force: true })
 })
 
+afterEach(async () => {
+  await cleanupCreatedWorkspaces()
+})
+
+async function createTrackedWorkspace(options: Parameters<typeof createWorkspace>[0]) {
+  const result = await createWorkspace(options)
+  if (result.success) trackCreatedWorkspace(result.workspacePath)
+  return result
+}
+
 describe("E2E: Workspace creation flow", () => {
   test("resolveFrameworkRoot finds the repo root", () => {
     const root = frameworkRoot()
@@ -44,7 +55,7 @@ describe("E2E: Workspace creation flow", () => {
     const root = frameworkRoot()
     expect(root).toBeTruthy()
 
-    const result = await createWorkspace({
+    const result = await createTrackedWorkspace({
       corpusPath: corpusDir,
       frameworkRoot: root,
       workspaceName: "e2e-test-workspace",
@@ -84,7 +95,7 @@ describe("E2E: Workspace creation flow", () => {
     const root = frameworkRoot()
     expect(root).toBeTruthy()
 
-    const result = await createWorkspace({
+    const result = await createTrackedWorkspace({
       corpusPath: corpusDir,
       frameworkRoot: root,
       workspaceName: "e2e-meta-test",
@@ -103,7 +114,7 @@ describe("E2E: Workspace creation flow", () => {
     const root = frameworkRoot()
     expect(root).toBeTruthy()
 
-    const ws1 = await createWorkspace({
+    const ws1 = await createTrackedWorkspace({
       corpusPath: corpusDir,
       frameworkRoot: root,
       workspaceName: "e2e-dup-test",
@@ -111,7 +122,7 @@ describe("E2E: Workspace creation flow", () => {
     expect(ws1.success).toBe(true)
 
     // Same name should create a numbered variant
-    const ws2 = await createWorkspace({
+    const ws2 = await createTrackedWorkspace({
       corpusPath: corpusDir,
       frameworkRoot: root,
       workspaceName: "e2e-dup-test",
@@ -123,7 +134,7 @@ describe("E2E: Workspace creation flow", () => {
   test("reuses an interrupted import workspace and preserves partial output", async () => {
     const root = frameworkRoot()
     expect(root).toBeTruthy()
-    const first = await createWorkspace({
+    const first = await createTrackedWorkspace({
       corpusPath: corpusDir,
       frameworkRoot: root,
       workspaceName: "e2e-resume-test",
@@ -132,7 +143,7 @@ describe("E2E: Workspace creation flow", () => {
     const before = (await readWorkspaceMeta(first.workspacePath))!.workspaceID
     await Bun.write(path.join(first.workspacePath, "raw", "partial.md"), "partial\n")
 
-    const resumed = await createWorkspace({
+    const resumed = await createTrackedWorkspace({
       corpusPath: corpusDir,
       frameworkRoot: root,
       workspaceName: "a-name-that-would-not-find-the-interrupted-workspace",
@@ -146,7 +157,7 @@ describe("E2E: Workspace creation flow", () => {
   })
 
   test("failed workspace creation cleans up reserved directory", async () => {
-    const result = await createWorkspace({
+    const result = await createTrackedWorkspace({
       corpusPath: corpusDir,
       frameworkRoot: path.join(testRoot, "missing-framework"),
       workspaceName: "e2e-cleanup-test",
