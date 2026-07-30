@@ -7,7 +7,7 @@ cd /path/to/spinosa
 bun run dev
 ```
 
-This runs the TUI from source (`packages/opencode/src/index.ts`). Edit any file and restart to see changes.
+This runs the TUI from source via `packages/spinosa-kernel` and `packages/tui`. Edit any file and restart to see changes.
 
 ### Alternative: run via the spinosa shim (dev mode)
 
@@ -18,10 +18,12 @@ SPINOSA_HOME=~/.spinosa ./workspace-template/.bin/spinosa
 
 The shim auto-detects dev mode from `workspace-template/.spinosa/workspace-files.tsv`.
 
+Set `SPINOSA_FRAMEWORK_ROOT` or `SPINOSA_TEMPLATE_ROOT` when the framework root is not the current working directory.
+
 ## Directory Layout
 
 ```
-workspace-template/  ← Files shipped into Spinosa workspaces
+workspace-template/  ← Files shipped into Spinosa workspaces (via workspace-files.tsv)
   .bin/spinosa       ← Bash launcher and command router
   .spinosa/          ← Workspace manifest and local state templates
   .agents/           ← Canonical skills and agent instructions
@@ -29,7 +31,7 @@ workspace-template/  ← Files shipped into Spinosa workspaces
   .claude/ .codex/   ← Vendor adapter mirrors
   .hermes/           ← Hermes adapter and generated workspace config
   system/ docs/      ← Workspace system files and user docs
-packages/            ← Runtime source (opencode fork + tui + spinosa-core + deps)
+packages/            ← Runtime source (kernel, tui, spinosa-core, llm, and deps)
 install.sh           ← User-facing installer (curl | bash)
 package.json         ← Bun workspace root
 ```
@@ -38,45 +40,39 @@ package.json         ← Bun workspace root
 
 | Package | Path | What it does |
 |---------|------|-------------|
-| **opencode** | `packages/opencode/` | CLI + TUI host — opencode fork. Entry: `src/index.ts`. Do not modify unless fixing upstream bugs. |
-| **tui** | `packages/tui/` | TUI components. Spinosa code in `src/spinosa/` and `src/routes/spinosa/`. |
-| **spinosa-core** | `packages/tui/src/spinosa-core/` | Backend: workspace management, import pipeline, scanning, CLI commands, channels. |
+| **spinosa-core** | `packages/spinosa-core/` | Product workspace behavior: create/update, import, channels, preflight, upgrade. |
+| **spinosa-kernel** | `packages/spinosa-kernel/` | Executable CLI host (`src/index.ts`). Commands in `src/cli/cmd/`. |
+| **kernel-core** | `packages/core/` (`@spinosa/kernel-core`) | Inherited runtime internals from the upstream kernel. |
+| **tui** | `packages/tui/` | Terminal UI. Spinosa routes in `src/routes/spinosa/`. Entry: `src/spinosa-cli.ts`. |
+| **llm** | `packages/llm/` | Effect Schema-first LLM provider core. |
 
 ## Key Files
 
 ### TUI Launch Flow
-- `workspace-template/.bin/spinosa` — thin bash bootstrap (~70 lines). Resolves root + bun, then execs `packages/spinosa-kernel/src/index.ts` or launches TUI.
-- `packages/spinosa-kernel/src/index.ts` — yargs CLI entry point. All commands: `help`, `version`, `mcp`, `debug`, `providers`, `agent`, `upgrade`, `uninstall`, `models`, `stats`, `export`, `import`, `session`, `plugin`, `db`, `new`, `add`, `update`, `status`, `list`, `doctor`, `startup-autoclean`, `web`.
-- `packages/spinosa-kernel/src/cli/cmd/` — modular command handlers with `--json`/`--quiet` output helpers.
-- `packages/opencode/src/cli/cmd/tui.ts` — creates Web Worker, RPC bridge, TUI component tree.
+- `workspace-template/.bin/spinosa` — bash bootstrap. Resolves framework root and bun, then execs the kernel CLI or launches the TUI.
+- `packages/spinosa-kernel/src/index.ts` — yargs CLI entry point.
+- `packages/spinosa-kernel/src/cli/cmd/tui.ts` — runs launch preflight, then creates the TUI worker and session transport.
+- `packages/spinosa-core/src/commands/preflight.ts` — upgrade check and workspace updates before TUI render.
 
 ### Onboarding (New Workspace)
-- `packages/tui/src/routes/spinosa/onboarding.tsx` — 10-step wizard UI.
-- `packages/tui/src/spinosa-core/commands/onboard.ts` — `prepareOnboarding`, `runOnboarding`, `completeOnboarding`.
-- `packages/tui/src/spinosa-core/import/pipeline.ts` — three-phase import (direct → MarkItDown → OCR).
+- `packages/tui/src/routes/spinosa/onboarding.tsx` — onboarding wizard UI.
+- `packages/spinosa-core/src/commands/create.ts` — workspace creation from manifest-declared template paths.
+- `packages/spinosa-core/src/import/pipeline.ts` — document import (direct → MarkItDown → OCR).
 
 ## Publishing
 
-### Framework Release
-```bash
-# Bump version in package.json (canonical source)
-# Keep package.json and install.sh PINNED_VERSION aligned, then run local release gate.
-bun run --cwd packages/tui test:spinosa
-bash script/release.sh vX.Y.Z[-beta.N]
-```
+See `RELEASE_GUIDE.md`. Framework releases use `release-it`:
 
-### NPM Binary
 ```bash
-bun run script/build-tui.ts --single
-cd dist/@spinosa/tui-darwin-arm64 && npm publish --access public --tag beta
-cd dist/@spinosa/tui && npm publish --access public --tag beta
+bun run release:validate
+bun run release:beta:patch   # or release:stable:patch
 ```
 
 ## Rules for Agents
 
-1. **Do NOT modify `packages/opencode/src/`** unless fixing an upstream bug. Spinosa features go in `packages/tui/src/spinosa/`, `packages/tui/src/routes/spinosa/`, or `packages/tui/src/spinosa-core/`.
+1. Product workspace behavior belongs in `packages/spinosa-core/`. CLI wiring belongs in `packages/spinosa-kernel/`. UI belongs in `packages/tui/`.
 2. **Channel inference**: never hardcode `"stable"`. Infer from bundle version: prerelease → beta, plain semver → stable.
 3. **Progress**: use `ProgressEmitter` for batch operations. Wire `onStdout`/`onStderr` for TUI visibility.
-4. **TypeScript**: use the package scripts (`bun run --cwd packages/tui typecheck`).
-5. **Bash**: `workspace-template/.bin/spinosa` is a thin bootstrap (~25 lines). All CLI logic lives in `packages/spinosa-kernel/src/index.ts`. `install.sh` must remain macOS Bash 3.2 compatible.
-6. Agent mirrors are pre-baked. Update canonical and adapter copies together, then run `bun run --cwd packages/tui verify:spinosa`.
+4. **TypeScript**: use package `typecheck` scripts (`bun run typecheck` at repo root).
+5. **Bash**: `workspace-template/.bin/spinosa` is a thin bootstrap. CLI logic lives in `packages/spinosa-kernel/`. `install.sh` must remain macOS Bash 3.2 compatible.
+6. Agent mirrors are pre-baked. Update canonical and adapter copies together, then run `bun run --cwd packages/tui test:spinosa`.

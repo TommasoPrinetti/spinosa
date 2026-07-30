@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import path from "node:path"
-import { copyDirContents, cleanMacMetadata } from "../utils/fs"
+import { cleanMacMetadata } from "../utils/fs"
+import { copyFrameworkManifestPaths } from "../framework/manifest"
 import { registerWorkspace, writeSetupFiles } from "../workspace/registry"
 import { writeWorkspaceStatus } from "../workspace/meta"
 import { createWorkspaceID, ensureWorkspaceID } from "../workspace/identity"
@@ -135,7 +136,7 @@ export async function createWorkspace(options: CreateWorkspaceOptions): Promise<
     }
     if (!reservation.resumed) {
       progress("Copying workspace template...")
-      copyDirContents(srcTemplate, workspacePath)
+      copyFrameworkManifestPaths(srcTemplate, workspacePath)
     }
     throwIfSpinosaCancelled(shouldAbort)
 

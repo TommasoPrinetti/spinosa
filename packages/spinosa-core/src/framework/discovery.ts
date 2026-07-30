@@ -81,7 +81,6 @@ export function resolveFrameworkRoot(): string | undefined {
   const installed = discoverInstalledFramework()
   if (installed) candidates.push(installed)
   candidates.push(process.cwd())
-  candidates.push(path.join(homedir(), "Documents", "spinosa-main"))
 
   for (const candidate of candidates) {
     if (hasFrameworkMarker(candidate)) return normalizeExistingRoot(candidate)

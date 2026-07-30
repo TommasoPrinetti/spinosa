@@ -2,7 +2,7 @@
 
 Spinosa turns a folder of research documents into a local workspace you can chat with. Ask questions in plain language. Spinosa searches your files, drafts an answer, and checks every claim against the original text.
 
-No cloud, no uploads, your documents stay on your machine.
+Local-first: your documents and indexes stay on your machine. When you connect a cloud model provider, prompts and context are sent to that provider for inference.
 
 ## Quick start
 

@@ -27,6 +27,7 @@ export * from "./extension/pdf"
 
 // --- framework
 export * from "./framework/discovery"
+export * from "./framework/manifest"
 
 // --- workspace
 export * from "./workspace/meta"

@@ -11,7 +11,7 @@
 
 Spinosa is a local research workspace for people who work with document collections — interviews, field notes, PDFs, reports, transcripts. You ask questions in plain language. AI agents search your files, draft answers, and verify every claim against the original text.
 
-**No cloud, no uploads.** All processing happens on your machine.
+**Local-first by design.** Your workspace files and indexes stay on your machine. When you connect a cloud model provider, prompts and context are sent to that provider for inference.
 
 ---
 
@@ -32,7 +32,7 @@ If you have a research question and a folder of documents, Spinosa gives you a t
 
 LLMs are good at answering questions. They are bad at knowing where their answers came from. Spinosa solves that by giving the AI a structured workspace on top of your actual files — so every answer traces back to a source you provided.
 
-The design is local-first. No documents leave your machine. The workspace is a folder on disk. The agents communicate through files, not hidden memory, so their work is inspectable and auditable.
+The design is local-first. Workspace files and indexes remain on your machine. When you select a cloud model, the prompts and context sent to that model are processed by the selected provider. The workspace is a folder on disk. The agents communicate through files, not hidden memory, so their work is inspectable and auditable.
 
 ---
 

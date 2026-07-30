@@ -6,6 +6,13 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 **Release policy:** versions are published only with explicit maintainer approval.
 
+## [Unreleased]
+
+### Changed
+
+- Workspace creation copies only paths declared in `workspace-files.tsv`, not the full template tree.
+- Privacy and development documentation updated to describe local-first behavior with optional cloud model providers.
+
 ## [1.0.2-beta.15] — 2026-07-30
 
 ### Changed

@@ -9,6 +9,12 @@ import { validateWorkspace } from "@spinosa/core/workspace/registry"
 import { readWorkspaceMeta } from "@spinosa/core/workspace/meta"
 import { writeWorkspaceStatus } from "@spinosa/core/workspace/meta"
 
+const repoRoot = path.resolve(import.meta.dir, "../../../..")
+
+function frameworkRoot(): string {
+  return resolveFrameworkRoot() ?? repoRoot
+}
+
 let corpusDir: string
 let testRoot: string
 
@@ -27,20 +33,20 @@ afterAll(() => {
 
 describe("E2E: Workspace creation flow", () => {
   test("resolveFrameworkRoot finds the repo root", () => {
-    const root = resolveFrameworkRoot()
+    const root = frameworkRoot()
     expect(root).toBeTruthy()
     // Verify the marker exists at the expected path
-    const marker = path.join(root!, "workspace-template", ".spinosa", "workspace-files.tsv")
+    const marker = path.join(root, "workspace-template", ".spinosa", "workspace-files.tsv")
     expect(existsSync(marker)).toBe(true)
   })
 
   test("createWorkspace succeeds with valid framework root", async () => {
-    const root = resolveFrameworkRoot()
+    const root = frameworkRoot()
     expect(root).toBeTruthy()
 
     const result = await createWorkspace({
       corpusPath: corpusDir,
-      frameworkRoot: root!,
+      frameworkRoot: root,
       workspaceName: "e2e-test-workspace",
     })
 
@@ -57,6 +63,7 @@ describe("E2E: Workspace creation flow", () => {
     expect(existsSync(path.join(ws, "AGENTS.md"))).toBe(true)
     expect(existsSync(path.join(ws, "startup-prompt.md"))).toBe(true)
     expect(existsSync(path.join(ws, ".bin", "spinosa"))).toBe(true)
+    expect(existsSync(path.join(ws, ".bin", "run-with-timeout.ts"))).toBe(false)
     expect(existsSync(path.join(ws, ".agents"))).toBe(true)
     expect(existsSync(path.join(ws, ".opencode", "node_modules"))).toBe(false)
     expect(await Bun.file(path.join(ws, ".hermes", "workspace.config.yaml")).text()).toContain(`cwd: ${ws}`)
@@ -65,7 +72,7 @@ describe("E2E: Workspace creation flow", () => {
     expect(existsSync(path.join(ws, "raw"))).toBe(true)
     expect(existsSync(path.join(ws, "raw", ".gitkeep"))).toBe(true)
     expect(existsSync(path.join(ws, "maps"))).toBe(true)
-    expect(existsSync(path.join(ws, "logs"))).toBe(true)
+    expect(existsSync(path.join(ws, ".logs"))).toBe(true)
     expect(existsSync(path.join(ws, "agent_reports"))).toBe(true)
     expect(existsSync(path.join(ws, ".trash"))).toBe(true)
 
@@ -74,12 +81,12 @@ describe("E2E: Workspace creation flow", () => {
   })
 
   test("readWorkspaceMeta returns correct metadata", async () => {
-    const root = resolveFrameworkRoot()
+    const root = frameworkRoot()
     expect(root).toBeTruthy()
 
     const result = await createWorkspace({
       corpusPath: corpusDir,
-      frameworkRoot: root!,
+      frameworkRoot: root,
       workspaceName: "e2e-meta-test",
     })
 
@@ -93,12 +100,12 @@ describe("E2E: Workspace creation flow", () => {
   })
 
   test("second workspace creation auto-increments name", async () => {
-    const root = resolveFrameworkRoot()
+    const root = frameworkRoot()
     expect(root).toBeTruthy()
 
     const ws1 = await createWorkspace({
       corpusPath: corpusDir,
-      frameworkRoot: root!,
+      frameworkRoot: root,
       workspaceName: "e2e-dup-test",
     })
     expect(ws1.success).toBe(true)
@@ -106,7 +113,7 @@ describe("E2E: Workspace creation flow", () => {
     // Same name should create a numbered variant
     const ws2 = await createWorkspace({
       corpusPath: corpusDir,
-      frameworkRoot: root!,
+      frameworkRoot: root,
       workspaceName: "e2e-dup-test",
     })
     expect(ws2.success).toBe(true)
@@ -114,11 +121,11 @@ describe("E2E: Workspace creation flow", () => {
   })
 
   test("reuses an interrupted import workspace and preserves partial output", async () => {
-    const root = resolveFrameworkRoot()
+    const root = frameworkRoot()
     expect(root).toBeTruthy()
     const first = await createWorkspace({
       corpusPath: corpusDir,
-      frameworkRoot: root!,
+      frameworkRoot: root,
       workspaceName: "e2e-resume-test",
     })
     await writeWorkspaceStatus(first.workspacePath, "importing")
@@ -127,7 +134,7 @@ describe("E2E: Workspace creation flow", () => {
 
     const resumed = await createWorkspace({
       corpusPath: corpusDir,
-      frameworkRoot: root!,
+      frameworkRoot: root,
       workspaceName: "a-name-that-would-not-find-the-interrupted-workspace",
       resumeWorkspacePath: first.workspacePath,
     })

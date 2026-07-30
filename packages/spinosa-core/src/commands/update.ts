@@ -22,6 +22,7 @@ import { loadRegistry } from "../workspace/registry"
 import { readFrameworkVersionFromRoot, resolveTemplateRootFromFrameworkRoot } from "../framework/discovery"
 import { spinosaLogInfo, spinosaLogWarn } from "../utils/log"
 import { resolvePathWithinRoot } from "../utils/path"
+import { readFrameworkFilesTsv } from "../framework/manifest"
 
 export interface UpdateOptions {
   workspacePath: string
@@ -42,33 +43,9 @@ export interface UpdateResult {
   presence?: import("../types").SpinosaWorkspacePresence
 }
 
-interface FrameworkEntry {
-  path: string
-  role: string
-  policy: string
-}
-
 interface ManifestEntry {
   path: string
   kind: string
-}
-
-function readFrameworkFilesTsv(tsvPath: string): FrameworkEntry[] {
-  const content = readFileSync(tsvPath, "utf-8")
-  const entries: FrameworkEntry[] = []
-  for (const line of content.split("\n")) {
-    const trimmed = line.trim()
-    if (!trimmed) continue
-    const parts = trimmed.split("\t")
-    const filePath = parts[0] ?? ""
-    const role = parts[1] ?? ""
-    const policy = parts[2] ?? ""
-    if (filePath === "path" && role === "role") continue
-    if (role && !role.startsWith("#")) {
-      entries.push({ path: filePath, role, policy })
-    }
-  }
-  return entries
 }
 
 function readWorkspaceManifest(manifestPath: string): ManifestEntry[] {
