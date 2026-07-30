@@ -193,7 +193,14 @@ read_from_tty() {
   fi
 }
 
-flush_pending_input() { :; }
+flush_pending_input() {
+  # Drain already-buffered keystrokes so prompts are not answered by stale input.
+  local _discard
+  while IFS= read -r -t 0 _discard 2>/dev/null; do :; done
+  if [ -r /dev/tty ]; then
+    while IFS= read -r -t 0 _discard </dev/tty 2>/dev/null; do :; done
+  fi
+}
 
 read_tty_or_die() {
   if ! read_from_tty "$1"; then

@@ -143,20 +143,14 @@ function copyFileAtomically(src: string, dest: string): boolean {
 
 export function safeCopy(src: string, dest: string, options?: SafeCopyOptions): boolean {
   const retries = options?.retries ?? DEFAULT_RETRIES
-  const useStream = isCloudStoragePath(dest)
   let delayMs = safeCopyDelaySec(dest) * 1000
   let lastReason = ""
 
   mkdirSync(path.dirname(dest), { recursive: true })
 
   for (let i = 1; i <= retries; i++) {
-    if (useStream) {
-      if (copyFileAtomically(src, dest)) return true
-      lastReason = "atomic copy failed"
-    } else {
-      if (copyFileAtomically(src, dest)) return true
-      lastReason = "atomic copy failed"
-    }
+    if (copyFileAtomically(src, dest)) return true
+    lastReason = "atomic copy failed"
     if (i >= retries) break
     options?.onRetry?.(i, lastReason)
     sleepMs(delayMs)

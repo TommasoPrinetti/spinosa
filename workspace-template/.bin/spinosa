@@ -74,8 +74,6 @@ ensure_runtime() {
   [[ -z "$RESOLVED_ROOT" || -z "$BUN" ]] && return 1
   link_workspace_packages "$RESOLVED_ROOT"
   runtime_healthy && return 0
-  # workspace symlinks may have just been created; retry once
-  runtime_healthy && return 0
   # try refreshing deps
   _btlog ensure "running bun install to resolve dependencies"
   "$BUN" install --cwd "$RESOLVED_ROOT" --no-summary >/dev/null 2>&1 || true
