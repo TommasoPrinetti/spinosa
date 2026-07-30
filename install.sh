@@ -2,7 +2,7 @@
 # shellcheck shell=bash
 # ── install.sh — Spinosa Framework Installer (auto-re-execs with bash) ──────
 
-PINNED_VERSION="1.0.3-beta.3"
+PINNED_VERSION="1.0.3-beta.4"
 PINNED_TAG="beta"
 BUNDLED_BUN_VERSION="1.3.14"
 DEFAULT_DEPS_TIMEOUT_SECONDS="600"
