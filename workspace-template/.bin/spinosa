@@ -131,7 +131,7 @@ done
 launcher_command="${launcher_args[$command_index]:-}"
 dispatch=false
 case "$launcher_command" in
-  help|--help|-h|version|--version|add|update|doctor|upgrade|uninstall|status|list|startup-autoclean|autoclean|models|stats|export|import|session|plugin|plug|db|providers|auth|agent|mcp|debug|web|completion) dispatch=true ;;
+  help|--help|-h|version|--version|add|update|doctor|upgrade|preflight|uninstall|status|list|startup-autoclean|autoclean|models|stats|export|import|session|plugin|plug|db|providers|auth|agent|mcp|debug|web|completion) dispatch=true ;;
   new|create) [[ $(( $# - command_index )) -gt 1 ]] && dispatch=true ;;
 esac
 if [[ "$dispatch" == "true" ]]; then
@@ -150,10 +150,25 @@ fi
 
 # No-args or new/create without source → launch TUI
 if [[ -d "${RESOLVED_ROOT}/packages/tui/src" && -n "$BUN" ]]; then
-  _btlog tui "running preflight check"
   export SPINOSA_TEMPLATE_ROOT="$RESOLVED_ROOT"
-  SPINOSA_TEMPLATE_ROOT="$RESOLVED_ROOT" \
-    "$BUN" run "${RESOLVED_ROOT}/packages/spinosa-kernel/src/index.ts" version >/dev/null 2>&1 || true
+  PREFLIGHT_RESTART_EXIT_CODE=10
+  if [[ "${SPINOSA_UPGRADE_REEXEC:-}" != "1" ]]; then
+    _btlog tui "running preflight check"
+    set +e
+    SPINOSA_TEMPLATE_ROOT="$RESOLVED_ROOT" \
+      "$BUN" run "${RESOLVED_ROOT}/packages/spinosa-kernel/src/index.ts" preflight
+    preflight_exit=$?
+    set -e
+    if [[ "$preflight_exit" -eq "$PREFLIGHT_RESTART_EXIT_CODE" ]]; then
+      _btlog tui "preflight requested restart after upgrade"
+      export SPINOSA_UPGRADE_REEXEC=1
+      exec "$0" "$@"
+    elif [[ "$preflight_exit" -ne 0 ]]; then
+      exit "$preflight_exit"
+    fi
+  else
+    _btlog tui "skipping preflight (SPINOSA_UPGRADE_REEXEC=1)"
+  fi
   exec "$BUN" run "${RESOLVED_ROOT}/packages/spinosa-kernel/src/index.ts" "$@"
 fi
 

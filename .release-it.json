@@ -1,0 +1,39 @@
+{
+  "git": {
+    "commitMessage": "release: v${version}",
+    "tagName": "v${version}",
+    "requireCleanWorkingDir": true,
+    "requireBranch": ["main", "beta"],
+    "push": true,
+    "tag": true
+  },
+  "github": {
+    "release": true,
+    "releaseName": "Spinosa v${version}",
+    "autoGenerate": true,
+    "assets": [
+      "dist/v${version}/install.sh",
+      "dist/v${version}/spinosa-v${version}.tar.gz",
+      "dist/v${version}/checksums.txt"
+    ]
+  },
+  "npm": {
+    "publish": false
+  },
+  "hooks": {
+    "before:init": [
+      "bun script/release/validate.ts"
+    ],
+    "after:bump": [
+      "bun script/set-version.ts ${version}"
+    ],
+    "before:release": [
+      "bun script/release/build.ts ${version}",
+      "bun script/release/verify-local.ts ${version}"
+    ],
+    "after:release": [
+      "bash script/release/publish-channel.sh ${version}",
+      "bun script/release/verify-remote.ts ${version}"
+    ]
+  }
+}

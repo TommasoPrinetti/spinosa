@@ -1,3 +1,5 @@
+import semver from "semver"
+
 export function normalizeFrameworkVersion(value: string | undefined): string {
   return value?.trim().replace(/^v/i, "") ?? ""
 }
@@ -9,9 +11,19 @@ export function isLegacyDevWorkspaceVersion(value: string | undefined): boolean 
 
 export function isPrereleaseFrameworkVersion(value: string | undefined): boolean {
   const normalized = normalizeFrameworkVersion(value)
-  return /^\d+\.\d+\.\d+-.+$/.test(normalized)
+  if (!normalized) return false
+  return semver.prerelease(normalized) !== null
 }
 
+function coerceComparableVersion(value: string | undefined): string | undefined {
+  const normalized = normalizeFrameworkVersion(value)
+  if (!normalized || normalized === "unknown") return undefined
+  if (isLegacyDevWorkspaceVersion(normalized)) return undefined
+  if (!semver.valid(normalized)) return undefined
+  return normalized
+}
+
+/** Returns -1, 0, or 1 when both sides are comparable semver strings. */
 export function compareFrameworkVersions(
   left: string | undefined,
   right: string | undefined,
@@ -20,66 +32,36 @@ export function compareFrameworkVersions(
   if (isLegacyDevWorkspaceVersion(left)) return -1
   if (isLegacyDevWorkspaceVersion(right)) return 1
 
-  const leftParsed = parseComparableFrameworkVersion(left)
-  const rightParsed = parseComparableFrameworkVersion(right)
-  if (!leftParsed || !rightParsed) return
+  const leftComparable = coerceComparableVersion(left)
+  const rightComparable = coerceComparableVersion(right)
+  if (!leftComparable || !rightComparable) return undefined
 
-  const maxCore = Math.max(leftParsed.core.length, rightParsed.core.length)
-  for (let index = 0; index < maxCore; index++) {
-    const leftValue = leftParsed.core[index] ?? 0
-    const rightValue = rightParsed.core[index] ?? 0
-    if (leftValue > rightValue) return 1
-    if (leftValue < rightValue) return -1
-  }
-
-  if (leftParsed.prerelease.length === 0 && rightParsed.prerelease.length > 0) return 1
-  if (leftParsed.prerelease.length > 0 && rightParsed.prerelease.length === 0) return -1
-  if (leftParsed.prerelease.length > 0 && rightParsed.prerelease.length > 0) {
-    return comparePrereleaseTokens(leftParsed.prerelease, rightParsed.prerelease)
-  }
-  return 0
+  return semver.compare(leftComparable, rightComparable)
 }
 
-function parseComparableFrameworkVersion(
-  value: string | undefined,
-): { core: number[]; prerelease: string[] } | undefined {
-  if (!value) return
-  const normalized = normalizeFrameworkVersion(value)
-  if (!normalized || normalized === "unknown" || normalized.toLowerCase() === "dev") return
+export function isUpgrade(current: string | undefined, target: string | undefined): boolean {
+  const cmp = compareFrameworkVersions(current, target)
+  return cmp !== undefined && cmp < 0
+}
 
-  const [base, ...rest] = normalized.split("-")
-  const prerelease = rest.join("-").split(".").filter(Boolean)
-  const coreTokens = base.split(".")
-  if (coreTokens.length === 0 || coreTokens.some((part) => !/^\d+$/.test(part))) return
+export function isSameVersion(current: string | undefined, target: string | undefined): boolean {
+  const cmp = compareFrameworkVersions(current, target)
+  return cmp === 0
+}
 
-  return {
-    core: coreTokens.map((part) => Number.parseInt(part, 10)),
-    prerelease,
-  }
+export function releaseChannel(version: string | undefined): "stable" | "beta" {
+  const normalized = coerceComparableVersion(version)
+  if (!normalized) return "stable"
+  return semver.prerelease(normalized) ? "beta" : "stable"
 }
 
 export function comparePrereleaseTokens(left: string[], right: string[]): number {
-  const max = Math.max(left.length, right.length)
-  for (let index = 0; index < max; index++) {
-    const leftToken = left[index] ?? ""
-    const rightToken = right[index] ?? ""
-    if (leftToken === rightToken) continue
-    if (!leftToken) return -1
-    if (!rightToken) return 1
-
-    const leftNumeric = /^\d+$/.test(leftToken) ? Number.parseInt(leftToken, 10) : undefined
-    const rightNumeric = /^\d+$/.test(rightToken) ? Number.parseInt(rightToken, 10) : undefined
-    if (leftNumeric !== undefined && rightNumeric !== undefined) {
-      if (leftNumeric > rightNumeric) return 1
-      if (leftNumeric < rightNumeric) return -1
-      continue
-    }
-    if (leftNumeric !== undefined) return -1
-    if (rightNumeric !== undefined) return 1
-    if (leftToken > rightToken) return 1
-    if (leftToken < rightToken) return -1
+  const leftVersion = left.length > 0 ? `0.0.0-${left.join(".")}` : "0.0.0"
+  const rightVersion = right.length > 0 ? `0.0.0-${right.join(".")}` : "0.0.0"
+  if (!semver.valid(leftVersion) || !semver.valid(rightVersion)) {
+    return compareFrameworkVersions(leftVersion, rightVersion) ?? 0
   }
-  return 0
+  return semver.compare(leftVersion, rightVersion)
 }
 
 export function parseInstallPinnedVersion(installScript: string | undefined): string | undefined {

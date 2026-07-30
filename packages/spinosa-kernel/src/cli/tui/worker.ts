@@ -1,7 +1,6 @@
 import { Server } from "@/server/server"
 import { InstanceRuntime } from "@/project/instance-runtime"
 import { Rpc } from "@/util/rpc"
-import { upgrade } from "@/cli/upgrade"
 import { Config } from "@/config/config"
 import { GlobalBus } from "@/bus/global"
 import { ServerAuth } from "@/server/auth"
@@ -78,24 +77,12 @@ export const rpc = {
     return { url }
   },
   async checkUpgrade(input: { directory: string }) {
-    bootLog("worker.checkUpgrade", "checking for upgrade", { directory: input.directory })
-    const t1 = Date.now()
-    bootLog("worker.checkUpgrade.load.start", "InstanceRuntime.load starting")
+    bootLog("worker.checkUpgrade", "loading instance (upgrade handled by launch preflight)", { directory: input.directory })
     try {
       await InstanceRuntime.load({ directory: input.directory })
-      bootLog("worker.checkUpgrade.load.done", "InstanceRuntime.load completed", { elapsedMs: Date.now() - t1 })
     } catch (e) {
       bootLog("worker.checkUpgrade.load.error", "InstanceRuntime.load failed", { error: String(e) })
     }
-    const t2 = Date.now()
-    bootLog("worker.checkUpgrade.upgrade.start", "upgrade() starting")
-    try {
-      await upgrade()
-      bootLog("worker.checkUpgrade.upgrade.done", "upgrade() completed", { elapsedMs: Date.now() - t2 })
-    } catch (e) {
-      bootLog("worker.checkUpgrade.upgrade.error", "upgrade() failed, suppressed", { error: String(e) })
-    }
-    bootLog("worker.checkUpgrade.done", "checkUpgrade finished", { totalMs: Date.now() - t1 })
   },
   async reload() {
     await AppRuntime.runPromise(

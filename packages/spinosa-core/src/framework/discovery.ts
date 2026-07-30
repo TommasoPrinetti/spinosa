@@ -1,4 +1,4 @@
-import { comparePrereleaseTokens, parseInstallPinnedVersion } from "../utils/version"
+import { compareFrameworkVersions, parseInstallPinnedVersion } from "../utils/version"
 
 import { existsSync, readFileSync, readdirSync, realpathSync } from "node:fs"
 import { homedir } from "node:os"
@@ -31,28 +31,6 @@ export function resolveTemplateRootFromFrameworkRoot(root: string): string | und
   if (existsSync(path.join(root, ".spinosa", "workspace-files.tsv"))) return root
   return undefined
 }
-function compareFrameworkVersions(a: string, b: string): number {
-  const parse = (v: string) => {
-    const [base, ...rest] = v.split("-")
-    return { parts: base.split(".").map(Number), pre: rest.join("-") }
-  }
-  const va = parse(a)
-  const vb = parse(b)
-  for (let i = 0; i < Math.max(va.parts.length, vb.parts.length); i++) {
-    const na = va.parts[i] ?? 0
-    const nb = vb.parts[i] ?? 0
-    if (na !== nb) return na - nb
-  }
-  if (!va.pre && vb.pre) return 1
-  if (va.pre && !vb.pre) return -1
-  const prereleaseResult = comparePrereleaseTokens(
-    va.pre ? va.pre.split(".") : [],
-    vb.pre ? vb.pre.split(".") : [],
-  )
-  if (prereleaseResult !== 0) return prereleaseResult
-  return 0
-}
-
 export function discoverInstalledFramework(): string | undefined {
   const versionsDir = path.join(process.env.SPINOSA_HOME ?? path.join(homedir(), ".spinosa"), "versions")
   if (!existsSync(versionsDir)) return undefined
@@ -67,7 +45,7 @@ export function discoverInstalledFramework(): string | undefined {
 
       // New installer format: framework files directly in the version directory
       if (hasFrameworkMarker(versionBase)) {
-        if (!bestDir || compareFrameworkVersions(ver, bestVersion) > 0) {
+        if (!bestDir || (compareFrameworkVersions(ver, bestVersion) ?? -1) > 0) {
           bestVersion = ver
           bestDir = versionBase
         }
@@ -80,7 +58,7 @@ export function discoverInstalledFramework(): string | undefined {
         const fwPath = path.join(versionBase, fwEntry.name)
         if (!hasFrameworkMarker(fwPath)) continue
         const fwVer = fwEntry.name.replace("spinosa-framework-", "")
-        if (!bestDir || compareFrameworkVersions(fwVer, bestVersion) > 0) {
+        if (!bestDir || (compareFrameworkVersions(fwVer, bestVersion) ?? -1) > 0) {
           bestVersion = fwVer
           bestDir = fwPath
         }

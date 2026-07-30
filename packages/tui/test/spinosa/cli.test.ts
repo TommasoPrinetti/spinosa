@@ -59,14 +59,23 @@ describe("Spinosa CLI", () => {
     expect(result.errors[0]).toContain("does not exist")
   })
 
-  test("rejects unknown options and accepts subcommand help without side effects", async () => {
+  test("rejects unknown options", async () => {
     const unknown = capture()
     expect(await runSpinosaCli(["doctor", "--bogus"], unknown.io)).toBe(1)
     expect(unknown.errors[0]).toContain("Unknown option")
+  })
 
-    const help = capture()
-    expect(await runSpinosaCli(["upgrade", "--help"], help.io)).toBe(0)
-    expect(help.output.join("\n")).toContain("spinosa upgrade")
+  test("launcher dispatches upgrade help through the kernel CLI", async () => {
+    await using tmp = await tmpdir()
+    const spawned = Bun.spawnSync({
+      cmd: ["bash", path.join(repoRoot, "workspace-template", ".bin", "spinosa"), "upgrade", "--help"],
+      cwd: repoRoot,
+      env: { ...process.env, SPINOSA_HOME: path.join(tmp.path, "home") },
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    expect(spawned.exitCode).toBe(0)
+    expect(spawned.stderr.toString()).toContain("upgrade")
   })
 
   test("launcher dispatches version instead of treating it as a project path", async () => {
@@ -95,7 +104,7 @@ describe("Spinosa CLI", () => {
       stderr: "pipe",
     })
     expect(spawned.exitCode).toBe(0)
-    expect(spawned.stdout.toString()).toContain("spinosa uninstall")
+    expect(spawned.stderr.toString()).toContain("uninstall")
     expect(await Bun.file(sentinel).text()).toBe("keep\n")
   })
 
@@ -103,16 +112,15 @@ describe("Spinosa CLI", () => {
     await using tmp = await tmpdir()
     const sentinel = path.join(tmp.path, "keep.txt")
     await Bun.write(sentinel, "keep\n")
-    const spawned = Bun.spawnSync({
-      cmd: ["bash", path.join(repoRoot, "workspace-template", ".bin", "spinosa"), "uninstall", "--yes"],
-      cwd: repoRoot,
-      env: { ...process.env, SPINOSA_HOME: tmp.path },
-      stdout: "pipe",
-      stderr: "pipe",
-    })
-    expect(spawned.exitCode).toBe(1)
-    expect(await Bun.file(sentinel).text()).toBe("keep\n")
-    expect(spawned.stderr.toString()).toContain("does not look like a Spinosa installation")
+    const result = capture()
+    process.env.SPINOSA_HOME = tmp.path
+    try {
+      expect(await runUninstall(result.io, true)).toBe(1)
+      expect(await Bun.file(sentinel).text()).toBe("keep\n")
+      expect(result.errors[0]).toContain("does not look like a Spinosa installation")
+    } finally {
+      delete process.env.SPINOSA_HOME
+    }
   })
 
   test("interactive uninstall accepts input and preserves central metadata", async () => {

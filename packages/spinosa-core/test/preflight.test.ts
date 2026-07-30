@@ -1,0 +1,89 @@
+import { describe, expect, test } from "bun:test"
+import {
+  runLaunchPreflight,
+  type PreflightDependencies,
+} from "../src/commands/preflight"
+
+function dependencies(overrides: Partial<PreflightDependencies> = {}) {
+  const output: string[] = []
+  const updated: string[] = []
+  const deps: PreflightDependencies = {
+    checkUpgradeAvailable: async () => ({ available: false }),
+    upgradeFramework: async () => ({ success: true, newVersion: "1.1.0", workspaceUpgradesNeeded: [] }),
+    discoverRegisteredWorkspaces: async () => [],
+    updateWorkspace: async (workspace) => {
+      updated.push(workspace)
+      return { success: true, added: 0, updated: 1, removed: 0, skipped: 0, changes: true }
+    },
+    confirm: async () => false,
+    frameworkRoot: (version) => `/home/versions/${version}`,
+    out: (message) => output.push(message),
+    ...overrides,
+  }
+  return { deps, output, updated }
+}
+
+describe("launch preflight", () => {
+  test("continues directly when the installed version is current", async () => {
+    const { deps, output } = dependencies()
+
+    expect(await runLaunchPreflight(deps)).toBe("continue")
+    expect(output).toEqual([])
+  })
+
+  test("continues when the user declines an available upgrade", async () => {
+    const questions: string[] = []
+    const { deps } = dependencies({
+      checkUpgradeAvailable: async () => ({ available: true, currentVersion: "1.0.0", latestVersion: "1.1.0" }),
+      confirm: async (question) => { questions.push(question); return false },
+    })
+
+    expect(await runLaunchPreflight(deps)).toBe("continue")
+    expect(questions).toEqual(["✨ \x1b[1mSpinosa v1.1.0\x1b[0m is available (current \x1b[32mv1.0.0\x1b[0m). Upgrade now?"])
+  })
+
+  test("upgrades every registered workspace and requests a fresh launch", async () => {
+    const answers = [true, true]
+    const roots: string[] = []
+    const { deps, output, updated } = dependencies({
+      checkUpgradeAvailable: async () => ({ available: true, currentVersion: "1.0.0", latestVersion: "1.1.0" }),
+      discoverRegisteredWorkspaces: async () => ["/work/alpha", "/work/beta"],
+      confirm: async () => answers.shift() ?? false,
+      updateWorkspace: async (workspace, root) => {
+        updated.push(workspace)
+        roots.push(root)
+        return { success: true, added: 0, updated: 1, removed: 0, skipped: 0, changes: true }
+      },
+    })
+
+    expect(await runLaunchPreflight(deps)).toBe("restart")
+    expect(updated).toEqual(["/work/alpha", "/work/beta"])
+    expect(roots).toEqual(["/home/versions/1.1.0", "/home/versions/1.1.0"])
+    expect(output.at(-1)).toBe("✨ Run 'spinosa' again to open the updated TUI.")
+  })
+
+  test("does not claim success when the framework upgrade fails", async () => {
+    const { deps, output } = dependencies({
+      checkUpgradeAvailable: async () => ({ available: true, currentVersion: "1.0.0", latestVersion: "1.1.0" }),
+      confirm: async () => true,
+      upgradeFramework: async () => ({ success: false, workspaceUpgradesNeeded: [] }),
+    })
+
+    await expect(runLaunchPreflight(deps)).rejects.toThrow("Spinosa upgrade failed")
+    expect(output).toEqual([])
+  })
+
+  test("still requests a fresh launch when one workspace update throws", async () => {
+    const answers = [true, true]
+    const { deps, output } = dependencies({
+      checkUpgradeAvailable: async () => ({ available: true, currentVersion: "1.0.0", latestVersion: "1.1.0" }),
+      discoverRegisteredWorkspaces: async () => ["/work/missing"],
+      confirm: async () => answers.shift() ?? false,
+      updateWorkspace: async () => { throw new Error("workspace is missing") },
+    })
+
+    expect(await runLaunchPreflight(deps)).toBe("restart")
+    expect(output).toContain("⚠ Could not update missing: workspace is missing")
+    expect(output.at(-1)).toBe("✨ Run 'spinosa' again to open the updated TUI.")
+  })
+})

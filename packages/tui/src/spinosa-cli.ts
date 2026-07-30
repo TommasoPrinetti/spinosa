@@ -13,9 +13,7 @@ import {
   resolveFrameworkRoot,
   runOnboarding,
   updateWorkspace,
-  upgradeFramework,
   writeWorkspaceStatus,
-  type ReleaseChannel,
 } from "@spinosa/core"
 import { parseSpinosaCliArgs, type ParsedArgs } from "./spinosa-cli/parser"
 import type { UpdateResult } from "@spinosa/core/commands/update"
@@ -56,7 +54,6 @@ function helpText(): string {
     "  spinosa list",
     "  spinosa startup-autoclean [--dry-run]",
     "  spinosa version",
-    "  spinosa upgrade [--channel stable|beta] [--version X.Y.Z] [--yes] [--reinstall]",
     "  spinosa uninstall [--yes]",
     "  spinosa web [--port PORT] [--api-port PORT]",
     "",
@@ -187,47 +184,6 @@ async function runDoctor(parsed: ParsedArgs, io: SpinosaCliIo): Promise<number> 
   return healthy ? 0 : 1
 }
 
-async function runUpgrade(parsed: ParsedArgs, io: SpinosaCliIo): Promise<number> {
-  const channelValue = parsed.values.get("channel")
-  if (channelValue && channelValue !== "stable" && channelValue !== "beta") {
-    throw new Error(`Invalid channel: ${channelValue} (use stable or beta)`)
-  }
-  const result = await upgradeFramework({
-    channel: channelValue as ReleaseChannel | undefined,
-    version: parsed.values.get("version"),
-    yes: parsed.flags.has("yes"),
-    reinstall: parsed.flags.has("reinstall"),
-    onPhase: (_phase, detail) => io.out(detail),
-  })
-  if (result.success) {
-    io.out(`Spinosa ${result.newVersion ?? "already current"}`)
-
-    if (result.workspaceUpgradesNeeded.length > 0) {
-      const ok = await io.confirm(
-        `${result.workspaceUpgradesNeeded.length} workspace(s) need updating to match the new framework version. Update now?`,
-        true,
-      )
-      if (ok) {
-        const fwRoot = resolveFrameworkRoot()
-        if (fwRoot) {
-          for (const ws of result.workspaceUpgradesNeeded) {
-            const wsFile = path.join(ws, ".spinosa", "workspace")
-            if (!existsSync(wsFile)) continue
-            io.out(`  Updating ${path.basename(ws)}...`)
-            try {
-              await updateWorkspace({ workspacePath: ws, frameworkRoot: fwRoot })
-            } catch { /* best-effort */ }
-          }
-        }
-      }
-    }
-  } else {
-    io.error("Spinosa upgrade failed")
-    io.out("Check your internet connection or run 'spinosa upgrade --channel stable' to try the stable channel.")
-  }
-  return result.success ? 0 : 1
-}
-
 async function runWeb(parsed: ParsedArgs, io: SpinosaCliIo): Promise<number> {
   const webDir = path.join(import.meta.dirname, "..", "..", "spinosa-web")
   const hasSpa = existsSync(webDir)
@@ -283,8 +239,6 @@ export async function runSpinosaCli(args: string[], io?: SpinosaCliIo): Promise<
         return await runUpdate(parsed, resolvedIo)
       case "doctor":
         return await runDoctor(parsed, resolvedIo)
-      case "upgrade":
-        return await runUpgrade(parsed, resolvedIo)
       case "uninstall":
         return await runUninstall(resolvedIo, parsed.flags.has("yes"))
       case "status":

@@ -1,56 +1,93 @@
 import type { Argv } from "yargs"
 import * as prompts from "@clack/prompts"
 import { UI } from "../ui"
-import { Installation } from "@/installation"
+import { upgradeFramework } from "@spinosa/core/commands/upgrade"
+import type { ReleaseChannel } from "@spinosa/core/system/channels"
 import { InstallationVersion } from "@spinosa/kernel-core/installation/version"
 
 export const UpgradeCommand = {
   command: "upgrade [target]",
   describe: "check for and install Spinosa updates",
   builder: (yargs: Argv) =>
-    yargs.positional("target", {
-      describe: "target version",
-      type: "string",
-    }),
-  handler: async (args: { target?: string }) => {
+    yargs
+      .positional("target", {
+        describe: "target version",
+        type: "string",
+      })
+      .option("channel", {
+        describe: "release channel (stable or beta)",
+        type: "string",
+        choices: ["stable", "beta"] as const,
+      })
+      .option("yes", {
+        describe: "skip confirmation prompts",
+        type: "boolean",
+      })
+      .option("reinstall", {
+        describe: "reinstall the target version even if it matches the installed version",
+        type: "boolean",
+      })
+      .option("allow-downgrade", {
+        describe: "permit downgrading to an older version",
+        type: "boolean",
+      })
+      .option("check", {
+        describe: "check for updates without installing",
+        type: "boolean",
+      }),
+  handler: async (args: {
+    target?: string
+    channel?: "stable" | "beta"
+    yes?: boolean
+    reinstall?: boolean
+    allowDowngrade?: boolean
+    check?: boolean
+  }) => {
     UI.empty()
     UI.println(UI.logo(" "))
     UI.empty()
     prompts.intro("Spinosa updates")
 
-    const method = await Installation.method()
-    let latest: string
-    if (args.target) {
-      latest = args.target
-    } else {
+    prompts.log.info(`Current: v${InstallationVersion}`)
+
+    if (args.check) {
       prompts.log.step("Checking for updates...")
-      latest = await Installation.latest(method)
     }
 
-    if (!latest || latest === InstallationVersion) {
-      prompts.log.info(`Already up to date (v${InstallationVersion})`)
-      prompts.outro("No update needed.")
-      return
-    }
-
-    prompts.log.info(`Current: v${InstallationVersion} → Latest: v${latest}`)
-    const shouldUpgrade = await prompts.confirm({
-      message: "Upgrade now?",
+    const result = await upgradeFramework({
+      version: args.target,
+      channel: args.channel as ReleaseChannel | undefined,
+      yes: args.yes,
+      reinstall: args.reinstall,
+      allowDowngrade: args.allowDowngrade,
+      check: args.check,
+      onPhase: (_phase, detail) => prompts.log.step(detail),
     })
-    if (!shouldUpgrade) {
-      prompts.outro("Upgrade skipped.")
+
+    if (args.check) {
+      if (result.newVersion && result.newVersion !== InstallationVersion) {
+        prompts.log.info(`Would update to v${result.newVersion}`)
+      } else {
+        prompts.log.info(`Already up to date (v${InstallationVersion})`)
+      }
+      prompts.outro("Check complete.")
       return
     }
 
-    prompts.log.step("Upgrading...")
-    try {
-      await Installation.upgrade(method, latest)
-      prompts.log.success(`Upgraded to v${latest}`)
-      prompts.outro("Restart Spinosa to use the new version.")
-    } catch (err) {
-      prompts.log.error(String(err))
-      prompts.log.error("Upgrade failed. Try reinstalling from https://spinosa.ai")
-      prompts.outro("Upgrade failed.")
+    if (result.refusedReason) {
+      prompts.log.warn(result.refusedReason)
+      prompts.outro("Upgrade refused.")
+      return
     }
+
+    if (!result.success) {
+      prompts.log.error("Upgrade failed.")
+      prompts.log.error("Try reinstalling from https://spinosa.ai")
+      prompts.outro("Upgrade failed.")
+      return
+    }
+
+    prompts.log.success(`Upgraded to v${result.newVersion}`)
+    prompts.outro("Restart Spinosa to use the new version.")
   },
 }

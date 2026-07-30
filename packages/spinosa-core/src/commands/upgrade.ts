@@ -23,7 +23,9 @@ export interface UpgradeOptions {
   version?: string
   channel?: ReleaseChannel
   reinstall?: boolean
+  allowDowngrade?: boolean
   yes?: boolean
+  check?: boolean
   onPhase?: (phase: string, detail: string) => void
   suppressInstallOutput?: boolean
 }
@@ -33,6 +35,7 @@ export interface UpgradeResult {
   previousVersion?: string
   newVersion?: string
   workspaceUpgradesNeeded: string[]
+  refusedReason?: string
 }
 
 export interface AutoUpgradeResult {
@@ -172,10 +175,48 @@ export async function upgradeFramework(
   }
 
   if (!options.reinstall && effectiveInstalled && effectiveInstalled === resolvedVersion) {
+    options.onPhase?.("current", `Already at v${resolvedVersion}`)
     return {
       success: true,
       previousVersion: effectiveInstalled,
       newVersion: effectiveInstalled,
+      workspaceUpgradesNeeded: [],
+    }
+  }
+
+  const direction = effectiveInstalled
+    ? compareFrameworkVersions(effectiveInstalled, resolvedVersion)
+    : 1
+
+  if (direction !== undefined && direction === 0 && !options.reinstall) {
+    options.onPhase?.("current", `Already at v${resolvedVersion}`)
+    return {
+      success: true,
+      previousVersion: effectiveInstalled,
+      newVersion: resolvedVersion,
+      workspaceUpgradesNeeded: [],
+    }
+  }
+
+  if (direction !== undefined && direction < 0 && !options.reinstall && !options.allowDowngrade) {
+    const reason = `Refusing to downgrade from v${effectiveInstalled} to v${resolvedVersion}. Use --reinstall or --allow-downgrade to proceed.`
+    options.onPhase?.("refused", reason)
+    return {
+      success: false,
+      refusedReason: reason,
+      previousVersion: effectiveInstalled,
+      newVersion: resolvedVersion,
+      workspaceUpgradesNeeded: [],
+    }
+  }
+
+  if (options.check) {
+    const action = direction === -1 ? "downgrade" : "upgrade"
+    options.onPhase?.("check", `Would ${action} to v${resolvedVersion}`)
+    return {
+      success: true,
+      previousVersion: effectiveInstalled,
+      newVersion: resolvedVersion,
       workspaceUpgradesNeeded: [],
     }
   }
@@ -274,24 +315,6 @@ export async function upgradeFramework(
       workspaceUpgradesNeeded: [],
     }
   }
-
-  // Remove old version directories, keeping only the newly installed one
-  try {
-    const versionsDir = path.join(spinosaHome(), "versions")
-    if (existsSync(versionsDir)) {
-      let cleaned = 0
-      for (const entry of readdirSync(versionsDir, { withFileTypes: true })) {
-        if (!entry.isDirectory()) continue
-        if (entry.name === resolvedVersion) continue
-        if (entry.name.startsWith(".")) continue
-        try {
-          rmSync(path.join(versionsDir, entry.name), { recursive: true, force: true })
-          cleaned++
-        } catch { /* best-effort */ }
-      }
-      if (cleaned > 0) spinosaLogInfo("upgrade", `removed ${cleaned} old version(s) from ${versionsDir}`)
-    }
-  } catch { /* cleanup is best-effort */ }
 
   options.onPhase?.("discover", "Checking workspaces for updates...")
   const workspaces: string[] = []

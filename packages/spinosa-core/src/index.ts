@@ -55,6 +55,7 @@ export * from "./commands/startup"
 export * from "./commands/onboard"
 export * from "./commands/update"
 export * from "./commands/upgrade"
+export * from "./commands/preflight"
 
 // --- application
 export * from "./application/research-run-service"

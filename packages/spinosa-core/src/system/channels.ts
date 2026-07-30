@@ -62,6 +62,7 @@ export async function spinosaReleaseChannel(): Promise<ReleaseChannel> {
     return spinosaBetaToggleChannel(betaToggle)
   }
 
+  // Legacy fallback — installers now write `beta: true|false` instead.
   const releaseChannel = await readConfigValue(configPath, "release_channel")
   return normalizeChannel(releaseChannel ?? "stable")
 }

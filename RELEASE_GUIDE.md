@@ -40,13 +40,22 @@ The canonical version lives in `package.json`. `PINNED_VERSION` in `install.sh` 
 
 ## Release script
 
-One-liner that does everything:
+Preferred flow (increments semver automatically):
 
 ```bash
-# Make sure you're on the right branch and have committed.
-# Then:
-bash script/release.sh v0.8.0-beta.1     # beta
-bash script/release.sh v0.7.7             # stable
+# Beta prerelease bump (from beta branch)
+bun run release:beta:patch
+
+# Stable release (from main branch)
+bun run release:stable:patch
+```
+
+`release-it` handles version bumping, git commit/tag, GitHub release assets, rolling channel sync, and remote verification via hooks in `.release-it.json`.
+
+Legacy explicit-version flow (republish a specific version without incrementing):
+
+```bash
+bash script/release.sh v1.0.2-beta.14
 ```
 
 Creates the GitHub Release, uploads `install.sh`, the immutable source archive, and `checksums.txt`, then syncs the rolling channel tag.
