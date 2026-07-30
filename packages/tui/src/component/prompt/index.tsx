@@ -42,6 +42,7 @@ import { Locale } from "../../util/locale"
 import { agentDisplayName } from "../../util/agent"
 import { errorMessage } from "../../util/error"
 import { formatDuration } from "../../util/format"
+import { resolveSessionRuntimeStatus } from "../../util/session"
 import { createColors, createFrames } from "../../ui/spinner"
 import { useDialog } from "../../ui/dialog"
 import { DialogProvider as DialogProviderConnect } from "../dialog-provider"
@@ -163,7 +164,13 @@ export function Prompt(props: PromptProps) {
   const dialog = useDialog()
   const toast = useToast()
   const spinosa = useSpinosaWorkspace()
-  const status = createMemo(() => sync.data.session_status?.[props.sessionID ?? ""] ?? { type: "idle" })
+  const status = createMemo(() => {
+    const sessionID = props.sessionID ?? ""
+    return resolveSessionRuntimeStatus(
+      sync.data.session_status?.[sessionID],
+      sessionID ? sync.session.status(sessionID) : undefined,
+    )
+  })
   const history = usePromptHistory()
   const stash = usePromptStash()
   const keymap = useOpencodeKeymap()

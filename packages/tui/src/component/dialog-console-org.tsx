@@ -5,7 +5,9 @@ import { useSDK } from "../context/sdk"
 import { useDialog } from "../ui/dialog"
 import { useToast } from "../ui/toast"
 import { useTheme } from "../context/theme"
+import { useSync } from "../context/sync"
 import { errorMessage } from "../util/error"
+import { sessionIsBusy } from "../util/session"
 import type { ExperimentalConsoleListOrgsResponse } from "@spinosa/sdk/v2"
 
 type OrgOption = ExperimentalConsoleListOrgsResponse["orgs"][number]
@@ -25,6 +27,7 @@ export function DialogConsoleOrg() {
   const sdk = useSDK()
   const dialog = useDialog()
   const toast = useToast()
+  const sync = useSync()
   const { theme } = useTheme()
 
   const [loadError, setLoadError] = createSignal<unknown>()
@@ -45,6 +48,17 @@ export function DialogConsoleOrg() {
   const showError = createMemo(() => Boolean(loadError()))
 
   const current = createMemo(() => orgs()?.find((item) => item.active))
+
+  const anySessionBusy = () => {
+    const statuses = sync.data.session_status ?? {}
+    for (const sessionID of Object.keys(statuses)) {
+      if (sessionIsBusy(statuses[sessionID], sync.session.status(sessionID))) return true
+    }
+    for (const session of sync.data.session ?? []) {
+      if (sessionIsBusy(statuses[session.id], sync.session.status(session.id))) return true
+    }
+    return false
+  }
 
   const options = createMemo(() => {
     if (showError()) return []
@@ -96,20 +110,39 @@ export function DialogConsoleOrg() {
             return
           }
 
-          await sdk.client.experimental.console.switchOrg(
-            {
-              accountID: item.accountID,
-              orgID: item.orgID,
-            },
-            { throwOnError: true },
-          )
+          if (anySessionBusy()) {
+            toast.show({
+              message: "Stop the running agent before switching org",
+              variant: "warning",
+            })
+            return
+          }
 
-          await sdk.client.instance.dispose()
-          toast.show({
-            message: `Switched to ${item.orgName}`,
-            variant: "info",
-          })
+          // Clear first so Enter does not feel stuck on network work.
           dialog.clear()
+          try {
+            await sdk.client.experimental.console.switchOrg(
+              {
+                accountID: item.accountID,
+                orgID: item.orgID,
+              },
+              { throwOnError: true },
+            )
+
+            // Org switch requires instance recycle; bootstrap immediately so
+            // catalog refresh does not depend solely on the disposed event.
+            await sdk.client.instance.dispose()
+            await sync.bootstrap({ fatal: false }).catch(() => sync.bootstrap())
+            toast.show({
+              message: `Switched to ${item.orgName}`,
+              variant: "info",
+            })
+          } catch (error) {
+            toast.show({
+              message: errorMessage(error),
+              variant: "error",
+            })
+          }
         },
       }))
   })
@@ -119,16 +152,11 @@ export function DialogConsoleOrg() {
       title="Switch org"
       options={options()}
       current={current()}
-      renderFilter={!showError()}
-      locked={showError()}
       emptyView={
         showError() ? (
-          <box paddingLeft={4} paddingRight={4}>
-            <text fg={theme.error} attributes={TextAttributes.BOLD}>
-              Could not load orgs
-            </text>
-            <text fg={theme.textMuted}>{errorMessage(loadError())}</text>
-          </box>
+          <text fg={theme.error} attributes={TextAttributes.BOLD}>
+            {errorMessage(loadError())}
+          </text>
         ) : undefined
       }
     />

@@ -1,6 +1,7 @@
 import { cmd } from "@/cli/cmd/cmd"
 import { Rpc } from "@/util/rpc"
 import { type rpc } from "../tui/worker"
+import { existsSync } from "fs"
 import path from "path"
 import { fileURLToPath } from "url"
 import { UI } from "@/cli/ui"
@@ -72,10 +73,32 @@ async function input(value?: string) {
   return piped + "\n" + value
 }
 
+/** True when `dir` looks like a Spinosa framework/install root (not a user project). */
+export function isSpinosaFrameworkRoot(dir: string) {
+  const resolved = Filesystem.resolve(dir)
+  const template = process.env.SPINOSA_TEMPLATE_ROOT
+  if (template && Filesystem.resolve(template) === resolved) return true
+  // Install / monorepo layout: kernel entry lives under packages/spinosa-kernel.
+  return existsSync(path.join(resolved, "packages", "spinosa-kernel", "src", "index.ts"))
+}
+
+/**
+ * Resolve the directory the TUI should open.
+ *
+ * Relative `--project` paths resolve from PWD (symlink-friendly invocation path).
+ * With no project, prefer real `cwd` — except when Bun was launched with
+ * `--cwd <frameworkRoot>` for OpenTUI preload: then `process.cwd()` is the
+ * install tree while PWD is still the caller's project. Prefer PWD in that case
+ * so the TUI does not chdir into `~/.spinosa/versions/...`.
+ */
 export function resolveThreadDirectory(project?: string, envPWD = process.env.PWD, cwd = process.cwd()) {
   const root = Filesystem.resolve(envPWD ?? cwd)
   if (project) return Filesystem.resolve(path.isAbsolute(project) ? project : path.join(root, project))
-  return Filesystem.resolve(cwd)
+  const resolvedCwd = Filesystem.resolve(cwd)
+  if (envPWD && isSpinosaFrameworkRoot(resolvedCwd) && !isSpinosaFrameworkRoot(envPWD)) {
+    return Filesystem.resolve(envPWD)
+  }
+  return resolvedCwd
 }
 
 export const TuiThreadCommand = cmd({

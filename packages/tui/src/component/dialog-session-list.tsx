@@ -20,6 +20,7 @@ import { useCommandShortcut } from "../keymap"
 import { useEvent } from "../context/event"
 import { readdir, readFile } from "node:fs/promises"
 import { dbg } from "../util/debug-log"
+import { sessionIsBusy } from "../util/session"
 
 type SessionListFilter = { scope?: "project"; directory?: string; path?: string; workspace?: string }
 
@@ -292,8 +293,10 @@ export function DialogSessionList() {
         directory && directory !== project.data.project.mainDir ? Locale.truncate(path.basename(directory), 20) : ""
 
       const isDeleting = toDelete() === x.id
-      const status = sync.data.session_status?.[x.id]
-      const isWorking = status?.type === "busy" || status?.type === "retry"
+      const isWorking = sessionIsBusy(
+        sync.data.session_status?.[x.id],
+        sync.session.status(x.id),
+      )
       const slot = slotByID.get(x.id)
       const gutter = isWorking
         ? () => <Spinner />

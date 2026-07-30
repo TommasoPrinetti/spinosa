@@ -314,8 +314,9 @@ function AutoMethod(props: AutoMethodProps) {
       dialog.clear()
       return
     }
-    await sdk.client.instance.dispose()
-    await sync.bootstrap()
+    // Reload providers in place — do not dispose the instance or we wipe
+    // session_status (busy spinner / ESC interrupt) for an in-flight run.
+    await sync.refreshProviders()
     dialog.replace(() => <DialogModel providerID={props.providerID} />)
   })
 
@@ -367,8 +368,7 @@ function CodeMethod(props: CodeMethodProps) {
           code: value,
         })
         if (!error) {
-          await sdk.client.instance.dispose()
-          await sync.bootstrap()
+          await sync.refreshProviders()
           dialog.replace(() => <DialogModel providerID={props.providerID} />)
           return
         }
@@ -440,8 +440,9 @@ function ApiMethod(props: ApiMethodProps) {
             ...(props.metadata ? { metadata: props.metadata } : {}),
           },
         })
-        await sdk.client.instance.dispose()
-        await sync.bootstrap()
+        // auth.set already reloads providers server-side; refresh TUI catalog
+        // without disposing (preserves in-flight session busy state).
+        await sync.refreshProviders()
         if (props.custom && !sync.data.provider_next.all.some((provider) => provider.id === props.providerID)) {
           toast.show({
             variant: "info",

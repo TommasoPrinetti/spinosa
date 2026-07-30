@@ -231,6 +231,9 @@ export const {
         case "server.instance.disposed":
           void bootstrap()
           break
+        case "catalog.updated":
+          void refreshProviders()
+          break
         case "permission.replied": {
           const requests = store.permission[event.properties.sessionID]
           if (!requests) break
@@ -501,7 +504,29 @@ export const {
     const exit = useExit()
     const args = useArgs()
 
+    let bootstrapFlight: Promise<void> | undefined
     async function bootstrap(input: { fatal?: boolean } = {}) {
+      if (bootstrapFlight) return bootstrapFlight
+      bootstrapFlight = runBootstrap(input).finally(() => {
+        bootstrapFlight = undefined
+      })
+      return bootstrapFlight
+    }
+
+    async function refreshProviders() {
+      const workspace = project.workspace.current()
+      const [providers, providerList] = await Promise.all([
+        sdk.client.config.providers({ workspace }, { throwOnError: true }),
+        sdk.client.provider.list({ workspace }, { throwOnError: true }),
+      ])
+      batch(() => {
+        setStore("provider", reconcile(providers.data!.providers))
+        setStore("provider_default", reconcile(providers.data!.default))
+        setStore("provider_next", reconcile(providerList.data!))
+      })
+    }
+
+    async function runBootstrap(input: { fatal?: boolean } = {}) {
       const fatal = input.fatal ?? true
       const workspace = project.workspace.current()
       const projectPromise = project.sync()
@@ -719,6 +744,7 @@ export const {
         },
       },
       bootstrap,
+      refreshProviders,
     }
     return result
   },

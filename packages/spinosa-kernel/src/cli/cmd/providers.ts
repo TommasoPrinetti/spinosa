@@ -25,9 +25,17 @@ const promptValue = <Value>(value: Option.Option<Value>) => {
   return Effect.succeed(value.value)
 }
 
+const reloadProviders = Effect.fn("Cli.providers.reload")(function* () {
+  const { Provider } = yield* Effect.promise(() => import("@/provider/provider"))
+  const provider = yield* Provider.Service
+  yield* provider.reload()
+})
+
 const put = Effect.fn("Cli.providers.put")(function* (key: string, info: Auth.Info) {
   const auth = yield* Auth.Service
   yield* Effect.orDie(auth.set(key, info))
+  // Best-effort: refresh in-process provider catalog when an instance is live.
+  yield* Effect.ignore(reloadProviders())
 })
 
 const cliTry = <Value>(message: string, fn: () => PromiseLike<Value>) =>
@@ -346,6 +354,7 @@ export const ProvidersLoginCommand = effectCmd({
         return
       }
       yield* Effect.orDie(authSvc.set(url, { type: "wellknown", key: wellknown.auth.env, token: token.trim() }))
+      yield* Effect.ignore(reloadProviders())
       yield* Prompt.log.success("Logged into " + url)
       yield* Prompt.outro("Done")
       return
@@ -483,6 +492,7 @@ export const ProvidersLoginCommand = effectCmd({
     })
     const apiKey = yield* promptValue(key)
     yield* Effect.orDie(authSvc.set(provider, { type: "api", key: apiKey }))
+    yield* Effect.ignore(reloadProviders())
 
     yield* Prompt.outro("Done")
   }),
@@ -529,6 +539,7 @@ export const ProvidersLogoutCommand = effectCmd({
         )
     if (!provider) return yield* fail(`Unknown configured provider "${args.provider}"`)
     yield* Effect.orDie(authSvc.remove(provider))
+    yield* Effect.ignore(reloadProviders())
     yield* Prompt.outro("Logout successful")
   }),
 })

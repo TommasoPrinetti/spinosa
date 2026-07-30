@@ -36,6 +36,13 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Shellcheck passes on `install.sh` (legacy shim detection uses explicit disable comments).
 - `bun install` catalog entry for `@effect/platform-node-shared` restored.
 
+## [1.0.3-beta.4] — 2026-07-30
+
+### Fixed
+
+- TUI opens the caller project when the launcher uses `bun --cwd` on the install/framework root: `resolveThreadDirectory` prefers `PWD` for framework cwd so the session lands in the user project.
+- `/connect-family`: keep session status and provider catalog live without dispose wipe on connect; shared session busy fallback; org-switch clear-first with busy guard and call-site bootstrap; single-flight bootstrap; `catalog.updated` refreshes providers; CLI providers reload.
+
 ## [1.0.3-beta.3] — 2026-07-30
 
 ### Fixed

@@ -1,7 +1,6 @@
 import { TextAttributes } from "@opentui/core"
 import { createMemo, createSignal, For } from "solid-js"
 import { useTheme } from "../context/theme"
-import { useRoute } from "../context/route"
 import { useSpinosaWorkspace } from "../context/spinosa-workspace"
 import { buildStartupChatPrompt } from "@spinosa/core/commands/startup"
 import { useDialog } from "../ui/dialog"
@@ -15,22 +14,21 @@ export function DialogSpinosaStartupChoice(props: {
   onBack?: () => void
 }) {
   const { theme } = useTheme()
-  const route = useRoute()
   const spinosa = useSpinosaWorkspace()
   const dialog = useDialog()
   const [selected, setSelected] = createSignal(0)
 
-  const launchStartupInChat = async () => {
+  const launchStartupInChat = () => {
+    // Clear the dialog first so Enter feels immediate; openWorkspace can take
+    // a beat for registry/meta I/O.
     dialog.clear()
     spinosa.queuePrompt(buildStartupChatPrompt(props.prompt), props.workspacePath)
-    await spinosa.openWorkspace(props.workspacePath)
-    route.navigate({ type: "global" })
+    void spinosa.openWorkspace(props.workspacePath, { route: { type: "global" } })
   }
 
-  const openChatDirectly = async () => {
+  const openChatDirectly = () => {
     dialog.clear()
-    await spinosa.openWorkspace(props.workspacePath)
-    route.navigate({ type: "global" })
+    void spinosa.openWorkspace(props.workspacePath, { route: { type: "global" } })
   }
 
   const options = createMemo(() => [

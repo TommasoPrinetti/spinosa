@@ -16,6 +16,7 @@ import { Prompt } from "../component/prompt"
 import type { useToast } from "../ui/toast"
 import * as Keymap from "../keymap"
 import type { PluginRoutes } from "./api"
+import { resolveSessionRuntimeStatus } from "../util/session"
 export type { RouteMap } from "./api"
 export { createPluginRoutes, createTuiApi } from "./api"
 
@@ -141,7 +142,10 @@ function stateApi(sync: ReturnType<typeof useSync>): TuiPluginApi["state"] {
         return sync.data.message[sessionID] ?? []
       },
       status(sessionID) {
-        return sync.data.session_status[sessionID]
+        return resolveSessionRuntimeStatus(
+          sync.data.session_status[sessionID],
+          sync.session.status(sessionID),
+        )
       },
       permission(sessionID) {
         return sync.data.permission[sessionID] ?? []

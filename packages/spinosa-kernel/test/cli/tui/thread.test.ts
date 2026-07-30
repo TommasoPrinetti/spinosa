@@ -45,6 +45,17 @@ describe("tui thread", () => {
     expect(resolveThreadDirectory(undefined, pwd.path, cwd.path)).toBe(cwd.path)
   })
 
+  test("prefers PWD when Bun --cwd pointed at the framework install root", async () => {
+    await using pwd = await tmpdir({ git: true })
+    await using framework = await tmpdir({})
+    await fs.mkdir(path.join(framework.path, "packages", "spinosa-kernel", "src"), { recursive: true })
+    await Bun.write(path.join(framework.path, "packages", "spinosa-kernel", "src", "index.ts"), "export {}\n")
+
+    expect(resolveThreadDirectory(undefined, pwd.path, framework.path)).toBe(pwd.path)
+    // Still use real cwd when PWD is only a symlink to the same project tree.
+    expect(resolveThreadDirectory(undefined, pwd.path, pwd.path)).toBe(pwd.path)
+  })
+
   test("parses supported --no-replay forms", async () => {
     for (const option of ["--no-replay", "--no-replay=true", "--noReplay"]) {
       const args = await yargs([])

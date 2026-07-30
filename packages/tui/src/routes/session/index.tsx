@@ -86,6 +86,7 @@ import { SPINOSA_BASE_MODE, useBindings, useCommandShortcut, useOpencodeKeymap }
 import { usePathFormatter } from "../../context/path-format"
 import { LocationProvider } from "../../context/location"
 import { agentDisplayName } from "../../util/agent"
+import { resolveSessionRuntimeStatus, sessionIsBusy } from "../../util/session"
 import { isSilentResearchAssistant } from "../../spinosa/visibility"
 
 addDefaultParsers(parsers.parsers)
@@ -769,7 +770,9 @@ const resolveExportPath = (filename: string): string => {
       },
       run: async () => {
         const status = sync.data.session_status?.[route.sessionID]
-        if (status?.type !== "idle") await sdk.client.session.abort({ sessionID: route.sessionID }).catch(() => {})
+        if (sessionIsBusy(status, sync.session.status(route.sessionID))) {
+          await sdk.client.session.abort({ sessionID: route.sessionID }).catch(() => {})
+        }
         const revert = session()?.revert?.messageID
         const message = messages().findLast((x) => (!revert || x.id < revert) && x.role === "user")
         if (!message) return
@@ -1320,9 +1323,8 @@ const resolveExportPath = (filename: string): string => {
               onMouseOut={() => setBackHover(false)}
               onMouseUp={async () => {
                 const currentID = route.sessionID
-                const status = currentID ? sync.data.session_status?.[currentID] : undefined
-                if (status?.type !== "idle" && status?.type !== undefined) {
-                  await sdk.client.session.abort({ sessionID: currentID! }).catch(() => {})
+                if (currentID && sessionIsBusy(sync.data.session_status?.[currentID], sync.session.status(currentID))) {
+                  await sdk.client.session.abort({ sessionID: currentID }).catch(() => {})
                 }
                 const s = session()
                 if (s?.parentID) navigate({ type: "workspace", sessionID: s.parentID })
@@ -2898,12 +2900,14 @@ function Task(props: ToolProps) {
     tools().findLast((x) => (x.state.status === "running" || x.state.status === "completed") && x.state.title),
   )
 
-  const status = createMemo(() => sync.data.session_status[sessionID() ?? ""])
+  const status = createMemo(() =>
+    resolveSessionRuntimeStatus(sync.data.session_status[sessionID() ?? ""], sync.session.status(sessionID() ?? "")),
+  )
   const isRunning = createMemo(() => {
     const value = status()
     return (
       props.part.state.status === "running" ||
-      (props.metadata.background === true && value !== undefined && value.type !== "idle")
+      (props.metadata.background === true && value.type !== "idle")
     )
   })
   const retry = createMemo(() => {

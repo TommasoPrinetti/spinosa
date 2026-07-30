@@ -101,6 +101,9 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
           code: ctx.payload.code,
         }),
       )
+      // Same as auth.set: reload so newly authorized providers appear without
+      // tearing down the instance (which wipes live session_status / busy UI).
+      yield* provider.reload()
       return true
     })
 
