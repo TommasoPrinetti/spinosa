@@ -6,7 +6,8 @@ const root = resolve(import.meta.dir, "../..")
 
 console.log("→ release:validate")
 
-const branch = (await $`git rev-parse --abbrev-ref HEAD`.text()).trim()
+const branch = (await $`git branch --show-current`.text()).trim()
+  || (await $`git rev-parse --abbrev-ref HEAD`.text()).trim()
 if (branch !== "main" && branch !== "beta") {
   console.error(`Error: releases must be cut from main or beta (current: ${branch})`)
   process.exit(1)

@@ -44,6 +44,11 @@ export function isUpgrade(current: string | undefined, target: string | undefine
   return cmp !== undefined && cmp < 0
 }
 
+export function isDowngrade(current: string | undefined, target: string | undefined): boolean {
+  const cmp = compareFrameworkVersions(current, target)
+  return cmp !== undefined && cmp > 0
+}
+
 export function isSameVersion(current: string | undefined, target: string | undefined): boolean {
   const cmp = compareFrameworkVersions(current, target)
   return cmp === 0

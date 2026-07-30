@@ -194,14 +194,12 @@ describe("install and release flow", () => {
   })
 
   test("local release script publishes versioned and rolling channel assets", async () => {
-    const releaseScript = await Bun.file(path.join(repoRoot, "script", "release.sh")).text()
-    expect(releaseScript).toContain("CHANNEL_DIST=\"dist/${CHANNEL}\"")
-    expect(releaseScript).toContain("\"${CHANNEL_DIST}/install.sh\"")
-    expect(releaseScript).toContain("\"${CHANNEL_DIST}/checksums.txt\"")
-    expect(releaseScript).toContain("git archive --format=tar.gz")
-    expect(releaseScript).toContain('"${DIST}/${ARCHIVE_NAME}"')
-    expect(releaseScript).toContain("shasum -a 256 install.sh")
-    expect(releaseScript).toContain('cd "$CHANNEL_DIST"')
+    const buildScript = await Bun.file(path.join(repoRoot, "script", "release", "build.ts")).text()
+    expect(buildScript).toContain("dist/${channel}")
+    expect(buildScript).toContain("channelInstallerPath")
+    expect(buildScript).toContain("git archive --format=tar.gz")
+    expect(buildScript).toContain("checksums.txt")
+    expect(buildScript).toContain("shasum -a 256 install.sh")
   })
 
   test("installer uses one global lock and stages before replacing a version", async () => {
@@ -211,7 +209,7 @@ describe("install and release flow", () => {
     expect(installer.indexOf('install_bun_dependencies "$fw_root"')).toBeLessThan(installer.indexOf('mv "$INSTALL_STAGE_DIR" "$version_dir"'))
     expect(installer).toContain('mv "${INSTALL_BACKUP_DIR}" "${SPINOSA_HOME}/versions/${VERSION}"')
     expect(installer).toContain('install_args+=(--force)')
-    expect(installer).toContain('src/index.ts" --version')
+    expect(installer).toContain('src/index.ts" version')
   })
 
   test("installer repair preserves metadata and removes only broken runtime state", async () => {
@@ -266,17 +264,20 @@ describe("install and release flow", () => {
       "exit 1",
       "",
     ].join("\n"))
+    await mkdir(path.join(root, "packages", "spinosa-kernel", "src"), { recursive: true })
+    await Bun.write(path.join(root, "packages", "spinosa-kernel", "src", "index.ts"), "process.exit(0)\n")
     await Bun.write(path.join(root, "install.sh"), [
       "#!/bin/sh",
       'touch "$SPINOSA_HOME/repaired"',
       "exit 0",
       "",
     ].join("\n"))
+    await chmod(path.join(root, "install.sh"), 0o755)
     await chmod(path.join(home, "bin", "spinosa"), 0o755)
     await chmod(path.join(home, "bin", "bun"), 0o755)
 
     const result = Bun.spawnSync({
-      cmd: [path.join(home, "bin", "spinosa"), "version"],
+      cmd: ["bash", "-c", `printf '\\n' | ${JSON.stringify(path.join(home, "bin", "spinosa"))} version`],
       cwd: tmp.path,
       env: { ...process.env, SPINOSA_HOME: home, NO_COLOR: "1" },
       stdout: "pipe",
@@ -284,7 +285,7 @@ describe("install and release flow", () => {
     })
 
     expect(result.exitCode).toBe(0)
-    expect(result.stderr.toString()).toContain("runtime corruption detected")
+    expect(result.stderr.toString()).toContain("runtime issue detected")
     expect(result.stdout.toString()).toContain("repaired runtime")
     expect(await Bun.file(path.join(home, "metadata", "workspaces.json")).text()).toBe('{"schemaVersion":1,"workspaces":[]}\n')
   })
@@ -311,6 +312,8 @@ describe("install and release flow", () => {
     expect(launcher).toContain('src/index.ts" "$@"')
     expect(launcher).toContain('"$BUN" run "${RESOLVED_ROOT}/packages/spinosa-kernel/src/index.ts" version')
     expect(launcher).toContain('launcher_command="${launcher_args[$command_index]:-}"')
+    expect(launcher).toContain("SPINOSA_PREFLIGHT_DONE=1")
+    expect(launcher).toContain("tui_launch=true")
   })
 
   test("rejects installer checksum mismatch", () => {

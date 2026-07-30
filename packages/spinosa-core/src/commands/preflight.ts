@@ -12,6 +12,11 @@ import {
 } from "./upgrade"
 
 export const PREFLIGHT_RESTART_EXIT_CODE = 10
+export const SPINOSA_PREFLIGHT_DONE_ENV = "SPINOSA_PREFLIGHT_DONE"
+
+export function shouldSkipLaunchPreflight(): boolean {
+  return process.env.SPINOSA_UPGRADE_REEXEC === "1" || process.env[SPINOSA_PREFLIGHT_DONE_ENV] === "1"
+}
 
 export interface PreflightDependencies {
   checkUpgradeAvailable(): Promise<AutoUpgradeResult>

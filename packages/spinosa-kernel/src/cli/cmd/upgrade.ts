@@ -1,9 +1,9 @@
 import type { Argv } from "yargs"
 import * as prompts from "@clack/prompts"
 import { UI } from "../ui"
-import { upgradeFramework } from "@spinosa/core/commands/upgrade"
+import { upgradeFramework, readEffectiveInstalledVersion } from "@spinosa/core/commands/upgrade"
+import { isUpgrade } from "@spinosa/core/utils/version"
 import type { ReleaseChannel } from "@spinosa/core/system/channels"
-import { InstallationVersion } from "@spinosa/kernel-core/installation/version"
 
 export const UpgradeCommand = {
   command: "upgrade [target]",
@@ -48,7 +48,8 @@ export const UpgradeCommand = {
     UI.empty()
     prompts.intro("Spinosa updates")
 
-    prompts.log.info(`Current: v${InstallationVersion}`)
+    const currentVersion = readEffectiveInstalledVersion() || "unknown"
+    prompts.log.info(`Current: v${currentVersion}`)
 
     if (args.check) {
       prompts.log.step("Checking for updates...")
@@ -65,10 +66,13 @@ export const UpgradeCommand = {
     })
 
     if (args.check) {
-      if (result.newVersion && result.newVersion !== InstallationVersion) {
+      if (result.refusedReason) {
+        prompts.log.warn(result.refusedReason)
+      } else if (isUpgrade(result.previousVersion, result.newVersion)) {
         prompts.log.info(`Would update to v${result.newVersion}`)
       } else {
-        prompts.log.info(`Already up to date (v${InstallationVersion})`)
+        const displayVersion = result.newVersion ?? currentVersion
+        prompts.log.info(`Already up to date (v${displayVersion})`)
       }
       prompts.outro("Check complete.")
       return

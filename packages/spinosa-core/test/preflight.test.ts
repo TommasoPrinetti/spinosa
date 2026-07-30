@@ -1,6 +1,8 @@
-import { describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "bun:test"
 import {
   runLaunchPreflight,
+  shouldSkipLaunchPreflight,
+  SPINOSA_PREFLIGHT_DONE_ENV,
   type PreflightDependencies,
 } from "../src/commands/preflight"
 
@@ -85,5 +87,37 @@ describe("launch preflight", () => {
     expect(await runLaunchPreflight(deps)).toBe("restart")
     expect(output).toContain("⚠ Could not update missing: workspace is missing")
     expect(output.at(-1)).toBe("✨ Run 'spinosa' again to open the updated TUI.")
+  })
+})
+
+describe("shouldSkipLaunchPreflight", () => {
+  const previous = {
+    reexec: process.env.SPINOSA_UPGRADE_REEXEC,
+    done: process.env[SPINOSA_PREFLIGHT_DONE_ENV],
+  }
+
+  afterEach(() => {
+    if (previous.reexec === undefined) delete process.env.SPINOSA_UPGRADE_REEXEC
+    else process.env.SPINOSA_UPGRADE_REEXEC = previous.reexec
+    if (previous.done === undefined) delete process.env[SPINOSA_PREFLIGHT_DONE_ENV]
+    else process.env[SPINOSA_PREFLIGHT_DONE_ENV] = previous.done
+  })
+
+  test("skips when launcher already ran preflight", () => {
+    delete process.env.SPINOSA_UPGRADE_REEXEC
+    process.env[SPINOSA_PREFLIGHT_DONE_ENV] = "1"
+    expect(shouldSkipLaunchPreflight()).toBe(true)
+  })
+
+  test("skips after upgrade re-exec", () => {
+    process.env.SPINOSA_UPGRADE_REEXEC = "1"
+    delete process.env[SPINOSA_PREFLIGHT_DONE_ENV]
+    expect(shouldSkipLaunchPreflight()).toBe(true)
+  })
+
+  test("runs when no skip env vars are set", () => {
+    delete process.env.SPINOSA_UPGRADE_REEXEC
+    delete process.env[SPINOSA_PREFLIGHT_DONE_ENV]
+    expect(shouldSkipLaunchPreflight()).toBe(false)
   })
 })

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import {
   compareFrameworkVersions,
   comparePrereleaseTokens,
+  isDowngrade,
   isLegacyDevWorkspaceVersion,
   isPrereleaseFrameworkVersion,
   isSameVersion,
@@ -159,6 +160,12 @@ describe("semver helpers", () => {
     expect(isUpgrade("1.0.2-beta.9", "1.0.2-beta.10")).toBe(true)
     expect(isUpgrade("1.0.2-beta.14", "1.0.2")).toBe(true)
     expect(isUpgrade("1.0.2", "1.0.2-beta.14")).toBe(false)
+  })
+
+  test("isDowngrade detects older targets", () => {
+    expect(isDowngrade("1.0.2-beta.14", "1.0.2-beta.12")).toBe(true)
+    expect(isDowngrade("1.0.2", "1.0.2-beta.14")).toBe(true)
+    expect(isDowngrade("1.0.2-beta.12", "1.0.2-beta.14")).toBe(false)
   })
 
   test("isSameVersion detects equality", () => {

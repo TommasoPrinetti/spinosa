@@ -13,7 +13,7 @@ import {
   spinosaReleaseChannel,
 } from "../system/channels"
 import { discoverInstalledFramework, installedReleaseVersion, resolveFrameworkRoot } from "../framework/discovery"
-import { compareFrameworkVersions } from "../utils/version"
+import { compareFrameworkVersions, isDowngrade } from "../utils/version"
 import { ensureGlobalMetadata, discoverRegisteredWorkspaces } from "../workspace/registry"
 import { readWorkspaceMeta } from "../workspace/meta"
 import { spinosaLogInfo } from "../utils/log"
@@ -77,6 +77,21 @@ export function installedUpgradeVersion(version: string, home = spinosaHome()): 
 
 function versionCachePath(channel: string): string {
   return path.join(metadataDir(), `version_check_cache_${channel}`)
+}
+
+export function readEffectiveInstalledVersion(): string {
+  const fwRoot = resolveFrameworkRoot()
+  const installedVersion = installedReleaseVersion(fwRoot)
+  const normalizedInstalled =
+    installedVersion === "dev" || !installedVersion ? "" : installedVersion
+
+  const installedFwRoot = discoverInstalledFramework()
+  if (installedFwRoot && installedFwRoot !== fwRoot) {
+    const globalVersion = installedReleaseVersion(installedFwRoot)
+    if (globalVersion) return globalVersion
+  }
+
+  return normalizedInstalled
 }
 
 
@@ -159,20 +174,8 @@ export async function upgradeFramework(
 
   options.onPhase?.("resolve", `Target version: v${resolvedVersion}`)
 
-  const fwRoot = resolveFrameworkRoot()
-  const installedVersion = installedReleaseVersion(fwRoot)
-  const normalizedInstalled =
-    installedVersion === "dev" || !installedVersion ? "" : installedVersion
-
-  // When running from source tree (dev), also check globally installed version
-  let effectiveInstalled = normalizedInstalled
-  if (normalizedInstalled !== resolvedVersion) {
-    const installedFwRoot = discoverInstalledFramework()
-    if (installedFwRoot && installedFwRoot !== fwRoot) {
-      const globalVersion = installedReleaseVersion(installedFwRoot)
-      if (globalVersion) effectiveInstalled = globalVersion
-    }
-  }
+  const effectiveInstalled = readEffectiveInstalledVersion()
+  const normalizedInstalled = effectiveInstalled
 
   if (!options.reinstall && effectiveInstalled && effectiveInstalled === resolvedVersion) {
     options.onPhase?.("current", `Already at v${resolvedVersion}`)
@@ -198,7 +201,7 @@ export async function upgradeFramework(
     }
   }
 
-  if (direction !== undefined && direction < 0 && !options.reinstall && !options.allowDowngrade) {
+  if (isDowngrade(effectiveInstalled, resolvedVersion) && !options.reinstall && !options.allowDowngrade) {
     const reason = `Refusing to downgrade from v${effectiveInstalled} to v${resolvedVersion}. Use --reinstall or --allow-downgrade to proceed.`
     options.onPhase?.("refused", reason)
     return {
@@ -211,7 +214,7 @@ export async function upgradeFramework(
   }
 
   if (options.check) {
-    const action = direction === -1 ? "downgrade" : "upgrade"
+    const action = isDowngrade(effectiveInstalled, resolvedVersion) ? "downgrade" : "upgrade"
     options.onPhase?.("check", `Would ${action} to v${resolvedVersion}`)
     return {
       success: true,

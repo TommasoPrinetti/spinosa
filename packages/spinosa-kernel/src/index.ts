@@ -76,7 +76,7 @@ function show(out: string) {
 
 const cli = yargs(args)
   .parserConfiguration({ "populate--": true })
-  .scriptName("opencode")
+  .scriptName("spinosa")
   .wrap(100)
   .help("help", "show help")
   .alias("help", "h")

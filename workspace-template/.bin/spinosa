@@ -112,8 +112,8 @@ if [[ "$installed_release" == "true" ]] && ! ensure_runtime; then
   esac
   rm -f "${SPINOSA_HOME}/versions/.install.lock" 2>/dev/null || true
   if bash "${RESOLVED_ROOT}/install.sh" --version "$_ver" --yes --reinstall --no-launch --no-modify-path; then
-    printf 'Reinstall complete. Run spinosa again to start.\n' >&2
-    exit 0
+    _btlog health "reinstall complete, re-running original command"
+    exec "$0" "$@"
   fi
   echo "Error: Spinosa reinstall failed. Metadata was preserved." >&2
   echo "Re-run the installer with --yes --reinstall for details." >&2
@@ -121,38 +121,28 @@ if [[ "$installed_release" == "true" ]] && ! ensure_runtime; then
 fi
 _btlog health "runtime healthy"
 
-# Dispatch to TS CLI for all non-interactive commands.
-# new/create without a source argument still launches the TUI dashboard.
+# Route to the TUI only for no-args, explicit tui, or new/create without a source.
+# Every other command is dispatched to the kernel CLI (single command router).
 launcher_args=("$@")
 command_index=0
 while [[ "${launcher_args[$command_index]:-}" == "--json" || "${launcher_args[$command_index]:-}" == "--quiet" || "${launcher_args[$command_index]:-}" == "--no-color" ]]; do
   command_index=$((command_index + 1))
 done
 launcher_command="${launcher_args[$command_index]:-}"
-dispatch=false
-case "$launcher_command" in
-  help|--help|-h|version|--version|add|update|doctor|upgrade|preflight|uninstall|status|list|startup-autoclean|autoclean|models|stats|export|import|session|plugin|plug|db|providers|auth|agent|mcp|debug|web|completion) dispatch=true ;;
-  new|create) [[ $(( $# - command_index )) -gt 1 ]] && dispatch=true ;;
-esac
-if [[ "$dispatch" == "true" ]]; then
-  [[ -z "$RESOLVED_ROOT" || -z "$BUN" ]] && { echo "Error: Spinosa runtime not found. Reinstall Spinosa." >&2; exit 1; }
-  _btlog dispatch "dispatching to kernel for command: $launcher_command"
-  export SPINOSA_TEMPLATE_ROOT="$RESOLVED_ROOT"
-  exec "$BUN" run "${RESOLVED_ROOT}/packages/spinosa-kernel/src/index.ts" "$@"
+remaining_args=$(( ${#launcher_args[@]} - command_index - 1 ))
+tui_launch=false
+if [[ -z "$launcher_command" ]]; then
+  tui_launch=true
+elif [[ "$launcher_command" == "tui" ]]; then
+  tui_launch=true
+elif [[ "$launcher_command" == "new" || "$launcher_command" == "create" ]] && [[ "$remaining_args" -eq 0 ]]; then
+  tui_launch=true
 fi
 
-# Unknown command — reject instead of silently falling through to TUI
-if [[ -n "$launcher_command" && "$launcher_command" != "new" && "$launcher_command" != "create" && "$launcher_command" != "tui" ]]; then
-  echo "Error: Unknown Spinosa command: ${launcher_command}" >&2
-  echo "Run 'spinosa help' for usage." >&2
-  exit 1
-fi
-
-# No-args or new/create without source → launch TUI
-if [[ -d "${RESOLVED_ROOT}/packages/tui/src" && -n "$BUN" ]]; then
+if [[ "$tui_launch" == "true" && -d "${RESOLVED_ROOT}/packages/tui/src" && -n "$BUN" ]]; then
   export SPINOSA_TEMPLATE_ROOT="$RESOLVED_ROOT"
   PREFLIGHT_RESTART_EXIT_CODE=10
-  if [[ "${SPINOSA_UPGRADE_REEXEC:-}" != "1" ]]; then
+  if [[ "${SPINOSA_UPGRADE_REEXEC:-}" != "1" && "${SPINOSA_PREFLIGHT_DONE:-}" != "1" ]]; then
     _btlog tui "running preflight check"
     set +e
     SPINOSA_TEMPLATE_ROOT="$RESOLVED_ROOT" \
@@ -166,9 +156,16 @@ if [[ -d "${RESOLVED_ROOT}/packages/tui/src" && -n "$BUN" ]]; then
     elif [[ "$preflight_exit" -ne 0 ]]; then
       exit "$preflight_exit"
     fi
+    export SPINOSA_PREFLIGHT_DONE=1
   else
-    _btlog tui "skipping preflight (SPINOSA_UPGRADE_REEXEC=1)"
+    _btlog tui "skipping launcher preflight (already done or re-exec)"
   fi
+  exec "$BUN" run "${RESOLVED_ROOT}/packages/spinosa-kernel/src/index.ts" "$@"
+fi
+
+if [[ -n "$RESOLVED_ROOT" && -n "$BUN" ]]; then
+  _btlog dispatch "dispatching to kernel for command: ${launcher_command:-<default>}"
+  export SPINOSA_TEMPLATE_ROOT="$RESOLVED_ROOT"
   exec "$BUN" run "${RESOLVED_ROOT}/packages/spinosa-kernel/src/index.ts" "$@"
 fi
 
