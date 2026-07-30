@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { $ } from "bun"
+import { execFileSync } from "node:child_process"
 import path from "node:path"
 
 const repoRoot = path.resolve(import.meta.dir, "../../../..")
@@ -8,10 +8,15 @@ const repoRoot = path.resolve(import.meta.dir, "../../../..")
 const maintainerHome = ["", "Users", "tommasoprinetti"].join("/")
 const localCloneMarker = ["Documents", "spinosa-main"].join("/")
 
+function trackedFiles(): string[] {
+  return execFileSync("git", ["ls-files"], { cwd: repoRoot, encoding: "utf-8", maxBuffer: 32 * 1024 * 1024 })
+    .split("\n")
+    .filter(Boolean)
+}
+
 describe("no personal machine paths in tracked files", () => {
-  test("git ls-files has no maintainer home paths", async () => {
-    const listed = await $`git ls-files`.cwd(repoRoot).text()
-    const files = listed.split("\n").filter(Boolean)
+  test("git ls-files has no maintainer home paths", () => {
+    const files = trackedFiles()
 
     const pathHits = files.filter((file) => {
       const lower = file.toLowerCase()
@@ -26,8 +31,7 @@ describe("no personal machine paths in tracked files", () => {
   })
 
   test("tracked file contents do not embed maintainer home directory", async () => {
-    const listed = await $`git ls-files`.cwd(repoRoot).text()
-    const files = listed.split("\n").filter(Boolean)
+    const files = trackedFiles()
     const self = path.relative(repoRoot, import.meta.path)
 
     const contentHits: string[] = []
@@ -56,9 +60,8 @@ describe("no personal machine paths in tracked files", () => {
     expect(contentHits).toEqual([])
   })
 
-  test("no tracked workspace log or ndjson artifacts", async () => {
-    const listed = await $`git ls-files`.cwd(repoRoot).text()
-    const files = listed.split("\n").filter(Boolean)
+  test("no tracked workspace log or ndjson artifacts", () => {
+    const files = trackedFiles()
 
     const logHits = files.filter((file) => {
       if (!/\.(log|ndjson)$/i.test(file)) return false

@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-// Pre-release gate: branch, clean tree, typecheck, core release tests.
+// Pre-release gate: branch, clean tree, quality checks.
 import { resolve } from "node:path"
 import { $ } from "bun"
 
@@ -20,8 +20,6 @@ if (dirty) {
   process.exit(1)
 }
 
-await $`bun run typecheck`.cwd(root)
-await $`bun test test/version.test.ts test/preflight.test.ts test/channels.test.ts test/yaml-config.test.ts test/upgrade-network.test.ts`.cwd(`${root}/packages/spinosa-core`)
-await $`bun test ../../script/release/github.test.ts`.cwd(`${root}/packages/spinosa-core`)
+await $`bun run quality`.cwd(root)
 
 console.log("✓ release validation passed")

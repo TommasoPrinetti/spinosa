@@ -1,13 +1,14 @@
 {
   "$schema": "https://json.schemastore.org/package",
   "name": "@spinosa/script",
+  "version": "0.0.0",
   "license": "MIT",
   "dependencies": {
-    "semver": "^7.6.3"
+    "semver": "catalog:"
   },
   "devDependencies": {
     "@types/bun": "catalog:",
-    "@types/semver": "^7.5.8"
+    "@types/semver": "catalog:"
   },
   "exports": {
     ".": "./src/index.ts"

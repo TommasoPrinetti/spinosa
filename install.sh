@@ -421,6 +421,7 @@ is_owned_spinosa_shim() {
   # Installers before v1.0.1-beta.1 created the same wrapper without the
   # ownership marker. Recognize that exact legacy shape so upgrades remain
   # safe without taking over an unrelated `spinosa` command.
+  # shellcheck disable=SC2016
   grep -Fqx "home=\"${SPINOSA_HOME}\"" "$shim" 2>/dev/null \
     && grep -Fqx 'target="${home}/bin/spinosa"' "$shim" 2>/dev/null \
     && grep -Fqx 'exec bash "$target" "$@"' "$shim" 2>/dev/null

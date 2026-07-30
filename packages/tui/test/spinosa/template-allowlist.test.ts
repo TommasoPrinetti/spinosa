@@ -3,14 +3,13 @@ import { existsSync, mkdtempSync, mkdirSync, readdirSync, rmSync, statSync, writ
 import { tmpdir } from "node:os"
 import path from "node:path"
 
-import { resolveFrameworkRoot } from "@spinosa/core/framework/discovery"
 import { readFrameworkFilesTsv } from "@spinosa/core/framework/manifest"
 import { createWorkspace } from "@spinosa/core/commands/create"
 
 const repoRoot = path.resolve(import.meta.dir, "../../../..")
 
 function frameworkRoot(): string {
-  return resolveFrameworkRoot() ?? repoRoot
+  return repoRoot
 }
 
 let corpusDir: string

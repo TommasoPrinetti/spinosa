@@ -22,7 +22,7 @@ import { loadRegistry } from "../workspace/registry"
 import { readFrameworkVersionFromRoot, resolveTemplateRootFromFrameworkRoot } from "../framework/discovery"
 import { spinosaLogInfo, spinosaLogWarn } from "../utils/log"
 import { resolvePathWithinRoot } from "../utils/path"
-import { readFrameworkFilesTsv } from "../framework/manifest"
+import { readFrameworkFilesTsv, type FrameworkManifestEntry } from "../framework/manifest"
 
 export interface UpdateOptions {
   workspacePath: string
@@ -148,7 +148,7 @@ function managedFilesUnder(root: string, relativePath: string): string[] {
 function copyManagedDirectory(
   sourceTemplateRoot: string,
   workspacePath: string,
-  entry: FrameworkEntry,
+  entry: FrameworkManifestEntry,
   storedChecksums: FrameworkChecksums,
   force: boolean,
 ): { changed: boolean; failed: boolean } {

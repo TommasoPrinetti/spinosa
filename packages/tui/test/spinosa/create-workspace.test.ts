@@ -12,7 +12,7 @@ import { writeWorkspaceStatus } from "@spinosa/core/workspace/meta"
 const repoRoot = path.resolve(import.meta.dir, "../../../..")
 
 function frameworkRoot(): string {
-  return resolveFrameworkRoot() ?? repoRoot
+  return repoRoot
 }
 
 let corpusDir: string

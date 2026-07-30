@@ -1,0 +1,27 @@
+name: Quality
+
+on:
+  push:
+    branches:
+      - main
+      - beta
+  pull_request:
+    branches:
+      - main
+      - beta
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-bun
+
+      - name: Install ShellCheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+
+      - name: Run quality gate
+        run: bun run quality
+        env:
+          CI: true

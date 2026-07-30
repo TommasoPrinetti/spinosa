@@ -143,15 +143,16 @@ export async function createWorkspace(options: CreateWorkspaceOptions): Promise<
     cleanMacMetadata(workspacePath)
     materializePlaceholders(workspacePath)
 
-    // ── Step 3: Create user-state directories (with .gitkeep) ──────────
-    progress("Creating user-state directories...")
+    // Ensure user-state dirs exist when an older installed template omits them.
     for (const dir of ["raw", "maps", ".logs", "agent_reports", ".trash"]) {
       throwIfSpinosaCancelled(shouldAbort)
-      mkdirSync(path.join(workspacePath, dir), { recursive: true })
-      writeFileSync(path.join(workspacePath, dir, ".gitkeep"), "", "utf-8")
+      const dirPath = path.join(workspacePath, dir)
+      mkdirSync(dirPath, { recursive: true })
+      const gitkeep = path.join(dirPath, ".gitkeep")
+      if (!existsSync(gitkeep)) writeFileSync(gitkeep, "", "utf-8")
     }
 
-    // ── Step 4: Write workspace metadata ───────────────────────────────
+    // ── Step 3: Write workspace metadata ───────────────────────────────
     const sourceFrameworkVersion = readFrameworkVersionFromRoot(frameworkRoot)
     progress("Writing workspace metadata...")
     const workspaceID = reservation.resumed ? ensureWorkspaceID(workspacePath) : createWorkspaceID()
@@ -169,7 +170,7 @@ export async function createWorkspace(options: CreateWorkspaceOptions): Promise<
       writeFileSync(path.join(workspacePath, ".spinosa", "workspace"), markerLines.join("\n"), "utf-8")
     }
 
-    // ── Step 5: Register workspace ─────────────────────────────────────
+    // ── Step 4: Register workspace ─────────────────────────────────────
     progress("Registering in global registry...")
     await registerWorkspace(workspacePath, projectName, recover, workspaceID)
     throwIfSpinosaCancelled(shouldAbort)

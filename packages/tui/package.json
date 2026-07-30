@@ -50,8 +50,6 @@
     "./component/spinner": "./src/component/spinner.tsx"
   },
   "dependencies": {
-    "@img/sharp-darwin-arm64": "0.35.3",
-    "@napi-rs/canvas": "1.0.2",
     "@spinosa/kernel-core": "workspace:*",
     "@spinosa/core": "workspace:*",
     "@spinosa/plugin": "workspace:*",
@@ -66,11 +64,7 @@
     "diff": "catalog:",
     "effect": "catalog:",
     "fuzzysort": "catalog:",
-    "markitdown-ts": "0.0.10",
     "open": "10.1.2",
-    "opentui-spinner": "catalog:",
-    "pdfjs-dist": "4.9.155",
-    "ppu-paddle-ocr": "6.0.0",
     "remeda": "catalog:",
     "solid-js": "catalog:",
     "strip-ansi": "7.1.2"
@@ -81,16 +75,6 @@
     "@typescript/native-preview": "catalog:"
   },
   "optionalDependencies": {
-    "@napi-rs/canvas-darwin-arm64": "1.0.2",
-    "@napi-rs/canvas-darwin-x64": "1.0.2",
-    "@napi-rs/canvas-linux-x64-gnu": "1.0.2",
-    "@napi-rs/canvas-linux-x64-musl": "1.0.2",
-    "@napi-rs/canvas-linux-arm64-gnu": "1.0.2",
-    "@napi-rs/canvas-linux-arm64-musl": "1.0.2",
-    "@napi-rs/canvas-linux-arm-gnueabihf": "1.0.2",
-    "@napi-rs/canvas-linux-riscv64-gnu": "1.0.2",
-    "@napi-rs/canvas-win32-x64-msvc": "1.0.2",
-    "@napi-rs/canvas-win32-arm64-msvc": "1.0.2",
     "tui-agent-use": "0.1.3"
   }
 }
