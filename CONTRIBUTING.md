@@ -53,6 +53,6 @@ Framework releases are cut locally — not via GitHub Actions. See [RELEASE_GUID
 
 - **Version sync:** `bun script/set-version.ts <version>` updates root `package.json` and `install.sh` `PINNED_VERSION`.
 - **Standard release:** `bun run release:beta:patch` or `bun run release:stable:patch` (uses `release-it` + hooks in `.release-it.json`).
-- **Republish explicit version:** `bash script/release.sh vX.Y.Z`.
+- **Republish explicit version:** `bun run release:republish -- vX.Y.Z`.
 - **Pre-release gate:** `bun run release:validate` plus the matrix in `workspace-template/docs/reference/testsuite.md`.
 

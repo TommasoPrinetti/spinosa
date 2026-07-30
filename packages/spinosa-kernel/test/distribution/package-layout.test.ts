@@ -17,11 +17,10 @@ describe("Spinosa distribution layout", () => {
   })
 
   test("platform packages and launchers agree on scoped names and the binary", async () => {
-    const [build, postinstall, launcher, publish, dockerfile] = await Promise.all([
+    const [build, postinstall, launcher, dockerfile] = await Promise.all([
       source("../../script/build.ts"),
       source("../../script/postinstall.mjs"),
       source("../../bin/spinosa"),
-      source("../../script/publish.ts"),
       source("../../Dockerfile"),
     ])
 
@@ -32,15 +31,6 @@ describe("Spinosa distribution layout", () => {
     expect(launcher).toContain('const base = "@spinosa/kernel-" + platform + "-" + arch')
     expect(launcher).toContain('platform === "windows" ? "spinosa.exe" : "spinosa"')
     expect(launcher).toContain('fileURLToPath(import.meta.url)')
-    expect(publish).toContain("name: pkg.name")
-    expect(publish).toContain('type: "module"')
-    expect(publish).toContain('spinosa: "./bin/spinosa"')
-    expect(publish).toContain("optionalDependencies: binaries")
-    expect(publish).not.toContain('pkg.name + "-ai"')
-    expect(publish).not.toContain("anomalyco/opencode")
-    expect(publish).toContain("GIT_ASKPASS: askpass")
-    expect(publish).toContain("https://github.com/medialab/homebrew-tap.git")
-    expect(publish).not.toContain("x-access-token:${token}")
     expect(dockerfile).toContain("dist/kernel-linux-x64-baseline-musl/bin/spinosa")
     expect(dockerfile).toContain('ENTRYPOINT ["spinosa"]')
   })

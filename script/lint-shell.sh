@@ -4,7 +4,6 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TARGETS=(
   "$ROOT/install.sh"
-  "$ROOT/script/release/publish-channel.sh"
   "$ROOT/workspace-template/.bin/spinosa"
 )
 

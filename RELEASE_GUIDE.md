@@ -19,7 +19,7 @@ bun run release:stable:patch    # or :minor / :major
 **Republish a specific version** without incrementing semver (e.g. fix a broken channel asset):
 
 ```bash
-bash script/release.sh v1.0.2-beta.14
+bun run release:republish -- v1.0.2-beta.14
 ```
 
 Both flows require a **clean working tree**, branch `main` or `beta`, and `gh` authenticated (`gh auth status`).
@@ -69,7 +69,7 @@ Channel is inferred from the version string (`releaseChannel()` in `@spinosa/cor
 
 ## Release pipeline
 
-Hooks are defined in `.release-it.json`. Both `release-it` and `script/release.sh` run the same stages.
+Hooks are defined in `.release-it.json`. Both `release-it` and `bun run release:republish` run the same stages.
 
 ```mermaid
 flowchart LR
@@ -86,7 +86,7 @@ flowchart LR
 
 | Stage | Script | What it checks |
 | ----- | ------ | -------------- |
-| Validate | `bun script/release/validate.ts` | Branch `main`/`beta`, clean tree, `bun run typecheck`, core release tests |
+| Validate | `bun script/release/validate.ts` | Branch `main`/`beta`, clean tree, `bun run quality` |
 | Sync version | `bun script/set-version.ts ${version}` | `package.json` + `install.sh` PINNED_VERSION match |
 | Build | `bun script/release/build.ts ${version}` | Stage `dist/v{VERSION}/` and `dist/{channel}/` installers + checksums + tarball |
 | Verify local | `bun script/release/verify-local.ts ${version}` | All three version-release assets exist; checksums include both files |
@@ -227,7 +227,7 @@ Disable launch-time checks: `SPINOSA_NO_UPGRADE_CHECK=1` or `auto_upgrade: false
 - **GitHub Actions are disabled** for framework releases — everything runs locally via `release-it` / `gh`.
 - **Version-release checksums need both entries** — always curl the live `checksums.txt` before declaring a release done.
 - **Channel-release checksums are install.sh only** — the tarball lives on the immutable version release, not the rolling channel.
-- **Republishing:** `script/release.sh` commits version sync changes if needed, then runs the full pipeline.
+- **Republishing:** `bun run release:republish -- vX.Y.Z` commits version sync changes if needed, then runs the full pipeline.
 
 ---
 

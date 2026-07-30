@@ -19,6 +19,8 @@
     "release:verify-local": "bun script/release/verify-local.ts",
     "release:publish-channel": "bun script/release/publish-channel.ts",
     "release:verify-remote": "bun script/release/verify-remote.ts",
+    "release:republish": "bun script/release/republish.ts",
+    "patches:generate": "bun script/generate-patches-md.ts",
     "lint:shell": "bash script/lint-shell.sh",
     "test:installer": "bats test/installer",
     "lint:deps": "depcruise packages/spinosa-core packages/spinosa-cli packages/spinosa-kernel packages/spinosa-runtime packages/spinosa-harness packages/tui script --config .dependency-cruiser.cjs",
