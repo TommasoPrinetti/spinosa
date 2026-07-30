@@ -67,7 +67,26 @@ esac
 runtime_healthy() {
   [[ -n "$RESOLVED_ROOT" && -n "$BUN" ]] || return 1
   SPINOSA_TEMPLATE_ROOT="$RESOLVED_ROOT" \
-    "$BUN" run "${RESOLVED_ROOT}/packages/spinosa-kernel/src/index.ts" version >/dev/null 2>&1
+    "$BUN" --cwd "$RESOLVED_ROOT" --preload "@opentui/solid/preload" \
+    "${RESOLVED_ROOT}/packages/spinosa-kernel/src/index.ts" version >/dev/null 2>&1
+}
+
+# Single launch path for every kernel command (TUI + CLI).
+# Avoid `bun run`: `bun --preload X run file` dumps Bun's package-script help
+# instead of starting Spinosa. Prefer `bun --cwd <root> --preload <opentui> <entry>`.
+# Keep this argv shape in sync with packages/spinosa-core/src/system/bun-launch.ts.
+exec_kernel() {
+  local entry="${RESOLVED_ROOT}/packages/spinosa-kernel/src/index.ts"
+  if [[ -z "$RESOLVED_ROOT" || -z "$BUN" ]]; then
+    echo "Error: Spinosa not found. Run the installer or re-install dependencies." >&2
+    exit 1
+  fi
+  if [[ ! -f "$entry" ]]; then
+    echo "Error: Spinosa kernel entry missing: $entry" >&2
+    exit 1
+  fi
+  export SPINOSA_TEMPLATE_ROOT="$RESOLVED_ROOT"
+  exec "$BUN" --cwd "$RESOLVED_ROOT" --preload "@opentui/solid/preload" "$entry" "$@"
 }
 
 ensure_runtime() {
@@ -139,17 +158,12 @@ elif [[ "$launcher_command" == "new" || "$launcher_command" == "create" ]] && [[
 fi
 
 if [[ "$tui_launch" == "true" && -d "${RESOLVED_ROOT}/packages/tui/src" && -n "$BUN" ]]; then
-  export SPINOSA_TEMPLATE_ROOT="$RESOLVED_ROOT"
-  # --preload must be a Bun CLI flag: bunfig.toml is loaded from CWD (the
-  # caller's project), not from the kernel package. Without this, Solid JSX
-  # compiles to DOM VNodes and the TUI paints a blank black screen.
-  exec "$BUN" --preload "@opentui/solid/preload" run "${RESOLVED_ROOT}/packages/spinosa-kernel/src/index.ts" "$@"
+  exec_kernel "$@"
 fi
 
 if [[ -n "$RESOLVED_ROOT" && -n "$BUN" ]]; then
   _btlog dispatch "dispatching to kernel for command: ${launcher_command:-<default>}"
-  export SPINOSA_TEMPLATE_ROOT="$RESOLVED_ROOT"
-  exec "$BUN" --preload "@opentui/solid/preload" run "${RESOLVED_ROOT}/packages/spinosa-kernel/src/index.ts" "$@"
+  exec_kernel "$@"
 fi
 
 _btlog tui "failed: RESOLVED_ROOT or BUN not found (${RESOLVED_ROOT:-unset}, ${BUN:-unset})"

@@ -40,7 +40,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
-- Installed `spinosa` launcher passes `bun --preload @opentui/solid/preload` so the TUI renders when launched from a project directory (was a blank black screen because root `bunfig.toml` has no OpenTUI preload).
+- Installed `spinosa` launcher loads OpenTUI Solid via `bun --cwd <root> --preload @opentui/solid/preload <entry>` so the TUI renders from any project directory (was a blank black screen).
+- Shared `buildKernelBunArgv` / bash `exec_kernel` launch helper rejects the broken `bun --preload … run …` argv that dumped Bun's help menu instead of starting Spinosa.
 
 ## [1.0.3-beta.2] — 2026-07-30
 

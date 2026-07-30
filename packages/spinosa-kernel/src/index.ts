@@ -1,8 +1,8 @@
 import "@opentui/solid/preload"
-// Must be above all other imports — documents the requirement. For installed
-// launches, the bash launcher also passes `bun --preload @opentui/solid/preload`
-// because bunfig.toml is loaded from CWD (the caller's project), not the kernel
-// package, and a static import alone is not reliable under ESM hoisting.
+// Prefer the launcher helper (`buildKernelBunArgv` / bash `exec_kernel`) which
+// passes `bun --cwd <root> --preload @opentui/solid/preload <entry>`.
+// A static import alone is not reliable under ESM hoisting, and
+// `bun --preload X run file` dumps Bun's help menu instead of starting Spinosa.
 // Without the OpenTUI Solid transform, JSX becomes DOM VNodes → blank TUI.
 import yargs from "yargs"
 import { hideBin } from "yargs/helpers"
