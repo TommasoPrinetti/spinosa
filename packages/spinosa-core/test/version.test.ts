@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test"
 import fc from "fast-check"
 import {
   compareFrameworkVersions,
-  comparePrereleaseTokens,
   isDowngrade,
   isLegacyDevWorkspaceVersion,
   isPrereleaseFrameworkVersion,
@@ -72,34 +71,6 @@ describe("compareFrameworkVersions", () => {
   test("refuses downgrade scenarios", () => {
     expect(compareFrameworkVersions("1.0.2-beta.14", "1.0.2-beta.3")! > 0).toBe(true)
     expect(compareFrameworkVersions("1.0.2-beta.11", "1.0.2-beta.14")! < 0).toBe(true)
-  })
-})
-
-describe("comparePrereleaseTokens", () => {
-  test("compares numeric tokens numerically", () => {
-    expect(comparePrereleaseTokens(["9"], ["10"])).toBe(-1)
-    expect(comparePrereleaseTokens(["10"], ["9"])).toBe(1)
-  })
-
-  test("compares alpha tokens lexicographically", () => {
-    expect(comparePrereleaseTokens(["alpha"], ["beta"])).toBe(-1)
-    expect(comparePrereleaseTokens(["beta"], ["alpha"])).toBe(1)
-  })
-
-  test("treats numeric as less than alpha", () => {
-    expect(comparePrereleaseTokens(["1"], ["alpha"])).toBe(-1)
-    expect(comparePrereleaseTokens(["alpha"], ["1"])).toBe(1)
-  })
-
-  test("compares token sequences", () => {
-    expect(comparePrereleaseTokens(["beta", "1"], ["beta", "2"])).toBe(-1)
-    expect(comparePrereleaseTokens(["beta", "10"], ["beta", "2"])).toBe(1)
-  })
-
-  test("handles missing tokens", () => {
-    expect(comparePrereleaseTokens(["1"], ["1"])).toBe(0)
-    expect(comparePrereleaseTokens(["1", "2"], ["1"])).toBe(1)
-    expect(comparePrereleaseTokens(["1"], ["1", "2"])).toBe(-1)
   })
 })
 

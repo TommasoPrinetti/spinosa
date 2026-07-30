@@ -14,6 +14,7 @@ import {
 import { writeFileSync } from "node:fs"
 import { copyFile as copyFileAsync, mkdir as mkdirAsync, rm as rmAsync } from "node:fs/promises"
 import { spawnSync } from "node:child_process"
+import { createHash } from "node:crypto"
 import path from "node:path"
 
 import { isCloudStoragePath } from "./path"
@@ -38,29 +39,51 @@ function asyncCopyAttemptTimeoutMs(src: string): number {
 const MAX_NAME_BYTES = 250
 const MAX_PATH_BYTES = 1000
 
+function truncateUtf8ByBytes(value: string, maxBytes: number): string {
+  if (Buffer.byteLength(value, "utf8") <= maxBytes) return value
+  let end = value.length
+  while (end > 0 && Buffer.byteLength(value.slice(0, end), "utf8") > maxBytes) end--
+  return end > 0 ? value.slice(0, end) : value.slice(0, 1)
+}
+
 // Truncate the longest path component(s) so the destination fits filesystem
 // limits (macOS: 255 bytes/component, ~1024 for the full path). Used when a
 // copy fails with ENAMETOOLONG so we reprocess under a safe name instead of
 // dropping the file.
 export function truncateDestPath(dest: string): string {
-  const dir = path.dirname(dest)
-  const base = path.basename(dest)
-  const ext = path.extname(base)
-  const stem = ext ? base.slice(0, base.length - ext.length) : base
-  const budget = MAX_NAME_BYTES - ext.length
-  const safeStem = Buffer.byteLength(stem, "utf8") > budget ? stem.slice(0, Math.max(1, budget)) : stem
+  const parsed = path.parse(dest)
+  const root = parsed.root
+  const ext = parsed.ext
+  const stemBudget = MAX_NAME_BYTES - Buffer.byteLength(ext, "utf8")
+  const safeStem = truncateUtf8ByBytes(parsed.name, stemBudget)
   const safeBase = safeStem + ext
-  let safeDir = dir
-  if (Buffer.byteLength(path.join(safeDir, safeBase), "utf8") > MAX_PATH_BYTES) {
-    // Walk up trimming parent component names until the full path fits.
-    const parts = safeDir.split(path.sep).filter(Boolean)
-    while (parts.length > 0 && Buffer.byteLength(path.join(parts.join(path.sep), safeBase), "utf8") > MAX_PATH_BYTES) {
-      const i = parts.reduce((mi, p, idx) => (Buffer.byteLength(p, "utf8") > Buffer.byteLength(parts[mi], "utf8") ? idx : mi), 0)
-      parts[i] = parts[i].slice(0, Math.max(1, MAX_NAME_BYTES - 10))
-    }
-    safeDir = parts.join(path.sep)
+
+  let dir = path.dirname(dest)
+  let candidate = path.join(dir, safeBase)
+  if (Buffer.byteLength(candidate, "utf8") <= MAX_PATH_BYTES) return candidate
+
+  const relParts = root ? dir.slice(root.length).split(path.sep).filter(Boolean) : dir.split(path.sep).filter(Boolean)
+  const parts = [...relParts]
+  while (parts.length > 0 && Buffer.byteLength(path.join(root, ...parts, safeBase), "utf8") > MAX_PATH_BYTES) {
+    const longest = parts.reduce(
+      (maxIndex, part, index, all) => (Buffer.byteLength(part, "utf8") > Buffer.byteLength(all[maxIndex]!, "utf8") ? index : maxIndex),
+      0,
+    )
+    const shortened = truncateUtf8ByBytes(parts[longest]!, MAX_NAME_BYTES - 10)
+    if (shortened === parts[longest]) break
+    parts[longest] = shortened
   }
-  return path.join(safeDir, safeBase)
+
+  dir = root ? path.join(root, ...parts) : parts.join(path.sep)
+  candidate = path.join(dir, safeBase)
+  if (Buffer.byteLength(candidate, "utf8") <= MAX_PATH_BYTES) return candidate
+
+  const hash = createHash("sha256").update(dest).digest("hex").slice(0, 16)
+  const hashBase = truncateUtf8ByBytes(hash, stemBudget) + ext
+  candidate = path.join(dir, hashBase)
+  if (Buffer.byteLength(candidate, "utf8") <= MAX_PATH_BYTES) return candidate
+
+  return path.join(root || dir, hashBase)
 }
 
 export interface SafeCopyOptions {

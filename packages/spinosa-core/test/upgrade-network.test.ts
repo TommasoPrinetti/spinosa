@@ -17,7 +17,7 @@ describe("rolling channel installer fetch", () => {
       ),
     )
 
-    await expect(resolvePinnedVersionFromInstaller("beta", "https://example.test/beta/install.sh"))
+    await expect(resolvePinnedVersionFromInstaller("https://example.test/beta/install.sh"))
       .resolves.toBe("1.0.2-beta.14")
   })
 
@@ -28,7 +28,7 @@ describe("rolling channel installer fetch", () => {
       ),
     )
 
-    await expect(resolvePinnedVersionFromInstaller("beta", "https://example.test/beta/install.sh"))
+    await expect(resolvePinnedVersionFromInstaller("https://example.test/beta/install.sh"))
       .resolves.toBeUndefined()
   })
 
@@ -39,7 +39,7 @@ describe("rolling channel installer fetch", () => {
       ),
     )
 
-    const pinned = await resolvePinnedVersionFromInstaller("beta", "https://example.test/beta/install.sh")
+    const pinned = await resolvePinnedVersionFromInstaller("https://example.test/beta/install.sh")
     expect(pinned).toBe("1.0.2-beta.11")
     expect(pinned).not.toBe("1.0.2-beta.14")
   })

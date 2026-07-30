@@ -60,15 +60,6 @@ export function releaseChannel(version: string | undefined): "stable" | "beta" {
   return semver.prerelease(normalized) ? "beta" : "stable"
 }
 
-export function comparePrereleaseTokens(left: string[], right: string[]): number {
-  const leftVersion = left.length > 0 ? `0.0.0-${left.join(".")}` : "0.0.0"
-  const rightVersion = right.length > 0 ? `0.0.0-${right.join(".")}` : "0.0.0"
-  if (!semver.valid(leftVersion) || !semver.valid(rightVersion)) {
-    return compareFrameworkVersions(leftVersion, rightVersion) ?? 0
-  }
-  return semver.compare(leftVersion, rightVersion)
-}
-
 export function parseInstallPinnedVersion(installScript: string | undefined): string | undefined {
   if (!installScript) return undefined
   const match = installScript.match(/^PINNED_VERSION="([^"]+)"/m)

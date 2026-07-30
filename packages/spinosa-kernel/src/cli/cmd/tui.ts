@@ -224,6 +224,20 @@ export const TuiThreadCommand = cmd({
       }
       const cwd = Filesystem.resolve(process.cwd())
 
+      // Launch preflight before spawning the worker so an accepted upgrade does not
+      // start background infrastructure from the previous installation.
+      if (!Flag.SPINOSA_DISABLE_AUTOUPDATE && !shouldSkipLaunchPreflight()) {
+        try {
+          const preflight = await runLaunchPreflight()
+          if (preflight === "restart") {
+            process.exit(PREFLIGHT_RESTART_EXIT_CODE)
+          }
+        } catch (error) {
+          process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`)
+          process.exit(1)
+        }
+      }
+
       const worker = new Worker(file)
       bootLog("tui.worker.created", "background worker spawned", { pid: process.pid })
       const client = Rpc.client<typeof rpc>(worker)
@@ -242,20 +256,6 @@ export const TuiThreadCommand = cmd({
       }
 
       const prompt = await input(args.prompt)
-
-      // Launch preflight: check for updates, print status lines, optional upgrade.
-      // Exit 10 tells the bash shim or spinosa-cli to re-exec after an upgrade.
-      if (!Flag.SPINOSA_DISABLE_AUTOUPDATE && !shouldSkipLaunchPreflight()) {
-        try {
-          const preflight = await runLaunchPreflight()
-          if (preflight === "restart") {
-            process.exit(PREFLIGHT_RESTART_EXIT_CODE)
-          }
-        } catch (error) {
-          process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`)
-          process.exit(1)
-        }
-      }
 
       printLaunchingTui()
 

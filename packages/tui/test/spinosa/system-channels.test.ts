@@ -13,6 +13,6 @@ describe("spinosa system channels", () => {
       throw new Error("dns failure")
     }) as unknown as typeof fetch
 
-    await expect(resolvePinnedVersionFromInstaller("stable", "https://example.invalid/install.sh")).resolves.toBeUndefined()
+    await expect(resolvePinnedVersionFromInstaller("https://example.invalid/install.sh")).resolves.toBeUndefined()
   })
 })

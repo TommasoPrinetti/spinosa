@@ -11,7 +11,6 @@ import path from "node:path"
 import { homedir } from "node:os"
 import { confirmPrompt } from "../utils/confirm"
 import { spinosaLogInfo } from "../utils/log"
-import { discoverRegisteredWorkspaces } from "../workspace/registry"
 import { updateWorkspace, type UpdateResult } from "./update"
 import {
   checkUpgradeAvailable,
@@ -23,9 +22,6 @@ import {
 /** Kernel exits with this code when launch preflight installed an upgrade. */
 export const PREFLIGHT_RESTART_EXIT_CODE = 10
 
-/** Legacy env var. Preflight now runs only in the kernel TUI. */
-export const SPINOSA_PREFLIGHT_DONE_ENV = "SPINOSA_PREFLIGHT_DONE"
-
 /** User-facing line printed before the remote version check. */
 export const LAUNCH_STATUS_CHECKING = "checking for updates..."
 
@@ -35,13 +31,8 @@ export const LAUNCH_STATUS_NO_UPDATES = "no updates available"
 /** User-facing line printed immediately before the TUI starts. */
 export const LAUNCH_STATUS_LAUNCHING = "launching TUI..."
 
-/** Minimum time to show the checking phase. Override with SPINOSA_LAUNCH_STATUS_MIN_MS=0 in tests. */
-export function launchStatusMinMs(): number {
-  const raw = process.env.SPINOSA_LAUNCH_STATUS_MIN_MS
-  if (raw === "0") return 0
-  const parsed = raw ? Number(raw) : Number.NaN
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 1000
-}
+/** User-facing line printed when launch preflight requests a restart. */
+export const LAUNCH_STATUS_RESTARTING = "restarting with updated Spinosa..."
 
 /** Skip the upgrade check after a launch-time upgrade re-exec. */
 export function shouldSkipLaunchPreflight(): boolean {
@@ -51,34 +42,19 @@ export function shouldSkipLaunchPreflight(): boolean {
 export interface PreflightDependencies {
   checkUpgradeAvailable(): Promise<AutoUpgradeResult>
   upgradeFramework(): Promise<UpgradeResult>
-  discoverRegisteredWorkspaces(): Promise<string[]>
   updateWorkspace(workspacePath: string, frameworkRoot: string): Promise<UpdateResult>
   confirm(question: string, defaultYes?: boolean): Promise<boolean>
   frameworkRoot(version: string): string
   out(message: string): void
-  now(): number
-  sleep(ms: number): Promise<void>
-  statusMinMs(): number
 }
 
 const defaults: PreflightDependencies = {
   checkUpgradeAvailable,
   upgradeFramework: () => upgradeFramework({ yes: true }),
-  discoverRegisteredWorkspaces,
   updateWorkspace: (workspacePath, frameworkRoot) => updateWorkspace({ workspacePath, frameworkRoot }),
   confirm: (question, defaultYes) => confirmPrompt(question, defaultYes),
   frameworkRoot: (version) => path.join(process.env.SPINOSA_HOME ?? path.join(homedir(), ".spinosa"), "versions", version),
   out: (message) => process.stdout.write(`${message}\n`),
-  now: () => Date.now(),
-  sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
-  statusMinMs: launchStatusMinMs,
-}
-
-/** Wait until the checking phase has been visible for statusMinMs. */
-async function waitForStatusMin(deps: PreflightDependencies, startedAt: number): Promise<void> {
-  const elapsed = deps.now() - startedAt
-  const remaining = deps.statusMinMs() - elapsed
-  if (remaining > 0) await deps.sleep(remaining)
 }
 
 /** Print the final launch line before the TUI worker starts. */
@@ -91,7 +67,6 @@ export function printLaunchingTui(out: (message: string) => void = defaults.out)
  * Returns "restart" when an upgrade was installed and the launcher must re-exec.
  */
 export async function runLaunchPreflight(deps: PreflightDependencies = defaults): Promise<"continue" | "restart"> {
-  const startedAt = deps.now()
   spinosaLogInfo("preflight", `preflight check started (pid=${process.pid})`)
   deps.out(LAUNCH_STATUS_CHECKING)
 
@@ -99,13 +74,10 @@ export async function runLaunchPreflight(deps: PreflightDependencies = defaults)
   spinosaLogInfo("preflight", `upgrade check: available=${available.available} latest=${available.latestVersion ?? "none"}`)
 
   if (!available.available || !available.latestVersion) {
-    await waitForStatusMin(deps, startedAt)
     deps.out(LAUNCH_STATUS_NO_UPDATES)
     spinosaLogInfo("preflight", "no upgrade needed, continuing")
     return "continue"
   }
-
-  await waitForStatusMin(deps, startedAt)
 
   const current = available.currentVersion ? ` (current \x1b[32mv${available.currentVersion}\x1b[0m)` : ""
   if (!(await deps.confirm(`✨ \x1b[1mSpinosa v${available.latestVersion}\x1b[0m is available${current}. Upgrade now?`, true))) {
@@ -117,13 +89,8 @@ export async function runLaunchPreflight(deps: PreflightDependencies = defaults)
     throw new Error("Spinosa upgrade failed. Run 'spinosa upgrade' for details.")
   }
 
-  let workspaces: string[] = []
-  try {
-    workspaces = await deps.discoverRegisteredWorkspaces()
-  } catch (error) {
-    deps.out(`⚠ Could not read the workspace index: ${error instanceof Error ? error.message : String(error)}`)
-  }
-  if (workspaces.length > 0 && await deps.confirm(`Upgrade all ${workspaces.length} registered workspace(s) now?`)) {
+  const workspaces = upgraded.workspaceUpgradesNeeded
+  if (workspaces.length > 0 && await deps.confirm(`Upgrade ${workspaces.length} outdated workspace(s) now?`)) {
     const frameworkRoot = deps.frameworkRoot(upgraded.newVersion)
     let failed = 0
     for (const workspace of workspaces) {
@@ -144,6 +111,6 @@ export async function runLaunchPreflight(deps: PreflightDependencies = defaults)
     if (failed > 0) deps.out(`⚠ ${failed} workspace update(s) failed; run 'spinosa update <workspace>' to retry.`)
   }
 
-  deps.out("✨ Run 'spinosa' again to open the updated TUI.")
+  deps.out(LAUNCH_STATUS_RESTARTING)
   return "restart"
 }

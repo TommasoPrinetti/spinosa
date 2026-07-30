@@ -1,8 +1,8 @@
 import { homedir } from "node:os"
 import path from "node:path"
 import { mkdirSync } from "node:fs"
-import { parseInstallPinnedVersion, isPrereleaseFrameworkVersion } from "../utils/version"
-import { deleteYamlKey, readYamlScalar, writeYamlConfig } from "../utils/yaml-config"
+import { parseInstallPinnedVersion } from "../utils/version"
+import { readYamlScalar, writeYamlConfig } from "../utils/yaml-config"
 
 export type ReleaseChannel = "stable" | "beta"
 
@@ -78,22 +78,6 @@ function normalizeChannel(ch: string): ReleaseChannel {
   }
 }
 
-export async function setConfigKey(
-  configPath: string,
-  key: string,
-  value: string,
-): Promise<void> {
-  await writeYamlConfig(configPath, (document) => {
-    document.set(key, value)
-  })
-}
-
-export async function deleteConfigKey(
-  configPath: string,
-  key: string,
-): Promise<void> {
-  await deleteYamlKey(configPath, key)
-}
 export async function setReleaseChannel(channel: ReleaseChannel): Promise<void> {
   const configPath = spinosaConfigFile()
   const configDir = path.dirname(configPath)
@@ -119,10 +103,7 @@ export async function setReleaseChannel(channel: ReleaseChannel): Promise<void> 
   })
 }
 
-export async function resolvePinnedVersionFromInstaller(
-  channel: ReleaseChannel,
-  url: string,
-): Promise<string | undefined> {
+export async function resolvePinnedVersionFromInstaller(url: string): Promise<string | undefined> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
   let response: Response
@@ -140,11 +121,11 @@ export async function resolvePinnedVersionFromInstaller(
 }
 
 export async function resolveLatestStableVersion(): Promise<string | undefined> {
-  return resolvePinnedVersionFromInstaller("stable", SPINOSA_STABLE_INSTALL_URL)
+  return resolvePinnedVersionFromInstaller(SPINOSA_STABLE_INSTALL_URL)
 }
 
 export async function resolveLatestBetaVersion(): Promise<string | undefined> {
-  return resolvePinnedVersionFromInstaller("beta", SPINOSA_BETA_INSTALL_URL)
+  return resolvePinnedVersionFromInstaller(SPINOSA_BETA_INSTALL_URL)
 }
 
 export async function resolveReleaseVersionForChannel(
@@ -166,8 +147,4 @@ export function installUrlForChannel(
     return `https://github.com/${SPINOSA_RELEASE_REPO}/releases/download/v${version}/install.sh`
   }
   return channel === "stable" ? SPINOSA_STABLE_INSTALL_URL : SPINOSA_BETA_INSTALL_URL
-}
-
-export function isPrereleaseVersion(version: string): boolean {
-  return isPrereleaseFrameworkVersion(version)
 }

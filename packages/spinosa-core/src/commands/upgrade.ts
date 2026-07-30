@@ -47,8 +47,9 @@ export interface AutoUpgradeResult {
 interface VersionCache {
   timestamp: number
   version: string
-  skipUntil: number
 }
+
+const VERSION_CACHE_TTL_SEC = 3600
 
 export function verifyInstallerChecksum(installerScript: string, checksums: string): boolean {
   const expected = checksums
@@ -82,7 +83,7 @@ function versionCachePath(channel: string): string {
 export function readEffectiveInstalledVersion(): string {
   const fwRoot = resolveFrameworkRoot()
   const installedVersion = installedReleaseVersion(fwRoot)
-  const normalizedInstalled =
+  const effectiveInstalled =
     installedVersion === "dev" || !installedVersion ? "" : installedVersion
 
   const installedFwRoot = discoverInstalledFramework()
@@ -91,7 +92,7 @@ export function readEffectiveInstalledVersion(): string {
     if (globalVersion) return globalVersion
   }
 
-  return normalizedInstalled
+  return effectiveInstalled
 }
 
 
@@ -123,12 +124,11 @@ export function readVersionCache(
   const cachePath = versionCachePath(channel)
   if (!existsSync(cachePath)) return undefined
   try {
-    const lines = readFileSync(cachePath, "utf-8").split(/\r?\n/)
-    if (lines.length < 3) return undefined
+    const lines = readFileSync(cachePath, "utf-8").split(/\r?\n/).filter((line) => line.length > 0)
+    if (lines.length !== 2) return undefined
     return {
       timestamp: Number(lines[0]) || 0,
       version: lines[1]?.trim() ?? "",
-      skipUntil: Number(lines[2]) || 0,
     }
   } catch {
     return undefined
@@ -138,12 +138,11 @@ export function readVersionCache(
 export function writeVersionCache(
   channel: string,
   version: string,
-  skipUntil: number,
 ): void {
   const cachePath = versionCachePath(channel)
   mkdirSync(path.dirname(cachePath), { recursive: true })
   const now = Math.floor(Date.now() / 1000)
-  writeFileSync(cachePath, `${now}\n${version}\n${skipUntil}\n${channel}\n`)
+  writeFileSync(cachePath, `${now}\n${version}\n`)
 }
 
 export async function upgradeFramework(
@@ -175,7 +174,6 @@ export async function upgradeFramework(
   options.onPhase?.("resolve", `Target version: v${resolvedVersion}`)
 
   const effectiveInstalled = readEffectiveInstalledVersion()
-  const normalizedInstalled = effectiveInstalled
 
   if (!options.reinstall && effectiveInstalled && effectiveInstalled === resolvedVersion) {
     options.onPhase?.("current", `Already at v${resolvedVersion}`)
@@ -190,16 +188,6 @@ export async function upgradeFramework(
   const direction = effectiveInstalled
     ? compareFrameworkVersions(effectiveInstalled, resolvedVersion)
     : 1
-
-  if (direction !== undefined && direction === 0 && !options.reinstall) {
-    options.onPhase?.("current", `Already at v${resolvedVersion}`)
-    return {
-      success: true,
-      previousVersion: effectiveInstalled,
-      newVersion: resolvedVersion,
-      workspaceUpgradesNeeded: [],
-    }
-  }
 
   if (isDowngrade(effectiveInstalled, resolvedVersion) && !options.reinstall && !options.allowDowngrade) {
     const reason = `Refusing to downgrade from v${effectiveInstalled} to v${resolvedVersion}. Use --reinstall or --allow-downgrade to proceed.`
@@ -242,7 +230,7 @@ export async function upgradeFramework(
     })
     if (answer === "n" || answer === "no") {
       options.onPhase?.("confirm", "Upgrade cancelled")
-      return { success: false, previousVersion: normalizedInstalled || undefined, workspaceUpgradesNeeded: [] }
+      return { success: false, previousVersion: effectiveInstalled || undefined, workspaceUpgradesNeeded: [] }
     }
   }
 
@@ -263,18 +251,18 @@ export async function upgradeFramework(
     response = installerResponse
     if (!response.ok || !checksumResponse.ok) {
       rmSync(tmpdir, { recursive: true, force: true })
-      return { success: false, previousVersion: normalizedInstalled || undefined, workspaceUpgradesNeeded: [] }
+      return { success: false, previousVersion: effectiveInstalled || undefined, workspaceUpgradesNeeded: [] }
     }
     const installerScript = await response.text()
     const checksums = await checksumResponse.text()
     if (!verifyInstallerChecksum(installerScript, checksums)) {
       rmSync(tmpdir, { recursive: true, force: true })
-      return { success: false, previousVersion: normalizedInstalled || undefined, workspaceUpgradesNeeded: [] }
+      return { success: false, previousVersion: effectiveInstalled || undefined, workspaceUpgradesNeeded: [] }
     }
     writeFileSync(installerPath, installerScript, { mode: 0o755 })
   } catch {
     rmSync(tmpdir, { recursive: true, force: true })
-    return { success: false, previousVersion: normalizedInstalled || undefined, workspaceUpgradesNeeded: [] }
+    return { success: false, previousVersion: effectiveInstalled || undefined, workspaceUpgradesNeeded: [] }
   }
 
   options.onPhase?.("install", "Running installer...")
@@ -290,7 +278,7 @@ export async function upgradeFramework(
     rmSync(tmpdir, { recursive: true, force: true })
     return {
       success: false,
-      previousVersion: normalizedInstalled || undefined,
+      previousVersion: effectiveInstalled || undefined,
       workspaceUpgradesNeeded: [],
     }
   }
@@ -313,7 +301,7 @@ export async function upgradeFramework(
   if (postInstallVersion !== resolvedVersion) {
     return {
       success: false,
-      previousVersion: normalizedInstalled || undefined,
+      previousVersion: effectiveInstalled || undefined,
       newVersion: postInstallVersion || undefined,
       workspaceUpgradesNeeded: [],
     }
@@ -339,7 +327,7 @@ export async function upgradeFramework(
 
   return {
     success: true,
-    previousVersion: normalizedInstalled || undefined,
+    previousVersion: effectiveInstalled || undefined,
     newVersion: resolvedVersion,
     workspaceUpgradesNeeded: needsUpdate,
   }
@@ -375,15 +363,14 @@ export async function checkUpgradeAvailable(): Promise<AutoUpgradeResult> {
   const now = Math.floor(Date.now() / 1000)
 
   const cache = readVersionCache(channel)
-  if (cache) {
-    const cmp = cache.version ? compareFrameworkVersions(installedVersion, cache.version) : undefined
-    if (cmp !== undefined && cmp < 0) {
-      if (now < cache.skipUntil) {
-        return { available: false, currentVersion: installedVersion, latestVersion: cache.version }
-      }
+  if (cache?.version && now - cache.timestamp < VERSION_CACHE_TTL_SEC) {
+    const latestCmp = compareFrameworkVersions(cache.version, installedVersion)
+    const available = latestCmp !== undefined && latestCmp > 0
+    return {
+      available,
+      currentVersion: installedVersion,
+      latestVersion: available ? cache.version : undefined,
     }
-    // Always re-fetch when installed >= cached: a new release may have appeared
-    rmSync(versionCachePath(channel), { force: true })
   }
 
   let latest: string | undefined
@@ -399,9 +386,7 @@ export async function checkUpgradeAvailable(): Promise<AutoUpgradeResult> {
   const latestCmp = compareFrameworkVersions(latest, installedVersion)
   const available = latestCmp !== undefined && latestCmp > 0
 
-  // Cache: used only to suppress re-prompting when an update was already shown
-  const skipUntil = available ? 0 : Math.floor(Date.now() / 1000) + 3600
-  writeVersionCache(channel, latest, skipUntil)
+  writeVersionCache(channel, latest)
 
   return {
     available,
