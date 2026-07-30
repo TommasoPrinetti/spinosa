@@ -2,7 +2,7 @@
 # shellcheck shell=bash
 # ── install.sh — Spinosa Framework Installer (auto-re-execs with bash) ──────
 
-PINNED_VERSION="1.0.2-beta.3"
+PINNED_VERSION="1.0.2-beta.14"
 PINNED_TAG="beta"
 BUNDLED_BUN_VERSION="1.3.14"
 DEFAULT_DEPS_TIMEOUT_SECONDS="600"
@@ -587,7 +587,7 @@ install_bun_dependencies() {
       "$bun_bin" run "$timeout_runner" "$timeout_seconds" "$bun_bin" "${install_args[@]}" 2>&1 | tee -a "$bun_out"); then
       ensure_workspace_links "$fw_root"
       if SPINOSA_HOME="$SPINOSA_HOME" SPINOSA_TEMPLATE_ROOT="$fw_root" \
-        "$bun_bin" run "${fw_root}/packages/tui/src/spinosa-cli.ts" version >> "$bun_out" 2>&1; then
+        "$bun_bin" run "${fw_root}/packages/spinosa-kernel/src/index.ts" version >> "$bun_out" 2>&1; then
         bun_ok=1
         break
       fi
@@ -784,7 +784,7 @@ warmup_macos_security() {
   local attempt
   for attempt in 1 2 3; do
     if SPINOSA_TEMPLATE_ROOT="$fw_root" \
-      "$bun_bin" run "${fw_root}/packages/tui/src/spinosa-cli.ts" version >/dev/null 2>&1; then
+      "$bun_bin" run "${fw_root}/packages/spinosa-kernel/src/index.ts" version >/dev/null 2>&1; then
       return 0
     fi
     sleep 2
@@ -1586,7 +1586,7 @@ run_basic_test() {
   fi
   if [[ "$healthy" -eq 0 ]]; then
     SPINOSA_HOME="$SPINOSA_HOME" SPINOSA_TEMPLATE_ROOT="$fw_root" \
-      "$bun_bin" run "${fw_root}/packages/tui/src/spinosa-cli.ts" version \
+      "$bun_bin" run "${fw_root}/packages/spinosa-kernel/src/index.ts" version \
       || healthy=1
   fi
   [[ "$healthy" -eq 0 ]] || return 1

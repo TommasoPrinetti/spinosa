@@ -8,7 +8,20 @@
   "scripts": {
     "dev": "bun run --cwd packages/spinosa-cli src/index.ts",
     "postinstall": "bun run --cwd packages/core fix-node-pty",
-    "typecheck": "bun run --cwd packages/core typecheck && bun run --cwd packages/sdk typecheck && bun run --cwd packages/tui typecheck && bun run --cwd packages/spinosa-kernel typecheck && bun run --cwd packages/spinosa-core typecheck && bun run --cwd packages/spinosa-runtime typecheck && bun run --cwd packages/spinosa-harness typecheck && bun run --cwd packages/spinosa-cli typecheck"
+    "typecheck": "bun run --cwd packages/core typecheck && bun run --cwd packages/sdk typecheck && bun run --cwd packages/tui typecheck && bun run --cwd packages/spinosa-kernel typecheck && bun run --cwd packages/spinosa-core typecheck && bun run --cwd packages/spinosa-runtime typecheck && bun run --cwd packages/spinosa-harness typecheck && bun run --cwd packages/spinosa-cli typecheck",
+    "release:validate": "bun script/release/validate.ts",
+    "release:sync-version": "bun script/set-version.ts",
+    "release:build": "bun script/release/build.ts",
+    "release:verify-local": "bun script/release/verify-local.ts",
+    "release:publish-channel": "bash script/release/publish-channel.sh",
+    "release:verify-remote": "bun script/release/verify-remote.ts",
+    "release:beta": "release-it --preRelease=beta",
+    "release:stable": "release-it",
+    "release:beta:patch": "release-it --preRelease=beta patch",
+    "release:beta:minor": "release-it --preRelease=beta minor",
+    "release:stable:patch": "release-it patch",
+    "release:stable:minor": "release-it minor",
+    "release:stable:major": "release-it major"
   },
   "workspaces": {
     "packages": [
@@ -17,16 +30,16 @@
       "packages/effect-sqlite-node",
       "packages/http-recorder",
       "packages/llm",
-        "packages/spinosa-kernel",
+      "packages/spinosa-kernel",
       "packages/plugin",
       "packages/protocol",
       "packages/schema",
       "packages/script",
       "packages/sdk",
       "packages/server",
-    "packages/spinosa-core",
-    "packages/spinosa-cli",
-    "packages/spinosa-harness",
+      "packages/spinosa-core",
+      "packages/spinosa-cli",
+      "packages/spinosa-harness",
       "packages/spinosa-runtime",
       "packages/tui",
       "packages/ui"
@@ -135,8 +148,11 @@
     "effect@4.0.0-beta.83": "patches/effect@4.0.0-beta.83.patch"
   },
   "devDependencies": {
-    "@typescript/native-preview": "catalog:",
     "@types/mime-types": "3.0.1",
+    "@types/semver": "catalog:",
+    "@typescript/native-preview": "catalog:",
+    "release-it": "^19.0.4",
+    "semver": "catalog:",
     "typescript": "catalog:"
   },
   "license": "MIT"
