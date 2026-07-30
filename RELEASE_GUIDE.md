@@ -89,10 +89,10 @@ flowchart LR
 | Validate | `bun script/release/validate.ts` | Branch `main`/`beta`, clean tree, `bun run quality` |
 | Sync version | `bun script/set-version.ts ${version}` | `package.json` + `install.sh` PINNED_VERSION match |
 | Build | `bun script/release/build.ts ${version}` | Stage `dist/v{VERSION}/` and `dist/{channel}/` installers + checksums + tarball |
-| Verify local | `bun script/release/verify-local.ts ${version}` | All three version-release assets exist; checksums include both files |
+| Verify local | `bun script/release/verify-local.ts ${version}` | Version + channel installers exist; `PINNED_VERSION` matches; checksums hash both files |
 | GitHub release | `release-it` or `gh release create` | Upload immutable version assets |
 | Publish channel | `bun script/release/publish-channel.ts ${version}` | Force-push rolling `stable`/`beta` tag; upload channel installer |
-| Verify remote | `bun script/release/verify-remote.ts ${version}` | Live rolling installer `PINNED_VERSION` matches published version |
+| Verify remote | `bun script/release/verify-remote.ts ${version}` | Live rolling **and** versioned installers serve the correct `PINNED_VERSION` |
 
 Run individual stages manually when debugging:
 
@@ -138,19 +138,10 @@ The version-release `checksums.txt` **must** list both `install.sh` and `spinosa
 Before cutting a release, run the full maintainer gate:
 
 ```bash
-# Automated release gate (same as release:validate)
-bun run release:validate
-
-# Shell syntax
-bash -n install.sh
-bash -n workspace-template/.bin/spinosa
-
-# Installer smoke tests
-bun run test:installer
-
-# Broader TUI / Spinosa flow tests
-(cd packages/tui && bun test test/spinosa)
+bun run release:validate    # branch, clean tree, bun run quality
 ```
+
+`bun run quality` runs: typecheck all packages, dependency-cruiser, knip, syncpack, shellcheck, core tests, TUI tests, and installer bats. Requires `shellcheck` (`brew install shellcheck`).
 
 For the full interactive + VM matrix, see `workspace-template/docs/reference/testsuite.md`.
 
@@ -210,9 +201,9 @@ User-facing upgrades are centralized in `@spinosa/core`:
 | Version comparison | `compareFrameworkVersions()` |
 | Channel config | `beta: true\|false` in `~/.spinosa/metadata/config.yaml` |
 
-**Launch flow:** when you run `spinosa` (no args) or `bun run dev`, the kernel TUI runs `runLaunchPreflight()` once, prints `checking for updates...` / `no updates available` (1s minimum), then `launching TUI...`. If preflight upgrades and requests a restart, it exits with code `10` and the launcher / `spinosa-cli` re-execs. The TUI does not own upgrade networking or installation.
+**Launch flow:** when you run `spinosa` (no args) or `bun run dev`, the kernel runs `runLaunchPreflight()` **before** spawning the TUI worker. It prints `checking for updates...` / `no updates available`, then `launching TUI...`. If preflight upgrades and requests a restart, it exits with code `10` and the launcher / `spinosa-cli` re-execs. The TUI does not own upgrade networking or installation.
 
-**Dev tree:** `bun run dev` skips the bash launcher; the kernel TUI runs preflight inline. Dev builds (`installedVersion === "dev"`) skip the network upgrade check.
+**Dev tree:** `bun run dev` uses `packages/spinosa-cli` to spawn the kernel with `SPINOSA_TEMPLATE_ROOT` set to the repo root. Dev builds (`installedVersion === "dev"`) skip the network upgrade check.
 
 Disable launch-time checks: `SPINOSA_NO_UPGRADE_CHECK=1` or `auto_upgrade: false` in config.
 
@@ -224,7 +215,8 @@ Disable launch-time checks: `SPINOSA_NO_UPGRADE_CHECK=1` or `auto_upgrade: false
 - **`PINNED_VERSION` must match:** use `set-version.ts` — never hand-edit one file without the other.
 - **`dist/` is gitignored:** release assets live in `dist/vX.Y.Z/` and `dist/{channel}/` — never committed.
 - **Beta does not move `stable`:** only stable releases refresh the rolling `stable` endpoint.
-- **GitHub Actions are disabled** for framework releases — everything runs locally via `release-it` / `gh`.
+- **GitHub Actions are disabled** for framework releases — everything runs locally via `release-it` / `gh`. There is no CI quality workflow; `bun run quality` is the gate.
+- **Patch audit:** run `bun run patches:generate` after editing `patchedDependencies` in root `package.json`.
 - **Version-release checksums need both entries** — always curl the live `checksums.txt` before declaring a release done.
 - **Channel-release checksums are install.sh only** — the tarball lives on the immutable version release, not the rolling channel.
 - **Republishing:** `bun run release:republish -- vX.Y.Z` commits version sync changes if needed, then runs the full pipeline.

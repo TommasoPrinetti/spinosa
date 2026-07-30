@@ -11,12 +11,16 @@ This package owns workspace, corpus, import, artifact, and application-domain co
 
 | Module | Role |
 | ------ | ---- |
+| `framework/manifest.ts` | `readFrameworkFilesTsv()`, `copyFrameworkManifestPaths()` |
+| `commands/create.ts` | Workspace creation from manifest-declared template paths |
 | `commands/upgrade.ts` | `upgradeFramework()`, `checkUpgradeAvailable()`, version cache |
 | `commands/preflight.ts` | `runLaunchPreflight()`, launch status lines, exit code `10` |
 | `utils/version.ts` | `compareFrameworkVersions()`, `releaseChannel()`, `parseInstallPinnedVersion()` |
 | `system/channels.ts` | Reads `beta: true\|false` from `~/.spinosa/metadata/config.yaml` |
 
-Kernel commands `upgrade` and `preflight` are thin wrappers. Launch preflight runs in `packages/spinosa-kernel/src/cli/cmd/tui.ts` before the TUI starts. Do not add a second preflight path in the bash launcher.
+Document converters (`markitdown-ts`, `pdfjs-dist`, `ppu-paddle-ocr`, `@napi-rs/canvas`) live in this package — not in `@spinosa/tui`.
+
+Kernel commands `upgrade` and `preflight` are thin wrappers. Launch preflight runs in `packages/spinosa-kernel/src/cli/cmd/tui.ts` **before** the TUI worker spawns. Do not add a second preflight path in the bash launcher.
 
 ## Release
 

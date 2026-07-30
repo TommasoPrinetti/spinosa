@@ -91,7 +91,7 @@ no updates available
 launching TUI...
 ```
 
-The check phase stays visible for at least one second so the status is readable. If a newer version is available, you are prompted to upgrade instead of seeing `no updates available`.
+If a newer version is available, you are prompted to upgrade instead of seeing `no updates available`.
 
 ## Maintenance
 

@@ -147,7 +147,7 @@ no updates available
 launching TUI...
 ```
 
-The check phase stays visible for at least one second. If a newer version is available, you are prompted to upgrade instead of seeing `no updates available`.
+If a newer version is available, you are prompted to upgrade instead of seeing `no updates available`.
 
 1. Spinosa compares your installed version against the release channel (`beta: true|false` in `~/.spinosa/metadata/config.yaml`).
 2. If a newer version is available, you are prompted to upgrade (`[Y/n]`).

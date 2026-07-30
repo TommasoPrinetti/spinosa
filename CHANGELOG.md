@@ -8,10 +8,35 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Local quality gate: `bun run quality` runs typecheck, dependency lint, knip, syncpack, shellcheck, and core/TUI/installer tests.
+- Explicit republish path: `bun run release:republish -- vX.Y.Z` (replaces `script/release.sh`).
+- `bun script/generate-patches-md.ts` regenerates `patches/PATCHES.md` from `patchedDependencies`.
+
 ### Changed
 
 - Workspace creation copies only paths declared in `workspace-files.tsv`, not the full template tree.
+- Launch preflight runs before the TUI worker spawns; the artificial 1-second status delay is removed.
+- Upgrade version cache simplified to a two-line timestamp + version file with a one-hour TTL.
+- Release pipeline collapsed to `release-it` + TypeScript scripts only (`script/release/*.ts`). Removed `script/release.sh`, `script/release/publish-channel.sh`, and `packages/spinosa-kernel/script/publish.ts`.
+- Local release verification strengthened: `verify-local.ts` checks channel assets and checksum hashes; `verify-remote.ts` also verifies the immutable versioned installer.
+- Typecheck across packages now uses `tsc --noEmit` instead of `tsgo`.
+- Document converter dependencies (`markitdown-ts`, `pdfjs-dist`, `ppu-paddle-ocr`, `@napi-rs/canvas`) owned by `@spinosa/core` only — removed from `@spinosa/tui`.
+- `bun run dev` entrypoint (`packages/spinosa-cli`) now declares `@spinosa/core` as a dependency.
 - Privacy and development documentation updated to describe local-first behavior with optional cloud model providers.
+
+### Removed
+
+- GitHub Actions quality workflow (`.github/workflows/quality.yml`). Release validation runs locally via `bun run release:validate` → `bun run quality`.
+- Orphan `patches/solid-js@1.9.10.patch` (not in `patchedDependencies`).
+
+### Fixed
+
+- `truncateDestPath()` preserves path roots and handles UTF-8 byte limits correctly.
+- Framework discovery no longer falls back to a hardcoded maintainer machine path.
+- Shellcheck passes on `install.sh` (legacy shim detection uses explicit disable comments).
+- `bun install` catalog entry for `@effect/platform-node-shared` restored.
 
 ## [1.0.2-beta.15] — 2026-07-30
 

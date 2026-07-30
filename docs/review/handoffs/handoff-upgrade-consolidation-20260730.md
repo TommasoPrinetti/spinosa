@@ -1,72 +1,45 @@
-# Handoff — Spinosa Upgrade Consolidation
+# Upgrade consolidation handoff (2026-07-30)
 
-Date: 2026-07-30
-Goal: Restore reliable upgrade flow (check → prompt → install → verify → re-exec → new TUI).
+Status: **implemented on `beta`**
 
-## Done
+## What shipped
 
-### WP-0: Unblock beta channel (prerequisite)
-- Fixed committed `install.sh` PINNED_VERSION from `1.0.2-beta.3` to `1.0.2-beta.14` (matching root `package.json`).
+### Launch and upgrade (`@spinosa/core`)
+- `runLaunchPreflight()` in `packages/spinosa-core/src/commands/preflight.ts`.
+- Preflight runs in `packages/spinosa-kernel/src/cli/cmd/tui.ts` **before** the TUI worker spawns.
+- Kernel `preflight` command + launcher / `spinosa-cli` re-exec on exit code `10`.
+- Upgrade engine and version cache consolidated in `commands/upgrade.ts`.
+- Version cache: two-line file (`timestamp` + `version`), one-hour TTL.
 
-### WP-1: Version synchronization script
-- `script/set-version.ts` syncs root `package.json` + `install.sh` PINNED_VERSION.
+### Workspace create
+- `copyFrameworkManifestPaths()` in `framework/manifest.ts` — only `workspace-files.tsv` paths are copied.
+- User-state dirs (`raw/`, `maps/`, `.logs/`, etc.) come from the manifest, not a blind tree copy.
 
-### WP-7: Version comparison consistency + tests
-- `packages/spinosa-core/test/version.test.ts` — 25 tests, all pass.
+### Release pipeline (local only)
+- `release-it` is the only release path (`bun run release:beta:patch`, etc.).
+- TypeScript scripts in `script/release/`: `validate`, `build`, `verify-local`, `publish-channel`, `verify-remote`, `republish`.
+- Removed: `script/release.sh`, `script/release/publish-channel.sh`, `packages/spinosa-kernel/script/publish.ts`.
+- No GitHub Actions quality workflow — `bun run quality` runs locally via `release:validate`.
 
-### WP-3: Unified upgrade engine
-- Single `upgradeFramework()` in `@spinosa/core/commands/upgrade`.
-- Kernel `upgrade` command is the canonical CLI entry point.
+### Quality gate
+- `bun run quality` = typecheck + depcruise + knip + syncpack + shellcheck + tests.
+- `bun script/typecheck-all.ts` typechecks all workspace packages (`tsc --noEmit`).
 
-### WP-4: Preflight + launcher restart
-- `runLaunchPreflight()` in `@spinosa/core/commands/preflight`.
-- Kernel `preflight` command + launcher re-exec on exit code 10.
-
-### WP-5: Installer smoke tests
-- All three `install.sh` validation paths use kernel entrypoint.
-
-### WP-6: Release hardening
-- `script/release.sh` validates branch, clean tree, version sync, typecheck, tests, live installer PINNED_VERSION.
-
-### WP-2: Channel config consolidation
-- Canonical key: `beta: true|false` in `config.yaml`.
-- `setReleaseChannel()` writes `beta`, deletes legacy `release_channel`.
-- `install.sh write_install_metadata()` matches same format.
-- `spinosaReleaseChannel()` reads `beta` first, falls back to `release_channel`.
-- Tests: `packages/spinosa-core/test/channels.test.ts`.
-
-### WP-8: Code cleanup
-- Removed kernel auto-upgrader (`packages/spinosa-kernel/src/cli/upgrade.ts`).
-- Worker `checkUpgrade` no longer auto-installs (preflight handles launch upgrades).
-- Removed TUI in-session `installation.update-available` handler from `app.tsx`.
-- Removed duplicate `runUpgrade()` from `packages/tui/src/spinosa-cli.ts`.
-- Replaced `isVersionGreater()` with `compareFrameworkVersions()`.
-
-## Still to do
-
-### HIGH PRIORITY
-
-#### Beta channel must be republished
-Live beta rolling channel still serves `beta.3`. Requires clean tree + `gh` auth:
+## Verification commands
 
 ```bash
-bash script/release.sh v1.0.2-beta.14
+bun run quality
+bun run dev -- --version
+cd packages/spinosa-core && bun test test/preflight.test.ts test/version-cache.test.ts
+cd packages/tui && bun test test/spinosa/preflight.test.ts test/spinosa/install-release.test.ts
 ```
 
-## Key architectural decisions
-
-| Decision | Value |
-|---|---|
-| Product version source | Root `package.json` |
-| Upgrade engine | `upgradeFramework()` in `@spinosa/core/commands/upgrade` |
-| Upgrade CLI | `spinosa upgrade` via kernel (`packages/spinosa-kernel/src/cli/cmd/upgrade.ts`) |
-| Launch upgrade flow | `spinosa preflight` → exit 10 → launcher re-exec |
-| Channel config canonical key | `beta: true|false` |
-| Version comparator | `compareFrameworkVersions()` |
-
-## How to run tests
+## Release
 
 ```bash
-cd packages/spinosa-core && bun test test/version.test.ts test/preflight.test.ts test/channels.test.ts
-cd packages/tui && bun test test/spinosa/preflight.test.ts test/spinosa/cli.test.ts
+bun run release:beta:patch
+# or republish without bump:
+bun run release:republish -- v1.0.2-beta.N
 ```
+
+See `RELEASE_GUIDE.md` and `DEVELOPMENT.md` for current maintainer docs.

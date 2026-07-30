@@ -105,18 +105,11 @@ Run from repo root before pushing a release tag:
 ```bash
 cd /path/to/spinosa-main
 
-# Release validation (typecheck + core release tests)
+# Full release gate (typecheck, lint, tests — same as release:validate)
+bun run quality
+
+# Or the release entrypoint directly
 bun run release:validate
-
-# Shell syntax
-bash -n install.sh
-bash -n workspace-template/.bin/spinosa
-
-# Installer smoke tests
-bun run test:installer
-
-# Spinosa TUI flow tests
-(cd packages/tui && bun test test/spinosa)
 ```
 
 **Pass criteria:** every command exits 0; no `FAIL` in output.

@@ -46,13 +46,20 @@ Small, concrete requests are easier to evaluate and ship than broad redesigns.
 - For behavior changes, include the relevant test or command output in the PR description.
 - For docs and templates, verify the files render cleanly and any YAML parses correctly.
 - Do not claim a change is complete without some form of validation.
+- Before merging release-impacting work, run `bun run quality` or `bun run release:validate`.
 
 ## Releases (maintainers)
 
-Framework releases are cut locally — not via GitHub Actions. See [RELEASE_GUIDE.md](RELEASE_GUIDE.md) for the full pipeline.
+Framework releases are cut **locally** — not via GitHub Actions. See [RELEASE_GUIDE.md](RELEASE_GUIDE.md) for the full pipeline.
 
-- **Version sync:** `bun script/set-version.ts <version>` updates root `package.json` and `install.sh` `PINNED_VERSION`.
-- **Standard release:** `bun run release:beta:patch` or `bun run release:stable:patch` (uses `release-it` + hooks in `.release-it.json`).
-- **Republish explicit version:** `bun run release:republish -- vX.Y.Z`.
-- **Pre-release gate:** `bun run release:validate` plus the matrix in `workspace-template/docs/reference/testsuite.md`.
+| Task | Command |
+|------|---------|
+| Pre-release gate | `bun run release:validate` (runs `bun run quality`) |
+| Standard beta release | `bun run release:beta:patch` (or `:minor`) |
+| Standard stable release | `bun run release:stable:patch` (or `:minor` / `:major`) |
+| Republish explicit version | `bun run release:republish -- vX.Y.Z` |
+| Sync version files | `bun script/set-version.ts <version>` |
+| Regenerate patch audit | `bun run patches:generate` |
+
+Interactive test matrix: `workspace-template/docs/reference/testsuite.md`.
 

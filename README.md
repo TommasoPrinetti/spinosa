@@ -119,4 +119,6 @@ PDFs, Word docs, spreadsheets, presentations, EPUB, HTML, ZIP, Outlook messages,
 ## Links
 
 - [Documentation](https://medialab.github.io/spinosa/)
+- [Development guide](DEVELOPMENT.md) — local setup, testing, and release commands
+- [Contributing](CONTRIBUTING.md)
 - [License (MIT)](LICENSE)

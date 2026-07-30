@@ -8,13 +8,9 @@ TARGETS=(
 )
 
 if ! command -v shellcheck >/dev/null 2>&1; then
-  if [ "${CI:-}" = "true" ]; then
-    echo "shellcheck is required in CI but was not found"
-    exit 1
-  fi
-  echo "shellcheck not installed — skipping shell lint"
+  echo "shellcheck is required for release validation but was not found"
   echo "Install with: brew install shellcheck"
-  exit 0
+  exit 1
 fi
 
 shellcheck "${TARGETS[@]}"
