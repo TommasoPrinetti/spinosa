@@ -1,0 +1,32 @@
+{
+  "name": "picker-escape-restore",
+  "description": "Escape from Switch workspace picker dismisses the dialog and returns to the workspace home prompt (same as Back).",
+  "adapter": "../adapters/spinosa.ts",
+  "terminal": { "width": 100, "height": 50 },
+  "fixture": {
+    "workspace": { "name": "escape-restore-workspace", "setupStatus": "workspace_started" },
+    "sessions": [
+      { "id": "ses_escape_restore", "title": "Escape restore chat", "directory": "$WORKSPACE", "updated": 200 }
+    ],
+    "responses": [
+      { "path": "/global/config", "body": { "autoupdate": "notify" } },
+      { "path": "/file", "body": [] }
+    ]
+  },
+  "steps": [
+    { "action": "waitForText", "text": "Describe the task", "timeoutMs": 8000 },
+    { "action": "waitForText", "text": "Switch workspace", "timeoutMs": 5000 },
+    { "action": "capture", "name": "before-picker" },
+
+    { "action": "clickText", "text": "Switch workspace" },
+    { "action": "waitForText", "text": "Choose a workspace", "timeoutMs": 5000 },
+    { "action": "capture", "name": "picker-open" },
+    { "action": "assert", "visible": ["Choose a workspace", "escape-restore-workspace"] },
+
+    { "action": "key", "key": "ESCAPE" },
+    { "action": "waitForAbsent", "text": "Choose a workspace", "timeoutMs": 5000 },
+    { "action": "waitForText", "text": "Describe the task", "timeoutMs": 8000 },
+    { "action": "capture", "name": "after-escape" },
+    { "action": "assert", "visible": ["Describe the task", "escape-restore-workspace", "Switch workspace"], "absent": ["Choose a workspace"] }
+  ]
+}

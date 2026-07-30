@@ -57,6 +57,21 @@ export const { use: useSpinosaWorkspace, provider: SpinosaWorkspaceProvider } = 
           return
         }
       }
+      const previousPath = activePath()
+      const previousGeneric = genericMode()
+      const previousWorkspaceKv = kv.get(SPINOSA_ACTIVE_WORKSPACE_KV) as string | undefined
+      const previousWorkspaceIdKv = kv.get(SPINOSA_ACTIVE_WORKSPACE_ID_KV) as string | undefined
+      const previousGenericKv = kv.get(SPINOSA_GENERIC_MODE_KV)
+
+      const rollbackActiveWorkspace = () => {
+        setActiveWorkspacePath(previousPath)
+        setActivePath(previousPath)
+        setGenericMode(previousGeneric)
+        kv.set(SPINOSA_ACTIVE_WORKSPACE_KV, previousWorkspaceKv)
+        kv.set(SPINOSA_ACTIVE_WORKSPACE_ID_KV, previousWorkspaceIdKv)
+        kv.set(SPINOSA_GENERIC_MODE_KV, previousGenericKv)
+      }
+
       setActiveWorkspacePath(workspacePath)
       tuiLog(`openWorkspace path=${workspacePath}`)
       kv.set(SPINOSA_ACTIVE_WORKSPACE_KV, workspacePath)
@@ -68,6 +83,7 @@ export const { use: useSpinosaWorkspace, provider: SpinosaWorkspaceProvider } = 
       const loaded = await readWorkspaceMeta(workspacePath).catch(() => undefined)
       if (activePath() !== workspacePath) return
       if (!loaded) {
+        rollbackActiveWorkspace()
         if (route.data.type !== "workspace" && route.data.type !== "visualizer") showPicker()
         return
       }

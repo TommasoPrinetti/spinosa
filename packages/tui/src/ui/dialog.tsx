@@ -179,6 +179,14 @@ function init() {
         },
       ])
     },
+    /** Close all dialogs without running stack onClose callbacks. */
+    dismiss() {
+      batch(() => {
+        setStore("size", "medium")
+        setStore("stack", [])
+      })
+      refocus()
+    },
     get stack() {
       return store.stack
     },

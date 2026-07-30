@@ -305,7 +305,15 @@ export function Home() {
       dialog.replace(() => <DialogProvider />)
       return
     }
-    dialog.replace(() => <DialogSpinosaWorkspacePicker onClose={() => spinosa.restorePickerRoute()} />)
+    const restore = () => spinosa.restorePickerRoute()
+    dialog.replace(
+      () => <DialogSpinosaWorkspacePicker onClose={restore} />,
+      undefined,
+      () => {
+        dialog.dismiss()
+        restore()
+      },
+    )
   })
 
   const launchRecentWorkspace = async (workspacePath: string) => {

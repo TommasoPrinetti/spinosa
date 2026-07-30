@@ -159,12 +159,21 @@ export function DialogSpinosaWorkspacePicker(props: { onClose?: () => void } = {
     props.onClose?.()
   }
 
+  const reopenPicker = () => {
+    dialog.replace(
+      () => <DialogSpinosaWorkspacePicker onClose={props.onClose} />,
+      undefined,
+      () => {
+        dialog.dismiss()
+        props.onClose?.()
+      },
+    )
+  }
+
   async function openWorkspace(path: string) {
     const launch = await getWorkspaceLaunchDecision(path)
     if (launch.type === "startup-choice") {
-      const returnToPicker = () => dialog.replace(
-        () => <DialogSpinosaWorkspacePicker onClose={props.onClose} />,
-      )
+      const returnToPicker = () => reopenPicker()
       dialog.replace(() => (
         <DialogSpinosaStartupChoice
           workspacePath={launch.workspacePath}
@@ -175,7 +184,7 @@ export function DialogSpinosaWorkspacePicker(props: { onClose?: () => void } = {
       ), undefined, returnToPicker)
       return
     }
-    dialog.clear()
+    dialog.dismiss()
     await spinosa.openWorkspace(path)
   }
 
@@ -209,7 +218,7 @@ export function DialogSpinosaWorkspacePicker(props: { onClose?: () => void } = {
     if (failed > 0) {
       await DialogConfirm.show(dialog, "Cleanup complete", `${removed} workspace(s) removed, ${failed} failed.`, { confirmLabel: "Ok", defaultChoice: "confirm" })
     }
-    dialog.replace(() => <DialogSpinosaWorkspacePicker onClose={props.onClose} />)
+    reopenPicker()
   }
 
   onMount(() => {
@@ -232,7 +241,7 @@ export function DialogSpinosaWorkspacePicker(props: { onClose?: () => void } = {
           const row = rows[idx]
           if (row) void chooseWorkspace(row)
         } else if (idx === rows.length) {
-          dialog.clear()
+          dialog.dismiss()
           route.navigate({ type: "onboarding" })
         }
         consume(); return
@@ -425,7 +434,7 @@ export function DialogSpinosaWorkspacePicker(props: { onClose?: () => void } = {
         backgroundColor={buttonBackground(theme, selected() === sorted().length)}
         border={["left"]}
         borderColor={buttonBorder(theme, selected() === sorted().length, theme.borderActive)}
-        onMouseDown={() => { dialog.clear(); route.navigate({ type: "onboarding" }) }}
+        onMouseDown={() => { dialog.dismiss(); route.navigate({ type: "onboarding" }) }}
         onMouseOver={() => setSelected(sorted().length)}
       >
         <text fg={buttonText(theme, selected() === sorted().length, theme.primary)}>
