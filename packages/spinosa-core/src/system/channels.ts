@@ -2,6 +2,7 @@ import { homedir } from "node:os"
 import path from "node:path"
 import { mkdirSync } from "node:fs"
 import { parseInstallPinnedVersion, isPrereleaseFrameworkVersion } from "../utils/version"
+import { deleteYamlKey, readYamlScalar, writeYamlConfig } from "../utils/yaml-config"
 
 export type ReleaseChannel = "stable" | "beta"
 
@@ -42,12 +43,8 @@ export function spinosaBetaToggleChannel(value: string): ReleaseChannel {
   }
 }
 
-export async function readConfigValue(path: string, key: string): Promise<string | undefined> {
-  const file = Bun.file(path)
-  if (!(await file.exists())) return undefined
-  const text = await file.text()
-  const match = text.match(new RegExp(`^${key}:\\s*(.+)$`, "m"))
-  return match?.[1]?.trim()
+export async function readConfigValue(configPath: string, key: string): Promise<string | undefined> {
+  return readYamlScalar(configPath, key)
 }
 
 export async function spinosaReleaseChannel(): Promise<ReleaseChannel> {
@@ -86,46 +83,40 @@ export async function setConfigKey(
   key: string,
   value: string,
 ): Promise<void> {
-  const file = Bun.file(configPath)
-  let text = (await file.exists()) ? await file.text() : ""
-
-  const regex = new RegExp(`^${key}:.*`, "m")
-  if (regex.test(text)) {
-    text = text.replace(regex, `${key}: ${value}`)
-  } else {
-    text += `\n${key}: ${value}\n`
-  }
-
-  await Bun.write(configPath, text)
+  await writeYamlConfig(configPath, (document) => {
+    document.set(key, value)
+  })
 }
 
 export async function deleteConfigKey(
   configPath: string,
   key: string,
 ): Promise<void> {
-  const file = Bun.file(configPath)
-  if (!(await file.exists())) return
-
-  let text = await file.text()
-  const regex = new RegExp(`^${key}:.*\\n?`, "m")
-  text = text.replace(regex, "")
-  await Bun.write(configPath, text)
+  await deleteYamlKey(configPath, key)
 }
 export async function setReleaseChannel(channel: ReleaseChannel): Promise<void> {
   const configPath = spinosaConfigFile()
   const configDir = path.dirname(configPath)
-  const betaValue = channel === "beta" ? "true" : "false"
+  const betaValue = channel === "beta"
 
   mkdirSync(configDir, { recursive: true })
 
   const file = Bun.file(configPath)
   if (!(await file.exists())) {
-    await Bun.write(configPath, `beta: ${betaValue}\n`)
+    await writeYamlConfig(
+      configPath,
+      (document) => {
+        document.set("beta", betaValue)
+      },
+      "beta: false\n",
+    )
     return
   }
 
-  await setConfigKey(configPath, "beta", betaValue)
-  await deleteConfigKey(configPath, "release_channel")
+  await writeYamlConfig(configPath, (document) => {
+    document.set("beta", betaValue)
+    document.delete("release_channel")
+  })
 }
 
 export async function resolvePinnedVersionFromInstaller(

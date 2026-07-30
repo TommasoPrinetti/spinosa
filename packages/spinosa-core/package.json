@@ -23,13 +23,18 @@
     "semver": "catalog:",
     "strip-ansi": "7.1.2",
     "unzipper": "^0.12.3",
+    "write-file-atomic": "8.0.0",
+    "yaml": "2.9.0",
     "youtube-transcript": "^1.2.1"
   },
   "devDependencies": {
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",
     "@types/semver": "catalog:",
+    "@types/write-file-atomic": "4.0.3",
     "@typescript/native-preview": "catalog:",
+    "fast-check": "4.9.0",
+    "msw": "2.15.0",
     "typescript": "catalog:"
   }
 }

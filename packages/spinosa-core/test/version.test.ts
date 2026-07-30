@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import fc from "fast-check"
 import {
   compareFrameworkVersions,
   comparePrereleaseTokens,
@@ -11,6 +12,13 @@ import {
   parseInstallPinnedVersion,
   releaseChannel,
 } from "../src/utils/version"
+
+const versionArbitrary = fc.oneof(
+  fc.tuple(fc.integer({ min: 0, max: 20 }), fc.integer({ min: 0, max: 20 }), fc.integer({ min: 0, max: 20 }))
+    .map(([major, minor, patch]) => `${major}.${minor}.${patch}`),
+  fc.tuple(fc.integer({ min: 0, max: 5 }), fc.integer({ min: 0, max: 20 }), fc.integer({ min: 0, max: 20 }), fc.integer({ min: 0, max: 30 }))
+    .map(([major, minor, patch, pre]) => `${major}.${minor}.${patch}-beta.${pre}`),
+)
 
 describe("compareFrameworkVersions", () => {
   test("handles equality for released versions", () => {
@@ -178,5 +186,27 @@ describe("semver helpers", () => {
     expect(releaseChannel("1.0.2")).toBe("stable")
     expect(releaseChannel("1.0.2-beta.14")).toBe("beta")
     expect(releaseChannel("dev")).toBe("stable")
+  })
+})
+
+describe("compareFrameworkVersions properties", () => {
+  test("comparison is reflexive for valid versions", () => {
+    fc.assert(
+      fc.property(versionArbitrary, (version) => {
+        expect(compareFrameworkVersions(version, version)).toBe(0)
+      }),
+    )
+  })
+
+  test("comparison is antisymmetric for valid versions", () => {
+    fc.assert(
+      fc.property(versionArbitrary, versionArbitrary, (left, right) => {
+        const forward = compareFrameworkVersions(left, right)
+        const reverse = compareFrameworkVersions(right, left)
+        if (forward === undefined || reverse === undefined) return true
+        if (forward === 0) return reverse === 0
+        return forward === -reverse
+      }),
+    )
   })
 })

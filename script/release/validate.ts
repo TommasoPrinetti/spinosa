@@ -20,6 +20,7 @@ if (dirty) {
 }
 
 await $`bun run typecheck`.cwd(root)
-await $`bun test test/version.test.ts test/preflight.test.ts test/channels.test.ts`.cwd(`${root}/packages/spinosa-core`)
+await $`bun test test/version.test.ts test/preflight.test.ts test/channels.test.ts test/yaml-config.test.ts test/upgrade-network.test.ts`.cwd(`${root}/packages/spinosa-core`)
+await $`bun test script/release/github.test.ts`.cwd(root)
 
 console.log("✓ release validation passed")

@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
-import { parseInstallPinnedVersion, releaseChannel } from "../../packages/spinosa-core/src/utils/version.ts"
+import { releaseChannel } from "../../packages/spinosa-core/src/utils/version.ts"
+import { assertRollingChannelInstaller } from "./github.ts"
 
 const version = process.argv[2]
 if (!version) {
@@ -8,6 +9,18 @@ if (!version) {
 }
 
 const channel = releaseChannel(version)
+
+try {
+  if (process.env.GITHUB_TOKEN || process.env.GH_TOKEN) {
+    const pinned = await assertRollingChannelInstaller({ version, channel })
+    console.log(`✓ Rolling ${channel} release verified (PINNED_VERSION=${pinned})`)
+    process.exit(0)
+  }
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error))
+  process.exit(1)
+}
+
 const url = `https://github.com/medialab/spinosa/releases/download/${channel}/install.sh`
 const response = await fetch(url)
 if (!response.ok) {
@@ -16,7 +29,7 @@ if (!response.ok) {
 }
 
 const script = await response.text()
-const pinned = parseInstallPinnedVersion(script)
+const pinned = script.match(/^PINNED_VERSION="([^"]+)"/m)?.[1]
 if (!pinned) {
   console.error(`Error: could not read PINNED_VERSION from live ${channel} installer`)
   process.exit(1)

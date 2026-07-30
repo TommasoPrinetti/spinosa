@@ -3,6 +3,7 @@ import { chmod, mkdir, rename, rm, stat, readFile, writeFile } from "node:fs/pro
 import { homedir } from "node:os"
 import path from "node:path"
 import { spinosaLogWarn } from "../utils/log"
+import { writeYamlConfig } from "../utils/yaml-config"
 import { resolveWorkspaceDisplayName } from "../workspace-name"
 import type { SpinosaRegisteredWorkspace, SpinosaSetupStatus, SpinosaWorkspacePresence } from "../types"
 import { ensureWorkspaceID, parseWorkspaceID, readWorkspaceID, type SpinosaWorkspaceID } from "./identity"
@@ -391,7 +392,14 @@ export async function ensureGlobalMetadata(): Promise<void> {
 
   const configPath = path.join(metadataDir, "config.yaml")
   if (!existsSync(configPath)) {
-    await Bun.write(configPath, "beta: false\nauto_upgrade: true\n")
+    await writeYamlConfig(
+      configPath,
+      (document) => {
+        document.set("beta", false)
+        document.set("auto_upgrade", true)
+      },
+      "beta: false\nauto_upgrade: true\n",
+    )
   }
   await chmod(configPath, 0o600)
 }

@@ -195,6 +195,8 @@ describe("install and release flow", () => {
 
   test("local release script publishes versioned and rolling channel assets", async () => {
     const buildScript = await Bun.file(path.join(repoRoot, "script", "release", "build.ts")).text()
+    const publishScript = await Bun.file(path.join(repoRoot, "script", "release", "publish-channel.ts")).text()
+    expect(publishScript).toContain("publishRollingChannelRelease")
     expect(buildScript).toContain("dist/${channel}")
     expect(buildScript).toContain("channelInstallerPath")
     expect(buildScript).toContain("git archive --format=tar.gz")

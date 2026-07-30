@@ -13,8 +13,13 @@
     "release:sync-version": "bun script/set-version.ts",
     "release:build": "bun script/release/build.ts",
     "release:verify-local": "bun script/release/verify-local.ts",
-    "release:publish-channel": "bash script/release/publish-channel.sh",
+    "release:publish-channel": "bun script/release/publish-channel.ts",
     "release:verify-remote": "bun script/release/verify-remote.ts",
+    "lint:shell": "bash script/lint-shell.sh",
+    "test:installer": "bats test/installer",
+    "lint:deps": "depcruise packages --config .dependency-cruiser.cjs",
+    "lint:unused": "knip",
+    "lint:syncpack": "syncpack list-mismatches",
     "release:beta": "release-it --preRelease=beta",
     "release:stable": "release-it",
     "release:beta:patch": "release-it --preRelease=beta patch",
@@ -148,12 +153,20 @@
     "effect@4.0.0-beta.83": "patches/effect@4.0.0-beta.83.patch"
   },
   "devDependencies": {
+    "@octokit/rest": "22.0.1",
     "@types/mime-types": "3.0.1",
     "@types/semver": "catalog:",
     "@typescript/native-preview": "catalog:",
+    "bats": "1.13.0",
+    "dependency-cruiser": "18.1.0",
+    "fast-check": "4.9.0",
+    "knip": "6.29.0",
+    "msw": "2.15.0",
     "release-it": "^19.0.4",
     "semver": "catalog:",
-    "typescript": "catalog:"
+    "syncpack": "15.3.2",
+    "typescript": "catalog:",
+    "zx": "8.8.5"
   },
   "license": "MIT"
 }

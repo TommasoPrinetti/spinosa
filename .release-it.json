@@ -32,7 +32,7 @@
       "bun script/release/verify-local.ts ${version}"
     ],
     "after:release": [
-      "bash script/release/publish-channel.sh ${version}",
+      "bun script/release/publish-channel.ts ${version}",
       "bun script/release/verify-remote.ts ${version}"
     ]
   }
