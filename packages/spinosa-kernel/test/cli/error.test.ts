@@ -73,7 +73,7 @@ describe("cli.error", () => {
     const expected = [
       "Model not found: anthropic/claude-sonet-4",
       "Did you mean: claude-sonnet-4",
-      "Try: `opencode models` to list available models",
+      "Try: `spinosa models` to list available models",
       "Or check your config (spinosa.json) provider/model names",
     ].join("\n")
 

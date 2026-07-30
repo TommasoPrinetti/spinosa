@@ -4,7 +4,9 @@ export {
   LAUNCH_STATUS_LAUNCHING,
   LAUNCH_STATUS_NO_UPDATES,
   LAUNCH_STATUS_UPGRADE_DONE,
+  offerWorkspaceUpgrades,
   printLaunchingTui,
   runLaunchPreflight,
   type PreflightDependencies,
+  type WorkspaceUpgradeOfferDeps,
 } from "@spinosa/core/commands/preflight"

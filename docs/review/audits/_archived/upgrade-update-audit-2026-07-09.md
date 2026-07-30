@@ -1,3 +1,6 @@
+
+# STALE — shell upgrade path deleted; see TypeScript upgradeFramework
+
 # Upgrade/Update Workflow Audit — 2026-07-09
 
 ## Summary

@@ -71,10 +71,16 @@ describe("launch preflight", () => {
     const { deps, output } = dependencies({
       checkUpgradeAvailable: async () => ({ available: true, currentVersion: "1.0.0", latestVersion: "1.1.0" }),
       confirm: async () => true,
-      upgradeFramework: async () => ({ success: false, workspaceUpgradesNeeded: [] }),
+      upgradeFramework: async () => ({
+        success: false,
+        workspaceUpgradesNeeded: [],
+        error: "Installer checksum verification failed",
+      }),
     })
 
-    await expect(runLaunchPreflight(deps)).rejects.toThrow("Spinosa upgrade failed")
+    await expect(runLaunchPreflight(deps)).rejects.toThrow(
+      "Spinosa upgrade failed: Installer checksum verification failed",
+    )
     expect(output).toEqual([LAUNCH_STATUS_CHECKING])
   })
 

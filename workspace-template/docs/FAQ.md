@@ -58,7 +58,7 @@ After upgrading the CLI, run `spinosa update` on each workspace (Spinosa prompts
 Run the Janitor agent. It scans for stale files, broken links, and outdated reports, then presents a cleanup proposal. You confirm before anything moves to `.trash/`.
 
 **Can I uninstall?**
-`spinosa uninstall` removes the CLI and framework runtime files. Your workspace folders are left in place, and `~/.spinosa/metadata/` remains so a future reinstall can reuse remembered workspace paths and configuration.
+`spinosa uninstall` (or `spinosa uninstall --yes` non-interactively) removes the framework runtime under `~/.spinosa` and application files under XDG paths. Your workspace folders are left in place, and `~/.spinosa/metadata/` remains so a future reinstall can reuse remembered workspace paths and configuration.
 
 If an installed release cannot load because Bun, `node_modules`, or its launcher is damaged, Spinosa runs one clean reinstall of that release and restarts the original command. Global metadata and workspace folders are not removed during this repair.
 

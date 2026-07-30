@@ -19,8 +19,6 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Workspace creation copies only paths declared in `workspace-files.tsv`, not the full template tree.
 - Launch preflight runs before the TUI worker spawns; the artificial 1-second status delay is removed.
 - Upgrade version cache simplified to a two-line timestamp + version file with a one-hour TTL.
-- Release pipeline collapsed to `release-it` + TypeScript scripts only (`script/release/*.ts`). Removed `script/release.sh`, `script/release/publish-channel.sh`, and `packages/spinosa-kernel/script/publish.ts`.
-- Local release verification strengthened: `verify-local.ts` checks channel assets and checksum hashes; `verify-remote.ts` also verifies the immutable versioned installer.
 - Typecheck across packages now uses `tsc --noEmit` instead of `tsgo`.
 - Document converter dependencies (`markitdown-ts`, `pdfjs-dist`, `ppu-paddle-ocr`, `@napi-rs/canvas`) owned by `@spinosa/core` only — removed from `@spinosa/tui`.
 - `bun run dev` entrypoint (`packages/spinosa-cli`) now declares `@spinosa/core` as a dependency.
@@ -38,13 +36,27 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Shellcheck passes on `install.sh` (legacy shim detection uses explicit disable comments).
 - `bun install` catalog entry for `@effect/platform-node-shared` restored.
 
+## [1.0.3-beta.1] — 2026-07-30
+
+### Changed
+
+- Release pipeline is the custom TypeScript orchestrator in `script/release/` (not release-it). Stages: preflight → bump → build → verify-local → git-tag → publish-version → channel → verify-remote.
+- `script/set-version.ts` syncs root `package.json`, `install.sh`, and Spinosa product packages (`spinosa-core`, `spinosa-cli`, `spinosa-harness`, `spinosa-runtime`) to the product version. Kernel/TUI keep their upstream 1.17.x fork versions.
+- Release preflight/bump require a `CHANGELOG.md` section heading for the version being released.
+- Orphan publish/build scripts (`build-tui`, `publish-tui`, `verify-release.sh`, per-package npm `publish.ts`) moved to `script/orphan/` — do not run during release.
+
+### Fixed
+
+- Stale product package versions (1.0.2-beta.2) brought in sync with root `1.0.3-beta.1`.
+- Maintainer docs corrected to name real `script/release/` stages instead of release-it / `publish-channel` / `release:verify-remote`.
+
 ## [1.0.2-beta.15] — 2026-07-30
 
 ### Changed
 
 - Launch preflight is unified in the kernel TUI. `spinosa` and `bun run dev` use the same path. Both print `checking for updates...`, `no updates available` (1 second minimum), then `launching TUI...`.
 - Upgrade engine, launch preflight, and version sync are consolidated in `@spinosa/core`. The bash launcher no longer runs a separate preflight subprocess.
-- Release docs rewritten: `RELEASE_GUIDE.md` documents the `release-it` pipeline, `script/set-version.ts`, and rolling channel publish steps. Maintainer docs updated in `CONTRIBUTING.md`, `workspace-template/docs/reference/cli.md`, and the website CLI reference.
+- Release docs rewritten: `RELEASE_GUIDE.md` documents the custom TypeScript orchestrator in `script/release/`, `script/set-version.ts`, and rolling channel publish steps. Maintainer docs updated in `CONTRIBUTING.md`, `workspace-template/docs/reference/cli.md`, and the website CLI reference.
 
 ### Fixed
 

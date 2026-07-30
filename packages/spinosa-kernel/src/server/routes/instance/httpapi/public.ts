@@ -529,9 +529,9 @@ function normalizeParameter(param: OpenApiParameter, route: string) {
 
 export const PublicApi = SpinosaHttpApi.annotateMerge(
   OpenApi.annotations({
-    title: "opencode",
+    title: "spinosa",
     version: "1.0.0",
-    description: "opencode api",
+    description: "spinosa api",
     transform: matchLegacyOpenApi,
   }),
 )

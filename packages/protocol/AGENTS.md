@@ -34,7 +34,7 @@ Location-scoped groups get `locationMiddleware`. Session-scoped groups also get 
 1. Add or extend schema types in `packages/schema`
 2. Add route definition in the matching `src/groups/<name>.ts`
 3. Implement handler in `packages/server/src/handlers/<name>.ts`
-4. Regenerate client: `packages/client`: `bun run generate`
+4. Regenerate client via `@spinosa/sdk` tooling when the wire contract changes
 
 Do not put handler logic in protocol files. Do not import `@spinosa/kernel-core` or `@spinosa/server`.
 
@@ -51,10 +51,10 @@ bun typecheck
 
 ## V1 parallel
 
-Legacy instance HttpApi: `packages/opencode/src/server/routes/instance/httpapi/` — separate types, separate handlers. V2 is the long-term `/api/...` surface consumed by `sdk-next` and the V2 CLI daemon.
+Legacy instance HttpApi: `packages/spinosa-kernel/src/server/routes/instance/httpapi/` — separate types, separate handlers. V2 is the long-term `/api/...` surface; the shipped entrypoint remains the kernel CLI/server.
 
 ## Related docs
 
 - `packages/schema/AGENTS.md` — wire type conventions
-- `packages/server/AGENTS.md` — handler implementation
-- `packages/client/AGENTS.md` — codegen after protocol edits
+- `packages/server/AGENTS.md` — handler implementation (V2 stack; not the shipped entrypoint)
+- `packages/sdk/AGENTS.md` — client SDK after protocol edits

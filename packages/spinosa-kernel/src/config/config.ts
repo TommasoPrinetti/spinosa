@@ -36,7 +36,7 @@ import { ConfigVariable } from "./variable"
 import { Npm } from "@spinosa/kernel-core/npm"
 import { withTransientReadRetry } from "@/util/effect-http-client"
 
-export const ConfigSchemaURL = "https://opencode.ai/config.json"
+export const ConfigSchemaURL = "https://medialab.github.io/spinosa/config.json"
 
 // Custom merge function that concatenates array fields instead of replacing them
 // Keep remeda's deep conditional merge type out of hot config-loading paths; TS profiling showed it dominates here.

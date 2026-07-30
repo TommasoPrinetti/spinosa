@@ -197,7 +197,7 @@ for (const item of targets) {
       autoloadPackageJson: true,
       target: target as any,
       outfile: `dist/${directory}/bin/spinosa`,
-      execArgv: [`--user-agent=opencode/${Script.version}`, "--use-system-ca", "--"],
+      execArgv: [`--user-agent=spinosa/${Script.version}`, "--use-system-ca", "--"],
       windows: {},
     },
     files: embeddedFileMap ? { "opencode-web-ui.gen.ts": embeddedFileMap } : {},

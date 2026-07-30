@@ -1,6 +1,6 @@
 # TUI Package Guide
 
-`@spinosa/tui` is the canonical Spinosa terminal application. SolidJS + OpenTUI. Hosts (`packages/opencode`, `packages/cli`) only wire transport, config, and Effect layers — they do not own UI trees.
+`@spinosa/tui` is the canonical Spinosa terminal application. SolidJS + OpenTUI. The live host is `packages/spinosa-kernel` (product entry via `packages/spinosa-cli`) — it wires transport, config, and Effect layers and does not own UI trees.
 
 Read `specs/tui-package.md` for extraction history and boundary rules.
 
@@ -68,19 +68,19 @@ src/
 
 ## Architecture rules
 
-- **SDK is the backend boundary.** Missing data or operations belong in the server API and `@spinosa/sdk`, not imports from `packages/opencode` or `packages/cli`.
+- **SDK is the backend boundary.** Missing data or operations belong in the server API and `@spinosa/sdk`, not imports from kernel internals.
 - **Do not add new `@spinosa/kernel-core` imports.** ~12 files still import core (Flag, Global, InstallationVersion, Flock, Glob, AppNodeBuilder) from the extraction migration. Shrink this set; do not expand it. Pass behavior through `run()` inputs, SDK, or explicit runtime providers instead.
-- **One canonical UI.** Never duplicate feature trees into `packages/cli` or `packages/opencode`. Host adapters live in those packages; presentation lives here.
+- **One canonical UI.** Never duplicate feature trees into the kernel CLI. Host adapters live in `packages/spinosa-kernel`; presentation lives here.
 - **Tool rendering stays tolerant.** Accept `unknown` wire shapes; do not import backend tool implementations for types.
 
 ## Host integration paths
 
 | Host | Entry | Notes |
 | ---- | ----- | ----- |
-| Legacy `opencode` | `packages/opencode/src/cli/cmd/tui.ts` → `cli/tui/layer.ts` | Full TUI via worker or in-process fetch |
-| Legacy attach | `packages/opencode/src/cli/cmd/attach.ts` | Full TUI unless `--mini` |
-| V2 `lildax` | `packages/cli/src/commands/handlers/default.ts` → `cli/tui.ts` | Daemon transport + graceful 404 fallbacks |
-| Mini TUI | `packages/opencode/src/cli/cmd/run/` | **Not** this package's app tree — reuses primitives only |
+| Live CLI (default) | `packages/spinosa-kernel/src/cli/cmd/tui.ts` → `cli/tui/layer.ts` | Full TUI via worker or in-process fetch |
+| Attach | `packages/spinosa-kernel/src/cli/cmd/attach.ts` | Full TUI unless `--mini` |
+| Product entry | `packages/spinosa-cli` | `bun run dev` / installed shim → kernel |
+| Mini TUI | `packages/spinosa-kernel/src/cli/cmd/run/` | **Not** this package's app tree — reuses primitives only |
 
 ## Tests and checks
 
@@ -95,7 +95,7 @@ Snapshot tests live under `test/`. Prefer extending existing test helpers over n
 ## UI stack
 
 - Rendering: `@opentui/core`, `@opentui/solid`, `@opentui/keymap`
-- State: SolidJS (`createStore` preferred over many signals — same as `packages/app`)
+- State: SolidJS (`createStore` preferred over many signals)
 - Shared web primitives: `@spinosa/ui` where terminal and web align
 - Plugins: `@spinosa/plugin` presentation slots; host injects `pluginHost`
 
@@ -109,9 +109,11 @@ Snapshot tests live under `test/`. Prefer extending existing test helpers over n
 
 ## Dev note
 
-There is no standalone `bun dev` in this package. Run through a host:
+There is no standalone `bun dev` in this package. Run through the live host:
 
-- `bun dev` from repo root (legacy opencode TUI)
-- `bun dev` from `packages/cli` (V2 preview)
+```bash
+bun run dev              # from repo root → packages/spinosa-cli → kernel TUI
+bun run dev serve        # headless API
+```
 
 For TUI-only iteration, `packages/tui` tests are the fastest feedback loop.

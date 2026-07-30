@@ -3,7 +3,7 @@ import { resolve } from "node:path"
 import { createHash } from "node:crypto"
 import { $ } from "bun"
 import { parseInstallPinnedVersion } from "../../packages/spinosa-core/src/utils/version.ts"
-import { syncProductVersion } from "../set-version.ts"
+import { syncProductVersion, assertChangelogHasVersion } from "../set-version.ts"
 import { assertRollingChannelInstaller, publishRollingChannelRelease } from "./github.ts"
 import { RELEASE_ROOT, releasePaths, type ReleasePaths } from "./lib.ts"
 import type { Reporter } from "./reporter.ts"
@@ -38,6 +38,9 @@ export async function runPreflight(ctx: StageContext): Promise<void> {
   }
   ctx.reporter.detail(`branch ${branch}`)
 
+  assertChangelogHasVersion(RELEASE_ROOT, ctx.version)
+  ctx.reporter.detail(`CHANGELOG has section for v${ctx.version}`)
+
   const dirty = (await $`git status --porcelain`.text()).trim()
   if (dirty && !ctx.dryRun) throw new Error("working tree not clean — commit first")
   ctx.reporter.detail(ctx.dryRun && dirty ? "working tree dirty (ignored in dry-run)" : "working tree clean")
@@ -64,12 +67,18 @@ export async function runBump(ctx: StageContext): Promise<string> {
     return ctx.version
   }
 
-  const { previous } = syncProductVersion(ctx.version, RELEASE_ROOT)
+  const { previous, syncedPackages } = syncProductVersion(ctx.version, RELEASE_ROOT)
   ctx.reporter.detail(`${previous} → ${ctx.version}`)
+  if (syncedPackages.length > 0) {
+    ctx.reporter.detail(`synced packages: ${syncedPackages.join(", ")}`)
+  }
 
-  const dirty = await $`git status --porcelain package.json install.sh`.cwd(RELEASE_ROOT).text()
+  // Root + installer are source of truth; product packages (spinosa-core/cli/…) are synced too.
+  // Kernel/tui stay on their own 1.17.x fork versions — see script/set-version.ts.
+  const versionPaths = ["package.json", "install.sh", ...syncedPackages.map((dir) => `${dir}/package.json`)]
+  const dirty = await $`git status --porcelain ${versionPaths}`.cwd(RELEASE_ROOT).text()
   if (dirty.trim()) {
-    await $`git add package.json install.sh`.cwd(RELEASE_ROOT)
+    await $`git add ${versionPaths}`.cwd(RELEASE_ROOT)
     await $`git commit -m ${`release: v${ctx.version}`}`.cwd(RELEASE_ROOT)
     // Push the current branch tip by SHA-backed HEAD, but name the destination
     // ref explicitly so a local `beta`/`stable` tag cannot make `git push origin beta` ambiguous.

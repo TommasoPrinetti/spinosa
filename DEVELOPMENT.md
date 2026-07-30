@@ -35,7 +35,7 @@ workspace-template/  ← Files shipped into Spinosa workspaces (via workspace-fi
 packages/            ← Runtime source (kernel, tui, spinosa-core, llm, and deps)
 install.sh           ← User-facing installer (curl | bash)
 package.json         ← Bun workspace root
-script/release/      ← TypeScript release pipeline (build, verify, publish-channel)
+script/release/      ← TypeScript release pipeline (preflight, bump, build, verify-local, git-tag, publish-version, channel, verify-remote)
 ```
 
 ## Codebase Structure

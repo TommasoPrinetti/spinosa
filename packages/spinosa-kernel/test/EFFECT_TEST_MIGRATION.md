@@ -28,7 +28,7 @@ it.effect("pure service behavior", () =>
 it.instance("instance-local behavior", () =>
   Effect.gen(function* () {
     const test = yield* TestInstance
-    expect(test.directory).toContain("opencode-test-")
+    expect(test.directory).toContain("spinosa-test-")
   }),
 )
 

@@ -62,7 +62,7 @@ Run `spinosa upgrade` to install the latest release. When you launch `spinosa` o
 Open the workspace picker (`W`) and click **Delete stale** in the top header. This removes entries pointing to deleted folders.
 
 **Can I uninstall without losing my workspaces?**
-Yes. `spinosa uninstall --yes` removes the framework but leaves your workspace folders in place.
+Yes. `spinosa uninstall --yes` removes the framework runtime under `~/.spinosa` (and application cache/data under XDG paths) but leaves your workspace folders and `~/.spinosa/metadata/` in place.
 
 **Where are my workspaces stored?**
 Each workspace is a folder on your filesystem. You choose the location during creation. The global workspace registry is at `~/.spinosa/metadata/workspaces.json`.

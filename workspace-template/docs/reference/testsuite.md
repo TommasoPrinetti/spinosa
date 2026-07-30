@@ -376,7 +376,7 @@ See [RELEASE_GUIDE.md](../../../RELEASE_GUIDE.md) § Linux VM testdrive. Summary
 
 ## Phase G — GitHub release (blocking, post-publish)
 
-`release:verify-remote` runs automatically at the end of every release. Confirm manually if needed:
+The `verify-remote` stage runs automatically at the end of every release (`bun run release`). Confirm manually if needed:
 
 ```bash
 VERSION="X.Y.Z"

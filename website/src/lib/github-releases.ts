@@ -21,9 +21,8 @@ export function installScriptUrl(tag: string): string {
 	return `https://github.com/${GITHUB_REPO}/releases/download/${normalized}/install.sh`;
 }
 
-export const STABLE_INSTALL_REDIRECT = `https://github.com/${GITHUB_REPO}/releases/latest/download/install.sh`;
+/** Rolling stable (production) tag — not GitHub's releases/latest. */
+export const STABLE_INSTALL_REDIRECT = `https://github.com/${GITHUB_REPO}/releases/download/stable/install.sh`;
 
-export function latestPrereleaseInstallUrl(releases: GhRelease[]): string | null {
-	const hit = releases.find((r) => r.prerelease && !r.draft);
-	return hit ? installScriptUrl(hit.tag_name) : null;
-}
+/** Rolling beta (prerelease / dev alias) tag. */
+export const BETA_INSTALL_REDIRECT = `https://github.com/${GITHUB_REPO}/releases/download/beta/install.sh`;

@@ -11,8 +11,8 @@ export const NvidiaPlugin = define({
           if (item.provider.api.package !== "@ai-sdk/openai-compatible") continue
           if (item.provider.api.url !== "https://integrate.api.nvidia.com/v1") continue
           evt.provider.update(item.provider.id, (provider) => {
-            provider.request.headers["HTTP-Referer"] = "https://opencode.ai/"
-            provider.request.headers["X-Title"] = "opencode"
+            provider.request.headers["HTTP-Referer"] = "https://github.com/medialab/spinosa"
+            provider.request.headers["X-Title"] = "spinosa"
             provider.request.headers["X-BILLING-INVOKE-ORIGIN"] ??= "Spinosa"
           })
         }

@@ -3,56 +3,108 @@ import { UI } from "../ui"
 import * as prompts from "@clack/prompts"
 import { Global } from "@spinosa/kernel-core/global"
 import fs from "fs/promises"
+import { existsSync } from "node:fs"
+import {
+  frameworkRuntimeTargets,
+  launcherShimTargets,
+  removeUninstallTargets,
+  spinosaHome,
+  validateSpinosaHome,
+  verifySpinosaInstallMarker,
+  type UninstallTarget,
+} from "@spinosa/core/commands/uninstall"
 
 interface UninstallArgs {
   keepConfig: boolean
   keepData: boolean
   dryRun: boolean
+  yes: boolean
   force: boolean
 }
 
 export const UninstallCommand = {
   command: "uninstall",
-  describe: "remove this local Spinosa installation and its selected data",
+  describe: "remove the Spinosa framework runtime and selected application data",
   builder: (yargs: Argv) =>
     yargs
-      .option("keep-config", { alias: "c", type: "boolean", describe: "keep configuration files", default: false })
-      .option("keep-data", { alias: "d", type: "boolean", describe: "keep session data and snapshots", default: false })
-      .option("dry-run", { type: "boolean", describe: "show what would be removed", default: false })
-      .option("force", { alias: "f", type: "boolean", describe: "skip confirmation prompts", default: false }),
+      .option("yes", { alias: "y", type: "boolean", describe: "skip confirmation prompts", default: false })
+      .option("force", { alias: "f", type: "boolean", describe: "alias for --yes", default: false })
+      .option("keep-config", { alias: "c", type: "boolean", describe: "keep XDG configuration files", default: false })
+      .option("keep-data", { alias: "d", type: "boolean", describe: "keep XDG session data and state", default: false })
+      .option("dry-run", { type: "boolean", describe: "show what would be removed", default: false }),
   handler: async (args: UninstallArgs) => {
     UI.empty()
     UI.println(UI.logo(" "))
     UI.empty()
     prompts.intro("Uninstall Spinosa")
-    const targets = [
-      { path: Global.Path.data, label: "Data", keep: args.keepData },
+
+    const home = spinosaHome()
+    const skipConfirm = args.yes || args.force
+    const frameworkTargets: UninstallTarget[] = []
+    const validationError = validateSpinosaHome(home)
+    const markerError = validationError ? undefined : verifySpinosaInstallMarker(home)
+
+    if (validationError) {
+      prompts.log.warn(`Framework home skipped: ${validationError} (${home})`)
+    } else if (markerError) {
+      prompts.log.warn(`Framework home skipped: ${markerError}`)
+    } else {
+      frameworkTargets.push(...frameworkRuntimeTargets(home), ...launcherShimTargets())
+    }
+
+    const xdgTargets = [
+      { path: Global.Path.data, label: "Application data", keep: args.keepData },
       { path: Global.Path.cache, label: "Cache", keep: false },
       { path: Global.Path.config, label: "Configuration", keep: args.keepConfig },
       { path: Global.Path.state, label: "State", keep: args.keepData },
       { path: Global.Path.tmp, label: "Temporary files", keep: false },
     ]
+
     const present = await Promise.all(
-      targets.map(async (target) => ({ ...target, exists: await fs.access(target.path).then(() => true).catch(() => false) })),
+      [...frameworkTargets.map((t) => ({ ...t, keep: false })), ...xdgTargets].map(async (target) => ({
+        ...target,
+        exists: existsSync(target.path) || (await fs.access(target.path).then(() => true).catch(() => false)),
+      })),
     )
+
     for (const target of present) {
       if (target.exists) prompts.log.info(`${target.keep ? "○ keeping" : "✓ removing"} ${target.label}: ${target.path}`)
     }
-    if (!args.force && !args.dryRun) {
-      const confirmed = await prompts.confirm({ message: "Remove the selected Spinosa files?" })
+
+    if (!frameworkTargets.length && !present.some((t) => t.exists && !t.keep)) {
+      prompts.outro("Nothing to uninstall.")
+      return
+    }
+
+    if (!skipConfirm && !args.dryRun) {
+      const confirmed = await prompts.confirm({
+        message: "Remove the Spinosa framework and selected application files? Workspace folders and ~/.spinosa/metadata/ are kept.",
+      })
       if (prompts.isCancel(confirmed) || !confirmed) {
         prompts.outro("Cancelled")
         return
       }
     }
+
     if (args.dryRun) {
       prompts.outro("Dry run complete; no files were removed.")
       return
     }
+
+    if (frameworkTargets.length) {
+      removeUninstallTargets(frameworkTargets)
+    }
+
     for (const target of present) {
       if (!target.exists || target.keep) continue
+      if (frameworkTargets.some((f) => f.path === target.path)) continue
       await fs.rm(target.path, { recursive: true, force: true })
     }
-    prompts.outro("Spinosa application files removed. The installer still controls the launcher and framework runtime.")
+
+    prompts.outro(
+      validationError || markerError
+        ? "Application files removed. Framework home was not a valid Spinosa install."
+        : "Spinosa uninstalled. Workspace folders and ~/.spinosa/metadata/ were left in place.",
+    )
   },
 }

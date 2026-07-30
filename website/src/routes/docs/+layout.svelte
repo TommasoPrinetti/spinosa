@@ -3,7 +3,7 @@
 	import { base } from '$app/paths';
 	import { afterNavigate } from '$app/navigation';
 	import { getDefaultDoc, getDocPages } from '$lib/docs/docs';
-	import { stableInstallCmd } from '$lib/install-urls';
+	import { devInstallCmd } from '$lib/install-urls';
 	import gitIcon from '$lib/assets/github.png';
 	import docFooterImg from '$lib/assets/docs_footer.png';
 
@@ -18,7 +18,8 @@
 		window.scrollTo(0, 0);
 	});
 
-	const CMD = stableInstallCmd();
+	/** Beta rolling tag — current development channel while product is in beta. */
+	const CMD = devInstallCmd();
 
 	let showCopied = $state(false);
 	const docPages = getDocPages();

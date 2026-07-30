@@ -16,8 +16,9 @@ Status: **implemented on `beta`**
 - User-state dirs (`raw/`, `maps/`, `.logs/`, etc.) come from the manifest, not a blind tree copy.
 
 ### Release pipeline (local only)
-- `release-it` is the only release path (`bun run release:beta:patch`, etc.).
-- TypeScript scripts in `script/release/`: `validate`, `build`, `verify-local`, `publish-channel`, `verify-remote`, `republish`.
+- Custom TypeScript orchestrator in `script/release/` is the only release path (`bun run release:beta:patch`, etc.).
+- Stages (see `script/release/stages.ts` / `state.ts`): `preflight`, `bump`, `build`, `verify-local`, `git-tag`, `publish-version`, `channel`, `verify-remote`.
+- Commands: `validate`, `resume`, `publish` (republish), plus channel/increment entrypoints.
 - Removed: `script/release.sh`, `script/release/publish-channel.sh`, `packages/spinosa-kernel/script/publish.ts`.
 - No GitHub Actions quality workflow — `bun run quality` runs locally via `release:validate`.
 

@@ -47,9 +47,9 @@ bash .agents/skills/agent-interception/scripts/extract-codex.sh \
   <rollout.jsonl> > /tmp/overseer-events.jsonl
 ```
 
-For OpenCode sessions:
+For Spinosa/OpenCode sessions:
 ```bash
-opencode export <session_id> \
+spinosa export <session_id> \
   | bash .agents/skills/agent-interception/scripts/extract-opencode.sh \
   >> /tmp/overseer-events.jsonl
 ```

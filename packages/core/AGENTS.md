@@ -42,14 +42,14 @@ src/
 
 ## Module conventions
 
-Follow `packages/opencode/AGENTS.md` module shape:
+Follow `packages/spinosa-kernel/AGENTS.md` module shape:
 
 - Flat top-level exports + `export * as Foo from "./foo"` self-reexport
 - No `export namespace Foo` blocks
 - Multi-sibling dirs (`session/`, `config/`) — no barrel `index.ts`; import specific siblings
 - `src/config` — self-export pattern at top when adding modules
 
-Effect rules: `makeRuntime` for services, `InstanceState` for per-directory state, `EffectBridge` for native callbacks. See `packages/opencode/AGENTS.md` and `specs/effect/migration.md`.
+Effect rules: `makeRuntime` for services, `InstanceState` for per-directory state, `EffectBridge` for native callbacks. See `packages/spinosa-kernel/AGENTS.md` and `specs/effect/migration.md`.
 
 ## Session V2 invariants (short)
 
@@ -66,7 +66,7 @@ Full spec: `specs/v2/session.md`, vocabulary: root `CONTEXT.md`.
 - Schema: `src/database/schema.sql.ts` and related `*.sql.ts` files
 - Migrations: `src/database/migration/`
 - Commands: `bun run db`, `bun run migration` from this package
-- `packages/opencode/AGENTS.md` notes schema authority lives here (not opencode)
+- Schema authority lives here (not in the kernel CLI package)
 
 ## Tests
 
@@ -82,8 +82,8 @@ Never run tests from repo root. Use `testEffect` from test helpers for layered t
 
 | May import | Must not import |
 | ---------- | --------------- |
-| `@spinosa/schema`, `@spinosa/llm`, `@spinosa/plugin` | `@spinosa/server`, `@spinosa/client`, `@spinosa/tui` |
-| `@spinosa/effect-drizzle-sqlite`, `@spinosa/effect-sqlite-node` | `packages/opencode` |
+| `@spinosa/schema`, `@spinosa/llm`, `@spinosa/plugin` | `@spinosa/server`, `@spinosa/tui` |
+| `@spinosa/effect-drizzle-sqlite`, `@spinosa/effect-sqlite-node` | `packages/spinosa-kernel` (CLI/server host) |
 
 ## Nested docs
 

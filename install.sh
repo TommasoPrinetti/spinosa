@@ -541,15 +541,15 @@ install_bundled_bun() {
 
 ensure_workspace_links() {
   local fw_root="$1"
-  local nm="${fw_root}/node_modules/@opencode-ai"
+  local nm="${fw_root}/node_modules/@spinosa"
   mkdir -p "$nm"
-  for pkg_dir in "${fw_root}/packages"/*/ "${fw_root}/packages/sdk/js"; do
+  for pkg_dir in "${fw_root}/packages"/*/; do
     local pkg_json="${pkg_dir}package.json"
     [[ -f "$pkg_json" ]] || continue
     local pkg_name
     pkg_name="$(grep '"name"' "$pkg_json" | head -1 | sed 's/.*"name": *"\(.*\)".*/\1/')"
-    [[ -n "$pkg_name" && "$pkg_name" == @opencode-ai/* ]] || continue
-    local link="$nm/${pkg_name#@opencode-ai/}"
+    [[ -n "$pkg_name" && "$pkg_name" == @spinosa/* ]] || continue
+    local link="$nm/${pkg_name#@spinosa/}"
     [[ -L "$link" ]] || ln -sf "$pkg_dir" "$link" 2>/dev/null || true
   done
 }
@@ -937,7 +937,7 @@ version_dir_has_runtime_deps() {
   local fw_dir="${SPINOSA_HOME}/versions/${version}"
   [ -d "${fw_dir}/node_modules" ] || return 1
   # bun install layout; empty or non-bun trees are treated as incomplete
-  [ -d "${fw_dir}/node_modules/.bun" ] || [ -d "${fw_dir}/node_modules/@opencode-ai" ] || return 1
+  [ -d "${fw_dir}/node_modules/.bun" ] || [ -d "${fw_dir}/node_modules/@spinosa" ] || return 1
 }
 
 version_install_complete() {

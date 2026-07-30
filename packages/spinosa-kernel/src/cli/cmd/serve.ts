@@ -6,7 +6,7 @@ import { Flag } from "@spinosa/kernel-core/flag/flag"
 export const ServeCommand = effectCmd({
   command: "serve",
   builder: (yargs) => withNetworkOptions(yargs),
-  describe: "starts a headless opencode server",
+  describe: "starts a headless spinosa server",
   // Server loads instances per-request via x-spinosa-directory header — no
   // need for an ambient project InstanceContext at startup.
   instance: false,
@@ -17,7 +17,7 @@ export const ServeCommand = effectCmd({
     }
     const opts = yield* resolveNetworkOptions(args)
     const server = yield* Effect.promise(() => Server.listen(opts))
-    console.log(`opencode server listening on http://${server.hostname}:${server.port}`)
+    console.log(`spinosa server listening on http://${server.hostname}:${server.port}`)
 
     yield* Effect.never
   }),

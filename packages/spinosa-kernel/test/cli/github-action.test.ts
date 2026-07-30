@@ -20,7 +20,7 @@ function createTextPart(text: string): SessionV1.Part {
   }
 }
 
-test("uses reachable upstream GitHub service endpoints", () => {
+test("documents orphan OpenCode cloud endpoints (not Spinosa-owned)", () => {
   expect(GitHubApiURL).toBe("https://api.opencode.ai")
   expect(GitHubDevShareURL).toBe("https://dev.opencode.ai")
 })

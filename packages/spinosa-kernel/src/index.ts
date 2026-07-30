@@ -66,7 +66,7 @@ bootLog("kernel.init", "kernel entry parsing args", {
 
 function show(out: string) {
   const text = out.trimStart()
-  if (!text.startsWith("opencode ")) {
+  if (!text.startsWith("spinosa ")) {
     process.stderr.write(UI.logo() + EOL + EOL)
     process.stderr.write(text + EOL)
     return
@@ -110,7 +110,7 @@ const cli = yargs(args)
     Heap.start()
 
     process.env.AGENT = "1"
-    process.env.OPENCODE = "1"
+    process.env.SPINOSA = "1"
     process.env.SPINOSA_PID = String(process.pid)
   })
   .usage("")

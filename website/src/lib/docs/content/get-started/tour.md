@@ -7,7 +7,11 @@ This walkthrough takes you from zero to your first verified report in about 10 m
 Open a terminal and run:
 
 ```bash
-curl -fsSL https://github.com/medialab/spinosa/releases/download/stable/install.sh | bash
+# Beta — current development / prerelease channel (recommended while Spinosa is in beta)
+curl -fsSL https://github.com/medialab/spinosa/releases/download/beta/install.sh | bash
+
+# Stable — production channel
+# curl -fsSL https://github.com/medialab/spinosa/releases/download/stable/install.sh | bash
 ```
 
 This installs the `spinosa` command and all its dependencies (Bun runtime, document converters, OCR engine). After install, open a new terminal window.

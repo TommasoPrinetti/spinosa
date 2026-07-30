@@ -52,7 +52,7 @@ const adapter: TuiAgentAdapter = {
       ? await createWorkspace(context, fixture.workspace)
       : undefined;
     if (fixture.kv) {
-      const stateDirectory = path.join(context.home, ".local", "state", "opencode");
+      const stateDirectory = path.join(context.home, ".local", "state", "spinosa");
       mkdirSync(stateDirectory, { recursive: true });
       await Bun.write(
         path.join(stateDirectory, "kv.json"),

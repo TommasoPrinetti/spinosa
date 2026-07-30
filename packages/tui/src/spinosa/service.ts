@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs"
+import { existsSync, rmSync } from "node:fs"
 import { homedir } from "node:os"
 import path from "node:path"
 import {
@@ -56,6 +56,28 @@ export async function countRawMarkdownFiles(rootDir: string) {
 
 export async function readBundledFrameworkVersion() {
   return readFrameworkVersionFromRoot(resolveFrameworkRoot())
+}
+
+/** Delete a Spinosa workspace folder and remove it from the registry. */
+export async function deleteWorkspace(workspacePath: string): Promise<void> {
+  const resolved = path.resolve(workspacePath)
+  if (!isSpinosaWorkspace(resolved)) {
+    throw new Error(`Not a Spinosa workspace: ${resolved}`)
+  }
+
+  const home = path.resolve(homedir())
+  const protectedPaths = new Set([
+    home,
+    path.sep,
+    path.resolve(home, ".spinosa"),
+    path.resolve(process.env.SPINOSA_HOME ?? path.join(home, ".spinosa")),
+  ])
+  if (protectedPaths.has(resolved)) {
+    throw new Error(`Refusing to delete protected path: ${resolved}`)
+  }
+
+  rmSync(resolved, { recursive: true, force: true })
+  await unregisterWorkspace(resolved)
 }
 
 // --- Re-exports from spinosa-core ---

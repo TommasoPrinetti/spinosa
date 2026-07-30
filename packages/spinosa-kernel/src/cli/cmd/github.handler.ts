@@ -1,8 +1,5 @@
 import path from "path"
-import { exec } from "child_process"
-import { Filesystem } from "@/util/filesystem"
 import * as prompts from "@clack/prompts"
-import { map, pipe, sortBy, values } from "remeda"
 import { Octokit } from "@octokit/rest"
 import { graphql } from "@octokit/graphql"
 import * as core from "@actions/core"
@@ -17,7 +14,6 @@ import type {
   PullRequestEvent,
 } from "@octokit/webhooks-types"
 import { UI } from "../ui"
-import { ModelsDev } from "@spinosa/kernel-core/models-dev"
 import { InstanceRef } from "@/effect/instance-ref"
 import { SessionShare } from "@/share/session"
 import { Session } from "@/session/session"
@@ -31,7 +27,6 @@ import { SessionPrompt } from "@/session/prompt"
 import { Git } from "@/git"
 import { setTimeout as sleep } from "node:timers/promises"
 import { Process } from "@/util/process"
-import { parseGitHubRemote } from "@/util/repository"
 import { Effect } from "effect"
 import {
   extractResponseText,
@@ -145,7 +140,6 @@ type IssueQueryResponse = {
 
 const AGENT_USERNAME = "opencode-agent[bot]"
 const AGENT_REACTION = "eyes"
-const WORKFLOW_FILE = ".github/workflows/opencode.yml"
 
 // Event categories for routing
 // USER_EVENTS: triggered by user actions, have actor/issueId, support reactions/comments
@@ -158,224 +152,14 @@ type UserEvent = (typeof USER_EVENTS)[number]
 type RepoEvent = (typeof REPO_EVENTS)[number]
 
 export const githubInstall = Effect.fn("Cli.github.install")(function* () {
-  const maybeCtx = yield* InstanceRef
-  if (!maybeCtx) return yield* Effect.die("InstanceRef not provided")
-  const ctx = maybeCtx
-  const modelsDev = yield* ModelsDev.Service
-  const gitSvc = yield* Git.Service
-  yield* Effect.promise(async () => {
-    {
-      UI.empty()
-      prompts.intro("Install GitHub agent")
-      const app = await getAppInfo()
-      await installGitHubApp()
-
-      const providers = await Effect.runPromise(modelsDev.get()).then((p) => {
-        // TODO: add guide for copilot, for now just hide it
-        delete p["github-copilot"]
-        return p
-      })
-
-      const provider = await promptProvider()
-      const model = await promptModel()
-      //const key = await promptKey()
-
-      await addWorkflowFiles()
-      printNextSteps()
-
-      function printNextSteps() {
-        let step2
-        if (provider === "amazon-bedrock") {
-          step2 =
-            "Configure OIDC in AWS - https://docs.github.com/en/actions/how-tos/security-for-github-actions/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services"
-        } else {
-          step2 = [
-            `    2. Add the following secrets in org or repo (${app.owner}/${app.repo}) settings`,
-            "",
-            ...providers[provider].env.map((e) => `       - ${e}`),
-          ].join("\n")
-        }
-
-        prompts.outro(
-          [
-            "Next steps:",
-            "",
-            `    1. Commit the \`${WORKFLOW_FILE}\` file and push`,
-            step2,
-            "",
-            "    3. Go to a GitHub issue and comment `/oc summarize` to see the agent in action",
-            "",
-            "   Learn more about the GitHub agent - https://opencode.ai/docs/github/#usage-examples",
-          ].join("\n"),
-        )
-      }
-
-      async function getAppInfo() {
-        const project = ctx.project
-        if (project.vcs !== "git") {
-          prompts.log.error(`Could not find git repository. Please run this command from a git repository.`)
-          throw new UI.CancelledError()
-        }
-
-        // Get repo info
-        const info = await Effect.runPromise(gitSvc.run(["remote", "get-url", "origin"], { cwd: ctx.worktree })).then(
-          (x) => x.text().trim(),
-        )
-        const parsed = parseGitHubRemote(info)
-        if (!parsed) {
-          prompts.log.error(`Could not find git repository. Please run this command from a git repository.`)
-          throw new UI.CancelledError()
-        }
-        return { owner: parsed.owner, repo: parsed.repo, root: ctx.worktree }
-      }
-
-      async function promptProvider() {
-        const priority: Record<string, number> = {
-          opencode: 0,
-          anthropic: 1,
-          openai: 2,
-          google: 3,
-        }
-        let provider = await prompts.select({
-          message: "Select provider",
-          maxItems: 8,
-          options: pipe(
-            providers,
-            values(),
-            sortBy(
-              (x) => priority[x.id] ?? 99,
-              (x) => x.name ?? x.id,
-            ),
-            map((x) => ({
-              label: x.name,
-              value: x.id,
-              hint: priority[x.id] === 0 ? "recommended" : undefined,
-            })),
-          ),
-        })
-
-        if (prompts.isCancel(provider)) throw new UI.CancelledError()
-
-        return provider
-      }
-
-      async function promptModel() {
-        const providerData = providers[provider]!
-
-        const model = await prompts.select({
-          message: "Select model",
-          maxItems: 8,
-          options: pipe(
-            providerData.models,
-            values(),
-            sortBy((x) => x.name ?? x.id),
-            map((x) => ({
-              label: x.name ?? x.id,
-              value: x.id,
-            })),
-          ),
-        })
-
-        if (prompts.isCancel(model)) throw new UI.CancelledError()
-        return model
-      }
-
-      async function installGitHubApp() {
-        const s = prompts.spinner()
-        s.start("Installing GitHub app")
-
-        // Get installation
-        const installation = await getInstallation()
-        if (installation) return s.stop("GitHub app already installed")
-
-        // Open browser
-        const url = "https://github.com/apps/opencode-agent"
-        const command =
-          process.platform === "darwin"
-            ? `open "${url}"`
-            : process.platform === "win32"
-              ? `start "" "${url}"`
-              : `xdg-open "${url}"`
-
-        exec(command, (error) => {
-          if (error) {
-            prompts.log.warn(`Could not open browser. Please visit: ${url}`)
-          }
-        })
-
-        // Wait for installation
-        s.message("Waiting for GitHub app to be installed")
-        const MAX_RETRIES = 120
-        let retries = 0
-        do {
-          const installation = await getInstallation()
-          if (installation) break
-
-          if (retries > MAX_RETRIES) {
-            s.stop(
-              `Failed to detect GitHub app installation. Make sure to install the app for the \`${app.owner}/${app.repo}\` repository.`,
-            )
-            throw new UI.CancelledError()
-          }
-
-          retries++
-          await sleep(1000)
-        } while (true) // oxlint-disable-line no-constant-condition
-
-        s.stop("Installed GitHub app")
-
-        async function getInstallation() {
-          return await fetch(`${GitHubApiURL}/get_github_app_installation?owner=${app.owner}&repo=${app.repo}`)
-            .then((res) => res.json())
-            .then((data) => data.installation)
-        }
-      }
-
-      async function addWorkflowFiles() {
-        const envStr =
-          provider === "amazon-bedrock"
-            ? ""
-            : `\n        env:${providers[provider].env.map((e) => `\n          ${e}: \${{ secrets.${e} }}`).join("")}`
-
-        await Filesystem.write(
-          path.join(app.root, WORKFLOW_FILE),
-          `name: opencode
-
-on:
-  issue_comment:
-    types: [created]
-  pull_request_review_comment:
-    types: [created]
-
-jobs:
-  opencode:
-    if: |
-      contains(github.event.comment.body, ' /oc') ||
-      startsWith(github.event.comment.body, '/oc') ||
-      contains(github.event.comment.body, ' /opencode') ||
-      startsWith(github.event.comment.body, '/opencode')
-    runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-      contents: read
-      pull-requests: read
-      issues: read
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-        with:
-          persist-credentials: false
-
-      - name: Run opencode
-        uses: anomalyco/opencode/github@latest${envStr}
-        with:
-          model: ${provider}/${model}`,
-        )
-
-        prompts.log.success(`Added workflow file: "${WORKFLOW_FILE}"`)
-      }
-    }
-  })
+  UI.empty()
+  prompts.intro("Install GitHub agent")
+  prompts.log.error(
+    "The Spinosa GitHub Action is not published yet.\n" +
+      "    `spinosa github install` will not wire anomalyco/opencode or any third-party action.\n" +
+      "    Track progress at https://github.com/medialab/spinosa",
+  )
+  prompts.outro("GitHub agent install unavailable.")
 })
 
 export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: string; token?: string }) {
@@ -499,7 +283,7 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
         await addReaction(commentType)
       }
 
-      // Setup opencode session
+      // Setup spinosa session
       const repoData = await fetchRepo()
       session = await runLocalEffect(
         sessionSvc.create({
@@ -519,7 +303,7 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
         await runLocalEffect(sessionShare.share(session.id))
         return session.id.slice(-8)
       })()
-      console.log("opencode session", session.id)
+      console.log("spinosa session", session.id)
 
       // Handle event types:
       // REPO_EVENTS (schedule, workflow_dispatch): no issue/PR context, output to logs/PR only
@@ -892,7 +676,7 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
     }
 
     async function chat(message: string, files: PromptFiles = []) {
-      console.log("Sending message to opencode...")
+      console.log("Sending message to spinosa...")
 
       return runLocalEffect(
         Effect.gen(function* () {
@@ -1357,7 +1141,7 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
 
         return `<a href="${shareBaseUrl}/s/${shareId}"><img width="200" alt="${titleAlt}" src="https://social-cards.sst.dev/opencode-share/${title64}.png?model=${providerID}/${modelID}&version=${session.version}&id=${shareId}" /></a>\n`
       })()
-      const shareUrl = shareId ? `[opencode session](${shareBaseUrl}/s/${shareId})&nbsp;&nbsp;|&nbsp;&nbsp;` : ""
+      const shareUrl = shareId ? `[spinosa session](${shareBaseUrl}/s/${shareId})&nbsp;&nbsp;|&nbsp;&nbsp;` : ""
       return `\n\n${image}${shareUrl}[github run](${runUrl})`
     }
 
@@ -1418,7 +1202,7 @@ query($owner: String!, $repo: String!, $number: Int!) {
       return [
         "<github_action_context>",
         "You are running as a GitHub Action. Important:",
-        "- Git push and PR creation are handled AUTOMATICALLY by the opencode infrastructure after your response",
+        "- Git push and PR creation are handled AUTOMATICALLY by the spinosa infrastructure after your response",
         "- Do NOT include warnings or disclaimers about GitHub tokens, workflow permissions, or PR creation capabilities",
         "- Do NOT suggest manual steps for creating PRs or pushing code - this happens automatically",
         "- Focus only on the code changes and your analysis/response",
@@ -1556,7 +1340,7 @@ query($owner: String!, $repo: String!, $number: Int!) {
       return [
         "<github_action_context>",
         "You are running as a GitHub Action. Important:",
-        "- Git push and PR creation are handled AUTOMATICALLY by the opencode infrastructure after your response",
+        "- Git push and PR creation are handled AUTOMATICALLY by the spinosa infrastructure after your response",
         "- Do NOT include warnings or disclaimers about GitHub tokens, workflow permissions, or PR creation capabilities",
         "- Do NOT suggest manual steps for creating PRs or pushing code - this happens automatically",
         "- Focus only on the code changes and your analysis/response",

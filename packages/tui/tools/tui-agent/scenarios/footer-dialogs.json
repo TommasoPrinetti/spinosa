@@ -1,7 +1,6 @@
 {
-  
   "name": "footer-dialogs",
-  "description": "Exercise all five HomeFooter actions via click and keyboard shortcuts: Settings (Shift+S), Agents (Shift+A), Keys (Shift+K), Workspaces (Shift+W), Models (Shift+M).",
+  "description": "Exercise HomeFooter click actions: Settings, Agents, Sessions, Models, and Delete workspace confirm.",
   "adapter": "../adapters/spinosa.ts",
   "terminal": { "width": 100, "height": 50 },
   "fixture": {
@@ -16,67 +15,40 @@
   },
   "steps": [
     { "action": "waitForText", "text": "Describe the task", "timeoutMs": 8000 },
+    { "action": "waitForText", "text": "Delete workspace", "timeoutMs": 5000 },
     { "action": "capture", "name": "before-dialogs" },
+    { "action": "assert", "visible": ["Settings", "Agents", "Sessions", "Provider", "Models", "Delete workspace"] },
 
     { "action": "clickText", "text": "Settings" },
-    { "action": "waitForText", "text": "Updates", "timeoutMs": 5000 },
-    { "action": "assert", "visible": ["Updates", "Maintenance"] },
-    { "action": "clickText", "text": "esc" },
-    { "action": "assert", "visible": ["Describe the task"] },
-
-    { "action": "key", "key": "s", "modifiers": { "shift": true } },
-    { "action": "waitForText", "text": "Updates", "timeoutMs": 5000 },
-    { "action": "assert", "visible": ["Updates"] },
-    { "action": "clickText", "text": "esc" },
-    { "action": "assert", "visible": ["Describe the task"] },
+    { "action": "waitForText", "text": "Notify before updating", "timeoutMs": 8000 },
+    { "action": "capture", "name": "settings-dialog" },
+    { "action": "assert", "visible": ["Notify before updating", "Release Channel", "Maintenance"] },
+    { "action": "key", "key": "ESCAPE" },
+    { "action": "waitForText", "text": "Describe the task", "timeoutMs": 5000 },
 
     { "action": "clickText", "text": "Agents" },
     { "action": "waitForText", "text": "Select agent", "timeoutMs": 5000 },
     { "action": "assert", "visible": ["Select agent"] },
-    { "action": "clickText", "text": "esc" },
-    { "action": "assert", "visible": ["Describe the task"] },
+    { "action": "key", "key": "ESCAPE" },
+    { "action": "waitForText", "text": "Describe the task", "timeoutMs": 5000 },
 
-    { "action": "key", "key": "a", "modifiers": { "shift": true } },
-    { "action": "waitForText", "text": "Select agent", "timeoutMs": 5000 },
-    { "action": "assert", "visible": ["Select agent"] },
-    { "action": "clickText", "text": "esc" },
-    { "action": "assert", "visible": ["Describe the task"] },
-
-    { "action": "clickText", "text": "Keys" },
-    { "action": "waitForText", "text": "Keyboard shortcuts", "timeoutMs": 5000 },
-    { "action": "capture", "name": "keyboard-shortcuts" },
-    { "action": "assert", "visible": ["Keyboard shortcuts"] },
-    { "action": "clickText", "text": "esc" },
-    { "action": "assert", "visible": ["Describe the task"] },
-
-    { "action": "key", "key": "k", "modifiers": { "shift": true } },
-    { "action": "waitForText", "text": "Keyboard shortcuts", "timeoutMs": 5000 },
-    { "action": "assert", "visible": ["Keyboard shortcuts"] },
-    { "action": "clickText", "text": "esc" },
-    { "action": "assert", "visible": ["Describe the task"] },
-
-    { "action": "clickText", "text": "Workspaces" },
-    { "action": "waitForText", "text": "Coming soon.", "timeoutMs": 5000 },
-    { "action": "assert", "visible": ["Coming soon."] },
-    { "action": "clickText", "text": "esc" },
-    { "action": "assert", "visible": ["Describe the task"] },
-
-    { "action": "key", "key": "w", "modifiers": { "shift": true } },
-    { "action": "waitForText", "text": "Coming soon.", "timeoutMs": 5000 },
-    { "action": "assert", "visible": ["Coming soon."] },
-    { "action": "clickText", "text": "esc" },
-    { "action": "assert", "visible": ["Describe the task"] },
+    { "action": "clickText", "text": "Sessions" },
+    { "action": "waitForText", "text": "Footer test chat", "timeoutMs": 5000 },
+    { "action": "key", "key": "ESCAPE" },
+    { "action": "waitForText", "text": "Describe the task", "timeoutMs": 5000 },
 
     { "action": "clickText", "text": "Models" },
-    { "action": "waitForText", "text": "Coming soon.", "timeoutMs": 5000 },
-    { "action": "assert", "visible": ["Coming soon."] },
-    { "action": "clickText", "text": "esc" },
-    { "action": "assert", "visible": ["Describe the task"] },
+    { "action": "waitForText", "text": "Model", "timeoutMs": 8000 },
+    { "action": "capture", "name": "models-dialog" },
+    { "action": "key", "key": "ESCAPE" },
+    { "action": "waitForText", "text": "Describe the task", "timeoutMs": 5000 },
 
-    { "action": "key", "key": "m", "modifiers": { "shift": true } },
-    { "action": "waitForText", "text": "Coming soon.", "timeoutMs": 5000 },
-    { "action": "assert", "visible": ["Coming soon."] },
-    { "action": "clickText", "text": "esc" },
-    { "action": "assert", "visible": ["Describe the task"] }
+    { "action": "clickText", "text": "Delete workspace" },
+    { "action": "waitForText", "text": "Do you really want to delete the workspace folder", "timeoutMs": 5000 },
+    { "action": "capture", "name": "delete-confirm" },
+    { "action": "assert", "visible": ["Yes, Delete", "No, Keep It"] },
+    { "action": "clickText", "text": "No, Keep It" },
+    { "action": "waitForText", "text": "Describe the task", "timeoutMs": 5000 },
+    { "action": "assert", "visible": ["footer-test-workspace", "Delete workspace"] }
   ]
 }

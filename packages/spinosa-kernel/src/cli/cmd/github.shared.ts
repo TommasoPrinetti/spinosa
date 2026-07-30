@@ -2,8 +2,13 @@ import type { SessionV1 } from "@spinosa/kernel-core/v1/session"
 
 export { parseGitHubRemote } from "@/util/repository"
 
-export const GitHubApiURL = "https://api.opencode.ai"
-export const GitHubDevShareURL = "https://dev.opencode.ai"
+/**
+ * Orphan OpenCode cloud endpoints formerly used by the GitHub agent install/share flow.
+ * Spinosa does not own these hosts. Do not treat them as Spinosa product URLs.
+ * `spinosa github install` refuses until a medialab/spinosa action is published.
+ */
+export const GitHubApiURL = "https://api.opencode.ai" // orphan: OpenCode cloud, not Spinosa
+export const GitHubDevShareURL = "https://dev.opencode.ai" // orphan: OpenCode cloud, not Spinosa
 
 /**
  * Extracts displayable text from assistant response parts.

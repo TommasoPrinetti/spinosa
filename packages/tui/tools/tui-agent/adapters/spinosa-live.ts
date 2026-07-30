@@ -25,7 +25,7 @@ async function checkServer() {
     const msg = err instanceof Error ? err.message : String(err);
     throw new Error(
       `Cannot connect to Spinosa at ${SPINOSA_URL}\n  ${msg}\n\n` +
-        `Make sure the Spinosa daemon is running:\n  spinosa  (or opencode serve)\n\n` +
+        `Make sure the Spinosa daemon is running:\n  spinosa serve\n\n` +
         `Override the URL with SPINOSA_URL env var if using a different port.`,
     );
   } finally {

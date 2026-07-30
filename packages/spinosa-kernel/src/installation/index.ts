@@ -3,11 +3,12 @@ import { LayerNode } from "@spinosa/kernel-core/effect/layer-node"
 import { makeRuntime } from "@spinosa/kernel-core/effect/runtime"
 import { Context, Effect, Layer, Schema } from "effect"
 import semver from "semver"
-import { InstallationChannel, InstallationVersion } from "@spinosa/kernel-core/installation/version"
+import { InstallationVersion } from "@spinosa/kernel-core/installation/version"
 import { InstallationEvent } from "@spinosa/schema/installation-event"
 import { spinosaReleaseChannel, resolveReleaseVersionForChannel } from "@spinosa/core/system/channels"
 import { upgradeFramework } from "@spinosa/core/commands/upgrade"
 import { resolveFrameworkRoot, installedReleaseVersion } from "@spinosa/core/framework/discovery"
+import { GlobalBus } from "@/bus/global"
 
 export type Method = "self-managed" | "unknown"
 export type ReleaseType = "patch" | "minor" | "major"
@@ -32,10 +33,28 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@spinosa/Installation") {}
 
+async function resolveLatestForCurrentChannel(): Promise<string> {
+  const channel = await spinosaReleaseChannel()
+  const result = await resolveReleaseVersionForChannel(channel)
+  return result || InstallationVersion
+}
+
 const layer = Layer.succeed(
   Service,
   Service.of({
-    info: Effect.succeed({ version: InstallationVersion, latest: InstallationVersion }),
+    info: Effect.tryPromise(async () => {
+      const latest = await resolveLatestForCurrentChannel()
+      if (latest !== InstallationVersion) {
+        GlobalBus.emit("event", {
+          directory: "global",
+          payload: {
+            type: Event.UpdateAvailable.type,
+            properties: { version: latest },
+          },
+        })
+      }
+      return { version: InstallationVersion, latest }
+    }),
     method: Effect.sync((): Method => {
       const templateRoot = process.env.SPINOSA_TEMPLATE_ROOT
       if (templateRoot && installedReleaseVersion(templateRoot)) return "self-managed"
@@ -45,17 +64,18 @@ const layer = Layer.succeed(
       } catch {}
       return "unknown"
     }),
-    latest: () =>
-      Effect.tryPromise(async () => {
-        const channel = await spinosaReleaseChannel()
-        const result = await resolveReleaseVersionForChannel(channel)
-        return result || InstallationVersion
-      }),
+    latest: () => Effect.tryPromise(() => resolveLatestForCurrentChannel()),
     upgrade: (method: Method, target: string) =>
       Effect.tryPromise({
         try: async () => {
           const result = await upgradeFramework({ version: target, yes: true })
-          if (!result.success) throw new Error(result.newVersion ? `Upgrade to v${result.newVersion} failed` : "Upgrade failed")
+          if (!result.success) {
+            const detail = result.error?.trim()
+            throw new Error(
+              detail ||
+                (result.newVersion ? `Upgrade to v${result.newVersion} failed` : "Upgrade failed"),
+            )
+          }
         },
         catch: (error) => new UpgradeFailedError({ stderr: String(error) }),
       }),
@@ -65,6 +85,7 @@ const layer = Layer.succeed(
 export const node = LayerNode.make({ service: Service, layer, deps: [] })
 const { runPromise } = makeRuntime(Service, AppNodeBuilder.build(node))
 
+export const info = () => runPromise((service) => service.info)
 export const latest = (...args: Parameters<Interface["latest"]>) => runPromise((service) => service.latest(...args))
 export const method = () => runPromise((service) => service.method)
 export const upgrade = (...args: Parameters<Interface["upgrade"]>) => runPromise((service) => service.upgrade(...args))

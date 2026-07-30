@@ -1,9 +1,15 @@
+import path from "node:path"
+import { homedir } from "node:os"
 import type { Argv } from "yargs"
 import * as prompts from "@clack/prompts"
 import { UI } from "../ui"
 import { upgradeFramework, readEffectiveInstalledVersion } from "@spinosa/core/commands/upgrade"
+import { offerWorkspaceUpgrades } from "@spinosa/core/commands/preflight"
+import { updateWorkspace } from "@spinosa/core/commands/update"
 import { isUpgrade } from "@spinosa/core/utils/version"
-import type { ReleaseChannel } from "@spinosa/core/system/channels"
+import { installUrlForChannel, type ReleaseChannel } from "@spinosa/core/system/channels"
+
+const REINSTALL_URL = installUrlForChannel("beta")
 
 export const UpgradeCommand = {
   command: "upgrade [target]",
@@ -86,12 +92,41 @@ export const UpgradeCommand = {
 
     if (!result.success) {
       prompts.log.error("Upgrade failed.")
-      prompts.log.error("Try reinstalling from https://spinosa.ai")
+      if (result.error) prompts.log.error(result.error)
+      prompts.log.error(`Try reinstalling from ${REINSTALL_URL}`)
       prompts.outro("Upgrade failed.")
       return
     }
 
+    const alreadyCurrent =
+      !!result.previousVersion &&
+      !!result.newVersion &&
+      result.previousVersion === result.newVersion &&
+      !args.reinstall
+
+    if (alreadyCurrent) {
+      prompts.log.success(`Already at v${result.newVersion}`)
+      prompts.outro("No upgrade needed.")
+      return
+    }
+
     prompts.log.success(`Upgraded to v${result.newVersion}`)
+
+    if (result.newVersion && result.workspaceUpgradesNeeded.length > 0) {
+      await offerWorkspaceUpgrades(result.workspaceUpgradesNeeded, result.newVersion, {
+        confirm: async (question, defaultYes = false) => {
+          if (args.yes) return true
+          const answer = await prompts.confirm({ message: question, initialValue: defaultYes })
+          return answer === true
+        },
+        frameworkRoot: (version) =>
+          path.join(process.env.SPINOSA_HOME ?? path.join(homedir(), ".spinosa"), "versions", version),
+        updateWorkspace: (workspacePath, frameworkRoot) =>
+          updateWorkspace({ workspacePath, frameworkRoot }),
+        out: (message) => prompts.log.info(message),
+      })
+    }
+
     prompts.outro("Restart Spinosa to use the new version.")
   },
 }

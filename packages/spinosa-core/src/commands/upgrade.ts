@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import * as readline from "node:readline"
 import { spawnSync } from "node:child_process"
 import { createHash } from "node:crypto"
-import { homedir } from "node:os"
+import { homedir, tmpdir as osTmpdir } from "node:os"
 import path from "node:path"
 import {
   readConfigValue,
@@ -36,6 +36,8 @@ export interface UpgradeResult {
   newVersion?: string
   workspaceUpgradesNeeded: string[]
   refusedReason?: string
+  /** Operational failure detail (download, checksum, spawn, resolve). */
+  error?: string
 }
 
 export interface AutoUpgradeResult {
@@ -165,8 +167,9 @@ export async function upgradeFramework(
     options.onPhase?.("resolve", `Resolving latest ${channel} version`)
     const latest = await resolveReleaseVersionForChannel(channel)
     if (!latest) {
-      spinosaLogInfo("upgrade", `failed to resolve latest version for channel ${channel}`)
-      return { success: false, workspaceUpgradesNeeded: [] }
+      const error = `Failed to resolve latest version for channel ${channel}`
+      spinosaLogInfo("upgrade", error)
+      return { success: false, workspaceUpgradesNeeded: [], error }
     }
     resolvedVersion = latest
   }
@@ -230,7 +233,12 @@ export async function upgradeFramework(
     })
     if (answer === "n" || answer === "no") {
       options.onPhase?.("confirm", "Upgrade cancelled")
-      return { success: false, previousVersion: effectiveInstalled || undefined, workspaceUpgradesNeeded: [] }
+      return {
+        success: false,
+        previousVersion: effectiveInstalled || undefined,
+        workspaceUpgradesNeeded: [],
+        error: "Upgrade cancelled by user",
+      }
     }
   }
 
@@ -238,7 +246,17 @@ export async function upgradeFramework(
 
   const installerUrl = installUrlForChannel(channel, options.version ?? "latest")
 
-  const tmpdir = mkdtempSync(path.join(homedir(), "spinosa-upgrade-"))
+  let tmpdir: string
+  try {
+    tmpdir = mkdtempSync(path.join(osTmpdir(), "spinosa-upgrade-"))
+  } catch (error) {
+    return {
+      success: false,
+      previousVersion: effectiveInstalled || undefined,
+      workspaceUpgradesNeeded: [],
+      error: `Failed to create upgrade temp directory: ${error instanceof Error ? error.message : String(error)}`,
+    }
+  }
   const installerPath = path.join(tmpdir, "install-spinosa.sh")
 
   let response: Response
@@ -251,18 +269,33 @@ export async function upgradeFramework(
     response = installerResponse
     if (!response.ok || !checksumResponse.ok) {
       rmSync(tmpdir, { recursive: true, force: true })
-      return { success: false, previousVersion: effectiveInstalled || undefined, workspaceUpgradesNeeded: [] }
+      return {
+        success: false,
+        previousVersion: effectiveInstalled || undefined,
+        workspaceUpgradesNeeded: [],
+        error: `Failed to download installer or checksums (HTTP ${response.status}/${checksumResponse.status}) from ${installerUrl}`,
+      }
     }
     const installerScript = await response.text()
     const checksums = await checksumResponse.text()
     if (!verifyInstallerChecksum(installerScript, checksums)) {
       rmSync(tmpdir, { recursive: true, force: true })
-      return { success: false, previousVersion: effectiveInstalled || undefined, workspaceUpgradesNeeded: [] }
+      return {
+        success: false,
+        previousVersion: effectiveInstalled || undefined,
+        workspaceUpgradesNeeded: [],
+        error: "Installer checksum verification failed",
+      }
     }
     writeFileSync(installerPath, installerScript, { mode: 0o755 })
-  } catch {
+  } catch (err) {
     rmSync(tmpdir, { recursive: true, force: true })
-    return { success: false, previousVersion: effectiveInstalled || undefined, workspaceUpgradesNeeded: [] }
+    return {
+      success: false,
+      previousVersion: effectiveInstalled || undefined,
+      workspaceUpgradesNeeded: [],
+      error: `Failed to download installer: ${err instanceof Error ? err.message : String(err)}`,
+    }
   }
 
   options.onPhase?.("install", "Running installer...")
@@ -276,10 +309,19 @@ export async function upgradeFramework(
   })
   if (result.status !== 0) {
     rmSync(tmpdir, { recursive: true, force: true })
+    const stderr = typeof result.stderr === "string"
+      ? result.stderr.trim()
+      : Buffer.isBuffer(result.stderr)
+        ? result.stderr.toString("utf8").trim()
+        : ""
+    const detail = stderr
+      || (result.error ? result.error.message : "")
+      || `installer exited with status ${result.status ?? "unknown"}`
     return {
       success: false,
       previousVersion: effectiveInstalled || undefined,
       workspaceUpgradesNeeded: [],
+      error: `Installer failed: ${detail}`,
     }
   }
 
@@ -304,6 +346,7 @@ export async function upgradeFramework(
       previousVersion: effectiveInstalled || undefined,
       newVersion: postInstallVersion || undefined,
       workspaceUpgradesNeeded: [],
+      error: `Post-install version mismatch: expected v${resolvedVersion}, found ${postInstallVersion ? `v${postInstallVersion}` : "none"}`,
     }
   }
 

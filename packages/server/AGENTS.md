@@ -2,6 +2,8 @@
 
 `@spinosa/server` implements the V2 HTTP API. It wires `packages/protocol` endpoint groups to `@spinosa/kernel-core` Effect handlers. No business rules invented here — translate HTTP ↔ core services.
 
+**Not the shipped entrypoint.** The live product CLI and HTTP surface ship from `packages/spinosa-kernel` (V1 HttpApi under `packages/spinosa-kernel/src/server/`). This package is the V2 Effect stack used by protocol/codegen and migration work — do not treat it as the binary users run.
+
 ## Entry points
 
 - `src/api.ts` — `makeDefaultApi({ locationMiddleware, sessionLocationMiddleware })`
@@ -37,18 +39,14 @@ Middleware: `src/middleware/authorization.ts`, `session-location.ts`, `schema-er
 1. **Schema** — add/update types in `packages/schema` (see `packages/schema/AGENTS.md`)
 2. **Protocol** — add endpoint to matching `packages/protocol/src/groups/*.ts`
 3. **Handler** — implement in `src/handlers/` calling core services
-4. **Client** — `cd packages/client && bun run generate` (never hand-edit `src/generated*`)
+4. **SDK** — regenerate via `@spinosa/sdk` tooling when the wire contract changes (never hand-edit generated clients)
 5. **Tests** — handler tests in this package; core logic tests in `packages/core`
 
 Dependency direction: `schema ← protocol ← server → core`. Server imports core; core never imports server.
 
 ## Running the server
 
-No standalone `bun dev` in this package. Consumers:
-
-- `packages/cli` — `serve` command or daemon `service start`
-- `packages/sdk-next` — embedded in-memory HttpClient for tests/tools
-- Integration tests — compose layers from `packages/core` + this package
+No standalone `bun dev` in this package. The shipped headless API is `spinosa serve` from `packages/spinosa-kernel`. Integration tests compose layers from `packages/core` + this package.
 
 ## Checks
 
@@ -59,10 +57,11 @@ bun typecheck
 
 ## V1 vs V2
 
-Legacy V1 HttpApi lives in `packages/opencode/src/server/routes/instance/httpapi/` (separate stack). Do not add V2 endpoints there. TUI/SDK may still hit V1 paths during migration — see `packages/cli/src/tui.ts` graceful fallbacks.
+Live V1 HttpApi lives in `packages/spinosa-kernel/src/server/routes/instance/httpapi/` (separate stack). Do not add V2 endpoints there. TUI/SDK may still hit V1 paths during migration.
 
 ## Related docs
 
 - `packages/protocol/AGENTS.md` — HttpApi groups, middleware placement
-- `packages/client/AGENTS.md` — codegen workflow
+- `packages/sdk/AGENTS.md` — client SDK
 - `packages/core/AGENTS.md` — domain services handlers call into
+- `packages/spinosa-kernel/AGENTS.md` — shipped CLI and V1 server

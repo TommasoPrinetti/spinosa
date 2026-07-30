@@ -8,7 +8,7 @@ import { Global } from "@spinosa/kernel-core/global"
 import { Filesystem } from "@/util/filesystem"
 import * as ConfigPaths from "@/config/paths"
 
-export const TUI_SCHEMA_URL = "https://opencode.ai/tui.json"
+export const TUI_SCHEMA_URL = "https://medialab.github.io/spinosa/tui.json"
 
 const decodeTheme = Schema.decodeUnknownOption(Schema.String)
 const decodeRecord = Schema.decodeUnknownOption(Schema.Record(Schema.String, Schema.Unknown))

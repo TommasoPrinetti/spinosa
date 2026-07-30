@@ -27,4 +27,4 @@ bun run build
 
 - `packages/tui/AGENTS.md` — plugin slots and `command-shim`
 - `packages/core/AGENTS.md` — plugin host in core
-- User docs: `packages/web/src/content/docs/` (plugins, MCP, rules)
+- User docs: `website/` (product site) and workspace FAQ under `workspace-template/docs/`

@@ -4,11 +4,12 @@
 	import { base } from '$app/paths';
 	import BgCanvas from '$lib/BgCanvas.svelte';
 	import github from '$lib/assets/github.png';
-	import { stableInstallCmd } from '$lib/install-urls';
+	import { devInstallCmd } from '$lib/install-urls';
 
 	const origin = $derived($page.url.origin);
 
-	const CMD = stableInstallCmd();
+	/** Beta rolling tag — current development channel while product is in beta. */
+	const CMD = devInstallCmd();
 
 	const words = [
 		'understands',

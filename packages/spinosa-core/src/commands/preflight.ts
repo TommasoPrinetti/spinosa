@@ -31,13 +31,16 @@ export const LAUNCH_STATUS_LAUNCHING = "launching TUI..."
 /** User-facing line printed after a successful launch-time upgrade. */
 export const LAUNCH_STATUS_UPGRADE_DONE = "upgrade complete — run spinosa again to launch"
 
-export interface PreflightDependencies {
-  checkUpgradeAvailable(): Promise<AutoUpgradeResult>
-  upgradeFramework(): Promise<UpgradeResult>
-  updateWorkspace(workspacePath: string, frameworkRoot: string): Promise<UpdateResult>
+export interface WorkspaceUpgradeOfferDeps {
   confirm(question: string, defaultYes?: boolean): Promise<boolean>
   frameworkRoot(version: string): string
+  updateWorkspace(workspacePath: string, frameworkRoot: string): Promise<UpdateResult>
   out(message: string): void
+}
+
+export interface PreflightDependencies extends WorkspaceUpgradeOfferDeps {
+  checkUpgradeAvailable(): Promise<AutoUpgradeResult>
+  upgradeFramework(): Promise<UpgradeResult>
 }
 
 const defaults: PreflightDependencies = {
@@ -52,6 +55,39 @@ const defaults: PreflightDependencies = {
 /** Print the final launch line before the TUI worker starts. */
 export function printLaunchingTui(out: (message: string) => void = defaults.out): void {
   out(LAUNCH_STATUS_LAUNCHING)
+}
+
+/**
+ * After a successful CLI/framework upgrade, optionally update registered
+ * workspaces still pinned to an older framework version.
+ * Shared by launch preflight and `spinosa upgrade`.
+ */
+export async function offerWorkspaceUpgrades(
+  workspaces: string[],
+  frameworkVersion: string,
+  deps: WorkspaceUpgradeOfferDeps,
+): Promise<void> {
+  if (workspaces.length === 0) return
+  if (!(await deps.confirm(`Upgrade ${workspaces.length} outdated workspace(s) now?`))) return
+
+  const frameworkRoot = deps.frameworkRoot(frameworkVersion)
+  let failed = 0
+  for (const workspace of workspaces) {
+    try {
+      const result = await deps.updateWorkspace(workspace, frameworkRoot)
+      if (result.success && result.presence) {
+        deps.out(`↷ Skipped ${path.basename(workspace) || workspace}: ${result.presence.replaceAll("_", " ").toUpperCase()}`)
+      } else if (result.success) deps.out(`✓ Updated ${path.basename(workspace) || workspace}`)
+      else {
+        failed++
+        deps.out(`⚠ Could not update ${path.basename(workspace) || workspace}`)
+      }
+    } catch (error) {
+      failed++
+      deps.out(`⚠ Could not update ${path.basename(workspace) || workspace}: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+  if (failed > 0) deps.out(`⚠ ${failed} workspace update(s) failed; run 'spinosa update <workspace>' to retry.`)
 }
 
 /**
@@ -78,30 +114,11 @@ export async function runLaunchPreflight(deps: PreflightDependencies = defaults)
 
   const upgraded = await deps.upgradeFramework()
   if (!upgraded.success || !upgraded.newVersion) {
-    throw new Error("Spinosa upgrade failed. Run 'spinosa upgrade' for details.")
+    const detail = upgraded.error ? `: ${upgraded.error}` : ""
+    throw new Error(`Spinosa upgrade failed${detail}. Run 'spinosa upgrade' for details.`)
   }
 
-  const workspaces = upgraded.workspaceUpgradesNeeded
-  if (workspaces.length > 0 && await deps.confirm(`Upgrade ${workspaces.length} outdated workspace(s) now?`)) {
-    const frameworkRoot = deps.frameworkRoot(upgraded.newVersion)
-    let failed = 0
-    for (const workspace of workspaces) {
-      try {
-        const result = await deps.updateWorkspace(workspace, frameworkRoot)
-        if (result.success && result.presence) {
-          deps.out(`↷ Skipped ${path.basename(workspace) || workspace}: ${result.presence.replaceAll("_", " ").toUpperCase()}`)
-        } else if (result.success) deps.out(`✓ Updated ${path.basename(workspace) || workspace}`)
-        else {
-          failed++
-          deps.out(`⚠ Could not update ${path.basename(workspace) || workspace}`)
-        }
-      } catch (error) {
-        failed++
-        deps.out(`⚠ Could not update ${path.basename(workspace) || workspace}: ${error instanceof Error ? error.message : String(error)}`)
-      }
-    }
-    if (failed > 0) deps.out(`⚠ ${failed} workspace update(s) failed; run 'spinosa update <workspace>' to retry.`)
-  }
+  await offerWorkspaceUpgrades(upgraded.workspaceUpgradesNeeded, upgraded.newVersion, deps)
 
   deps.out(LAUNCH_STATUS_UPGRADE_DONE)
   return "exit"

@@ -65,7 +65,7 @@ State is tracked in `dist/v{VERSION}/.release-state.json` so releases can be res
 ### Stages
 
 1. **preflight** — branch, clean tree, `bun run quality`
-2. **bump** — sync `package.json` + `install.sh`, commit, push
+2. **bump** — sync root `package.json` + `install.sh` + product packages (`spinosa-core`/`cli`/`harness`/`runtime`), commit, push. Requires a `CHANGELOG.md` section for the version (checked in preflight). Kernel/TUI keep their own 1.17.x fork versions.
 3. **build** — stage installers, tarball, checksums
 4. **verify-local** — pins and checksums
 5. **git-tag** — push `v{VERSION}` tag
@@ -107,7 +107,7 @@ bun run release:republish -- v1.0.3-beta.1
 
 Beta never moves the `stable` rolling tag.
 
-Version source of truth: root `package.json`. `bun script/set-version.ts` syncs `install.sh` `PINNED_VERSION`.
+Version source of truth: root `package.json`. `bun script/set-version.ts` syncs `install.sh` `PINNED_VERSION` and Spinosa product package versions. Add a `## [version]` section to `CHANGELOG.md` before releasing.
 
 ---
 

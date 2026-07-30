@@ -11,7 +11,7 @@ export function readCurrentVersion(root = RELEASE_ROOT): string {
   return pkg.version.replace(/^v/, "")
 }
 
-/** Match release-it preRelease bump semantics. */
+/** Match historical preRelease bump semantics (prerelease → next beta.N). */
 export function planBump(current: string, channel: ReleaseChannel, increment: ReleaseIncrement): string {
   const version = current.replace(/^v/, "")
   if (!semver.valid(version)) {
