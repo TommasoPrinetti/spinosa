@@ -47,7 +47,8 @@ export const UpgradeCommand = {
       await Installation.upgrade(method, latest)
       prompts.log.success(`Upgraded to v${latest}`)
       prompts.outro("Restart Spinosa to use the new version.")
-    } catch {
+    } catch (err) {
+      prompts.log.error(String(err))
       prompts.log.error("Upgrade failed. Try reinstalling from https://spinosa.ai")
       prompts.outro("Upgrade failed.")
     }
