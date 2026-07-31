@@ -1,8 +1,9 @@
 import { existsSync, readFileSync, rmSync } from "node:fs"
 import { homedir } from "node:os"
 import path from "node:path"
+import { BINARY_UNINSTALL_RUNTIME_TARGETS } from "../distribution/contract"
 
-/** Runtime dirs/files under SPINOSA_HOME that uninstall removes. Metadata is kept. */
+/** @deprecated Prefer BINARY_UNINSTALL_RUNTIME_TARGETS. Legacy source uninstall list. */
 export const FRAMEWORK_RUNTIME_TARGETS = ["versions", "bin", "lib", "logs", "env.sh"] as const
 
 export function spinosaHome(): string {
@@ -39,12 +40,24 @@ export function verifySpinosaInstallMarker(home: string): string | undefined {
 
 export type UninstallTarget = { path: string; label: string }
 
-/** Framework runtime paths under SPINOSA_HOME (excludes metadata/). */
-export function frameworkRuntimeTargets(home: string): UninstallTarget[] {
-  return FRAMEWORK_RUNTIME_TARGETS.map((target) => ({
+/**
+ * Binary uninstall removes the active binary, template caches, staging, and logs.
+ * Legacy `versions/` is preserved unless explicitly requested.
+ */
+export function frameworkRuntimeTargets(home: string, options?: { purgeLegacyVersions?: boolean }): UninstallTarget[] {
+  const targets: UninstallTarget[] = BINARY_UNINSTALL_RUNTIME_TARGETS.map((target) => ({
     path: path.join(home, target),
     label: `Framework ${target}`,
   }))
+
+  // Also clear empty/legacy bin leftovers except we already remove bin/spinosa.
+  // Keep bin/bun dormant unless purge is requested with full legacy cleanup.
+  if (options?.purgeLegacyVersions) {
+    for (const legacy of ["versions", "lib", "env.sh", "bin/bun"] as const) {
+      targets.push({ path: path.join(home, legacy), label: `Legacy ${legacy}` })
+    }
+  }
+  return targets
 }
 
 /** Common user-level launcher shim written by install.sh. */
@@ -65,10 +78,13 @@ export function removeUninstallTargets(targets: UninstallTarget[]): UninstallTar
 }
 
 /**
- * Remove framework runtime under SPINOSA_HOME and the user launcher shim.
- * Leaves metadata/ (workspaces + config) intact for reinstall.
+ * Remove binary runtime under SPINOSA_HOME and the user launcher shim.
+ * Leaves metadata/ and legacy versions/ intact for reinstall / explicit cleanup.
  */
-export function uninstallFrameworkRuntime(home = spinosaHome()): {
+export function uninstallFrameworkRuntime(
+  home = spinosaHome(),
+  options?: { purgeLegacyVersions?: boolean },
+): {
   home: string
   removed: UninstallTarget[]
   error?: string
@@ -80,7 +96,7 @@ export function uninstallFrameworkRuntime(home = spinosaHome()): {
   if (markerError) return { home, removed: [], error: markerError }
 
   const removed = removeUninstallTargets([
-    ...frameworkRuntimeTargets(home),
+    ...frameworkRuntimeTargets(home, options),
     ...launcherShimTargets(),
   ])
   return { home, removed }

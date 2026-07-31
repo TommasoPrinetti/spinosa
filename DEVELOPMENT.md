@@ -19,38 +19,26 @@ bun run spinosa doctor
 
 `bun run dev` / `bun run spinosa` run `packages/spinosa-cli`, set `SPINOSA_TEMPLATE_ROOT` to the repo root, ensure `@opentui` is linked at the root for preload, and spawn the kernel. **PWD** is the project directory the TUI opens.
 
-### Local `./spinosa` shim (same as installed CLI)
+End-user installs (from GitHub releases) use a self-contained platform binary — no Bun on the user machine. Development from this checkout remains source-based.
+
+### Local product binary (optional)
 
 ```bash
-cd /path/to/spinosa
-./spinosa version
-./spinosa doctor
-
-# Launch TUI against another folder:
-cd ~/your-project
-/path/to/spinosa/spinosa
-# equivalent:
-SPINOSA_HOME=~/.spinosa /path/to/spinosa/workspace-template/.bin/spinosa
+bun run build:binaries:host
+bun script/smoke-install.ts --binary dist/v$(jq -r .version package.json)/spinosa-$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/')
 ```
 
-The shim auto-detects this checkout from `workspace-template/.spinosa/workspace-files.tsv` and links `@opentui` when needed.
+### Local `./spinosa` / workspace forwarder
 
-### Alternative: run via the spinosa shim (dev mode)
+After the binary hard cut, `workspace-template/.bin/spinosa` forwards to `$SPINOSA_HOME/bin/spinosa`. For checkout development prefer `bun run dev` / `bun run spinosa`.
 
-```bash
-cd /path/to/spinosa
-SPINOSA_HOME=~/.spinosa ./workspace-template/.bin/spinosa
-```
-
-The shim auto-detects dev mode from `workspace-template/.spinosa/workspace-files.tsv`.
-
-Set `SPINOSA_FRAMEWORK_ROOT` or `SPINOSA_TEMPLATE_ROOT` when the framework root is not the current working directory.
+Set `SPINOSA_FRAMEWORK_ROOT` or `SPINOSA_TEMPLATE_ROOT` when the framework/template root is not the current working directory.
 
 ## Directory Layout
 
 ```
 workspace-template/  ← Files shipped into Spinosa workspaces (via workspace-files.tsv)
-  .bin/spinosa       ← Bash launcher and command router
+  .bin/spinosa       ← Minimal forwarder to ~/.spinosa/bin/spinosa (product installs)
   .spinosa/          ← Workspace manifest and local state templates
   .agents/           ← Canonical skills and agent instructions
   .opencode/         ← OpenCode adapter mirror
@@ -58,18 +46,19 @@ workspace-template/  ← Files shipped into Spinosa workspaces (via workspace-fi
   .hermes/           ← Hermes adapter and generated workspace config
   system/ docs/      ← Workspace system files and user docs
 packages/            ← Runtime source (kernel, tui, spinosa-core, llm, and deps)
-install.sh           ← User-facing installer (curl | bash)
+install.sh           ← User-facing binary installer (curl | bash)
 package.json         ← Bun workspace root
-script/release/      ← TypeScript release pipeline (preflight, bump, build, verify-local, git-tag, publish-version, channel, verify-remote)
+script/release/      ← TypeScript release pipeline (preflight, bump, build, verify-local, smoke, git-tag, publish-version, channel, verify-remote)
+script/build-release-binaries.ts ← Product binary build (four platforms)
 ```
 
 ## Codebase Structure
 
 | Package | Path | What it does |
 |---------|------|-------------|
-| **spinosa-core** | `packages/spinosa-core/` | Product workspace behavior: create/update, import, channels, preflight, upgrade, document converters. |
+| **spinosa-core** | `packages/spinosa-core/` | Product workspace behavior: create/update, import, channels, preflight, upgrade, document converters, distribution contract. |
 | **spinosa-cli** | `packages/spinosa-cli/` | Dev entrypoint (`bun run dev`). Spawns kernel, re-execs on preflight exit `10`. |
-| **spinosa-kernel** | `packages/spinosa-kernel/` | Executable CLI host (`src/index.ts`). Commands in `src/cli/cmd/`. |
+| **spinosa-kernel** | `packages/spinosa-kernel/` | Executable CLI host (`src/index.ts`) — product compile entry. Commands in `src/cli/cmd/`. |
 | **kernel-core** | `packages/core/` (`@spinosa/kernel-core`) | Inherited runtime internals from the upstream kernel. |
 | **tui** | `packages/tui/` | Terminal UI. Spinosa routes in `src/routes/spinosa/`. Entry: `src/spinosa-cli.ts`. |
 | **llm** | `packages/llm/` | Effect Schema-first LLM provider core. |
@@ -77,7 +66,8 @@ script/release/      ← TypeScript release pipeline (preflight, bump, build, ve
 ## Key Files
 
 ### TUI Launch Flow
-- `workspace-template/.bin/spinosa` — bash bootstrap. Resolves framework root and bun, then execs the kernel CLI or launches the TUI.
+- Product install: `~/.spinosa/bin/spinosa` (compiled kernel). Workspace `.bin/spinosa` forwards to it.
+- Dev: `bun run dev` → `packages/spinosa-cli` → kernel TypeScript entry.
 - `packages/spinosa-cli/src/index.ts` — `bun run dev` entry; re-execs on preflight exit `10`.
 - `packages/spinosa-kernel/src/cli/cmd/tui.ts` — runs launch preflight **before** spawning the TUI worker.
 - `packages/spinosa-core/src/commands/preflight.ts` — upgrade check and workspace updates before TUI render.

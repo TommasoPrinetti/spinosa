@@ -8,6 +8,8 @@
  * stop without auto-starting the TUI.
  */
 import path from "node:path"
+import { existsSync } from "node:fs"
+import { spawnSync } from "node:child_process"
 import { homedir } from "node:os"
 import { confirmPrompt } from "../utils/confirm"
 import { spinosaLogInfo } from "../utils/log"
@@ -33,6 +35,7 @@ export const LAUNCH_STATUS_UPGRADE_DONE = "upgrade complete — run spinosa agai
 
 export interface WorkspaceUpgradeOfferDeps {
   confirm(question: string, defaultYes?: boolean): Promise<boolean>
+  /** Resolve template/framework root for the installed version (binary cache or legacy tree). */
   frameworkRoot(version: string): string
   updateWorkspace(workspacePath: string, frameworkRoot: string): Promise<UpdateResult>
   out(message: string): void
@@ -43,12 +46,36 @@ export interface PreflightDependencies extends WorkspaceUpgradeOfferDeps {
   upgradeFramework(): Promise<UpgradeResult>
 }
 
+function defaultFrameworkRootForVersion(version: string): string {
+  const home = process.env.SPINOSA_HOME ?? path.join(homedir(), ".spinosa")
+  const envRoot = process.env.SPINOSA_TEMPLATE_ROOT
+  if (envRoot) return envRoot
+
+  const binary = path.join(home, "bin", "spinosa")
+  if (existsSync(binary)) {
+    try {
+      const probe = spawnSync(binary, ["internal", "template", "ensure", "--json"], {
+        encoding: "utf-8",
+        env: process.env,
+      })
+      if (probe.status === 0) {
+        const parsed = JSON.parse(probe.stdout) as { templateRoot?: string; ok?: boolean }
+        if (parsed.ok && parsed.templateRoot) return parsed.templateRoot
+      }
+    } catch {
+      /* fall through */
+    }
+  }
+
+  return path.join(home, "versions", version)
+}
+
 const defaults: PreflightDependencies = {
   checkUpgradeAvailable,
   upgradeFramework: () => upgradeFramework({ yes: true }),
   updateWorkspace: (workspacePath, frameworkRoot) => updateWorkspace({ workspacePath, frameworkRoot }),
   confirm: (question, defaultYes) => confirmPrompt(question, defaultYes),
-  frameworkRoot: (version) => path.join(process.env.SPINOSA_HOME ?? path.join(homedir(), ".spinosa"), "versions", version),
+  frameworkRoot: defaultFrameworkRootForVersion,
   out: (message) => process.stdout.write(`${message}\n`),
 }
 

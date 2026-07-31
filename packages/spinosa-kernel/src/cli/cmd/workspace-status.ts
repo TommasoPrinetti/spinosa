@@ -4,10 +4,9 @@ import {
   readWorkspaceMeta,
   isSpinosaWorkspace,
   getFrameworkHealth,
-  readFrameworkVersionFromRoot,
-  resolveFrameworkRoot,
-  detectDocumentTools,
-} from "@spinosa/core"
+} from "@spinosa/core/workspace/meta"
+import { readFrameworkVersionFromRoot, resolveFrameworkRoot } from "@spinosa/core/framework/discovery"
+import { detectDocumentTools } from "@spinosa/core/scan/scanner"
 import { getFormat, log, emitResult, type OutputFormat } from "../output"
 
 interface StatusArgs {

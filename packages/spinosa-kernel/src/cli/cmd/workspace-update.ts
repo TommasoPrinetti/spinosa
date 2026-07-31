@@ -1,6 +1,8 @@
 import path from "node:path"
 import type { Argv, CommandModule } from "yargs"
-import { isSpinosaWorkspace, resolveFrameworkRoot, updateWorkspace } from "@spinosa/core"
+import { isSpinosaWorkspace } from "@spinosa/core/workspace/meta"
+import { resolveFrameworkRoot } from "@spinosa/core/framework/discovery"
+import { updateWorkspace } from "@spinosa/core/commands/update"
 import { getFormat, emitResult, log, type OutputFormat } from "../output"
 
 interface UpdateArgs {

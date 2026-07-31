@@ -1,13 +1,4 @@
 import { readFile } from "node:fs/promises"
-import {
-  pdfPageCount as jsPdfPageCount,
-  pdfPageHasExtractableText as jsPdfPageHasText,
-  pdfTextPagesMeetThreshold as jsPdfTextPagesThreshold,
-  withPdfDocument,
-  pdfDocumentTextPagesMeetThreshold,
-} from "./pdf-js"
-
-export { pdfExtractAllText, pdfExtractPageTexts, pdfRenderPageToPng } from "./pdf-js"
 
 const QUICK_SCAN_LEN = 262144
 const PDFJS_TIMEOUT_MS = 5000
@@ -22,9 +13,29 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   })
 }
 
+async function pdfJs() {
+  return import("./pdf-js")
+}
+
+export async function pdfExtractAllText(pdfPath: string): Promise<string> {
+  const m = await pdfJs()
+  return m.pdfExtractAllText(pdfPath)
+}
+
+export async function pdfExtractPageTexts(pdfPath: string): Promise<{ page: number; text: string }[]> {
+  const m = await pdfJs()
+  return m.pdfExtractPageTexts(pdfPath)
+}
+
+export async function pdfRenderPageToPng(pdfPath: string, pageNumber: number, dpi?: number): Promise<Buffer> {
+  const m = await pdfJs()
+  return m.pdfRenderPageToPng(pdfPath, pageNumber, dpi)
+}
+
 export async function pdfPageCount(pdfPath: string): Promise<number> {
   try {
-    return await jsPdfPageCount(pdfPath)
+    const m = await pdfJs()
+    return await m.pdfPageCount(pdfPath)
   } catch {
     return 1
   }
@@ -35,7 +46,8 @@ export async function pdfPageHasExtractableText(
   page: number,
 ): Promise<boolean> {
   try {
-    return await jsPdfPageHasText(pdfPath, page)
+    const m = await pdfJs()
+    return await m.pdfPageHasExtractableText(pdfPath, page)
   } catch {
     return false
   }
@@ -46,7 +58,8 @@ export async function pdfTextPagesMeetThreshold(
   pageCount: number,
 ): Promise<boolean> {
   try {
-    return await jsPdfTextPagesThreshold(pdfPath, pageCount)
+    const m = await pdfJs()
+    return await m.pdfTextPagesMeetThreshold(pdfPath, pageCount)
   } catch {
     return false
   }
@@ -75,8 +88,9 @@ export async function isTextBasedPdf(pdfPath: string): Promise<boolean> {
   ) return true
 
   try {
+    const m = await pdfJs()
     return await withTimeout(
-      withPdfDocument(pdfPath, (doc) => pdfDocumentTextPagesMeetThreshold(doc)),
+      m.withPdfDocument(pdfPath, (doc) => m.pdfDocumentTextPagesMeetThreshold(doc)),
       PDFJS_TIMEOUT_MS,
     )
   } catch {

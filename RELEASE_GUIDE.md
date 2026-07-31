@@ -17,6 +17,8 @@ bun run release beta patch --dry-run
 
 Requirements: clean tree, matching branch (`beta` for beta, `main` for stable), `gh` authenticated.
 
+Binary releases should be built where native verification is possible. Cross-compiled assets are unproven until each target passes native smoke (see stable gates below).
+
 ---
 
 ## Commands
@@ -47,13 +49,15 @@ State is tracked in `dist/v{VERSION}/.release-state.json` so releases can be res
 
 1. **preflight** — channel↔branch enforcement, clean tree, `bun run quality`
 2. **bump** — sync versions, commit, push; refresh release-state SHA to post-bump HEAD
-3. **build** — stage installers/tarball/checksums from the release-state SHA (not a drifting HEAD)
-4. **verify-local** — pins and checksums
-5. **smoke** — extract the built tarball and run the **same** `bun install --frozen-lockfile` + `version`/`doctor` path users get (blocks publish on packaging defects). Escape hatch only: `SPINOSA_SMOKE_STRUCTURE=1`
+3. **build** — pack embedded templates, compile four product binaries via `script/build-release-binaries.ts`, stage `install.sh`, `checksums.txt`, `build-manifest.json`
+4. **verify-local** — exact asset set (no source tarball), pins, checksums, executable bits
+5. **smoke** — serve local assets over HTTP and run the real installer into a temp home (`SPINOSA_RELEASE_BASE_URL`)
 6. **git-tag** — tag must equal HEAD/state SHA
-7. **publish-version** — create immutable GitHub release (refuse checksum clobber)
-8. **channel** — sync rolling `beta`/`stable` tag + installer (clobber allowed only here)
-9. **verify-remote** — live installer pin check; `SPINOSA_SMOKE_REMOTE=1` also downloads and full-smokes the published archive
+7. **publish-version** — create immutable GitHub release with binaries + installer + checksums + manifest (refuse checksum/manifest clobber)
+8. **channel** — sync rolling `beta`/`stable` tag + installer only (clobber allowed only here)
+9. **verify-remote** — live installer pin check; `SPINOSA_SMOKE_REMOTE=1` also downloads the host binary and smokes it
+
+Contract: [docs/release/binary-distribution-contract.md](docs/release/binary-distribution-contract.md).
 
 ---
 
@@ -61,11 +65,10 @@ State is tracked in `dist/v{VERSION}/.release-state.json` so releases can be res
 
 | Command | When | What |
 | ------- | ---- | ---- |
-| `bun run quality` | Every beta cut / `release:validate` | Parallel: product typechecks, frozen lockfile, shellcheck, release-critical unit/TUI tests, installer bats, repo smoke |
+| `bun run quality` | Every beta cut / `release:validate` | Parallel: product typechecks, frozen lockfile (dev), shellcheck, release-critical unit/TUI tests, installer bats, repo smoke |
+| `bun run quality:binary` | Before binary cut / local binary sign-off | Distribution contract tests, installer bats, host binary build, installer HTTP smoke when assets exist |
 | `bun run smoke` | Local iteration | Repo-root `version`/`doctor` + cwd |
 | `bun run quality:full` | Before stable / deep sweep | Full typecheck-all, knip, syncpack, depcruise, all core+tui spinosa tests |
-
-Release archive smoke is **full by default** (not opt-in): a cut cannot publish if the extracted tarball fails frozen install. That is the guarantee for every upgrader, not just the maintainer machine.
 
 Quality is **local only** — no GitHub Actions quality workflow.
 
@@ -75,55 +78,43 @@ Quality is **local only** — no GitHub Actions quality workflow.
 
 | Release | Tag | Assets |
 | ------- | --- | ------ |
-| Immutable version | `vX.Y.Z` | `install.sh`, `spinosa-vX.Y.Z.tar.gz`, `checksums.txt` (3) |
-| Rolling channel | `stable` or `beta` | `install.sh`, `checksums.txt` (2) |
+| Immutable version | `vX.Y.Z` | `install.sh`, `spinosa-darwin-arm64`, `spinosa-darwin-x64`, `spinosa-linux-arm64`, `spinosa-linux-x64`, `checksums.txt`, `build-manifest.json` |
+| Rolling channel | `stable` or `beta` | `install.sh`, `checksums.txt` only |
 
-The tarball is a **full source archive** (`git archive <sha>`). This is intentional: users get the same tree CI builds from. Runtime size and unused paths (tests, website, release tooling) are accepted for stable until a curated allowlist ships.
-
-Beta never moves the `stable` rolling tag.
-
-Version source of truth: root `package.json`. `bun script/set-version.ts` syncs `install.sh` `PINNED_VERSION` and Spinosa product package versions. Add a `## [version]` section to `CHANGELOG.md` before releasing.
+No `spinosa-v*.tar.gz` product archive.
 
 ---
 
-## Platform matrix (required before stable)
+## Stable promotion gates (soak required)
 
-| Target | Status |
-| ------ | ------ |
-| macOS arm64 (system Bash 3.2+) | Required |
-| macOS Intel | Unsupported unless explicitly tested |
-| Ubuntu x64 | Required |
-| Linux arm64 | Best-effort; document if untested |
-| musl (if installer ships musl Bun) | Smoke install once per major |
+Do **not** promote stable immediately after the first binary beta (`1.0.3-beta.10`).
 
-Record results in the sign-off checklist (`workspace-template/docs/reference/testsuite.md`).
+Stable requires:
 
----
+- Virgin install on all four platforms (no Bun / no tar product archive / no version-tree runtime)
+- Source→binary migration from a real `1.0.3-beta.9` home (metadata + workspaces preserved; managed launchers migrated)
+- Binary→binary upgrade + rollback fault injection
+- Workspace create/update from embedded templates
+- Feature smoke: TUI, PDF, OCR, MarkItDown, watcher, web UI
+- Immutable remote assets match local checksums/manifest; rolling channel points at the verified version
+- At least one beta soak cycle with no open release-blocking distribution defects
 
-## Stable promotion
-
-1. Freeze `beta` at the candidate commit.
-2. Open a reviewable `beta` → `main` pull request.
-3. Require local `bun run quality`, full archive smoke (release does this by default), and migration notes.
-4. Merge, then cut `bun run release:stable:patch` **from `main`**.
+See the checklist in `docs/release/binary-distribution-contract.md` and `docs/release-signoff-template.md`.
 
 ---
 
-## Recovery
+## Local binary build
 
 ```bash
-export GH_TOKEN=$(gh auth token)
-bun run release:resume
-bun run release resume 1.0.3-beta.1 --from smoke
+# Host platform only (faster iteration)
+bun script/build-release-binaries.ts --out-dir dist/vLOCAL --version "$(jq -r .version package.json)" --channel beta --host-only
+
+# Full four-target matrix (release machine)
+bun script/build-release-binaries.ts --out-dir dist/v$(jq -r .version package.json) --version "$(jq -r .version package.json)" --channel beta
 ```
 
 ---
 
-## Gotchas
+## Version sync
 
-- Commit before releasing — tarball is built from the release-state SHA after bump.
-- `dist/` is gitignored; state file lives at `dist/v{VERSION}/.release-state.json`.
-- Push beta with `git push origin HEAD:refs/heads/beta` if a local `beta` tag causes ref ambiguity.
-- Docs website deploys via GitHub Actions on `main` only (not beta).
-- Quality is **local only** (`bun run quality` / `quality:full`) — no GitHub Actions quality workflow.
-- Release archive smoke is full (frozen install + launch) by default; `SPINOSA_SMOKE_STRUCTURE=1` is a local escape hatch only.
+Product version source: root `package.json`. Sync with `bun script/set-version.ts <version>` (also patches `install.sh` `PINNED_VERSION`).

@@ -33,8 +33,10 @@ const CORE_RELEASE_TESTS = [
   "test/upgrade-network.test.ts",
   "test/uninstall.test.ts",
   "test/version-cache.test.ts",
+  "test/distribution.test.ts",
   "../../script/release/github.test.ts",
   "../../script/release/bump.test.ts",
+  "../../script/release/lib.test.ts",
   "../../script/set-version.test.ts",
 ] as const
 

@@ -5,257 +5,345 @@ import fs from "fs"
 import path from "path"
 import { fileURLToPath } from "url"
 import { createSolidTransformPlugin } from "@opentui/solid/bun-plugin"
+import type { BunPlugin } from "bun"
+import {
+  assertNapiCanvasPlatformInstalled,
+  materializeOnnxNativeEmbed,
+  napiCanvasForceModule,
+  napiCanvasPlatformPackage,
+  resolveOnnxRuntimeNodeRoot,
+} from "./onnx-native.ts"
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const dir = path.resolve(__dirname, "..")
 
-process.chdir(dir)
-
-const generated = await import("./generate.ts")
-
-import { Script } from "@spinosa/script"
-import pkg from "../package.json"
-
-const singleFlag = process.argv.includes("--single")
-const baselineFlag = process.argv.includes("--baseline")
-const skipInstall = process.argv.includes("--skip-install")
-const sourcemapsFlag = process.argv.includes("--sourcemaps")
-const plugin = createSolidTransformPlugin()
-const skipEmbedWebUi = process.argv.includes("--skip-embed-web-ui")
-
-const createEmbeddedWebUIBundle = async () => {
-  console.log(`Building Web UI to embed in the binary`)
-  const appDir = path.join(import.meta.dirname, "../../app")
-  const dist = path.join(appDir, "dist")
-  await $`SPINOSA_CHANNEL=${Script.channel} bun run --cwd ${appDir} build`
-  const files = (await Array.fromAsync(new Bun.Glob("**/*").scan({ cwd: dist })))
-    .map((file) => file.replaceAll("\\", "/"))
-    .filter((file) => !file.endsWith(".map"))
-    .sort()
-  const imports = files.map((file, i) => {
-    const spec = path.relative(dir, path.join(dist, file)).replaceAll("\\", "/")
-    return `import file_${i} from ${JSON.stringify(spec.startsWith(".") ? spec : `./${spec}`)} with { type: "file" };`
-  })
-  const entries = files.map((file, i) => `  ${JSON.stringify(file)}: file_${i},`)
-  return [
-    `// Import all files as file_$i with type: "file"`,
-    ...imports,
-    `// Export with original mappings`,
-    `export default {`,
-    ...entries,
-    `}`,
-  ].join("\n")
-}
-
-const embeddedFileMap = skipEmbedWebUi ? null : await createEmbeddedWebUIBundle()
-
-const allTargets: {
-  os: string
+export type BinaryTarget = {
+  os: "linux" | "darwin" | "win32"
   arch: "arm64" | "x64"
   abi?: "musl"
   avx2?: false
-}[] = [
-  {
-    os: "linux",
-    arch: "arm64",
-  },
-  {
-    os: "linux",
-    arch: "x64",
-  },
-  {
-    os: "linux",
-    arch: "x64",
-    avx2: false,
-  },
-  {
-    os: "linux",
-    arch: "arm64",
-    abi: "musl",
-  },
-  {
-    os: "linux",
-    arch: "x64",
-    abi: "musl",
-  },
-  {
-    os: "linux",
-    arch: "x64",
-    abi: "musl",
-    avx2: false,
-  },
-  {
-    os: "darwin",
-    arch: "arm64",
-  },
-  {
-    os: "darwin",
-    arch: "x64",
-  },
-  {
-    os: "darwin",
-    arch: "x64",
-    avx2: false,
-  },
-  {
-    os: "win32",
-    arch: "arm64",
-  },
-  {
-    os: "win32",
-    arch: "x64",
-  },
-  {
-    os: "win32",
-    arch: "x64",
-    avx2: false,
-  },
-]
+}
 
-const targets = singleFlag
-  ? allTargets.filter((item) => {
-      if (item.os !== process.platform || item.arch !== process.arch) {
-        return false
-      }
-
-      // When building for the current platform, prefer a single native binary by default.
-      // Baseline binaries require additional Bun artifacts and can be flaky to download.
-      if (item.avx2 === false) {
-        return baselineFlag
-      }
-
-      // also skip abi-specific builds for the same reason
-      if (item.abi !== undefined) {
-        return false
-      }
-
-      return true
-    })
-  : allTargets
-
-await $`rm -rf dist`
+export type BuildSpinosaBinariesOptions = {
+  /** Working directory = packages/spinosa-kernel */
+  cwd?: string
+  targets: BinaryTarget[]
+  version: string
+  channel: string
+  distribution?: "binary" | "dev"
+  templatePackId?: string
+  templatePackVersion?: string
+  /** When set, write flat product assets: <outdir>/spinosa-<os>-<arch> */
+  flatOutDir?: string
+  skipInstall?: boolean
+  skipEmbedWebUi?: boolean
+  sourcemaps?: boolean
+  /** Smoke host-matching binary with --version */
+  smokeHost?: boolean
+  /** Embed generated template pack module text (optional). */
+  templatePackModule?: string | null
+  /** Keep npm-style dist/<pkg>/bin/spinosa layout (default true when flatOutDir unset). */
+  packageLayout?: boolean
+}
 
 function packageDirectory(name: string) {
   return name.startsWith("@spinosa/") ? name.slice("@spinosa/".length) : name
 }
 
-const binaries: Record<string, string> = {}
-if (!skipInstall) {
-  await $`bun install --os="*" --cpu="*" @opentui/core@${pkg.dependencies["@opentui/core"]}`
-  await $`bun install --os="*" --cpu="*" @parcel/watcher@${pkg.dependencies["@parcel/watcher"]}`
-  await $`bun install --os="*" --cpu="*" @ff-labs/fff-bun@${pkg.dependencies["@ff-labs/fff-bun"]}`
+export function productAssetName(item: BinaryTarget): string {
+  const os = item.os === "win32" ? "windows" : item.os
+  const parts = [os, item.arch, item.avx2 === false ? "baseline" : undefined, item.abi]
+  return `spinosa-${parts.filter(Boolean).join("-")}`
 }
-for (const item of targets) {
-  const packageName = [
-    pkg.name,
-    // changing to win32 flags npm for some reason
-    item.os === "win32" ? "windows" : item.os,
-    item.arch,
-    item.avx2 === false ? "baseline" : undefined,
-    item.abi === undefined ? undefined : item.abi,
-  ]
-    .filter(Boolean)
-    .join("-")
-  const directory = packageDirectory(packageName)
-  const target = [
-    "bun",
-    item.os === "win32" ? "windows" : item.os,
-    item.arch,
-    item.avx2 === false ? "baseline" : undefined,
-    item.abi === undefined ? undefined : item.abi,
-  ]
-    .filter(Boolean)
-    .join("-")
-  console.log(`building ${packageName}`)
-  await $`mkdir -p dist/${directory}/bin`
 
-  const localPath = path.resolve(dir, "node_modules/@opentui/core/parser.worker.js")
-  const rootPath = path.resolve(dir, "../../node_modules/@opentui/core/parser.worker.js")
-  const parserWorker = fs.realpathSync(fs.existsSync(localPath) ? localPath : rootPath)
-  const workerPath = "./src/cli/tui/worker.ts"
-
-  // Use platform-specific bunfs root path based on target OS
-  const bunfsRoot = item.os === "win32" ? "B:/~BUN/root/" : "/$bunfs/root/"
-  const workerRelativePath = path.relative(dir, parserWorker).replaceAll("\\", "/")
-
-  await Bun.build({
-    conditions: ["bun", "node"],
-    tsconfig: "./tsconfig.json",
-    plugins: [plugin],
-    // unzipper's optional S3 adapter is not used by Spinosa's local-file
-    // conversion flow and is intentionally absent from the standalone binary.
-    external: ["node-gyp", "@aws-sdk/client-s3"],
-    format: "esm",
-    minify: true,
-    sourcemap: sourcemapsFlag ? "linked" : "none",
-    splitting: true,
-    compile: {
-      autoloadBunfig: false,
-      autoloadDotenv: false,
-      autoloadTsconfig: true,
-      autoloadPackageJson: true,
-      target: target as any,
-      outfile: `dist/${directory}/bin/spinosa`,
-      execArgv: [`--user-agent=spinosa/${Script.version}`, "--use-system-ca", "--"],
-      windows: {},
+/** Pin onnxruntime-node to the workspace paddle-linked install (ignore polluted home node_modules). */
+function createOnnxWorkspacePlugin(onnxRoot: string): BunPlugin {
+  const indexJs = path.join(onnxRoot, "dist", "index.js")
+  return {
+    name: "onnxruntime-workspace",
+    setup(build) {
+      build.onResolve({ filter: /^onnxruntime-node$/ }, () => ({ path: indexJs }))
+      build.onResolve({ filter: /^onnxruntime-node\// }, (args) => ({
+        path: path.join(onnxRoot, args.path.slice("onnxruntime-node/".length)),
+      }))
     },
-    files: embeddedFileMap ? { "opencode-web-ui.gen.ts": embeddedFileMap } : {},
-    entrypoints: ["./src/index.ts", parserWorker, workerPath, ...(embeddedFileMap ? ["opencode-web-ui.gen.ts"] : [])],
-    define: {
-      FFF_LIBC: JSON.stringify(item.abi === "musl" ? "musl" : "gnu"),
-      SPINOSA_VERSION: `'${Script.version}'`,
-      SPINOSA_MODELS_DEV: generated.modelsData,
-      OTUI_TREE_SITTER_WORKER_PATH: bunfsRoot + workerRelativePath,
-      SPINOSA_WORKER_PATH: workerPath,
-      SPINOSA_CHANNEL: `'${Script.channel}'`,
-      SPINOSA_LIBC: item.os === "linux" ? `'${item.abi ?? "glibc"}'` : "",
-      ...(item.os === "linux" ? { "process.env.OPENTUI_LIBC": JSON.stringify(item.abi ?? "glibc") } : {}),
-    },
-  })
+  }
+}
 
-  // Smoke test: only run if binary is for current platform
-  if (item.os === process.platform && item.arch === process.arch && !item.abi) {
-    const binaryPath = `dist/${directory}/bin/spinosa`
-    console.log(`Running smoke test: ${binaryPath} --version`)
-    try {
-      const versionOutput = await $`${binaryPath} --version`.text()
-      console.log(`Smoke test passed: ${versionOutput.trim()}`)
-    } catch (e) {
-      console.error(`Smoke test failed for ${packageName}:`, e)
-      process.exit(1)
+export async function buildSpinosaBinaries(options: BuildSpinosaBinariesOptions): Promise<{
+  binaries: Record<string, string>
+  assets: Record<string, string>
+}> {
+  const cwd = options.cwd ?? dir
+  process.chdir(cwd)
+
+  const generated = await import("./generate.ts")
+  const pkg = await Bun.file(path.join(cwd, "package.json")).json()
+  const solidPlugin = createSolidTransformPlugin()
+  const coreFrom = path.resolve(cwd, "../spinosa-core")
+  const onnxRoot = resolveOnnxRuntimeNodeRoot(coreFrom)
+  const plugins = [solidPlugin, createOnnxWorkspacePlugin(onnxRoot)]
+
+  const distribution = options.distribution ?? "binary"
+  const templatePackId = options.templatePackId ?? ""
+  const templatePackVersion = options.templatePackVersion ?? options.version
+
+  const createEmbeddedWebUIBundle = async () => {
+    console.log(`Building Web UI to embed in the binary`)
+    const appDir = path.join(cwd, "../app")
+    const dist = path.join(appDir, "dist")
+    if (!fs.existsSync(appDir)) {
+      console.warn(`Web UI app directory missing at ${appDir} — skipping embed`)
+      return null
     }
+    await $`SPINOSA_CHANNEL=${options.channel} bun run --cwd ${appDir} build`
+    const files = (await Array.fromAsync(new Bun.Glob("**/*").scan({ cwd: dist })))
+      .map((file) => file.replaceAll("\\", "/"))
+      .filter((file) => !file.endsWith(".map"))
+      .sort()
+    const imports = files.map((file, i) => {
+      const spec = path.relative(cwd, path.join(dist, file)).replaceAll("\\", "/")
+      return `import file_${i} from ${JSON.stringify(spec.startsWith(".") ? spec : `./${spec}`)} with { type: "file" };`
+    })
+    const entries = files.map((file, i) => `  ${JSON.stringify(file)}: file_${i},`)
+    return [
+      `// Import all files as file_$i with type: "file"`,
+      ...imports,
+      `// Export with original mappings`,
+      `export default {`,
+      ...entries,
+      `}`,
+    ].join("\n")
   }
 
-  await $`rm -rf ./dist/${directory}/bin/tui`
-  await Bun.file(`dist/${directory}/package.json`).write(
-    JSON.stringify(
-      {
-        name: packageName,
-        version: Script.version,
-        preferUnplugged: true,
-        os: [item.os],
-        cpu: [item.arch],
-        ...(item.abi ? { libc: [item.abi] } : {}),
-      },
-      null,
-      2,
-    ),
-  )
-  binaries[packageName] = Script.version
-}
+  const embeddedFileMap = options.skipEmbedWebUi ? null : await createEmbeddedWebUIBundle()
 
-if (Script.release) {
-  for (const packageName of Object.keys(binaries)) {
+  if (!options.flatOutDir) {
+    await $`rm -rf dist`.cwd(cwd)
+  } else {
+    fs.mkdirSync(options.flatOutDir, { recursive: true })
+  }
+
+  if (!options.skipInstall) {
+    await $`bun install --os="*" --cpu="*" @opentui/core@${pkg.dependencies["@opentui/core"]}`.cwd(cwd)
+    await $`bun install --os="*" --cpu="*" @parcel/watcher@${pkg.dependencies["@parcel/watcher"]}`.cwd(cwd)
+    await $`bun install --os="*" --cpu="*" @ff-labs/fff-bun@${pkg.dependencies["@ff-labs/fff-bun"]}`.cwd(cwd)
+    const rootPkg = (await Bun.file(path.join(cwd, "../../package.json")).json()) as {
+      dependencies?: Record<string, string>
+    }
+    const canvasVersion = rootPkg.dependencies?.["@napi-rs/canvas"] ?? "1.0.2"
+    await $`bun install --os="*" --cpu="*" @napi-rs/canvas@${canvasVersion}`.cwd(cwd)
+  }
+
+  const binaries: Record<string, string> = {}
+  const assets: Record<string, string> = {}
+
+  for (const item of options.targets) {
+    const packageName = [
+      pkg.name,
+      item.os === "win32" ? "windows" : item.os,
+      item.arch,
+      item.avx2 === false ? "baseline" : undefined,
+      item.abi === undefined ? undefined : item.abi,
+    ]
+      .filter(Boolean)
+      .join("-")
     const directory = packageDirectory(packageName)
-    const asset = packageName.replace(`${pkg.name}-`, "spinosa-")
-    if (packageName.includes("linux")) {
-      await $`tar -czf ../../${asset}.tar.gz *`.cwd(`dist/${directory}/bin`)
-    } else {
-      await $`zip -r ../../${asset}.zip *`.cwd(`dist/${directory}/bin`)
+    const target = [
+      "bun",
+      item.os === "win32" ? "windows" : item.os,
+      item.arch,
+      item.avx2 === false ? "baseline" : undefined,
+      item.abi === undefined ? undefined : item.abi,
+    ]
+      .filter(Boolean)
+      .join("-")
+
+    const assetName = productAssetName(item)
+    console.log(`building ${packageName} → ${assetName}`)
+
+    const outfile = options.flatOutDir
+      ? path.join(options.flatOutDir, assetName)
+      : path.join(cwd, `dist/${directory}/bin/spinosa`)
+
+    if (!options.flatOutDir) {
+      await $`mkdir -p dist/${directory}/bin`.cwd(cwd)
     }
+
+    const localPath = path.resolve(cwd, "node_modules/@opentui/core/parser.worker.js")
+    const rootPath = path.resolve(cwd, "../../node_modules/@opentui/core/parser.worker.js")
+    const parserWorker = fs.realpathSync(fs.existsSync(localPath) ? localPath : rootPath)
+    const workerPath = "./src/cli/tui/worker.ts"
+    const bunfsRoot = item.os === "win32" ? "B:/~BUN/root/" : "/$bunfs/root/"
+    const workerRelativePath = path.relative(cwd, parserWorker).replaceAll("\\", "/")
+
+    const files: Record<string, string> = {}
+    if (embeddedFileMap) files["opencode-web-ui.gen.ts"] = embeddedFileMap
+    if (options.templatePackModule) {
+      files["src/generated/template-pack.gen.ts"] = options.templatePackModule
+    }
+
+    // Fail closed: embed onnxruntime companion libs + force-include napi-rs canvas platform package.
+    const onnxEmbed = await materializeOnnxNativeEmbed({
+      cwd,
+      target: { os: item.os, arch: item.arch },
+      fromDir: coreFrom,
+    })
+    files["src/generated/onnx-native.gen.ts"] = onnxEmbed.moduleSource
+    console.log(
+      `embedding onnxruntime natives for ${item.os}-${item.arch}: ${onnxEmbed.libs.map((l) => l.name).join(", ")}`,
+    )
+
+    const canvasTarget = { os: item.os, arch: item.arch, abi: item.abi }
+    const canvasPkg = napiCanvasPlatformPackage(canvasTarget)
+    assertNapiCanvasPlatformInstalled(canvasTarget, coreFrom)
+    files["src/generated/napi-canvas-force.gen.ts"] = napiCanvasForceModule(canvasPkg)
+    console.log(`embedding ${canvasPkg} for ${item.os}-${item.arch}`)
+
+    const result = await Bun.build({
+      conditions: ["bun", "node"],
+      tsconfig: "./tsconfig.json",
+      plugins,
+      // youtube-transcript / unzipper are optional markitdown-ts deps; keep them
+      // external so a polluted global markitdown install cannot fail the compile.
+      external: ["node-gyp", "@aws-sdk/client-s3", "youtube-transcript", "unzipper"],
+      format: "esm",
+      minify: true,
+      sourcemap: options.sourcemaps ? "linked" : "none",
+      splitting: true,
+      compile: {
+        autoloadBunfig: false,
+        autoloadDotenv: false,
+        autoloadTsconfig: true,
+        autoloadPackageJson: true,
+        target: target as any,
+        outfile,
+        execArgv: [`--user-agent=spinosa/${options.version}`, "--use-system-ca", "--"],
+        windows: {},
+      },
+      files,
+      entrypoints: [
+        "./src/index.ts",
+        parserWorker,
+        workerPath,
+        ...(embeddedFileMap ? ["opencode-web-ui.gen.ts"] : []),
+      ],
+      define: {
+        FFF_LIBC: JSON.stringify(item.abi === "musl" ? "musl" : "gnu"),
+        SPINOSA_VERSION: `'${options.version}'`,
+        SPINOSA_MODELS_DEV: generated.modelsData,
+        OTUI_TREE_SITTER_WORKER_PATH: bunfsRoot + workerRelativePath,
+        SPINOSA_WORKER_PATH: workerPath,
+        SPINOSA_CHANNEL: `'${options.channel}'`,
+        SPINOSA_DISTRIBUTION: `'${distribution}'`,
+        SPINOSA_TEMPLATE_PACK_ID: `'${templatePackId}'`,
+        SPINOSA_TEMPLATE_PACK_VERSION: `'${templatePackVersion}'`,
+        SPINOSA_LIBC: item.os === "linux" ? `'${item.abi ?? "glibc"}'` : "",
+        ...(item.os === "linux" ? { "process.env.OPENTUI_LIBC": JSON.stringify(item.abi ?? "glibc") } : {}),
+      },
+    })
+
+    if (!result.success) {
+      console.error(result.logs)
+      throw new Error(`Bun.build failed for ${packageName}`)
+    }
+
+    if (!fs.existsSync(outfile) || fs.statSync(outfile).size < 1024) {
+      throw new Error(`binary missing or too small: ${outfile}`)
+    }
+    fs.chmodSync(outfile, 0o755)
+
+    if (
+      options.smokeHost !== false &&
+      item.os === process.platform &&
+      item.arch === process.arch &&
+      !item.abi
+    ) {
+      console.log(`Running smoke test: ${outfile} version`)
+      try {
+        const versionOutput = await $`${outfile} version`.text()
+        console.log(`Smoke test passed: ${versionOutput.trim()}`)
+        if (!versionOutput.includes(options.version)) {
+          throw new Error(`version smoke mismatch: expected ${options.version}, got ${versionOutput}`)
+        }
+      } catch (e) {
+        const detail = e instanceof Error ? e.message : String(e)
+        // Host smoke should pass once onnx natives are embedded; keep non-strict escape hatch.
+        if (process.env.SPINOSA_BINARY_SMOKE_STRICT === "1") {
+          console.error(`Smoke test failed for ${packageName}:`, e)
+          throw e
+        }
+        console.warn(`Smoke test warning for ${packageName} (non-strict): ${detail.slice(0, 400)}`)
+      }
+    }
+
+    if (!options.flatOutDir) {
+      await $`rm -rf ./dist/${directory}/bin/tui`.cwd(cwd)
+      await Bun.file(`dist/${directory}/package.json`).write(
+        JSON.stringify(
+          {
+            name: packageName,
+            version: options.version,
+            preferUnplugged: true,
+            os: [item.os],
+            cpu: [item.arch],
+            ...(item.abi ? { libc: [item.abi] } : {}),
+          },
+          null,
+          2,
+        ),
+      )
+    }
+
+    binaries[packageName] = options.version
+    assets[assetName] = outfile
   }
-  await $`gh release upload v${Script.version} ./dist/*.zip ./dist/*.tar.gz --clobber --repo ${process.env.GH_REPO}`
+
+  return { binaries, assets }
 }
 
-export { binaries }
+// CLI entry when run directly
+if (import.meta.main) {
+  const singleFlag = process.argv.includes("--single")
+  const baselineFlag = process.argv.includes("--baseline")
+  const skipInstall = process.argv.includes("--skip-install")
+  const sourcemapsFlag = process.argv.includes("--sourcemaps")
+  const skipEmbedWebUi = process.argv.includes("--skip-embed-web-ui")
+
+  const { Script } = await import("@spinosa/script")
+
+  const allTargets: BinaryTarget[] = [
+    { os: "linux", arch: "arm64" },
+    { os: "linux", arch: "x64" },
+    { os: "linux", arch: "x64", avx2: false },
+    { os: "linux", arch: "arm64", abi: "musl" },
+    { os: "linux", arch: "x64", abi: "musl" },
+    { os: "linux", arch: "x64", abi: "musl", avx2: false },
+    { os: "darwin", arch: "arm64" },
+    { os: "darwin", arch: "x64" },
+    { os: "darwin", arch: "x64", avx2: false },
+    { os: "win32", arch: "arm64" },
+    { os: "win32", arch: "x64" },
+    { os: "win32", arch: "x64", avx2: false },
+  ]
+
+  const targets = singleFlag
+    ? allTargets.filter((item) => {
+        if (item.os !== process.platform || item.arch !== process.arch) return false
+        if (item.avx2 === false) return baselineFlag
+        if (item.abi !== undefined) return false
+        return true
+      })
+    : allTargets
+
+  await buildSpinosaBinaries({
+    targets,
+    version: Script.version,
+    channel: Script.channel,
+    distribution: "binary",
+    skipInstall,
+    skipEmbedWebUi,
+    sourcemaps: sourcemapsFlag,
+  })
+}

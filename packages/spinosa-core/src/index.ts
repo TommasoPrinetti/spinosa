@@ -28,6 +28,12 @@ export * from "./extension/pdf"
 // --- framework
 export * from "./framework/discovery"
 export * from "./framework/manifest"
+export * from "./framework/template-pack"
+
+// --- distribution
+export * from "./distribution/contract"
+export * from "./distribution/bootstrap"
+export * from "./distribution/workspace-launcher"
 
 // --- workspace
 export * from "./workspace/meta"

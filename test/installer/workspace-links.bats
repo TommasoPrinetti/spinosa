@@ -1,82 +1,52 @@
 #!/usr/bin/env bats
+# Replaced OpenTUI/workspace link tests — binary distribution has no package links.
 
 setup() {
   export SPINOSA_INSTALLER_LIB_ONLY=1
   export NO_COLOR=1
   export SPINOSA_LOG_DISABLED=1
   export SPINOSA_HOME="$BATS_TEST_TMPDIR/.spinosa"
+  export SPINOSA_METADATA_DIR="$SPINOSA_HOME/metadata"
+  export SPINOSA_BIN_DIR="$BATS_TEST_TMPDIR/.local/bin"
   INSTALLER="$BATS_TEST_DIRNAME/../../install.sh"
   set --
   # shellcheck disable=SC1090
   source "$INSTALLER"
 }
 
-write_pkg_json() {
-  local dest="$1"
-  local name="$2"
-  mkdir -p "$(dirname "$dest")"
-  # install.sh extracts name via sed; keep "name" on its own line.
-  cat >"$dest" <<EOF
-{
-  "name": "${name}",
-  "version": "0.0.0"
-}
-EOF
+@test "installer no longer defines source package link helpers" {
+  ! declare -F ensure_workspace_links >/dev/null
+  ! declare -F ensure_opentui_links >/dev/null
+  ! declare -F install_bundled_bun >/dev/null
 }
 
-@test "ensure_workspace_links uses @spinosa namespace only" {
-  # Guard against regressing to @opencode-ai package links.
-  run bash -c '! grep -q "@opencode-ai" <<<"$(declare -f ensure_workspace_links)"'
+@test "release_asset_base uses GitHub immutable release by default" {
+  VERSION="1.0.3-beta.9"
+  unset SPINOSA_RELEASE_BASE_URL || true
+  run release_asset_base
   [ "$status" -eq 0 ]
-
-  fw_root="$BATS_TEST_TMPDIR/fw"
-  write_pkg_json "$fw_root/packages/spinosa-core/package.json" "@spinosa/core"
-  write_pkg_json "$fw_root/packages/other/package.json" "other"
-
-  ensure_workspace_links "$fw_root"
-
-  [ -L "$fw_root/node_modules/@spinosa/core" ]
-  [ ! -e "$fw_root/node_modules/@spinosa/other" ]
-  [ ! -d "$fw_root/node_modules/@opencode-ai" ]
+  [ "$output" = "https://github.com/medialab/spinosa/releases/download/v1.0.3-beta.9" ]
 }
 
-@test "ensure_workspace_links is idempotent for existing symlink" {
-  fw_root="$BATS_TEST_TMPDIR/fw2"
-  write_pkg_json "$fw_root/packages/spinosa-cli/package.json" "@spinosa/cli"
-
-  ensure_workspace_links "$fw_root"
-  first_target="$(readlink "$fw_root/node_modules/@spinosa/cli")"
-  ensure_workspace_links "$fw_root"
-  second_target="$(readlink "$fw_root/node_modules/@spinosa/cli")"
-
-  [ -n "$first_target" ]
-  [ "$first_target" = "$second_target" ]
+@test "release_asset_base honors SPINOSA_RELEASE_BASE_URL override" {
+  export SPINOSA_RELEASE_BASE_URL="http://127.0.0.1:8765/dist/"
+  run release_asset_base
+  [ "$status" -eq 0 ]
+  [ "$output" = "http://127.0.0.1:8765/dist" ]
 }
 
-@test "ensure_opentui_links mirrors kernel @opentui into framework root" {
-  fw_root="$BATS_TEST_TMPDIR/fw-opentui"
-  mkdir -p "$fw_root/packages/spinosa-kernel/node_modules/@opentui/solid"
-  mkdir -p "$fw_root/packages/spinosa-kernel/node_modules/@opentui/core"
-  mkdir -p "$fw_root/packages/spinosa-kernel/node_modules/@opentui/keymap"
-  : >"$fw_root/packages/spinosa-kernel/node_modules/@opentui/solid/preload.ts"
-
-  ensure_opentui_links "$fw_root"
-
-  [ -L "$fw_root/node_modules/@opentui/solid" ]
-  [ -L "$fw_root/node_modules/@opentui/core" ]
-  [ -L "$fw_root/node_modules/@opentui/keymap" ]
-  [ -f "$fw_root/node_modules/@opentui/solid/preload.ts" ]
+@test "spinosa_home_needs_repair detects owned home missing binary" {
+  mkdir -p "$SPINOSA_METADATA_DIR"
+  printf 'spinosa: true\n' >"$SPINOSA_METADATA_DIR/config.yaml"
+  run spinosa_home_needs_repair "$SPINOSA_HOME"
+  [ "$status" -eq 0 ]
 }
 
-@test "ensure_opentui_links is a no-op when root solid already exists" {
-  fw_root="$BATS_TEST_TMPDIR/fw-opentui-existing"
-  mkdir -p "$fw_root/node_modules/@opentui/solid"
-  mkdir -p "$fw_root/packages/spinosa-kernel/node_modules/@opentui/solid"
-  : >"$fw_root/node_modules/@opentui/solid/keep"
-  : >"$fw_root/packages/spinosa-kernel/node_modules/@opentui/solid/other"
-
-  ensure_opentui_links "$fw_root"
-
-  [ -f "$fw_root/node_modules/@opentui/solid/keep" ]
-  [ ! -f "$fw_root/node_modules/@opentui/solid/other" ]
+@test "spinosa_home_needs_repair is quiet when binary present" {
+  mkdir -p "$SPINOSA_METADATA_DIR" "$SPINOSA_HOME/bin"
+  printf 'spinosa: true\n' >"$SPINOSA_METADATA_DIR/config.yaml"
+  : >"$SPINOSA_HOME/bin/spinosa"
+  chmod +x "$SPINOSA_HOME/bin/spinosa"
+  run spinosa_home_needs_repair "$SPINOSA_HOME"
+  [ "$status" -ne 0 ]
 }

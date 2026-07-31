@@ -30,6 +30,16 @@ export interface PpuOcrFile {
 export interface PpuOcrBatchResult {
   converted: number
   skipped: number
+  /** Per-file or batch failure messages (when converted stays 0 or files are skipped due to errors). */
+  errors?: string[]
+  /** Terminal outcome for each file in order. */
+  files?: Array<{ rel: string; ok: boolean; error?: string }>
+}
+
+export interface PpuOcrFileResult {
+  rel: string
+  ok: boolean
+  error?: string
 }
 
 let servicePromise: Promise<PaddleOcrService> | undefined
@@ -181,6 +191,11 @@ async function ocrImage(service: PaddleOcrService, file: PpuOcrFile, shouldAbort
   return ocrImageBuffer(service, data, file.dest, titleFromRel(file.rel), file.rel, shouldAbort)
 }
 
+/** ppu-paddle-ocr Node `recognize()` accepts ArrayBuffer (or Canvas), not Buffer/Uint8Array. */
+export function bufferToOcrArrayBuffer(data: Buffer): ArrayBuffer {
+  return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer
+}
+
 async function ocrImageBuffer(
   service: PaddleOcrService,
   data: Buffer,
@@ -189,7 +204,7 @@ async function ocrImageBuffer(
   sourceRel: string,
   shouldAbort?: () => boolean,
 ): Promise<boolean> {
-  const buffer = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer
+  const buffer = bufferToOcrArrayBuffer(data)
   const result = await withTimeout(service.recognize(buffer), OCR_PAGE_TIMEOUT_MS, "OCR page") as PaddleOcrResult
   throwIfSpinosaCancelled(shouldAbort)
   writeMarkdown(destFile, title, result.text, sourceRel, result.confidence)
@@ -318,7 +333,7 @@ async function ocrPdf(
       throwIfSpinosaCancelled(shouldAbort)
       const pngBuffer = await pdfRenderDocumentPageToPng(doc, page, 180)
       throwIfSpinosaCancelled(shouldAbort)
-      const buffer = pngBuffer.buffer.slice(pngBuffer.byteOffset, pngBuffer.byteOffset + pngBuffer.byteLength) as ArrayBuffer
+      const buffer = bufferToOcrArrayBuffer(pngBuffer)
       const result = await withTimeout(service.recognize(buffer), OCR_PAGE_TIMEOUT_MS, `OCR page ${page}`) as PaddleOcrResult
       throwIfSpinosaCancelled(shouldAbort)
       output.set(page, result.text)
@@ -337,20 +352,31 @@ export async function runPpuOcrBatch(
     onProgress?: (current: number, total: number, relPath: string) => void
     onPageProgress?: (current: number, total: number, relPath: string, page: string) => void
     onLog?: (line: string) => void
+    onFileStart?: (relPath: string) => void
+    onFile?: (result: PpuOcrFileResult) => void
     shouldAbort?: () => boolean
   },
 ): Promise<PpuOcrBatchResult> {
   let converted = 0
   let skipped = 0
+  const errors: string[] = []
+  const fileResults: PpuOcrFileResult[] = []
   let service: PaddleOcrService
   try {
     throwIfSpinosaCancelled(options?.shouldAbort)
     service = await ppuService(options?.onLog)
   } catch (err) {
     if (isSpinosaCancellationError(err)) throw err
-    options?.onLog?.(`PPU PaddleOCR engine initialization failed: ${err instanceof Error ? err.message : String(err)} — skipping all ${files.length} file(s)`)
+    const msg = `PPU PaddleOCR engine initialization failed: ${err instanceof Error ? err.message : String(err)} — skipping all ${files.length} file(s)`
+    options?.onLog?.(msg)
+    errors.push(msg)
+    for (const file of files) {
+      const fr = { rel: file.rel, ok: false, error: msg }
+      fileResults.push(fr)
+      options?.onFile?.(fr)
+    }
     skipped = files.length
-    return { converted: 0, skipped }
+    return { converted: 0, skipped, errors, files: fileResults }
   }
   const total = files.length
   activeBatches++
@@ -359,7 +385,9 @@ export async function runPpuOcrBatch(
     for (let i = 0; i < files.length; i++) {
       throwIfSpinosaCancelled(options?.shouldAbort)
       const file = files[i]!
+      options?.onFileStart?.(file.rel)
       options?.onLog?.(`  ${file.rel} → OCR ...`)
+      let fr: PpuOcrFileResult
       try {
         const ext = fileExt(file.src)
         const ok = ext === "pdf"
@@ -369,21 +397,35 @@ export async function runPpuOcrBatch(
           converted++
           injectColdFrontmatter(file.dest)
           injectPageDirFrontmatter(file.dest)
+          fr = { rel: file.rel, ok: true }
         } else {
           skipped++
+          const error = `${file.rel}: OCR returned no content`
+          errors.push(error)
+          fr = { rel: file.rel, ok: false, error }
         }
       } catch (err) {
         if (isSpinosaCancellationError(err)) throw err
         skipped++
-        options?.onLog?.(`PPU PaddleOCR failed: ${file.rel} - ${err}`)
+        const msg = `PPU PaddleOCR failed: ${file.rel} - ${err instanceof Error ? err.message : String(err)}`
+        errors.push(msg)
+        options?.onLog?.(msg)
+        fr = { rel: file.rel, ok: false, error: msg }
       }
+      fileResults.push(fr)
+      options?.onFile?.(fr)
       options?.onProgress?.(i + 1, total, file.rel)
       const { promise, resolve } = Promise.withResolvers<void>()
       setTimeout(resolve, 0)
       await promise
     }
 
-    return { converted, skipped }
+    return {
+      converted,
+      skipped,
+      errors: errors.length > 0 ? errors : undefined,
+      files: fileResults,
+    }
   } finally {
     activeBatches--
     if (activeBatches === 0) await disposePpuOcr()

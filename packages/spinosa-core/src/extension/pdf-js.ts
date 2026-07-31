@@ -1,11 +1,84 @@
 import { readFile } from "node:fs/promises"
-import { getDocument, type PDFDocumentProxy } from "pdfjs-dist/legacy/build/pdf.mjs"
+import { createRequire } from "node:module"
+import { pathToFileURL } from "node:url"
+import { getDocument, GlobalWorkerOptions, type PDFDocumentProxy } from "pdfjs-dist/legacy/build/pdf.mjs"
 import { createCanvas } from "@napi-rs/canvas"
 import stripAnsi from "strip-ansi"
 
+const require = createRequire(import.meta.url)
+
+/**
+ * pdfjs-dist rejects `instanceof Buffer` even though Buffer extends Uint8Array.
+ * Bun `--compile` + minify can elide `new Uint8Array(buffer)` as an identity cast;
+ * allocate + set so the binary still passes a plain Uint8Array.
+ */
+export function bufferToPdfJsUint8Array(data: Buffer): Uint8Array {
+  const copy = new Uint8Array(data.byteLength)
+  copy.set(data)
+  return copy
+}
+
+/**
+ * Force pdfjs to use our `@napi-rs/canvas@1.0.2` native binding.
+ * Without this, pdfjs resolves a nested older canvas (e.g. 0.1.80) from its
+ * own package tree; loading two Skia natives in one process segfaults under
+ * Bun (and can under Node).
+ */
+class NodeCanvasFactory {
+  create(width: number, height: number) {
+    const canvas = createCanvas(Math.max(1, Math.ceil(width)), Math.max(1, Math.ceil(height)))
+    return {
+      canvas,
+      context: canvas.getContext("2d"),
+    }
+  }
+
+  reset(
+    canvasAndContext: { canvas: ReturnType<typeof createCanvas>; context: unknown },
+    width: number,
+    height: number,
+  ): void {
+    canvasAndContext.canvas.width = Math.max(1, Math.ceil(width))
+    canvasAndContext.canvas.height = Math.max(1, Math.ceil(height))
+  }
+
+  destroy(canvasAndContext: {
+    canvas: ReturnType<typeof createCanvas> | null
+    context: unknown
+  }): void {
+    if (canvasAndContext.canvas) {
+      canvasAndContext.canvas.width = 0
+      canvasAndContext.canvas.height = 0
+    }
+    canvasAndContext.canvas = null
+    canvasAndContext.context = null
+  }
+}
+
+let workerConfigured = false
+function ensurePdfJsWorker(): void {
+  if (workerConfigured) return
+  try {
+    const workerPath = require.resolve("pdfjs-dist/legacy/build/pdf.worker.mjs")
+    GlobalWorkerOptions.workerSrc = pathToFileURL(workerPath).href
+  } catch {
+    // Compiled binary may lack an on-disk worker; pdfjs falls back to fake worker.
+  }
+  workerConfigured = true
+}
+
 async function getDoc(pdfPath: string): Promise<PDFDocumentProxy> {
-  const data = await readFile(pdfPath)
-  return withTimeout(getDocument({ data }).promise, 2000)
+  ensurePdfJsWorker()
+  const file = await readFile(pdfPath)
+  const data = bufferToPdfJsUint8Array(file)
+  return withTimeout(
+    getDocument({
+      data,
+      CanvasFactory: NodeCanvasFactory,
+      isEvalSupported: false,
+    }).promise,
+    2000,
+  )
 }
 
 export async function withPdfDocument<T>(pdfPath: string, fn: (doc: PDFDocumentProxy) => Promise<T>): Promise<T> {
@@ -72,10 +145,18 @@ export async function pdfRenderPageToPng(pdfPath: string, pageNumber: number, dp
 export async function pdfRenderDocumentPageToPng(doc: PDFDocumentProxy, pageNumber: number, dpi = 180): Promise<Buffer> {
   const pg = await doc.getPage(pageNumber)
   const viewport = pg.getViewport({ scale: dpi / 72 })
-  const canvas = createCanvas(viewport.width, viewport.height)
-  const ctx = canvas.getContext("2d")
-  await pg.render({ canvasContext: ctx as unknown as CanvasRenderingContext2D, viewport }).promise
-  return canvas.toBuffer("image/png")
+  const factory = new NodeCanvasFactory()
+  const { canvas, context } = factory.create(viewport.width, viewport.height)
+  try {
+    await pg.render({
+      canvasContext: context as unknown as CanvasRenderingContext2D,
+      viewport,
+      canvas: canvas as unknown as HTMLCanvasElement,
+    }).promise
+    return canvas.toBuffer("image/png")
+  } finally {
+    factory.destroy({ canvas, context })
+  }
 }
 
 export async function isTextBasedPdf(pdfPath: string): Promise<boolean> {

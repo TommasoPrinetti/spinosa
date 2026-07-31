@@ -1,12 +1,10 @@
 import path from "node:path"
 import { existsSync, statSync } from "node:fs"
 import type { Argv, CommandModule } from "yargs"
-import {
-  createWorkspace,
-  resolveFrameworkRoot,
-  runOnboarding,
-  writeWorkspaceStatus,
-} from "@spinosa/core"
+import { createWorkspace } from "@spinosa/core/commands/create"
+import { runOnboarding } from "@spinosa/core/commands/onboard"
+import { resolveFrameworkRoot } from "@spinosa/core/framework/discovery"
+import { writeWorkspaceStatus } from "@spinosa/core/workspace/meta"
 import { getFormat, log, emitResult, type OutputFormat } from "../output"
 
 interface NewArgs {

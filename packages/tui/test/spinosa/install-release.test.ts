@@ -8,7 +8,7 @@ import { installedUpgradeVersion, verifyInstallerChecksum } from "@spinosa/core/
 const repoRoot = path.resolve(import.meta.dir, "../../../..")
 
 describe("install and release flow", () => {
-  test("installer dry-run uses immutable release archive and workspace-template layout", async () => {
+  test("installer dry-run uses immutable platform binary assets", async () => {
     await using tmp = await tmpdir()
     const result = Bun.spawnSync({
       cmd: [
@@ -34,8 +34,12 @@ describe("install and release flow", () => {
 
     const output = `${result.stdout.toString()}\n${result.stderr.toString()}`
     expect(result.exitCode).toBe(0)
-    expect(output).toContain("https://github.com/medialab/spinosa/releases/download/v0.8.0-beta.16/spinosa-v0.8.0-beta.16.tar.gz")
-    expect(output).toContain(`/versions/0.8.0-beta.16/`)
+    expect(output).toMatch(
+      /https:\/\/github\.com\/medialab\/spinosa\/releases\/download\/v0\.8\.0-beta\.16\/(spinosa-(darwin|linux)-(arm64|x64)|checksums\.txt)/,
+    )
+    expect(output).toContain(`/bin/spinosa`)
+    expect(output).not.toContain("spinosa-v0.8.0-beta.16.tar.gz")
+    expect(output).not.toContain("/versions/")
     expect(output).not.toContain("spinosa-framework-")
     expect(existsSync(path.join(tmp.path, "home"))).toBe(false)
     expect(output).not.toContain("\u001b[")
@@ -118,9 +122,9 @@ describe("install and release flow", () => {
     await using tmp = await tmpdir()
     const home = path.join(tmp.path, "home")
     await mkdir(path.join(home, "metadata"), { recursive: true })
-    await mkdir(path.join(home, "versions", ".install.lock"), { recursive: true })
+    await mkdir(path.join(home, ".staging", ".install.lock"), { recursive: true })
     await Bun.write(path.join(home, "metadata", "config.yaml"), "spinosa: true\n")
-    await Bun.write(path.join(home, "versions", ".install.lock", "pid"), `${process.pid}\n`)
+    await Bun.write(path.join(home, ".staging", ".install.lock", "pid"), `${process.pid}\n`)
 
     const result = Bun.spawnSync({
       cmd: ["bash", path.join(repoRoot, "install.sh"), "--yes", "--version", "1.0.0"],
@@ -136,7 +140,7 @@ describe("install and release flow", () => {
 
     expect(result.exitCode).toBe(1)
     expect(result.stderr.toString()).toContain("Another Spinosa installer is running")
-    expect(existsSync(path.join(home, "versions", ".install.lock"))).toBe(true)
+    expect(existsSync(path.join(home, ".staging", ".install.lock"))).toBe(true)
   })
 
   test("installer compares SemVer without GNU sort", () => {
@@ -163,7 +167,7 @@ describe("install and release flow", () => {
     expect(installer).toContain(`PINNED_VERSION="${pkg.version}"`)
   })
 
-  test("does not run native Tree-sitter install hooks for the WASM shell parser", async () => {
+  test("binary installer does not ship source-archive dependency install hooks", async () => {
     const pkg = await Bun.file(path.join(repoRoot, "package.json")).json() as {
       trustedDependencies?: string[]
     }
@@ -176,8 +180,11 @@ describe("install and release flow", () => {
     expect(pkg.trustedDependencies ?? []).not.toContain("web-tree-sitter")
     const lockTrustedDependencies = lockfile.match(/\n  "trustedDependencies": \[([\s\S]*?)\n  \],/)?.[1] ?? ""
     expect(lockTrustedDependencies).not.toContain("tree-sitter")
-    expect(installer).toContain('2>&1 | tee -a "$bun_out"')
-    expect(installer).toContain("workspace-template/.bin/run-with-timeout.ts")
+    expect(installer).toContain("SPINOSA_RELEASE_BASE_URL")
+    expect(installer).toContain("distribution: binary")
+    expect(installer).toContain("ASSET_NAME=")
+    expect(installer).not.toContain("install --frozen-lockfile")
+    expect(installer).not.toContain("workspace-template/.bin/run-with-timeout.ts")
   })
 
   test("dependency watchdog terminates a hung process group", () => {
@@ -193,43 +200,44 @@ describe("install and release flow", () => {
     expect(result.stderr.toString()).toContain("command timed out after 1s")
   })
 
-  test("local release pipeline builds versioned and rolling channel assets", async () => {
+  test("local release pipeline builds product binaries and rolling channel assets", async () => {
     const stages = await Bun.file(path.join(repoRoot, "script", "release", "stages.ts")).text()
     const github = await Bun.file(path.join(repoRoot, "script", "release", "github.ts")).text()
     expect(stages).toContain("publishRollingChannelRelease")
-    expect(stages).toContain("git archive --format=tar.gz")
+    expect(stages).toContain("build-release-binaries")
+    expect(stages).toContain("build-manifest.json")
+    expect(stages).not.toContain("git archive --format=tar.gz")
     expect(stages).toContain("checksums.txt")
     expect(stages).toContain("shasum -a 256 install.sh")
     expect(github).toContain("publishRollingChannelRelease")
   })
 
-  test("installer uses one global lock and stages before replacing a version", async () => {
+  test("installer stages binaries under .staging and activates atomically", async () => {
     const installer = await Bun.file(path.join(repoRoot, "install.sh")).text()
-    expect(installer).toContain('versions/.install.lock')
-    expect(installer).not.toContain('versions/.lock.${$}-${VERSION}')
-    expect(installer.indexOf('install_bun_dependencies "$fw_root"')).toBeLessThan(installer.indexOf('mv "$INSTALL_STAGE_DIR" "$version_dir"'))
-    expect(installer).toContain('mv "${INSTALL_BACKUP_DIR}" "${SPINOSA_HOME}/versions/${VERSION}"')
-    expect(installer).toContain('install --frozen-lockfile')
-    expect(installer).not.toContain('install_args+=(--force)')
-    expect(installer).toContain('src/index.ts" version')
-    expect(installer).toContain('ensure_opentui_links')
-    expect(installer).toContain('--preload "@opentui/solid/preload"')
+    expect(installer).toContain('${SPINOSA_STAGING_DIR}/.install.lock')
+    expect(installer).toContain('SPINOSA_STAGING_DIR="${SPINOSA_HOME}/.staging"')
+    expect(installer).toContain("activate_binary()")
+    expect(installer).toContain('mv "$staged" "$active"')
+    expect(installer).toContain("distribution: binary")
+    expect(installer).toContain("ASSET_NAME=")
+    expect(installer).toContain("SPINOSA_RELEASE_BASE_URL")
+    expect(installer).not.toContain("versions/.install.lock")
+    expect(installer).not.toContain("install --frozen-lockfile")
+    expect(installer).not.toMatch(/ensure_opentui_links\s*\(/)
+    expect(installer).not.toContain('--preload "@opentui/solid/preload"')
   })
 
-  test("installer repair preserves metadata and removes only broken runtime state", async () => {
+  test("installer clears reclaimable virgin debris while refusing owned homes", async () => {
     await using tmp = await tmpdir()
     const home = path.join(tmp.path, "home")
-    const metadata = path.join(home, "metadata")
-    await mkdir(metadata, { recursive: true })
     await mkdir(path.join(home, "versions", "broken", "node_modules"), { recursive: true })
-    await mkdir(path.join(home, "versions", ".install.lock"), { recursive: true })
+    await mkdir(path.join(home, ".staging", ".install.lock"), { recursive: true })
     await mkdir(path.join(home, "bin"), { recursive: true })
     await mkdir(path.join(home, "lib"), { recursive: true })
-    await Bun.write(path.join(metadata, "workspaces.json"), '{"schemaVersion":1,"workspaces":[]}\n')
     await Bun.write(path.join(home, "env.sh"), "keep=no\n")
 
-    const result = Bun.spawnSync({
-      cmd: ["bash", "-c", 'installer="$1"; set --; source "$installer"; repair_spinosa_home', "spinosa-test", path.join(repoRoot, "install.sh")],
+    const clear = Bun.spawnSync({
+      cmd: ["bash", "-c", 'installer="$1"; set --; source "$installer"; clear_virgin_install_debris', "spinosa-test", path.join(repoRoot, "install.sh")],
       cwd: repoRoot,
       env: {
         ...process.env,
@@ -242,56 +250,65 @@ describe("install and release flow", () => {
       stderr: "pipe",
     })
 
-    expect(result.exitCode).toBe(0)
-    expect(await Bun.file(path.join(metadata, "workspaces.json")).text()).toBe('{"schemaVersion":1,"workspaces":[]}\n')
-    expect(existsSync(path.join(home, "versions", "broken"))).toBe(false)
-    expect(existsSync(path.join(home, "versions", ".install.lock"))).toBe(true)
+    expect(clear.exitCode).toBe(0)
+    expect(existsSync(path.join(home, "versions"))).toBe(false)
+    expect(existsSync(path.join(home, ".staging"))).toBe(false)
     expect(existsSync(path.join(home, "env.sh"))).toBe(false)
+    expect(existsSync(home)).toBe(true)
+
+    await mkdir(path.join(home, "metadata"), { recursive: true })
+    await Bun.write(path.join(home, "metadata", "workspaces.json"), '{"schemaVersion":1,"workspaces":[]}\n')
+    await Bun.write(path.join(home, "env.sh"), "owned=yes\n")
+
+    const refused = Bun.spawnSync({
+      cmd: ["bash", "-c", 'installer="$1"; set --; source "$installer"; clear_virgin_install_debris', "spinosa-test", path.join(repoRoot, "install.sh")],
+      cwd: repoRoot,
+      env: {
+        ...process.env,
+        SPINOSA_INSTALLER_LIB_ONLY: "1",
+        SPINOSA_HOME: home,
+        SPINOSA_BIN_DIR: path.join(tmp.path, "bin"),
+        NO_COLOR: "1",
+      },
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+
+    expect(refused.exitCode).not.toBe(0)
+    expect(await Bun.file(path.join(home, "metadata", "workspaces.json")).text()).toBe('{"schemaVersion":1,"workspaces":[]}\n')
+    expect(await Bun.file(path.join(home, "env.sh")).text()).toBe("owned=yes\n")
   })
 
-  test("installed launcher repairs a corrupt runtime and restarts the original command", async () => {
+  test("workspace launcher forwards to the installed binary and reports missing installs", async () => {
     await using tmp = await tmpdir()
     const home = path.join(tmp.path, "home")
-    const root = path.join(home, "versions", "1.2.3")
     const launcher = await Bun.file(path.join(repoRoot, "workspace-template", ".bin", "spinosa")).text()
-    await mkdir(path.join(home, "metadata"), { recursive: true })
     await mkdir(path.join(home, "bin"), { recursive: true })
-    await mkdir(path.join(root, "workspace-template", ".spinosa"), { recursive: true })
-    await mkdir(path.join(root, "metadata"), { recursive: true })
-    await Bun.write(path.join(home, "metadata", "workspaces.json"), '{"schemaVersion":1,"workspaces":[]}\n')
-    await Bun.write(path.join(root, "workspace-template", ".spinosa", "workspace-files.tsv"), "fixture\n")
-    await Bun.write(path.join(root, "metadata", "version"), "1.2.3\n")
-    await Bun.write(path.join(home, "bin", "spinosa"), launcher)
-    await Bun.write(path.join(home, "bin", "bun"), [
-      "#!/bin/sh",
-      'if [ -f "$SPINOSA_HOME/repaired" ]; then echo "repaired runtime"; exit 0; fi',
-      "exit 1",
-      "",
-    ].join("\n"))
-    await mkdir(path.join(root, "packages", "spinosa-kernel", "src"), { recursive: true })
-    await Bun.write(path.join(root, "packages", "spinosa-kernel", "src", "index.ts"), "process.exit(0)\n")
-    await Bun.write(path.join(root, "install.sh"), [
-      "#!/bin/sh",
-      'touch "$SPINOSA_HOME/repaired"',
-      "exit 0",
-      "",
-    ].join("\n"))
-    await chmod(path.join(root, "install.sh"), 0o755)
-    await chmod(path.join(home, "bin", "spinosa"), 0o755)
-    await chmod(path.join(home, "bin", "bun"), 0o755)
+    await Bun.write(path.join(tmp.path, "launcher"), launcher)
+    await chmod(path.join(tmp.path, "launcher"), 0o755)
 
-    const result = Bun.spawnSync({
-      cmd: ["bash", "-c", `printf '\\n' | ${JSON.stringify(path.join(home, "bin", "spinosa"))} version`],
+    const missing = Bun.spawnSync({
+      cmd: [path.join(tmp.path, "launcher"), "version"],
       cwd: tmp.path,
       env: { ...process.env, SPINOSA_HOME: home, NO_COLOR: "1" },
       stdout: "pipe",
       stderr: "pipe",
     })
+    expect(missing.exitCode).toBe(1)
+    expect(missing.stderr.toString()).toContain("installed binary is missing")
 
-    expect(result.exitCode).toBe(0)
-    expect(result.stderr.toString()).toContain("runtime issue detected")
-    expect(result.stdout.toString()).toContain("repaired runtime")
-    expect(await Bun.file(path.join(home, "metadata", "workspaces.json")).text()).toBe('{"schemaVersion":1,"workspaces":[]}\n')
+    await Bun.write(path.join(home, "bin", "spinosa"), ["#!/bin/sh", 'echo "product binary"', ""].join("\n"))
+    await chmod(path.join(home, "bin", "spinosa"), 0o755)
+
+    const ok = Bun.spawnSync({
+      cmd: [path.join(tmp.path, "launcher"), "version"],
+      cwd: tmp.path,
+      env: { ...process.env, SPINOSA_HOME: home, NO_COLOR: "1" },
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    expect(ok.exitCode).toBe(0)
+    expect(ok.stdout.toString()).toContain("product binary")
   })
 
   test("uninstaller rejects a non-Spinosa home", async () => {
@@ -309,19 +326,16 @@ describe("install and release flow", () => {
     expect(await Bun.file(sentinel).text()).toBe("keep\n")
   })
 
-  test("installed launcher derives a custom installation root from its bin directory", async () => {
+  test("workspace launcher is a minimal binary forwarder", async () => {
     const launcher = await Bun.file(path.join(repoRoot, "workspace-template", ".bin", "spinosa")).text()
-    expect(launcher).toContain('"${SCRIPT_DIR}/../versions"')
-    expect(launcher).toContain("export SPINOSA_HOME")
-    expect(launcher).toContain("exec_kernel()")
-    expect(launcher).toContain("link_opentui_packages()")
-    expect(launcher).toContain('--cwd "$RESOLVED_ROOT"')
-    expect(launcher).toContain('--preload "@opentui/solid/preload"')
-    expect(launcher).toContain('"${RESOLVED_ROOT}/packages/spinosa-kernel/src/index.ts"')
-    // Guard: never `bun --preload … run …` (dumps Bun help instead of Spinosa).
-    expect(launcher).not.toMatch(/"\$BUN" --preload[^\n]* run /)
-    expect(launcher).toContain('launcher_command="${launcher_args[$command_index]:-}"')
-    expect(launcher).toContain("tui_launch=true")
+    expect(launcher).toContain('home="${SPINOSA_HOME:-$HOME/.spinosa}"')
+    expect(launcher).toContain('target="$home/bin/spinosa"')
+    expect(launcher).toContain('exec "$target" "$@"')
+    expect(launcher).toContain("Managed by Spinosa binary distribution")
+    expect(launcher).not.toContain('"${SCRIPT_DIR}/../versions"')
+    expect(launcher).not.toContain("link_opentui_packages()")
+    expect(launcher).not.toContain('--preload "@opentui/solid/preload"')
+    expect(launcher).not.toContain("exec_kernel()")
   })
 
   test("rejects installer checksum mismatch", () => {
@@ -330,11 +344,16 @@ describe("install and release flow", () => {
     expect(verifyInstallerChecksum(`${installer}# changed\n`, `${Bun.CryptoHasher.hash("sha256", installer, "hex")}  install.sh\n`)).toBe(false)
   })
 
-  test("verifies an upgrade against the newly installed target", async () => {
+  test("verifies an upgrade against the newly installed binary metadata", async () => {
     await using tmp = await tmpdir()
-    const target = path.join(tmp.path, "versions", "1.2.3", "metadata")
-    await mkdir(target, { recursive: true })
-    await Bun.write(path.join(target, "version"), "1.2.3\n")
+    await mkdir(path.join(tmp.path, "bin"), { recursive: true })
+    await mkdir(path.join(tmp.path, "metadata"), { recursive: true })
+    await Bun.write(
+      path.join(tmp.path, "metadata", "config.yaml"),
+      ["spinosa: true", "distribution: binary", "last_installed_version: 1.2.3", ""].join("\n"),
+    )
+    await Bun.write(path.join(tmp.path, "bin", "spinosa"), ["#!/bin/sh", "exit 0", ""].join("\n"))
+    await chmod(path.join(tmp.path, "bin", "spinosa"), 0o755)
 
     expect(installedUpgradeVersion("1.2.3", tmp.path)).toBe("1.2.3")
   })

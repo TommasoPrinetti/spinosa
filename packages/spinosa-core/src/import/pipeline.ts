@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url"
 import { MarkItDown } from "markitdown-ts"
 
 import stripAnsi from "strip-ansi"
+import { markitdownConvertFile } from "./markitdown-convert"
 import { fileExt } from "../constants"
 import {
   shouldSkipSourceFile,
@@ -17,16 +18,15 @@ import {
   importRouteForFile,
 } from "../extension/classifier"
 import { safeCopyAsync, writeTextAtomic, writeTextAtomicSafe } from "../utils/fs"
-import { spinosaLogInfo } from "../utils/log"
+import { spinosaLogInfo, spinosaLogWarn } from "../utils/log"
 import type { FileClass, ImportRoute } from "../extension/types"
 import { injectColdFrontmatter, convertedOutputExists } from "./frontmatter"
 import type { ImportBatchManager } from "./batch"
 import { isSpinosaCancellationError, throwIfSpinosaCancelled } from "./cancellation"
 import type { PpuOcrFile, PpuOcrBatchResult } from "./ppu-ocr"
-import { runPpuOcrBatch, validateOcrImageInput } from "./ppu-ocr"
 import { ProgressEmitter } from "../progress/progress"
 import { ocrAvailable } from "../tools/detection"
-import { pdfPageCount, pdfExtractPageTexts } from "../extension/pdf-js"
+import { isCompiledBinaryDistribution } from "../distribution/bootstrap"
 
 export interface CopyResult {
   copied: number
@@ -359,7 +359,7 @@ export async function processMarkitdown(
       const startTime = Date.now()
       try {
         mkdirSync(path.dirname(f.dest), { recursive: true })
-        const result = await converter.convert(f.src)
+        const result = await markitdownConvertFile(converter, f.src)
         throwIfSpinosaCancelled(shouldAbort)
         const text = result?.markdown ?? ""
         if (!text.trim()) throw new Error("MarkItDown returned no content")
@@ -404,7 +404,7 @@ export async function processMarkitdown(
       const startTime = Date.now()
       let ok = false
       try {
-        const result = await runOcrWorker([{ src: f.src, rel: f.rel, dest: f.dest }], { onLog })
+        const result = await runOcrWorker([{ src: f.src, rel: f.rel, dest: f.dest }], { onLog, shouldAbort })
         ok = result.converted > 0 && convertedOutputExists(f.dest)
         if (ok) {
           converted++
@@ -412,18 +412,38 @@ export async function processMarkitdown(
           onLog?.(`  ${f.rel} → OCR fallback succeeded`)
         } else {
           skipped++
-          onLog?.(`  ${f.rel} → OCR fallback returned no content`)
+          const errDetail = result.errors?.[0] ?? "OCR produced no convertible output"
+          onLog?.(`  ${f.rel} → OCR fallback returned no content — ${errDetail}`)
+          appendNdjson(mdLog, {
+            ts: isoNow(), status: "fail",
+            source: f.rel, output: markitdownOutputRelPath(f.rel),
+            engine: "ppu-paddle-ocr", pages: "", duration_s: (Date.now() - startTime) / 1000,
+            error: errDetail,
+            mode: resolveOcrWorkerMode(),
+          })
+          prog?.file("MarkItDown", ++processed, total, f.rel)
+          continue
         }
       } catch (err) {
         if (isSpinosaCancellationError(err)) throw err
         const errMsg = err instanceof Error ? err.message : String(err)
         skipped++
         onLog?.(`  ${f.rel} → OCR fallback failed: ${errMsg}`)
+        appendNdjson(mdLog, {
+          ts: isoNow(), status: "fail",
+          source: f.rel, output: markitdownOutputRelPath(f.rel),
+          engine: "ppu-paddle-ocr", pages: "", duration_s: (Date.now() - startTime) / 1000,
+          error: errMsg,
+          mode: resolveOcrWorkerMode(),
+        })
+        prog?.file("MarkItDown", ++processed, total, f.rel)
+        continue
       }
       appendNdjson(mdLog, {
-        ts: isoNow(), status: ok ? "ok" : "fail",
+        ts: isoNow(), status: "ok",
         source: f.rel, output: markitdownOutputRelPath(f.rel),
         engine: "ppu-paddle-ocr", pages: "", duration_s: (Date.now() - startTime) / 1000,
+        mode: resolveOcrWorkerMode(),
       })
       prog?.file("MarkItDown", ++processed, total, f.rel)
     }
@@ -465,6 +485,7 @@ export async function processOcr(
     prog?.file("OCR", ++processed, total, ps.rel)
   }
 
+  const { validateOcrImageInput } = await import("./ppu-ocr")
   for (let index = toProcess.length - 1; index >= 0; index--) {
     const file = toProcess[index]!
     const validationError = validateOcrImageInput(readFileSync(file.src), fileExt(file.src))
@@ -487,38 +508,138 @@ export async function processOcr(
   }
   if (toProcess.length > 0) {
     const ocrLog = path.join(logsDir, "ocr-processed.ndjson")
-    onLog?.(`PPU PaddleOCR: Processing ${toProcess.length} files`)
+    const mode = resolveOcrWorkerMode()
+    onLog?.(`PPU PaddleOCR: Processing ${toProcess.length} files (child worker, model loaded once per worker)`)
+    spinosaLogInfo("ocr", `processing ${toProcess.length} file(s) mode=${mode}`)
 
-    for (let i = 0; i < toProcess.length; i++) {
+    // One child loads the model once and walks the remaining queue. If the native
+    // stack segfaults, collect that file's failure and respawn for the rest.
+    let remaining: ClassifiedEntry[] = [...toProcess]
+    while (remaining.length > 0) {
       throwIfSpinosaCancelled(shouldAbort)
-      const f = toProcess[i]!
-      onLog?.(`  ${f.rel} → OCR ...`)
+      const batch = remaining as PpuOcrFile[]
+      const batchStart = Date.now()
+      const finished = new Map<string, { ok: boolean; error?: string; duration_s: number }>()
+      let crashedRel: string | undefined
 
-      try {
-        const result = await runOcrWorker([f as PpuOcrFile], { onLog })
-        const ok = result.converted > 0 && convertedOutputExists(f.dest)
-        appendNdjson(ocrLog, {
-          ts: isoNow(), status: ok ? "ok" : "fail",
-          source: f.rel, output: ocrOutputRelPath(f.rel),
-          engine: "ppu-paddle-ocr", pages: "", duration_s: 0,
-        })
-        if (ok) {
-          converted++
-          recoverable.push({ src: f.src, dest: f.dest })
-        } else {
-          skipped++
-        }
-      } catch (err) {
-        if (isSpinosaCancellationError(err)) throw err
-        onLog?.(`  PPU PaddleOCR failed: ${f.rel} — ${err instanceof Error ? err.message : String(err)}`)
-        appendNdjson(ocrLog, {
-          ts: isoNow(), status: "fail",
-          source: f.rel, output: ocrOutputRelPath(f.rel),
-          engine: "ppu-paddle-ocr", pages: "", duration_s: 0,
-        })
+      const result = await runOcrWorker(batch, {
+        onLog,
+        shouldAbort,
+        onFileStart: (relPath) => {
+          // Live label for TUI ProgressEmitter (numerator stays at files completed).
+          prog?.file("OCR", processed, total, relPath)
+        },
+        onPageProgress: (_current, _totalFiles, relPath, page) => {
+          prog?.file("OCR", processed, total, page ? `${relPath} (${page})` : relPath)
+        },
+        onProgress: (current, _totalFiles, relPath) => {
+          prog?.file("OCR", processed + current, total, relPath)
+        },
+        onFile: (fr) => {
+          const entry = remaining.find((f) => f.rel === fr.rel)
+          const ok = fr.ok && !!entry && convertedOutputExists(entry.dest)
+          const error = !ok
+            ? (fr.error
+              ?? (fr.ok
+                ? "OCR claimed success but output is missing or is a binary masquerading as markdown"
+                : "OCR produced no convertible output"))
+            : undefined
+          finished.set(fr.rel, {
+            ok,
+            error,
+            duration_s: (Date.now() - batchStart) / 1000,
+          })
+          if (ok && entry) {
+            converted++
+            recoverable.push({ src: entry.src, dest: entry.dest })
+          } else {
+            skipped++
+            spinosaLogWarn("ocr", `${fr.rel}: ${error}`)
+            onLog?.(`  ${fr.rel} → OCR failed: ${error}`)
+          }
+          appendNdjson(ocrLog, {
+            ts: isoNow(),
+            status: ok ? "ok" : "fail",
+            source: fr.rel,
+            output: ocrOutputRelPath(fr.rel),
+            engine: "ppu-paddle-ocr",
+            pages: "",
+            duration_s: (Date.now() - batchStart) / 1000,
+            ...(error ? { error } : {}),
+            mode,
+          })
+          prog?.file("OCR", ++processed, total, fr.rel)
+        },
+      })
+
+      crashedRel = result.crashedRel
+      if (result.crashed && crashedRel && !finished.has(crashedRel)) {
+        const error = result.errors?.[0] ?? `OCR worker crashed while processing ${crashedRel}`
+        finished.set(crashedRel, { ok: false, error, duration_s: (Date.now() - batchStart) / 1000 })
         skipped++
+        spinosaLogWarn("ocr", `${crashedRel}: ${error}`)
+        onLog?.(`  ${crashedRel} → OCR failed: ${error}`)
+        appendNdjson(ocrLog, {
+          ts: isoNow(),
+          status: "fail",
+          source: crashedRel,
+          output: ocrOutputRelPath(crashedRel),
+          engine: "ppu-paddle-ocr",
+          pages: "",
+          duration_s: (Date.now() - batchStart) / 1000,
+          error,
+          mode,
+          crashed: true,
+        })
+        prog?.file("OCR", ++processed, total, crashedRel)
+      } else if (result.crashed && !crashedRel && remaining.length > 0 && finished.size === 0) {
+        // Worker died before any file-start (e.g. model init segfault).
+        const head = remaining[0]!
+        const error = result.errors?.[0] ?? "OCR worker crashed before processing any file"
+        finished.set(head.rel, { ok: false, error, duration_s: (Date.now() - batchStart) / 1000 })
+        skipped++
+        spinosaLogWarn("ocr", `${head.rel}: ${error}`)
+        onLog?.(`  ${head.rel} → OCR failed: ${error}`)
+        appendNdjson(ocrLog, {
+          ts: isoNow(),
+          status: "fail",
+          source: head.rel,
+          output: ocrOutputRelPath(head.rel),
+          engine: "ppu-paddle-ocr",
+          pages: "",
+          duration_s: (Date.now() - batchStart) / 1000,
+          error,
+          mode,
+          crashed: true,
+        })
+        prog?.file("OCR", ++processed, total, head.rel)
       }
-      prog?.file("OCR", ++processed, total, f.rel)
+
+      // Advance past finished (+ crashed) files; respawn for the rest (new model load).
+      remaining = remaining.filter((f) => !finished.has(f.rel))
+      if (!result.crashed) {
+        // Clean completion: anything not reported is a protocol gap — mark failed once.
+        for (const f of remaining) {
+          const error = "OCR worker finished without reporting this file"
+          skipped++
+          appendNdjson(ocrLog, {
+            ts: isoNow(),
+            status: "fail",
+            source: f.rel,
+            output: ocrOutputRelPath(f.rel),
+            engine: "ppu-paddle-ocr",
+            pages: "",
+            duration_s: (Date.now() - batchStart) / 1000,
+            error,
+            mode,
+          })
+          prog?.file("OCR", ++processed, total, f.rel)
+        }
+        remaining = []
+      } else if (remaining.length > 0) {
+        onLog?.(`PPU PaddleOCR: worker crashed — continuing with ${remaining.length} remaining file(s) in a new child`)
+        spinosaLogWarn("ocr", `respawning worker for ${remaining.length} remaining file(s)`)
+      }
     }
     prog?.file("OCR", processed, total, "")
   }
@@ -530,66 +651,211 @@ function workerScriptPath(): string {
   return fileURLToPath(new URL("ppu-ocr-worker.ts", import.meta.url))
 }
 
+export type OcrWorkerMode = "binary-cli" | "bun-script"
+
+/**
+ * OCR always runs in a child process:
+ * - product binary → `spinosa internal ocr-worker <json>` (isolates native segfaults)
+ * - source/dev → `bun run ppu-ocr-worker.ts <json>`
+ * Never spawn `argv0 run /$bunfs/...` (that re-enters the kernel CLI).
+ */
+export function resolveOcrWorkerMode(workerScript = workerScriptPath()): OcrWorkerMode {
+  if (isCompiledBinaryDistribution()) return "binary-cli"
+  if (workerScript.includes("$bunfs")) return "binary-cli"
+  const exe = path.basename(process.argv0 || process.execPath || "")
+  if (exe === "spinosa" || exe.startsWith("spinosa-")) return "binary-cli"
+  return "bun-script"
+}
+
+/** @deprecated Use resolveOcrWorkerMode — OCR is never in-process by design. */
+export function shouldRunOcrInProcess(workerScript = workerScriptPath()): boolean {
+  void workerScript
+  return false
+}
+
+function bunExecutableForWorker(): string {
+  const exec = process.execPath || ""
+  if (/(^|\/)bun(\.exe)?$/i.test(exec)) return exec
+  return "bun"
+}
+
+function productBinaryExecutable(): string {
+  return process.execPath || process.argv0 || "spinosa"
+}
+
+export type OcrWorkerRunResult = PpuOcrBatchResult & {
+  mode: OcrWorkerMode
+  /** Files that received a terminal `file` event from the worker. */
+  finishedRels: string[]
+  /** File that had started but not finished when the worker died (segfault / kill). */
+  crashedRel?: string
+  crashed?: boolean
+}
+
+/** Parse one NDJSON worker line into callbacks. Returns in-flight rel when type is file-start. */
+export function consumeOcrWorkerNdjsonLine(
+  line: string,
+  state: {
+    workerConverted: number
+    workerSkipped: number
+    errors: string[]
+    fileResults: Array<{ rel: string; ok: boolean; error?: string }>
+    finishedRels: string[]
+    inFlightRel?: string
+  },
+  options?: {
+    onLog?: (msg: string) => void
+    onProgress?: (current: number, total: number, relPath: string) => void
+    onPageProgress?: (current: number, total: number, relPath: string, page: string) => void
+    onFileStart?: (relPath: string) => void
+    onFile?: (result: { rel: string; ok: boolean; error?: string }) => void
+  },
+): void {
+  const trimmed = line.trim()
+  if (!trimmed) return
+  try {
+    const msg = JSON.parse(trimmed) as Record<string, unknown>
+    switch (msg.type) {
+      case "progress":
+        options?.onProgress?.(Number(msg.current), Number(msg.total), String(msg.relPath ?? ""))
+        break
+      case "pageProgress":
+        options?.onPageProgress?.(
+          Number(msg.current),
+          Number(msg.total),
+          String(msg.relPath ?? ""),
+          String(msg.page ?? ""),
+        )
+        break
+      case "log":
+        options?.onLog?.(String(msg.message ?? ""))
+        break
+      case "file-start": {
+        const rel = String(msg.relPath ?? "")
+        state.inFlightRel = rel
+        options?.onFileStart?.(rel)
+        break
+      }
+      case "file": {
+        const rel = String(msg.relPath ?? "")
+        const ok = Boolean(msg.ok)
+        const error = typeof msg.error === "string" ? msg.error : undefined
+        const fr = { rel, ok, ...(error ? { error } : {}) }
+        state.fileResults.push(fr)
+        state.finishedRels.push(rel)
+        if (state.inFlightRel === rel) state.inFlightRel = undefined
+        options?.onFile?.(fr)
+        break
+      }
+      case "done":
+        state.workerConverted = Number(msg.converted ?? 0)
+        state.workerSkipped = Number(msg.skipped ?? 0)
+        if (Array.isArray(msg.errors)) {
+          for (const e of msg.errors) state.errors.push(String(e))
+        }
+        break
+      case "error":
+        state.errors.push(String(msg.message ?? "worker error"))
+        options?.onLog?.(`PPU PaddleOCR worker: ${msg.message}`)
+        break
+    }
+  } catch {
+    options?.onLog?.(`PPU PaddleOCR worker: ${trimmed}`)
+  }
+}
+
 async function runOcrWorker(
   files: PpuOcrFile[],
   options?: {
     onLog?: (msg: string) => void
     onProgress?: (current: number, total: number, relPath: string) => void
     onPageProgress?: (current: number, total: number, relPath: string, page: string) => void
+    onFileStart?: (relPath: string) => void
+    onFile?: (result: { rel: string; ok: boolean; error?: string }) => void
+    shouldAbort?: () => boolean
   },
-): Promise<PpuOcrBatchResult> {
-  const workerScript = workerScriptPath()
+): Promise<OcrWorkerRunResult> {
+  throwIfSpinosaCancelled(options?.shouldAbort)
+  const mode = resolveOcrWorkerMode()
   const workerArgs = JSON.stringify({ files })
-  const child = spawn(process.argv0, ["run", workerScript, workerArgs], {
-    stdio: ["ignore", "pipe", "ignore"],
-    detached: true,
-  })
+  const child =
+    mode === "binary-cli"
+      ? spawn(productBinaryExecutable(), ["internal", "ocr-worker", workerArgs], {
+          stdio: ["ignore", "pipe", "pipe"],
+          detached: true,
+          env: process.env,
+        })
+      : spawn(bunExecutableForWorker(), ["run", workerScriptPath(), workerArgs], {
+          stdio: ["ignore", "pipe", "pipe"],
+          detached: true,
+        })
   child.unref()
 
-  let stdoutBuf = ""
-  child.stdout.on("data", (chunk: Buffer) => { stdoutBuf += chunk.toString() })
+  const state = {
+    workerConverted: 0,
+    workerSkipped: 0,
+    errors: [] as string[],
+    fileResults: [] as Array<{ rel: string; ok: boolean; error?: string }>,
+    finishedRels: [] as string[],
+    inFlightRel: undefined as string | undefined,
+  }
+
+  // Stream NDJSON as it arrives so TUI ProgressEmitter updates live (not only after exit).
+  let stdoutCarry = ""
+  let stderrBuf = ""
+  child.stdout?.on("data", (chunk: Buffer) => {
+    stdoutCarry += chunk.toString()
+    let nl: number
+    while ((nl = stdoutCarry.indexOf("\n")) >= 0) {
+      const line = stdoutCarry.slice(0, nl)
+      stdoutCarry = stdoutCarry.slice(nl + 1)
+      consumeOcrWorkerNdjsonLine(line, state, options)
+    }
+  })
+  child.stderr?.on("data", (chunk: Buffer) => { stderrBuf += chunk.toString() })
 
   const { code, signal } = await new Promise<{ code: number | null; signal: string | null }>((resolve) => {
     child.on("close", (c, s) => resolve({ code: c, signal: s }))
   })
+  if (stdoutCarry.trim()) consumeOcrWorkerNdjsonLine(stdoutCarry, state, options)
 
-  let workerConverted = 0
-  let workerSkipped = 0
-
-  for (const line of stdoutBuf.split("\n").filter(Boolean)) {
-    try {
-      const msg = JSON.parse(line)
-      switch (msg.type) {
-        case "progress":
-          options?.onProgress?.(msg.current, msg.total, msg.relPath)
-          break
-        case "pageProgress":
-          options?.onPageProgress?.(msg.current, msg.total, msg.relPath, msg.page)
-          break
-        case "log":
-          options?.onLog?.(msg.message)
-          break
-        case "done":
-          workerConverted = msg.converted
-          workerSkipped = msg.skipped
-          break
-        case "error":
-          options?.onLog?.(`PPU PaddleOCR worker: ${msg.message}`)
-          break
-      }
-    } catch {
-      options?.onLog?.(`PPU PaddleOCR worker: ${line}`)
-    }
+  if (stderrBuf.trim()) {
+    const errLine = stderrBuf.trim().split("\n").slice(-3).join(" | ")
+    state.errors.push(errLine)
+    options?.onLog?.(`PPU PaddleOCR worker stderr: ${errLine}`)
   }
 
+  const crashed = Boolean(signal) || (code !== 0 && code !== null)
   if (signal) {
-    options?.onLog?.(`PPU PaddleOCR worker terminated by signal ${signal} — worker crash`)
-  } else if (code !== 0) {
-    options?.onLog?.(`PPU PaddleOCR worker exited with code ${code}`)
+    const msg = `PPU PaddleOCR worker terminated by signal ${signal} — worker crash`
+    state.errors.push(msg)
+    options?.onLog?.(msg)
+  } else if (code !== 0 && code !== null) {
+    const msg = `PPU PaddleOCR worker exited with code ${code}`
+    state.errors.push(msg)
+    options?.onLog?.(msg)
   }
 
-  return { converted: workerConverted, skipped: workerSkipped }
+  // Prefer per-file events for accurate converted/skipped when the worker crashed mid-batch.
+  let workerConverted = state.workerConverted
+  let workerSkipped = state.workerSkipped
+  if (state.fileResults.length > 0) {
+    workerConverted = state.fileResults.filter((f) => f.ok).length
+    workerSkipped = state.fileResults.filter((f) => !f.ok).length
+  }
+
+  return {
+    converted: workerConverted,
+    skipped: workerSkipped,
+    errors: state.errors.length > 0 ? state.errors : undefined,
+    files: state.fileResults.length > 0 ? state.fileResults : undefined,
+    mode,
+    finishedRels: state.finishedRels,
+    crashedRel: crashed ? state.inFlightRel : undefined,
+    crashed,
+  }
 }
+
 
 
 // ── Helpers ───────────────────────────────────────────────────────────────
@@ -643,6 +909,7 @@ function appendNdjson(path: string, obj: Record<string, unknown>): void {
 
 async function convertTextPdf(srcFile: string, destFile: string, relPath: string, shouldAbort?: () => boolean): Promise<void> {
   const title = path.basename(relPath, path.extname(relPath))
+  const { pdfExtractPageTexts } = await import("../extension/pdf-js")
   const pageTexts = await pdfExtractPageTexts(srcFile)
   throwIfSpinosaCancelled(shouldAbort)
   const pages = pageTexts.length
@@ -795,7 +1062,7 @@ export async function verifyAndRecoverImport(
         try {
           mkdirSync(path.dirname(destFile), { recursive: true })
           const converter = new MarkItDown()
-          const result = await converter.convert(srcFile)
+          const result = await markitdownConvertFile(converter, srcFile)
           throwIfSpinosaCancelled(shouldAbort)
         const text = stripAnsi(result?.markdown ?? "")
           writeTextAtomicSafe(destFile, text)
@@ -815,26 +1082,31 @@ export async function verifyAndRecoverImport(
       }
       case "ocr": {
         let ppuConverted = 0
+        let ocrError: string | undefined
         if (ocrAvailable()) {
           try {
-            const ppuResult = await runOcrWorker([{ src: srcFile, rel: relPath, dest: destFile }], { onLog })
+            const ppuResult = await runOcrWorker([{ src: srcFile, rel: relPath, dest: destFile }], { onLog, shouldAbort })
             ppuConverted = ppuResult.converted
+            if (ppuConverted <= 0 || !convertedOutputExists(destFile)) {
+              ocrError = ppuResult.errors?.[0] ?? "OCR produced no convertible markdown"
+              ppuConverted = 0
+            }
           } catch (err) {
             if (isSpinosaCancellationError(err)) throw err
-            onLog?.(`    PPU OCR engine failed: ${err instanceof Error ? err.message : String(err)} — skipping OCR recovery`)
+            ocrError = err instanceof Error ? err.message : String(err)
+            onLog?.(`    PPU OCR engine failed: ${ocrError} — leaving file missing (no binary-as-md fallback)`)
           }
+        } else {
+          ocrError = "OCR engine unavailable"
         }
-        if (ppuConverted > 0) {
+        if (ppuConverted > 0 && convertedOutputExists(destFile)) {
           injectColdFrontmatter(destFile)
           onLog?.(`    Recovered (ocr retry): ${relPath}`)
           ok = true
         } else {
-          const fallbackDest = destFile
-          mkdirSync(path.dirname(fallbackDest), { recursive: true })
-          if (await safeCopyAsync(srcFile, fallbackDest)) {
-            onLog?.(`    Recovered (source copy fallback, ocr retry failed): ${relPath}`)
-            ok = true
-          }
+          // Never copy PDF/PNG/JPEG onto a `.md` path — that poisons raw/ for agents.
+          spinosaLogWarn("ocr", `verify recover left missing ${relPath}: ${ocrError ?? "ocr failed"}`)
+          onLog?.(`    Still missing (OCR failed, no source-copy fallback): ${relPath}${ocrError ? ` — ${ocrError}` : ""}`)
         }
         break
       }

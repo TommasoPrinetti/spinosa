@@ -3,6 +3,13 @@ import { compareFrameworkVersions, parseInstallPinnedVersion } from "../utils/ve
 import { existsSync, readFileSync, readdirSync, realpathSync } from "node:fs"
 import { homedir } from "node:os"
 import path from "node:path"
+import {
+  isCompiledBinaryDistribution,
+  compiledVersion,
+  resolveTemplateCacheRoot,
+  readInstalledBinaryVersion,
+  ensureEmbeddedTemplateCache,
+} from "../distribution/bootstrap"
 
 // New layout (post restructure): workspace-template/.spinosa/workspace-files.tsv
 const MARKER = path.join("workspace-template", ".spinosa", "workspace-files.tsv")
@@ -31,6 +38,8 @@ export function resolveTemplateRootFromFrameworkRoot(root: string): string | und
   if (existsSync(path.join(root, ".spinosa", "workspace-files.tsv"))) return root
   return undefined
 }
+
+/** Legacy source-tree discovery — migration utilities only. Not used in binary mode. */
 export function discoverInstalledFramework(): string | undefined {
   const versionsDir = path.join(process.env.SPINOSA_HOME ?? path.join(homedir(), ".spinosa"), "versions")
   if (!existsSync(versionsDir)) return undefined
@@ -43,7 +52,6 @@ export function discoverInstalledFramework(): string | undefined {
       const ver = verEntry.name
       if (!/^\d/.test(ver)) continue
 
-      // New installer format: framework files directly in the version directory
       if (hasFrameworkMarker(versionBase)) {
         if (!bestDir || (compareFrameworkVersions(ver, bestVersion) ?? -1) > 0) {
           bestVersion = ver
@@ -52,7 +60,6 @@ export function discoverInstalledFramework(): string | undefined {
         continue
       }
 
-      // Old installer format: spinosa-framework-<version>/ subdirectory
       for (const fwEntry of readdirSync(versionBase, { withFileTypes: true })) {
         if (!fwEntry.isDirectory() || !fwEntry.name.startsWith("spinosa-framework-")) continue
         const fwPath = path.join(versionBase, fwEntry.name)
@@ -70,16 +77,42 @@ export function discoverInstalledFramework(): string | undefined {
   return bestDir || undefined
 }
 
+function resolveBinaryTemplateRoot(): string | undefined {
+  const env = process.env.SPINOSA_TEMPLATE_ROOT
+  if (env && existsSync(path.join(env, ".spinosa", "workspace-files.tsv"))) {
+    return normalizeExistingRoot(env)
+  }
+
+  const ensured = ensureEmbeddedTemplateCache()
+  if (ensured.ok && existsSync(path.join(ensured.templateRoot, ".spinosa", "workspace-files.tsv"))) {
+    return normalizeExistingRoot(ensured.templateRoot)
+  }
+
+  const cache = resolveTemplateCacheRoot()
+  if (existsSync(path.join(cache, ".spinosa", "workspace-files.tsv"))) {
+    return normalizeExistingRoot(cache)
+  }
+  return undefined
+}
+
 export function resolveFrameworkRoot(): string | undefined {
+  // Binary mode: never let dormant ~/.spinosa/versions outrank the embedded pack.
+  if (isCompiledBinaryDistribution()) {
+    return resolveBinaryTemplateRoot()
+  }
+
   const env = process.env.SPINOSA_TEMPLATE_ROOT ?? process.env.SPINOSA_FRAMEWORK_ROOT
   if (env && hasFrameworkMarker(env)) return normalizeExistingRoot(env)
+  if (env && existsSync(path.join(env, ".spinosa", "workspace-files.tsv"))) {
+    return normalizeExistingRoot(env)
+  }
 
-  // Prefer the installed release over the dev repo or cwd so workspace
-  // creation/lookup stamps with the actual installed version (not whatever
-  // `package.json` says in the spinosa-main checkout).
   const candidates: string[] = []
-  const installed = discoverInstalledFramework()
-  if (installed) candidates.push(installed)
+  // Dev / source installs may still use version trees.
+  if (!process.env.SPINOSA_DISABLE_VERSION_TREE_DISCOVERY) {
+    const installed = discoverInstalledFramework()
+    if (installed) candidates.push(installed)
+  }
   candidates.push(process.cwd())
 
   for (const candidate of candidates) {
@@ -87,11 +120,11 @@ export function resolveFrameworkRoot(): string | undefined {
   }
   return undefined
 }
+
 export function resolveFrameworkBin(): string | undefined {
   const root = resolveFrameworkRoot()
   if (!root) return undefined
-  const templateRoot = resolveTemplateRootFromFrameworkRoot(root)
-  if (!templateRoot) return undefined
+  const templateRoot = resolveTemplateRootFromFrameworkRoot(root) ?? root
   const bin = path.join(templateRoot, ".bin", "spinosa")
   return existsSync(bin) ? bin : undefined
 }
@@ -110,6 +143,13 @@ export async function readFrameworkFile(relativePath: string): Promise<string | 
 }
 
 export function readFrameworkVersionFromRoot(frameworkRoot: string | undefined): string {
+  if (isCompiledBinaryDistribution()) {
+    const compiled = compiledVersion()
+    if (compiled && compiled !== "dev") return compiled
+    const installed = readInstalledBinaryVersion()
+    if (installed) return installed
+  }
+
   if (!frameworkRoot) return "dev"
   try {
     const metadataPath = path.join(frameworkRoot, "metadata", "version")
@@ -130,6 +170,12 @@ export function readFrameworkVersionFromRoot(frameworkRoot: string | undefined):
       if (pinned && pinned !== "__VERSION__") return pinned
     }
 
+    const packMeta = path.join(frameworkRoot, ".spinosa", "template-pack.json")
+    if (existsSync(packMeta)) {
+      const parsed = JSON.parse(readFileSync(packMeta, "utf-8")) as { version?: string }
+      if (parsed.version?.trim()) return parsed.version.trim()
+    }
+
     const directoryVersion = path.basename(frameworkRoot)
     if (/^\d+\.\d+\.\d+(?:-.+)?$/.test(directoryVersion) && hasFrameworkMarker(frameworkRoot)) {
       return directoryVersion
@@ -141,6 +187,12 @@ export function readFrameworkVersionFromRoot(frameworkRoot: string | undefined):
 }
 
 export function installedReleaseVersion(frameworkRoot: string | undefined): string {
+  if (isCompiledBinaryDistribution()) {
+    const compiled = compiledVersion()
+    if (compiled && compiled !== "dev" && compiled !== "local") return compiled
+    const installed = readInstalledBinaryVersion()
+    if (installed) return installed
+  }
   const version = readFrameworkVersionFromRoot(frameworkRoot)
   return version === "dev" ? "" : version
 }

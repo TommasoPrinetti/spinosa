@@ -8,6 +8,25 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.0.3-beta.10] — 2026-07-31
+
+### Breaking
+
+- Product distribution is **binary-only**. Releases publish four platform executables (`spinosa-darwin-arm64`, `spinosa-darwin-x64`, `spinosa-linux-arm64`, `spinosa-linux-x64`), `install.sh`, `checksums.txt`, and `build-manifest.json`. The `spinosa-v*.tar.gz` source product archive is no longer published.
+- End-user installs no longer download Bun, run `bun install`, link OpenTUI packages, or stage `~/.spinosa/versions/<version>` source trees. The active runtime is `~/.spinosa/bin/spinosa` with embedded workspace templates extracted under `~/.spinosa/templates/`.
+- Workspace `.bin/spinosa` is a minimal forwarder to the installed binary. Managed source launchers are migrated; user-modified launchers are preserved.
+
+### Changed
+
+- Installer performs checksum-verified download, staged verification (`version` / template ensure / doctor), atomic activation, and rollback. `SPINOSA_RELEASE_BASE_URL` overrides the asset base for local smoke.
+- Upgrade, launch preflight, repair, and uninstall no longer treat `~/.spinosa/versions` as the active runtime. Legacy version trees are left dormant and are never auto-deleted; metadata and registered workspaces are preserved.
+- Release pipeline builds product binaries via `script/build-release-binaries.ts` (shared `buildSpinosaBinaries`) and smokes the real installer against local HTTP assets.
+- `--no-bundled-tools` is a deprecated no-op warning during the transition beta.
+
+### Migration
+
+- Re-run the beta/stable `install.sh` once. Owned metadata and workspace registrations remain. Dormant `versions/` may be removed later with an explicit cleanup option after the binary install is healthy.
+
 ## [1.0.3-beta.9] — 2026-07-31
 
 ### Fixed

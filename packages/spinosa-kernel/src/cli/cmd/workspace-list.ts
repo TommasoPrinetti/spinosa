@@ -1,10 +1,7 @@
 import type { Argv } from "yargs"
-import {
-  inspectWorkspacePresence,
-  loadRegistry,
-  readWorkspaceMeta,
-  workspacePresenceLabel,
-} from "@spinosa/core"
+import { inspectWorkspacePresence, workspacePresenceLabel } from "@spinosa/core/workspace/presence"
+import { loadRegistry } from "@spinosa/core/workspace/registry"
+import { readWorkspaceMeta } from "@spinosa/core/workspace/meta"
 import { getFormatFromRecord, log, emitResult, type OutputFormat } from "../output"
 
 interface ListArgs {

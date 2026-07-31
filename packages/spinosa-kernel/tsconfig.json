@@ -12,5 +12,6 @@
       "@/*": ["./src/*"],
       "@test/*": ["./test/*"]
     }
-  }
+  },
+  "exclude": ["src/generated/**", "dist/**", "node_modules"]
 }

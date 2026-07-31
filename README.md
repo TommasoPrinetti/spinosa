@@ -39,7 +39,7 @@ The design is local-first. Workspace files and indexes remain on your machine. W
 ## Cold start
 
 ```bash
-# 1. Install (macOS / Linux)
+# 1. Install (macOS / Linux) — downloads a platform binary (no Bun required)
 
 # Stable channel — use for production after a stable cut from main
 curl -fsSL https://github.com/medialab/spinosa/releases/download/stable/install.sh | bash
@@ -53,6 +53,12 @@ curl -fsSL https://github.com/medialab/spinosa/releases/download/stable/install.
 # 2. Launch the dashboard
 spinosa
 ```
+
+Supported install platforms: macOS and Linux (glibc) on `arm64` / `x64`. The installer verifies SHA-256 checksums and installs `~/.spinosa/bin/spinosa` plus a PATH shim. Workspace templates ship embedded in the binary.
+
+**Source installs from older betas:** re-run the installer once. Metadata and registered workspaces are preserved; dormant `~/.spinosa/versions/` trees are not deleted automatically.
+
+Developers working from a git checkout still use `bun run dev` (see [DEVELOPMENT.md](DEVELOPMENT.md)).
 
 The first time you run `spinosa`, you'll see the workspace picker. Click **+ New workspace** and follow the 11-step wizard: choose your document folder, name the workspace, verify the document converters are installed, review what was found, and select your AI coding tool (Claude Code, OpenCode, Gemini, Ollama, etc.).
 

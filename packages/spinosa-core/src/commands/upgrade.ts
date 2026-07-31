@@ -74,24 +74,79 @@ function metadataDir(): string {
   return process.env.SPINOSA_METADATA_DIR ?? `${spinosaHome()}/metadata`
 }
 
-export function installedUpgradeVersion(version: string, home = spinosaHome()): string {
-  return installedReleaseVersion(path.join(home, "versions", version))
-}
-
 function versionCachePath(channel: string): string {
   return path.join(metadataDir(), `version_check_cache_${channel}`)
 }
 
+export function installedUpgradeVersion(version: string, home = spinosaHome()): string {
+  // Binary installs: prefer active binary metadata / binary --version, not versions/<ver>.
+  const binaryPath = path.join(home, "bin", "spinosa")
+  if (existsSync(binaryPath)) {
+    const fromMeta = (() => {
+      try {
+        const text = readFileSync(path.join(home, "metadata", "config.yaml"), "utf-8")
+        return text.match(/^last_installed_version:\s*["']?([^\s"']+)/m)?.[1]?.trim() ?? ""
+      } catch {
+        return ""
+      }
+    })()
+    if (fromMeta === version) return fromMeta
+
+    const probe = spawnSync(binaryPath, ["version", "--json"], { encoding: "utf-8" })
+    if (probe.status === 0) {
+      try {
+        const parsed = JSON.parse(probe.stdout) as { version?: string; data?: { version?: string } }
+        const reported = parsed.version ?? parsed.data?.version ?? ""
+        if (reported === version) return reported
+      } catch {
+        const match = probe.stdout.match(/spinosa\s+(\S+)/)
+        if (match?.[1] === version) return match[1]
+      }
+    }
+  }
+
+  // Legacy source tree fallback (migration era only).
+  return installedReleaseVersion(path.join(home, "versions", version))
+}
+
 export function readEffectiveInstalledVersion(): string {
+  const home = spinosaHome()
+  const binaryPath = path.join(home, "bin", "spinosa")
+  if (existsSync(binaryPath)) {
+    const fromMeta = (() => {
+      try {
+        const text = readFileSync(path.join(home, "metadata", "config.yaml"), "utf-8")
+        return text.match(/^last_installed_version:\s*["']?([^\s"']+)/m)?.[1]?.trim() ?? ""
+      } catch {
+        return ""
+      }
+    })()
+    if (fromMeta) return fromMeta
+
+    const probe = spawnSync(binaryPath, ["version", "--json"], { encoding: "utf-8" })
+    if (probe.status === 0) {
+      try {
+        const parsed = JSON.parse(probe.stdout) as { version?: string; data?: { version?: string } }
+        const reported = parsed.version ?? parsed.data?.version ?? ""
+        if (reported) return reported
+      } catch {
+        const match = probe.stdout.match(/spinosa\s+(\S+)/)
+        if (match?.[1]) return match[1]
+      }
+    }
+  }
+
   const fwRoot = resolveFrameworkRoot()
   const installedVersion = installedReleaseVersion(fwRoot)
   const effectiveInstalled =
     installedVersion === "dev" || !installedVersion ? "" : installedVersion
 
-  const installedFwRoot = discoverInstalledFramework()
-  if (installedFwRoot && installedFwRoot !== fwRoot) {
-    const globalVersion = installedReleaseVersion(installedFwRoot)
-    if (globalVersion) return globalVersion
+  if (!process.env.SPINOSA_DISABLE_VERSION_TREE_DISCOVERY) {
+    const installedFwRoot = discoverInstalledFramework()
+    if (installedFwRoot && installedFwRoot !== fwRoot) {
+      const globalVersion = installedReleaseVersion(installedFwRoot)
+      if (globalVersion) return globalVersion
+    }
   }
 
   return effectiveInstalled

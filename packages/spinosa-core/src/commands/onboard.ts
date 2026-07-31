@@ -2,11 +2,7 @@ import { existsSync, mkdirSync } from "node:fs"
 import path from "node:path"
 import { scanSource, detectDocumentTools, type ScanCounts, type ScanBytes, type ToolStatus } from "../scan/scanner"
 import { ImportBatchManager } from "../import/batch"
-import {
-  copySource,
-  verifyAndRecoverImport,
-  type PhaseResult,
-} from "../import/pipeline"
+import type { PhaseResult } from "../import/pipeline"
 import { writeSetupFiles } from "../workspace/registry"
 import { writeWorkspaceStatus } from "../workspace/meta"
 import { generateStartupPrompt } from "./startup"
@@ -147,6 +143,7 @@ export async function completeOnboarding(
   const phase = onPhase ?? (() => {})
 
   phase("verification", "Verifying import delivery...")
+  const { verifyAndRecoverImport } = await import("../import/pipeline")
   const verifyResult = await verifyAndRecoverImport(
     ctx.sourcePath, ctx.rawDir, ctx.batches,
     ctx.toolStatus.markitdown, true,
@@ -230,6 +227,7 @@ export async function runOnboarding(
 
   const { onPhase, onCopyProgress } = options
 
+  const { copySource } = await import("../import/pipeline")
   const result = await copySource(ctx.sourcePath, ctx.rawDir, {
     batchManager: ctx.batches,
     markitdownChoice: ctx.toolStatus.markitdown,

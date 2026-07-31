@@ -1,7 +1,16 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync } from "node:fs"
+import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync, chmodSync } from "node:fs"
 import { resolve } from "node:path"
 import { createHash } from "node:crypto"
 import { $ } from "bun"
+import {
+  buildManifestAssets,
+  expectedChannelReleaseAssets,
+  expectedImmutableReleaseAssets,
+  productBinaryAssetName,
+  resolveProductBinaryTarget,
+  type BuildManifest,
+  type ProductBinaryTarget,
+} from "../../packages/spinosa-core/src/distribution/contract.ts"
 import { parseInstallPinnedVersion } from "../../packages/spinosa-core/src/utils/version.ts"
 import { syncProductVersion, assertChangelogHasVersion } from "../set-version.ts"
 import { assertRollingChannelInstaller, publishRollingChannelRelease } from "./github.ts"
@@ -118,12 +127,11 @@ export async function runBump(ctx: StageContext): Promise<string> {
 export async function runBuild(ctx: StageContext): Promise<void> {
   const { paths, version } = ctx
   if (ctx.dryRun) {
-    ctx.reporter.detail(`would build dist/v${version}/ and dist/${paths.channel}/`)
+    ctx.reporter.detail(`would build product binaries + installers into dist/v${version}/ and dist/${paths.channel}/`)
     return
   }
 
   const head = (await $`git rev-parse HEAD`.cwd(RELEASE_ROOT).text()).trim()
-  const archiveSha = ctx.state.sha || head
   if (ctx.state.sha && ctx.state.sha !== head) {
     throw new Error(
       `refusing to build: release state sha ${ctx.state.sha.slice(0, 8)} ≠ HEAD ${head.slice(0, 8)}`,
@@ -132,6 +140,25 @@ export async function runBuild(ctx: StageContext): Promise<void> {
 
   mkdirSync(paths.dist, { recursive: true })
   mkdirSync(paths.channelDist, { recursive: true })
+
+  // Shared entry: packs template + buildSpinosaBinaries → flat product assets + build-manifest.json
+  const build = await $`bun script/build-release-binaries.ts --out-dir ${paths.dist} --version ${version} --channel ${paths.channel}`
+    .cwd(RELEASE_ROOT)
+    .nothrow()
+  if (build.exitCode !== 0) {
+    throw new Error("product binary build failed — see script/build-release-binaries.ts")
+  }
+
+  for (const binaryPath of Object.values(paths.binaryPaths)) {
+    if (!existsSync(binaryPath)) throw new Error(`missing binary after build: ${binaryPath}`)
+    chmodSync(binaryPath, 0o755)
+  }
+
+  const builtManifest = JSON.parse(readFileSync(paths.manifestPath, "utf-8")) as BuildManifest
+  if (!builtManifest.templatePackId) {
+    throw new Error("build-manifest.json missing templatePackId after binary build")
+  }
+  ctx.reporter.detail(`templatePackId ${builtManifest.templatePackId.slice(0, 12)}…`)
 
   const installSource = readFileSync(resolve(RELEASE_ROOT, "install.sh"), "utf-8")
   const patchInstaller = (source: string, pinnedVersion: string, pinnedTag: string) =>
@@ -142,9 +169,23 @@ export async function runBuild(ctx: StageContext): Promise<void> {
   writeFileSync(paths.installPath, patchInstaller(installSource, version, paths.tag))
   writeFileSync(paths.channelInstallPath, patchInstaller(installSource, version, paths.channel))
 
-  await $`git archive --format=tar.gz --prefix=spinosa-${version}/ -o ${paths.archivePath} ${archiveSha}`.cwd(RELEASE_ROOT)
+  // Re-write manifest after installers so version/channel stay authoritative for this cut.
+  const manifest: BuildManifest = {
+    product: "spinosa",
+    version,
+    channel: paths.channel,
+    templatePackId: builtManifest.templatePackId,
+    assets: buildManifestAssets(),
+  }
+  writeFileSync(paths.manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
 
-  const checksums = await $`shasum -a 256 install.sh ${paths.archiveName}`.cwd(paths.dist).text()
+  // Immutable assets hashed into checksums.txt (checksums.txt itself is published, not self-hashed).
+  const immutableHashed = [
+    "install.sh",
+    ...paths.binaryNames,
+    "build-manifest.json",
+  ]
+  const checksums = await $`shasum -a 256 ${immutableHashed}`.cwd(paths.dist).text()
   writeFileSync(paths.checksumsPath, formatChecksums(checksums))
 
   const channelChecksums = await $`shasum -a 256 install.sh`.cwd(paths.channelDist).text()
@@ -152,7 +193,7 @@ export async function runBuild(ctx: StageContext): Promise<void> {
 
   ctx.reporter.detail(paths.dist)
   ctx.reporter.detail(paths.channelDist)
-  ctx.reporter.detail(`archived ${archiveSha.slice(0, 8)}`)
+  ctx.reporter.detail(`binaries ${paths.binaryNames.join(", ")}`)
 }
 
 function formatChecksums(text: string): string {
@@ -165,20 +206,31 @@ function formatChecksums(text: string): string {
 export async function runVerifyLocal(ctx: StageContext): Promise<void> {
   const { paths, version } = ctx
   if (ctx.dryRun) {
-    ctx.reporter.detail("would verify local installers, archive, and checksums")
+    ctx.reporter.detail("would verify local installers, binaries, manifest, and checksums")
     return
   }
 
-  for (const file of [
-    paths.installPath,
-    paths.archivePath,
-    paths.checksumsPath,
-    paths.channelInstallPath,
-    paths.channelChecksumsPath,
-  ]) {
+  const expected = expectedImmutableReleaseAssets(version)
+  for (const name of expected) {
+    const file = resolve(paths.dist, name)
     if (!existsSync(file)) throw new Error(`missing local asset ${file}`)
   }
-  if (statSync(paths.archivePath).size < 1024) throw new Error(`archive looks empty: ${paths.archivePath}`)
+  for (const name of expectedChannelReleaseAssets()) {
+    const file = resolve(paths.channelDist, name)
+    if (!existsSync(file)) throw new Error(`missing channel asset ${file}`)
+  }
+
+  // Hard cut: no product archive under dist.
+  const strayArchive = resolve(paths.dist, `spinosa-v${version}.tar.gz`)
+  if (existsSync(strayArchive)) {
+    throw new Error(`refusing archive product asset ${strayArchive} — binary distribution only`)
+  }
+
+  for (const binaryPath of Object.values(paths.binaryPaths)) {
+    const st = statSync(binaryPath)
+    if (st.size <= 0) throw new Error(`binary looks empty: ${binaryPath}`)
+    if ((st.mode & 0o111) === 0) throw new Error(`binary not executable: ${binaryPath}`)
+  }
 
   const pinned = parseInstallPinnedVersion(readFileSync(paths.installPath, "utf-8"))
   if (pinned !== version) throw new Error(`dist installer PINNED_VERSION=${pinned}, expected ${version}`)
@@ -188,9 +240,28 @@ export async function runVerifyLocal(ctx: StageContext): Promise<void> {
     throw new Error(`channel installer PINNED_VERSION=${channelPinned}, expected ${version}`)
   }
 
+  const manifest = JSON.parse(readFileSync(paths.manifestPath, "utf-8")) as BuildManifest
+  if (manifest.product !== "spinosa") throw new Error(`manifest product=${manifest.product}, expected spinosa`)
+  if (manifest.version !== version) throw new Error(`manifest version=${manifest.version}, expected ${version}`)
+  if (manifest.channel !== paths.channel) {
+    throw new Error(`manifest channel=${manifest.channel}, expected ${paths.channel}`)
+  }
+  if (!manifest.templatePackId) throw new Error("manifest missing templatePackId")
+  for (const target of Object.keys(buildManifestAssets()) as ProductBinaryTarget[]) {
+    if (manifest.assets[target] !== productBinaryAssetName(target)) {
+      throw new Error(`manifest assets[${target}]=${manifest.assets[target]}, expected ${productBinaryAssetName(target)}`)
+    }
+  }
+
   const checksums = parseChecksums(readFileSync(paths.checksumsPath, "utf-8"))
   assertChecksum(paths.installPath, checksums.get("install.sh"), "install.sh")
-  assertChecksum(paths.archivePath, checksums.get(paths.archiveName), paths.archiveName)
+  assertChecksum(paths.manifestPath, checksums.get("build-manifest.json"), "build-manifest.json")
+  for (const name of paths.binaryNames) {
+    assertChecksum(resolve(paths.dist, name), checksums.get(name), name)
+  }
+  for (const name of ["install.sh", ...paths.binaryNames, "build-manifest.json"]) {
+    if (!checksums.has(name)) throw new Error(`checksums.txt missing entry for ${name}`)
+  }
 
   const channelChecksums = parseChecksums(readFileSync(paths.channelChecksumsPath, "utf-8"))
   assertChecksum(paths.channelInstallPath, channelChecksums.get("install.sh"), `${paths.channel}/install.sh`)
@@ -199,31 +270,27 @@ export async function runVerifyLocal(ctx: StageContext): Promise<void> {
 export async function runSmoke(ctx: StageContext): Promise<void> {
   const { paths } = ctx
   // Structure-only is a local escape hatch only — never the release default.
-  // Every published archive must pass the same frozen install users run.
   const structureOnly = process.env.SPINOSA_SMOKE_STRUCTURE === "1"
   if (ctx.dryRun) {
     ctx.reporter.detail(
       structureOnly
-        ? "would structure-smoke local archive (SPINOSA_SMOKE_STRUCTURE=1)"
-        : "would full-smoke local archive (frozen install + version/doctor + cwd)",
+        ? "would structure-smoke local binary release assets (SPINOSA_SMOKE_STRUCTURE=1)"
+        : "would full-smoke binary installer via local HTTP (SPINOSA_RELEASE_BASE_URL)",
     )
     return
   }
-  if (!existsSync(paths.archivePath)) {
-    throw new Error(`smoke requires archive at ${paths.archivePath}`)
+  if (!existsSync(paths.installPath) || !existsSync(paths.checksumsPath)) {
+    throw new Error(`smoke requires release assets at ${paths.dist}`)
   }
-  const flags = ["--archive", paths.archivePath]
+  const flags = ["--dist", paths.dist]
   if (structureOnly) flags.push("--structure")
-  if (process.env.SPINOSA_SMOKE_SKIP_DEPS === "1") flags.push("--skip-deps")
   const result = await $`bun script/smoke-install.ts ${flags}`.cwd(RELEASE_ROOT).nothrow()
   if (result.exitCode !== 0) {
     throw new Error(
-      "local archive smoke failed — published installs would break for users; see script/smoke-install.ts",
+      "local binary installer smoke failed — published installs would break for users; see script/smoke-install.ts",
     )
   }
-  ctx.reporter.detail(
-    structureOnly ? `structure-smoked ${paths.archiveName}` : `full-smoked ${paths.archiveName}`,
-  )
+  ctx.reporter.detail(structureOnly ? `structure-smoked ${paths.dist}` : `full-smoked ${paths.dist}`)
 }
 
 function sha256(filePath: string): string {
@@ -283,16 +350,12 @@ export async function runGitTag(ctx: StageContext): Promise<void> {
 export async function runPublishVersion(ctx: StageContext): Promise<void> {
   const { paths, version } = ctx
   if (ctx.dryRun) {
-    ctx.reporter.detail(`would create GitHub release ${paths.tag}`)
+    ctx.reporter.detail(`would create GitHub release ${paths.tag} with binary assets`)
     return
   }
 
   await resolveGhToken()
-  const assets = [
-    `dist/v${version}/install.sh`,
-    `dist/v${version}/spinosa-v${version}.tar.gz`,
-    `dist/v${version}/checksums.txt`,
-  ]
+  const assets = expectedImmutableReleaseAssets(version).map((name) => `dist/v${version}/${name}`)
   const prerelease = version.includes("-")
   const createArgs = [
     "release", "create", paths.tag,
@@ -306,23 +369,29 @@ export async function runPublishVersion(ctx: StageContext): Promise<void> {
   if (existing.exitCode === 0) {
     const remoteCheck = resolve(paths.dist, ".remote-check")
     mkdirSync(remoteCheck, { recursive: true })
-    const downloaded = await $`gh release download ${paths.tag} --pattern checksums.txt --dir ${remoteCheck} --clobber`
+    const downloaded = await $`gh release download ${paths.tag} --pattern checksums.txt --pattern build-manifest.json --dir ${remoteCheck} --clobber`
       .cwd(RELEASE_ROOT)
       .nothrow()
       .quiet()
-    if (downloaded.exitCode === 0 && existsSync(resolve(remoteCheck, "checksums.txt"))) {
-      const localHash = sha256(paths.checksumsPath)
-      const remoteHash = sha256(resolve(remoteCheck, "checksums.txt"))
-      if (localHash !== remoteHash) {
+    const remoteChecksums = resolve(remoteCheck, "checksums.txt")
+    const remoteManifest = resolve(remoteCheck, "build-manifest.json")
+    if (downloaded.exitCode === 0 && existsSync(remoteChecksums) && existsSync(remoteManifest)) {
+      const localChecksums = sha256(paths.checksumsPath)
+      const remoteChecksumsHash = sha256(remoteChecksums)
+      const localManifest = sha256(paths.manifestPath)
+      const remoteManifestHash = sha256(remoteManifest)
+      if (localChecksums !== remoteChecksumsHash || localManifest !== remoteManifestHash) {
         throw new Error(
-          `refusing to clobber immutable release ${paths.tag}: checksums.txt differs (local ${localHash.slice(0, 12)} ≠ remote ${remoteHash.slice(0, 12)})`,
+          `refusing to clobber immutable release ${paths.tag}: checksums/manifest differ ` +
+            `(checksums local ${localChecksums.slice(0, 12)} ≠ remote ${remoteChecksumsHash.slice(0, 12)}; ` +
+            `manifest local ${localManifest.slice(0, 12)} ≠ remote ${remoteManifestHash.slice(0, 12)})`,
         )
       }
-      ctx.reporter.detail(`existing ${paths.tag} checksums match — skip upload`)
+      ctx.reporter.detail(`existing ${paths.tag} checksums+manifest match — skip upload`)
       return
     }
     throw new Error(
-      `GitHub release ${paths.tag} already exists but checksums.txt could not be verified — refuse immutable republish`,
+      `GitHub release ${paths.tag} already exists but checksums.txt/build-manifest.json could not be verified — refuse immutable republish`,
     )
   }
 
@@ -378,19 +447,24 @@ export async function runVerifyRemote(ctx: StageContext): Promise<void> {
   )
   ctx.reporter.detail(`versioned ${paths.tag} PINNED_VERSION=${versionPinned}`)
 
-  // Optional remote archive smoke (downloads published tarball). Full frozen install
-  // by default — same contract as local smoke. SPINOSA_SMOKE_STRUCTURE=1 for paths only.
+  // Optional remote binary smoke — downloads the host platform product binary.
+  // SPINOSA_SMOKE_STRUCTURE=1 for asset presence only.
   if (process.env.SPINOSA_SMOKE_REMOTE === "1") {
     const remoteDir = resolve(paths.dist, ".remote-smoke")
     mkdirSync(remoteDir, { recursive: true })
-    await $`gh release download ${paths.tag} --pattern ${paths.archiveName} --dir ${remoteDir} --clobber`
+    const hostTarget = resolveProductBinaryTarget({
+      os: process.platform,
+      arch: process.arch,
+    })
+    const hostBinary = productBinaryAssetName(hostTarget)
+    await $`gh release download ${paths.tag} --pattern ${hostBinary} --dir ${remoteDir} --clobber`
       .cwd(RELEASE_ROOT)
-    const remoteArchive = resolve(remoteDir, paths.archiveName)
-    const flags = ["--archive", remoteArchive]
+    const remoteBinary = resolve(remoteDir, hostBinary)
+    const flags = ["--binary", remoteBinary]
     if (process.env.SPINOSA_SMOKE_STRUCTURE === "1") flags.push("--structure")
     const smoke = await $`bun script/smoke-install.ts ${flags}`.cwd(RELEASE_ROOT).nothrow()
-    if (smoke.exitCode !== 0) throw new Error("remote archive smoke failed")
-    ctx.reporter.detail(`remote smoke passed for ${paths.tag}`)
+    if (smoke.exitCode !== 0) throw new Error("remote binary smoke failed")
+    ctx.reporter.detail(`remote smoke passed for ${paths.tag} (${hostBinary})`)
   }
 }
 

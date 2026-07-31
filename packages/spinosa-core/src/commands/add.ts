@@ -20,12 +20,11 @@ import { ImportBatchManager } from "../import/batch"
 import { injectColdFrontmatter, convertedOutputExists, removeConvertedOutput } from "../import/frontmatter"
 import { scanSource } from "../scan/scanner"
 import { fileExt } from "../constants"
-import { runPpuOcrBatch } from "../import/ppu-ocr"
 import type { PpuOcrFile } from "../import/ppu-ocr"
 import { spinosaLogInfo } from "../utils/log"
 import { MarkItDown } from "markitdown-ts"
-import { copySource } from "../import/pipeline"
 import { isSpinosaCancellationError, throwIfSpinosaCancelled } from "../import/cancellation"
+import { markitdownConvertFile } from "../import/markitdown-convert"
 
 export interface AddFilesOptions {
   workspacePath: string
@@ -86,6 +85,7 @@ async function addFilesFromDir(
 
   onProgress?.("Scanning source directory...")
 
+  const { copySource } = await import("../import/pipeline")
   const result = await copySource(sourcePath, rawDir, {
     batchManager: importBatches,
     markitdownChoice: true,
@@ -240,7 +240,7 @@ async function addSingleFile(
 
       try {
         const converter = new MarkItDown()
-        const result = await converter.convert(srcFile)
+        const result = await markitdownConvertFile(converter, srcFile)
         throwIfSpinosaCancelled(shouldAbort)
         const text = result?.markdown ?? ""
         if (!text.trim()) throw new Error("MarkItDown returned no content")
@@ -273,6 +273,7 @@ async function addSingleFile(
 
       const tmpDest = destFile + `.spinosa-part-${process.pid}-${crypto.randomUUID()}`
       try {
+        const { runPpuOcrBatch } = await import("../import/ppu-ocr")
         await runPpuOcrBatch([{ src: srcFile, rel: fileName, dest: tmpDest }], { shouldAbort })
         if (convertedOutputExists(tmpDest)) {
           renameSync(tmpDest, destFile)

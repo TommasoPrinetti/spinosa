@@ -122,6 +122,7 @@ export async function publishRollingChannelRelease(input: {
 
   const installPath = path.join(input.channelDist, "install.sh")
   const checksumsPath = path.join(input.channelDist, "checksums.txt")
+  // Rolling channel publishes installer + checksums only (no binaries / no archive).
   await uploadReleaseFile(octokit, repo, releaseId, installPath, "install.sh")
   await uploadReleaseFile(octokit, repo, releaseId, checksumsPath, "checksums.txt")
 }

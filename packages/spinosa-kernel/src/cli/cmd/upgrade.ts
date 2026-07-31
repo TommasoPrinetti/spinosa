@@ -1,4 +1,6 @@
 import path from "node:path"
+import { existsSync } from "node:fs"
+import { spawnSync } from "node:child_process"
 import { homedir } from "node:os"
 import type { Argv } from "yargs"
 import * as prompts from "@clack/prompts"
@@ -119,8 +121,26 @@ export const UpgradeCommand = {
           const answer = await prompts.confirm({ message: question, initialValue: defaultYes })
           return answer === true
         },
-        frameworkRoot: (version) =>
-          path.join(process.env.SPINOSA_HOME ?? path.join(homedir(), ".spinosa"), "versions", version),
+        frameworkRoot: (version) => {
+          const home = process.env.SPINOSA_HOME ?? path.join(homedir(), ".spinosa")
+          const binary = path.join(home, "bin", "spinosa")
+          if (existsSync(binary)) {
+            const probe = spawnSync(binary, ["internal", "template", "ensure", "--json"], {
+              encoding: "utf-8",
+              env: process.env,
+            })
+            if (probe.status === 0) {
+              try {
+                const parsed = JSON.parse(probe.stdout) as { ok?: boolean; templateRoot?: string }
+                if (parsed.ok && parsed.templateRoot) return parsed.templateRoot
+              } catch {
+                /* fall through */
+              }
+            }
+          }
+          if (process.env.SPINOSA_TEMPLATE_ROOT) return process.env.SPINOSA_TEMPLATE_ROOT
+          return path.join(home, "versions", version)
+        },
         updateWorkspace: (workspacePath, frameworkRoot) =>
           updateWorkspace({ workspacePath, frameworkRoot }),
         out: (message) => prompts.log.info(message),
