@@ -8,6 +8,14 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.0.3-beta.11] — 2026-07-31
+
+### Fixed
+
+- PDF viewer polyfills canvas globals (`ImageData`, `Path2D`, DOMMatrix) from the ESM `@napi-rs/canvas` entry so pdfjs render works in the product binary without relying on optional CJS probes.
+- Markdown viewer shows a clear missing-file state instead of aborting when a path is gone or unreadable.
+- TUI resource reads harden against `ENOENT` so missing companion files do not crash the session.
+
 ## [1.0.3-beta.10] — 2026-07-31
 
 ### Breaking
