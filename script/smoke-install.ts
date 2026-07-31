@@ -1,17 +1,17 @@
 #!/usr/bin/env bun
 /**
- * Install / launch smoke.
+ * Install / launch smoke — mirrors what end users get from install.sh.
  *
- * Default (no flags): fast smoke against the live checkout.
- * Archive mode: extract a release tarball; by default only checks structure
- * (key paths + lockfile). Full launch after `bun install --frozen-lockfile`
- * requires `--full` (or SPINOSA_SMOKE_FULL=1 from the release pipeline).
+ * Default (no flags): fast smoke against the live checkout (repo-root).
+ * Archive mode: ALWAYS runs the same frozen install + launch path as the
+ * installer, so a published tarball cannot ship if deps/preload are broken.
+ * Use `--structure` only for local iteration (not for release).
  *
  * Usage:
  *   bun script/smoke-install.ts
  *   bun script/smoke-install.ts --repo-root
  *   bun script/smoke-install.ts --archive dist/vX/spinosa-vX.tar.gz
- *   bun script/smoke-install.ts --archive … --full
+ *   bun script/smoke-install.ts --archive … --structure   # paths only
  */
 import { existsSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
@@ -29,18 +29,22 @@ function argValue(flag: string): string | undefined {
 
 const archive = argValue("--archive")
 const explicitRepo = process.argv.includes("--repo-root")
-const wantFull =
-  process.argv.includes("--full") ||
-  process.env.SPINOSA_SMOKE_FULL === "1"
+const structureOnly =
+  process.argv.includes("--structure") ||
+  process.env.SPINOSA_SMOKE_STRUCTURE === "1"
 const skipDeps = process.argv.includes("--skip-deps")
+// Back-compat: --full / SPINOSA_SMOKE_FULL=1 are no-ops (archive default is full).
+const _legacyFull =
+  process.argv.includes("--full") || process.env.SPINOSA_SMOKE_FULL === "1"
+void _legacyFull
 
 if (process.argv.includes("--help") || process.argv.includes("-h")) {
   console.log(`Usage:
-  bun script/smoke-install.ts
-  bun script/smoke-install.ts --repo-root
-  bun script/smoke-install.ts --archive <tar.gz>          # structure only
-  bun script/smoke-install.ts --archive <tar.gz> --full   # install + launch
-Env: SPINOSA_SMOKE_FULL=1 enables --full`)
+  bun script/smoke-install.ts                         # live checkout
+  bun script/smoke-install.ts --repo-root             # same
+  bun script/smoke-install.ts --archive <tar.gz>      # frozen install + launch (default)
+  bun script/smoke-install.ts --archive <tar.gz> --structure  # paths only (local)
+Env: SPINOSA_SMOKE_STRUCTURE=1 forces structure-only (not for release)`)
   process.exit(0)
 }
 
@@ -65,7 +69,7 @@ writeFileSync(path.join(project, "README.md"), "# smoke project\n")
 
 let frameworkRoot = root
 const cleanup: string[] = [home, project]
-let structureOnly = false
+let skipLaunch = false
 
 try {
   if (archive) {
@@ -85,13 +89,18 @@ try {
     }
     console.log("✓ archive structure")
 
-    if (!wantFull) {
-      // Launch path is covered by repo smoke in `bun run quality`.
-      structureOnly = true
+    if (structureOnly) {
+      skipLaunch = true
+      console.log(`✓ smoke passed (structure-only, framework=${frameworkRoot})`)
     } else if (!skipDeps) {
+      // Same contract as install.sh: frozen lockfile must succeed for every user.
       console.log("→ bun install --frozen-lockfile (smoke tree)")
       const install = await $`bun install --frozen-lockfile`.cwd(frameworkRoot).nothrow()
-      if (install.exitCode !== 0) throw new Error("bun install --frozen-lockfile failed in smoke tree")
+      if (install.exitCode !== 0) {
+        throw new Error(
+          "bun install --frozen-lockfile failed in extracted archive — do not publish; refresh bun.lock and re-cut",
+        )
+      }
 
       const link = await $`bash -c ${`
         set -euo pipefail
@@ -103,13 +112,11 @@ try {
         console.warn("ensure_opentui_links returned non-zero — continuing if preload already resolvable")
       }
     } else {
-      console.warn("--full --skip-deps: launching without install (bare tree will fail)")
+      console.warn("--skip-deps: launching without install (bare tree will fail)")
     }
   }
 
-  if (structureOnly) {
-    console.log(`✓ smoke passed (structure-only, framework=${frameworkRoot})`)
-  } else {
+  if (!skipLaunch) {
     const kernelEntry = path.join(frameworkRoot, "packages/spinosa-kernel/src/index.ts")
     if (!existsSync(kernelEntry)) throw new Error(`missing kernel entry: ${kernelEntry}`)
 
@@ -120,7 +127,6 @@ try {
       PWD: project,
     }
 
-    // version + doctor catch preload/launch; help is noisy and redundant here.
     for (const cmd of ["version", "doctor"] as const) {
       console.log(`→ smoke ${cmd}`)
       const argv = buildKernelBunArgv({
@@ -135,7 +141,6 @@ try {
       }
     }
 
-    // Confirm cwd selection prefers PWD over framework --cwd (beta4 regression).
     const { resolveThreadDirectory } = await import(
       "../packages/spinosa-kernel/src/cli/cmd/tui.ts"
     )

@@ -198,30 +198,31 @@ export async function runVerifyLocal(ctx: StageContext): Promise<void> {
 
 export async function runSmoke(ctx: StageContext): Promise<void> {
   const { paths } = ctx
+  // Structure-only is a local escape hatch only — never the release default.
+  // Every published archive must pass the same frozen install users run.
+  const structureOnly = process.env.SPINOSA_SMOKE_STRUCTURE === "1"
   if (ctx.dryRun) {
     ctx.reporter.detail(
-      process.env.SPINOSA_SMOKE_FULL === "1"
-        ? "would full-smoke local archive (install + version/doctor + cwd)"
-        : "would structure-smoke local archive (key paths; set SPINOSA_SMOKE_FULL=1 for install+launch)",
+      structureOnly
+        ? "would structure-smoke local archive (SPINOSA_SMOKE_STRUCTURE=1)"
+        : "would full-smoke local archive (frozen install + version/doctor + cwd)",
     )
     return
   }
   if (!existsSync(paths.archivePath)) {
     throw new Error(`smoke requires archive at ${paths.archivePath}`)
   }
-  // Default: structure-only (fast). Full frozen install + launch: SPINOSA_SMOKE_FULL=1.
-  // Skip deps inside a full smoke with SPINOSA_SMOKE_SKIP_DEPS=1 (local iteration only).
   const flags = ["--archive", paths.archivePath]
-  if (process.env.SPINOSA_SMOKE_FULL === "1") flags.push("--full")
+  if (structureOnly) flags.push("--structure")
   if (process.env.SPINOSA_SMOKE_SKIP_DEPS === "1") flags.push("--skip-deps")
   const result = await $`bun script/smoke-install.ts ${flags}`.cwd(RELEASE_ROOT).nothrow()
   if (result.exitCode !== 0) {
-    throw new Error("local archive smoke failed — see script/smoke-install.ts output")
+    throw new Error(
+      "local archive smoke failed — published installs would break for users; see script/smoke-install.ts",
+    )
   }
   ctx.reporter.detail(
-    process.env.SPINOSA_SMOKE_FULL === "1"
-      ? `full-smoked ${paths.archiveName}`
-      : `structure-smoked ${paths.archiveName}`,
+    structureOnly ? `structure-smoked ${paths.archiveName}` : `full-smoked ${paths.archiveName}`,
   )
 }
 
@@ -377,8 +378,8 @@ export async function runVerifyRemote(ctx: StageContext): Promise<void> {
   )
   ctx.reporter.detail(`versioned ${paths.tag} PINNED_VERSION=${versionPinned}`)
 
-  // Optional remote archive smoke. Structure-only by default; full install+launch with
-  // SPINOSA_SMOKE_FULL=1 (and SPINOSA_SMOKE_REMOTE=1 to enable the download).
+  // Optional remote archive smoke (downloads published tarball). Full frozen install
+  // by default — same contract as local smoke. SPINOSA_SMOKE_STRUCTURE=1 for paths only.
   if (process.env.SPINOSA_SMOKE_REMOTE === "1") {
     const remoteDir = resolve(paths.dist, ".remote-smoke")
     mkdirSync(remoteDir, { recursive: true })
@@ -386,7 +387,7 @@ export async function runVerifyRemote(ctx: StageContext): Promise<void> {
       .cwd(RELEASE_ROOT)
     const remoteArchive = resolve(remoteDir, paths.archiveName)
     const flags = ["--archive", remoteArchive]
-    if (process.env.SPINOSA_SMOKE_FULL === "1") flags.push("--full")
+    if (process.env.SPINOSA_SMOKE_STRUCTURE === "1") flags.push("--structure")
     const smoke = await $`bun script/smoke-install.ts ${flags}`.cwd(RELEASE_ROOT).nothrow()
     if (smoke.exitCode !== 0) throw new Error("remote archive smoke failed")
     ctx.reporter.detail(`remote smoke passed for ${paths.tag}`)

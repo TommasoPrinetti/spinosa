@@ -8,6 +8,16 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.0.3-beta.8] — 2026-07-31
+
+### Changed
+
+- Release archive smoke is **full by default** (`bun install --frozen-lockfile` + launch inside the built tarball). Cuts cannot publish if the archive would fail for upgraders. Structure-only is opt-out via `SPINOSA_SMOKE_STRUCTURE=1` (local only).
+
+### Fixed
+
+- Installer dependency-failure message clarifies packaging defects vs local environment issues.
+
 ## [1.0.3-beta.7] — 2026-07-31
 
 ### Fixed

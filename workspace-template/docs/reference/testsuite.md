@@ -446,7 +446,7 @@ Copy into `dist/vX.Y.Z/SIGNOFF.md` (or release notes) before promoting stable:
 - [ ] macOS arm64 + system Bash version: ________
 - [ ] Linux distro + arch (or N/A with reason): ________
 - [ ] Phase A — `bun run quality` passed
-- [ ] Phase B — archive structure smoke (`bun script/smoke-install.ts --archive …`); for stable also `SPINOSA_SMOKE_FULL=1 … --full`
+- [ ] Phase B — full archive smoke (`bun script/smoke-install.ts --archive …`; release does this by default)
 - [ ] Phase C — `spinosa version` / `doctor`
 - [ ] Phase D — TUI first frame renders; opens invoking project directory
 - [ ] Phase E — upgrade from 1.0.0 workspace (Pilosa agents retired, corpus intact)

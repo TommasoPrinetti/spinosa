@@ -650,7 +650,7 @@ install_bun_dependencies() {
     spinosa_log ERROR "bun install --frozen-lockfile failed after 2 attempts. Output:"
     while IFS= read -r line; do spinosa_log ERROR "$line"; done < "$bun_out"
     rm -f "$bun_out"
-    die "Dependency install failed (lockfile must be honoured). Metadata was preserved; check ${SPINOSA_HOME}/logs/spinosa.log and re-run the installer."
+    die "Dependency install failed (frozen lockfile could not be honoured). This is a packaging defect in the published archive — please report it. Metadata was preserved; check ${SPINOSA_HOME}/logs/spinosa.log and re-run the installer after a fixed release."
   fi
   rm -f "$bun_out"
   ok "Dependencies installed"

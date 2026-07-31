@@ -49,11 +49,11 @@ State is tracked in `dist/v{VERSION}/.release-state.json` so releases can be res
 2. **bump** — sync versions, commit, push; refresh release-state SHA to post-bump HEAD
 3. **build** — stage installers/tarball/checksums from the release-state SHA (not a drifting HEAD)
 4. **verify-local** — pins and checksums
-5. **smoke** — extract local tarball and assert key paths (fast). Set `SPINOSA_SMOKE_FULL=1` for frozen install + `version`/`doctor` + cwd inside the archive
+5. **smoke** — extract the built tarball and run the **same** `bun install --frozen-lockfile` + `version`/`doctor` path users get (blocks publish on packaging defects). Escape hatch only: `SPINOSA_SMOKE_STRUCTURE=1`
 6. **git-tag** — tag must equal HEAD/state SHA
 7. **publish-version** — create immutable GitHub release (refuse checksum clobber)
 8. **channel** — sync rolling `beta`/`stable` tag + installer (clobber allowed only here)
-9. **verify-remote** — live installer pin check; `SPINOSA_SMOKE_REMOTE=1` downloads the published archive (structure-only unless `SPINOSA_SMOKE_FULL=1`)
+9. **verify-remote** — live installer pin check; `SPINOSA_SMOKE_REMOTE=1` also downloads and full-smokes the published archive
 
 ---
 
@@ -62,9 +62,10 @@ State is tracked in `dist/v{VERSION}/.release-state.json` so releases can be res
 | Command | When | What |
 | ------- | ---- | ---- |
 | `bun run quality` | Every beta cut / `release:validate` | Parallel: product typechecks, frozen lockfile, shellcheck, release-critical unit/TUI tests, installer bats, repo smoke |
-| `bun run smoke` | Local iteration | Repo-root `version`/`doctor` + cwd (same as quality’s smoke) |
+| `bun run smoke` | Local iteration | Repo-root `version`/`doctor` + cwd |
 | `bun run quality:full` | Before stable / deep sweep | Full typecheck-all, knip, syncpack, depcruise, all core+tui spinosa tests |
-| `SPINOSA_SMOKE_FULL=1` | Before stable / archive confidence | Full tarball install+launch smoke |
+
+Release archive smoke is **full by default** (not opt-in): a cut cannot publish if the extracted tarball fails frozen install. That is the guarantee for every upgrader, not just the maintainer machine.
 
 Quality is **local only** — no GitHub Actions quality workflow.
 
@@ -103,7 +104,7 @@ Record results in the sign-off checklist (`workspace-template/docs/reference/tes
 
 1. Freeze `beta` at the candidate commit.
 2. Open a reviewable `beta` → `main` pull request.
-3. Require local `bun run quality`, structure archive smoke (or `SPINOSA_SMOKE_FULL=1`), and migration notes.
+3. Require local `bun run quality`, full archive smoke (release does this by default), and migration notes.
 4. Merge, then cut `bun run release:stable:patch` **from `main`**.
 
 ---
@@ -125,4 +126,4 @@ bun run release resume 1.0.3-beta.1 --from smoke
 - Push beta with `git push origin HEAD:refs/heads/beta` if a local `beta` tag causes ref ambiguity.
 - Docs website deploys via GitHub Actions on `main` only (not beta).
 - Quality is **local only** (`bun run quality` / `quality:full`) — no GitHub Actions quality workflow.
-- Default release archive smoke is structure-only; set `SPINOSA_SMOKE_FULL=1` when you need install+launch inside the tarball.
+- Release archive smoke is full (frozen install + launch) by default; `SPINOSA_SMOKE_STRUCTURE=1` is a local escape hatch only.
