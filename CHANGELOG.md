@@ -16,7 +16,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
-- Installer dependency-failure message clarifies packaging defects vs local environment issues.
+- When dependency install fails (e.g. lockfile mismatch), the installer says **Installation needs repair** and offers **Repair now? [Y/n]**. `--yes` / `SPINOSA_REPAIR=1` auto-repair with a non-frozen `bun install` so upgraders are not stuck.
 
 ## [1.0.3-beta.7] — 2026-07-31
 

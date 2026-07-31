@@ -378,11 +378,14 @@ while [ $# -gt 0 ]; do
       echo "  --reinstall       Reinstall even if same version"
       echo "  --dry-run         Show what would happen without doing it"
       echo "  --verify-only     Verify installed binaries, do not install"
-      echo "  --yes             Skip all confirmation prompts (for automation)"
+      echo "  --yes             Skip prompts; auto-upgrade and auto-repair deps if needed"
       echo "  --no-launch       Compatibility flag; the installer never auto-launches"
       echo ""
       echo "Security:"
       echo "  --min-days N      Reject releases newer than N days old"
+      echo ""
+      echo "Environment:"
+      echo "  SPINOSA_REPAIR=1  Auto-repair dependency install without prompting"
       echo ""
       echo "Paths:"
       echo "  --no-bundled-tools Use an existing system Bun runtime"
@@ -592,6 +595,50 @@ ensure_opentui_links() {
   done
 }
 
+# Returns 0 if the user (or --yes / SPINOSA_REPAIR=1) wants a local dependency repair.
+prompt_dependency_repair() {
+  echo "" >&2
+  printf '  %s %sInstallation needs repair.%s\n' "${Y}⚠${RESET}" "${Y}" "${RESET}" >&2
+  printf '  %s Dependency install could not honour the published lockfile (or the tree is damaged).%s\n' "${DIM}" "${RESET}" >&2
+  if [ "${SPINOSA_REPAIR:-}" = "1" ]; then
+    info "Repairing automatically (SPINOSA_REPAIR=1)..."
+    return 0
+  fi
+  if [ "$YES" -eq 1 ]; then
+    info "Repairing automatically (--yes)..."
+    return 0
+  fi
+  printf '  %s Repair now?%s [Y/n]: ' "${BOLD}?${RESET}" "${RESET}" >&2
+  local reply
+  if ! read_from_tty reply; then
+    echo "" >&2
+    warn "No terminal for repair prompt. Re-run with --yes to auto-repair."
+    return 1
+  fi
+  reply="${reply:-Y}"
+  case "$reply" in
+    n|N|no|NO)
+      info "Repair cancelled."
+      return 1
+      ;;
+    *)
+      return 0
+      ;;
+  esac
+}
+
+# Validate that the installed framework can launch (same argv as the user shim).
+validate_framework_launch() {
+  local fw_root="$1"
+  local bun_bin="$2"
+  local bun_out="${3:-/dev/null}"
+  ensure_workspace_links "$fw_root"
+  ensure_opentui_links "$fw_root"
+  SPINOSA_HOME="$SPINOSA_HOME" SPINOSA_TEMPLATE_ROOT="$fw_root" \
+    "$bun_bin" --cwd "$fw_root" --preload "@opentui/solid/preload" \
+    "${fw_root}/packages/spinosa-kernel/src/index.ts" version >> "$bun_out" 2>&1
+}
+
 install_bun_dependencies() {
   local fw_root="$1"
   local bun_bin="${SPINOSA_HOME}/bin/bun"
@@ -623,20 +670,14 @@ install_bun_dependencies() {
   for attempt in 1 2; do
     local install_args=(install --frozen-lockfile)
     if [[ $attempt -eq 2 ]]; then
-      info "Repairing dependency tree after failed validation (attempt 2/2, timeout ${timeout_seconds}s)"
+      info "Retrying with a clean dependency tree (attempt 2/2, timeout ${timeout_seconds}s, frozen lockfile)"
       rm -rf "${fw_root}/node_modules"
     else
       info "Installing dependencies (attempt 1/2, timeout ${timeout_seconds}s, frozen lockfile)"
     fi
     if (cd "$fw_root" && PATH="$(dirname "$bun_bin"):$PATH" \
       "$bun_bin" run "$timeout_runner" "$timeout_seconds" "$bun_bin" "${install_args[@]}" 2>&1 | tee -a "$bun_out"); then
-      ensure_workspace_links "$fw_root"
-      # Validate with the same argv shape as workspace-template/.bin/spinosa exec_kernel
-      # (bun --cwd <root> --preload @opentui/solid/preload <entry>). Plain `bun run`
-      # can pass via package-local node_modules while the launcher still fails.
-      if SPINOSA_HOME="$SPINOSA_HOME" SPINOSA_TEMPLATE_ROOT="$fw_root" \
-        "$bun_bin" --cwd "$fw_root" --preload "@opentui/solid/preload" \
-        "${fw_root}/packages/spinosa-kernel/src/index.ts" version >> "$bun_out" 2>&1; then
+      if validate_framework_launch "$fw_root" "$bun_bin" "$bun_out"; then
         bun_ok=1
         break
       fi
@@ -646,11 +687,32 @@ install_bun_dependencies() {
       sleep 2
     fi
   done
+
+  # Frozen path failed — offer an interactive (or --yes) repair that regenerates
+  # the lockfile locally so upgraders are not stuck on a packaging mismatch.
   if [[ $bun_ok -eq 0 ]]; then
     spinosa_log ERROR "bun install --frozen-lockfile failed after 2 attempts. Output:"
     while IFS= read -r line; do spinosa_log ERROR "$line"; done < "$bun_out"
+    if prompt_dependency_repair; then
+      info "Repairing dependencies (clean install, lockfile may update locally)..."
+      rm -rf "${fw_root}/node_modules"
+      : > "$bun_out"
+      if (cd "$fw_root" && PATH="$(dirname "$bun_bin"):$PATH" \
+        "$bun_bin" run "$timeout_runner" "$timeout_seconds" "$bun_bin" install 2>&1 | tee -a "$bun_out") \
+        && validate_framework_launch "$fw_root" "$bun_bin" "$bun_out"; then
+        bun_ok=1
+        ok "Dependencies repaired"
+        spinosa_log WARN "Dependency repair used a non-frozen bun install (local lockfile may differ from the release)"
+      else
+        spinosa_log ERROR "Dependency repair failed. Output:"
+        while IFS= read -r line; do spinosa_log ERROR "$line"; done < "$bun_out"
+      fi
+    fi
+  fi
+
+  if [[ $bun_ok -eq 0 ]]; then
     rm -f "$bun_out"
-    die "Dependency install failed (frozen lockfile could not be honoured). This is a packaging defect in the published archive — please report it. Metadata was preserved; check ${SPINOSA_HOME}/logs/spinosa.log and re-run the installer after a fixed release."
+    die "Installation needs repair. Re-run: curl -fsSL https://github.com/medialab/spinosa/releases/download/beta/install.sh | bash -s -- --yes   (or set SPINOSA_REPAIR=1). Metadata was preserved; see ${SPINOSA_HOME}/logs/spinosa.log"
   fi
   rm -f "$bun_out"
   ok "Dependencies installed"
@@ -1044,7 +1106,7 @@ repair_spinosa_home() {
         .*|*/*) continue ;;
       esac
       if ! version_install_complete "$version"; then
-        info "Removing incomplete install: versions/${version}"
+        info "Installation needs repair — removing incomplete install: versions/${version}"
         rm -rf "$entry"
         repaired=1
       fi
@@ -1088,7 +1150,7 @@ repair_spinosa_home() {
   # Target version specifically incomplete → force clean reinstall of that tree
   if [ -n "${VERSION:-}" ] && [ -d "${SPINOSA_HOME}/versions/${VERSION}" ] \
     && ! version_install_complete "$VERSION"; then
-    info "Target v${VERSION} is incomplete — removing for clean reinstall"
+    info "Installation needs repair — target v${VERSION} is incomplete; removing for clean reinstall"
     rm -rf "${SPINOSA_HOME}/versions/${VERSION}"
     REINSTALL=1
     repaired=1
