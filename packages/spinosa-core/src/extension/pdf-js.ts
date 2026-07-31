@@ -2,10 +2,15 @@ import { readFile } from "node:fs/promises"
 import { createRequire } from "node:module"
 import { pathToFileURL } from "node:url"
 import { getDocument, GlobalWorkerOptions, type PDFDocumentProxy } from "pdfjs-dist/legacy/build/pdf.mjs"
-import { createCanvas } from "@napi-rs/canvas"
+import { createCanvas, type Canvas } from "@napi-rs/canvas"
 import stripAnsi from "strip-ansi"
 
 const require = createRequire(import.meta.url)
+
+type NodeCanvasAndContext = {
+  canvas: Canvas | null
+  context: ReturnType<Canvas["getContext"]> | null
+}
 
 /**
  * pdfjs-dist rejects `instanceof Buffer` even though Buffer extends Uint8Array.
@@ -25,7 +30,7 @@ export function bufferToPdfJsUint8Array(data: Buffer): Uint8Array {
  * Bun (and can under Node).
  */
 class NodeCanvasFactory {
-  create(width: number, height: number) {
+  create(width: number, height: number): NodeCanvasAndContext {
     const canvas = createCanvas(Math.max(1, Math.ceil(width)), Math.max(1, Math.ceil(height)))
     return {
       canvas,
@@ -33,19 +38,13 @@ class NodeCanvasFactory {
     }
   }
 
-  reset(
-    canvasAndContext: { canvas: ReturnType<typeof createCanvas>; context: unknown },
-    width: number,
-    height: number,
-  ): void {
+  reset(canvasAndContext: NodeCanvasAndContext, width: number, height: number): void {
+    if (!canvasAndContext.canvas) return
     canvasAndContext.canvas.width = Math.max(1, Math.ceil(width))
     canvasAndContext.canvas.height = Math.max(1, Math.ceil(height))
   }
 
-  destroy(canvasAndContext: {
-    canvas: ReturnType<typeof createCanvas> | null
-    context: unknown
-  }): void {
+  destroy(canvasAndContext: NodeCanvasAndContext): void {
     if (canvasAndContext.canvas) {
       canvasAndContext.canvas.width = 0
       canvasAndContext.canvas.height = 0
@@ -146,16 +145,18 @@ export async function pdfRenderDocumentPageToPng(doc: PDFDocumentProxy, pageNumb
   const pg = await doc.getPage(pageNumber)
   const viewport = pg.getViewport({ scale: dpi / 72 })
   const factory = new NodeCanvasFactory()
-  const { canvas, context } = factory.create(viewport.width, viewport.height)
+  const canvasAndContext = factory.create(viewport.width, viewport.height)
+  const { canvas, context } = canvasAndContext
+  if (!canvas || !context) throw new Error("pdfjs NodeCanvasFactory failed to create canvas")
   try {
+    // pdfjs-dist@4 RenderParameters has no `canvas` field; context + viewport is enough.
     await pg.render({
       canvasContext: context as unknown as CanvasRenderingContext2D,
       viewport,
-      canvas: canvas as unknown as HTMLCanvasElement,
     }).promise
     return canvas.toBuffer("image/png")
   } finally {
-    factory.destroy({ canvas, context })
+    factory.destroy(canvasAndContext)
   }
 }
 
