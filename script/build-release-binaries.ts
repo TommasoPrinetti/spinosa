@@ -40,7 +40,12 @@ const version =
   (JSON.parse(readFileSync(path.join(root, "package.json"), "utf-8")) as { version: string }).version
 const channel =
   (argValue("--channel") as "beta" | "stable" | undefined) ?? releaseChannel(version)
-const outDir = argValue("--out-dir") ?? argValue("--out") ?? path.join(root, `dist/v${version}`)
+// Resolve absolutely: buildSpinosaBinaries process.chdir()'s into the kernel
+// package, so a relative --out-dir would silently write under packages/spinosa-kernel/.
+const outDir = path.resolve(
+  root,
+  argValue("--out-dir") ?? argValue("--out") ?? path.join(root, `dist/v${version}`),
+)
 const hostOnly = process.argv.includes("--host-only")
 const skipEmbedWebUi = process.argv.includes("--skip-embed-web-ui")
 const skipInstall = process.argv.includes("--skip-install")

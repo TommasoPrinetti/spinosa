@@ -11,19 +11,19 @@ Target: first binary-distribution hard cut (`distribution: binary`, four product
 - [x] Host strict smoke green: `bun script/smoke-install.ts --binary dist/v1.0.3-beta.9/spinosa-darwin-arm64`
 - [x] Cross assets verified (exist, mode `755`, size ≫ 1KiB, correct Mach-O/ELF, onnx + canvas embed strings)
 - [x] Stay on Bun for packaging (`packageManager: bun@1.3.14`); npm only if Bun compile fails (it did not)
-- [ ] Working tree committed on cut branch (or release branch) — **not done in this session**
-- [ ] Version bumped to `1.0.3-beta.10` via release orchestrator (or `bun script/set-version.ts`) — **not done**
-- [ ] `SPINOSA_BINARY_SMOKE_STRICT=1 bun run quality:binary` on the bumped tree
-- [ ] `bun run quality` on the bumped tree
-- [ ] Rebuild four binaries for **v1.0.3-beta.10** into `dist/v1.0.3-beta.10/`
-- [ ] Stage `install.sh` + `checksums.txt` + `build-manifest.json` (release `build` stage)
-- [ ] Installer HTTP smoke: `bun script/smoke-install.ts --dist dist/v1.0.3-beta.10`
+- [x] Working tree committed on cut branch (`a6587ab` release + `146f28e` pdf-js types + outDir fix)
+- [x] Version bumped to `1.0.3-beta.10` (package.json + install.sh `PINNED_VERSION`)
+- [x] `SPINOSA_BINARY_SMOKE_STRICT=1 bun run quality:binary` on the bumped tree
+- [x] `bun run quality` on the bumped tree
+- [x] Rebuild four binaries for **v1.0.3-beta.10** into `dist/v1.0.3-beta.10/`
+- [x] Stage `install.sh` + `checksums.txt` + `build-manifest.json` (release `build` stage layout)
+- [x] Installer HTTP smoke: `bun script/smoke-install.ts --dist dist/v1.0.3-beta.10`
 
-## Four-asset matrix (local verify, built as 1.0.3-beta.9 rehearsal)
+## Four-asset matrix (local verify, built as 1.0.3-beta.10)
 
 | Asset | Host smoke | Cross verify on this Mac |
 | ----- | ---------- | ------------------------ |
-| `spinosa-darwin-arm64` | Strict version/doctor green | Native arm64 Mach-O |
+| `spinosa-darwin-arm64` | Strict version/doctor green + installer HTTP smoke | Native arm64 Mach-O, onnx+canvas embeds |
 | `spinosa-darwin-x64` | N/A (Intel) | Exists, `755`, x86_64 Mach-O, onnx+canvas embeds |
 | `spinosa-linux-arm64` | N/A (ELF) | Exists, `755`, aarch64 ELF, onnx+canvas embeds |
 | `spinosa-linux-x64` | N/A (ELF) | Exists, `755`, x86_64 ELF, onnx+canvas embeds |
