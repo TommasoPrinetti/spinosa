@@ -1,5 +1,5 @@
 import { createResource, createMemo, createSignal, onMount, Show } from "solid-js"
-import { readFile, writeFile, mkdtemp, rm } from "node:fs/promises"
+import { writeFile, mkdtemp, rm } from "node:fs/promises"
 import path from "node:path"
 import { homedir, tmpdir } from "node:os"
 import { spawn } from "node:child_process"
@@ -9,6 +9,7 @@ import { useTheme } from "../../context/theme"
 import { useDialog } from "../../ui/dialog"
 import { useBindings } from "../../keymap"
 import { useToast } from "../../ui/toast"
+import { loadMarkdownFile, type MarkdownLoadResult } from "./load-markdown-file"
 
 export function DialogMdViewer(props: { filePath: string; workspaceRoot?: string }) {
   const dialog = useDialog()
@@ -21,9 +22,20 @@ export function DialogMdViewer(props: { filePath: string; workspaceRoot?: string
 
   onMount(() => dialog.setSize("xlarge"))
 
-  const [content, { mutate: setContent }] = createResource(() => props.filePath, (filepath) =>
-    readFile(filepath, "utf-8"),
+  const [loaded, { mutate: setLoaded }] = createResource(
+    () => props.filePath,
+    (filepath): Promise<MarkdownLoadResult> => loadMarkdownFile(filepath),
   )
+
+  const mdText = createMemo(() => {
+    const result = loaded()
+    return result?.ok ? result.text : undefined
+  })
+
+  const loadError = createMemo(() => {
+    const result = loaded()
+    return result && !result.ok ? result.message : undefined
+  })
 
   const displayPath = createMemo(() => {
     if (!props.workspaceRoot) return props.filePath
@@ -39,7 +51,7 @@ export function DialogMdViewer(props: { filePath: string; workspaceRoot?: string
 
   const handleExport = async () => {
     if (exportState() !== "idle") return
-    const md = content()
+    const md = mdText()
     if (!md) return
     setExportState("busy")
     try {
@@ -60,13 +72,13 @@ export function DialogMdViewer(props: { filePath: string; workspaceRoot?: string
       setEditError("No $EDITOR or $VISUAL set")
       return
     }
-    const md = content()
-    if (content.loading) {
+    const md = mdText()
+    if (loaded.loading) {
       setEditError("File is still loading, please wait")
       return
     }
     if (!md) {
-      setEditError("File content unavailable")
+      setEditError(loadError() ?? "File content unavailable")
       return
     }
     const tmpDir = await mkdtemp(path.join(tmpdir(), "spinosa-edit-"))
@@ -93,10 +105,15 @@ export function DialogMdViewer(props: { filePath: string; workspaceRoot?: string
         renderer.resume()
         renderer.requestRender()
       }
-      const edited = await readFile(tmpFile, "utf-8")
-      if (edited !== md) {
-        await writeFile(props.filePath, edited)
-        setContent(edited)
+      const edited = await loadMarkdownFile(tmpFile)
+      if (!edited.ok) {
+        setEditError(edited.message)
+        toast.show({ variant: "error", message: `Edit failed: ${edited.message}` })
+        return
+      }
+      if (edited.text !== md) {
+        await writeFile(props.filePath, edited.text)
+        setLoaded({ ok: true, text: edited.text })
         toast.show({ variant: "success", message: "File saved" })
       }
     } catch (e) {
@@ -157,11 +174,23 @@ export function DialogMdViewer(props: { filePath: string; workspaceRoot?: string
       </box>
       <box height={1} border={["top"]} borderColor={theme.border} flexShrink={0} />
       <scrollbox flexGrow={2} minHeight={0} paddingTop={1} paddingBottom={1}>
-        <Show when={!content.loading && content() !== undefined}
-          fallback={<text fg={theme.textMuted}>Loading...</text>}>
+        <Show when={loaded.loading}>
+          <text fg={theme.textMuted}>Loading...</text>
+        </Show>
+        <Show when={!loaded.loading && loadError()}>
+          {(msg) => (
+            <box paddingLeft={1} flexDirection="column" gap={1}>
+              <text fg={theme.error}>{msg()}</text>
+              <text fg={theme.textMuted}>
+                The path was resolved, but the file is missing (deleted, never written, or a stale chat link). Press esc to close.
+              </text>
+            </box>
+          )}
+        </Show>
+        <Show when={!loaded.loading && mdText() !== undefined}>
           <box paddingLeft={1}>
             <markdown
-              content={content()!}
+              content={mdText()!}
               syntaxStyle={syntax()}
               streaming={false}
               internalBlockMode="top-level"
