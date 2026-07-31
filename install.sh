@@ -126,7 +126,9 @@ _spinosa_install_signal() {
   exit "$exit_code"
 }
 
-trap '_spinosa_install_err_trap $LINENO' ERR
+if [[ "${SPINOSA_INSTALLER_LIB_ONLY:-0}" != "1" ]]; then
+  trap '_spinosa_install_err_trap $LINENO' ERR
+fi
 
 # ══════════════════════════════════════════════════════════════════════════════
 # CONFIGURATION
@@ -439,13 +441,140 @@ is_owned_spinosa_shim() {
 
 preflight_tools() {
   local tool
-  for tool in tar unzip find awk sed grep df mktemp; do
+  for tool in tar find awk sed grep df mktemp; do
     command -v "$tool" >/dev/null 2>&1 || die "Required tool not found: ${tool}"
   done
+  if ! command -v unzip >/dev/null 2>&1; then
+    die "Required tool not found: unzip (install it, e.g. sudo apt-get install -y unzip)"
+  fi
   command -v curl >/dev/null 2>&1 || command -v wget >/dev/null 2>&1 \
     || die "Neither curl nor wget found. Please install one."
   command -v sha256sum >/dev/null 2>&1 || command -v shasum >/dev/null 2>&1 \
     || die "No SHA-256 tool found (sha256sum or shasum)"
+}
+
+# Single repair consent for home reclaim, incomplete trees, and dep recovery.
+# --yes / SPINOSA_REPAIR=1 auto-accept. Returns 0 to proceed with repair.
+prompt_install_repair() {
+  local detail="${1:-Something in the Spinosa install needs fixing.}"
+  echo "" >&2
+  printf '  %s %sInstallation needs repair.%s\n' "${Y}⚠${RESET}" "${Y}" "${RESET}" >&2
+  printf '  %s %s%s\n' "${DIM}" "$detail" "${RESET}" >&2
+  if [ "${SPINOSA_REPAIR:-}" = "1" ]; then
+    info "Repairing automatically (SPINOSA_REPAIR=1)..."
+    return 0
+  fi
+  if [ "$YES" -eq 1 ]; then
+    info "Repairing automatically (--yes)..."
+    return 0
+  fi
+  printf '  %s Repair now?%s [Y/n]: ' "${BOLD}?${RESET}" "${RESET}" >&2
+  local reply
+  if ! read_from_tty reply; then
+    echo "" >&2
+    warn "No terminal for repair prompt. Re-run with --yes to auto-repair."
+    return 1
+  fi
+  reply="${reply:-Y}"
+  case "$reply" in
+    n|N|no|NO)
+      info "Repair cancelled."
+      return 1
+      ;;
+    *)
+      return 0
+      ;;
+  esac
+}
+
+# True when SPINOSA_HOME looks like installer debris / a failed virgin attempt
+# (logs only, empty runtime dirs) rather than another product or user data.
+is_reclaimable_spinosa_home() {
+  local home="$1"
+  local entry base
+  [ -d "$home" ] || return 1
+  # Never reclaim if workspace / owned metadata is present.
+  if grep -q '^spinosa: true$' "${home}/metadata/config.yaml" 2>/dev/null \
+    || [ -f "${home}/metadata/workspaces.json" ] \
+    || [ -f "${home}/workspace_cache.txt" ]; then
+    return 1
+  fi
+  # Any complete version stamp means this is (or was) a real install — use repair paths elsewhere.
+  if [ -d "${home}/versions" ]; then
+    for entry in "${home}/versions"/*; do
+      [ -e "$entry" ] || continue
+      [ -d "$entry" ] || continue
+      base="$(basename "$entry")"
+      case "$base" in
+        .|..|.install.lock) continue ;;
+      esac
+      if [[ "$base" == .* ]]; then
+        continue
+      fi
+      if [ -f "${entry}/${SPINOSA_INSTALL_COMPLETE_STAMP:-.spinosa-install-complete}" ]; then
+        return 1
+      fi
+    done
+  fi
+  local found=0
+  for entry in "$home"/* "$home"/.[!.]* "$home"/..?*; do
+    [ -e "$entry" ] || continue
+    base="$(basename "$entry")"
+    case "$base" in
+      .|..) continue ;;
+      logs|versions|bin|lib|metadata|env.sh)
+        found=1
+        continue
+        ;;
+      *) return 1 ;;
+    esac
+  done
+  # Empty dir is fine (not debris); only known installer paths count as reclaimable.
+  [ "$found" -eq 1 ]
+}
+
+spinosa_home_is_owned() {
+  local home="${1:-$SPINOSA_HOME}"
+  grep -q '^spinosa: true$' "${home}/metadata/config.yaml" 2>/dev/null \
+    || [ -f "${home}/metadata/workspaces.json" ] \
+    || [ -f "${home}/workspace_cache.txt" ]
+}
+
+# True when the home needs destructive/cleanup repair before a clean install can proceed.
+spinosa_home_needs_repair() {
+  local home="${1:-$SPINOSA_HOME}"
+  local entry version
+
+  [ -d "$home" ] || return 1
+
+  if is_reclaimable_spinosa_home "$home"; then
+    return 0
+  fi
+
+  if [ -d "${home}/versions" ]; then
+    for entry in "${home}/versions"/*; do
+      [ -e "$entry" ] || continue
+      [ -d "$entry" ] || continue
+      version="$(basename "$entry")"
+      case "$version" in
+        .*|*/*) continue ;;
+      esac
+      if ! version_install_complete "$version"; then
+        return 0
+      fi
+    done
+  fi
+
+  if [ -z "$(get_installed_version 2>/dev/null || true)" ]; then
+    if [ -d "${home}/bin" ] || [ -f "${home}/env.sh" ] || [ -d "${home}/lib" ]; then
+      return 0
+    fi
+  else
+    if [ ! -x "${home}/bin/spinosa" ] || [ ! -x "${home}/bin/bun" ]; then
+      return 0
+    fi
+  fi
+  return 1
 }
 
 validate_install_paths() {
@@ -462,13 +591,14 @@ validate_install_paths() {
     esac
   done
 
+  # Foreign occupied home (not Spinosa, not reclaimable debris) — refuse early.
   if [ -d "$SPINOSA_HOME" ] \
     && [ -n "$(find "$SPINOSA_HOME" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ] \
-    && ! grep -q '^spinosa: true$' "${SPINOSA_HOME}/metadata/config.yaml" 2>/dev/null \
-    && [ ! -f "${SPINOSA_HOME}/metadata/workspaces.json" ] \
-    && [ ! -f "${SPINOSA_HOME}/workspace_cache.txt" ]; then
+    && ! spinosa_home_is_owned "$SPINOSA_HOME" \
+    && ! is_reclaimable_spinosa_home "$SPINOSA_HOME"; then
     die "Install root is not an owned Spinosa directory: ${SPINOSA_HOME}. Choose an empty directory."
   fi
+
   if [ "$PREFIX_MODE" -eq 0 ] && [ -e "${SPINOSA_BIN_DIR}/spinosa" ] \
     && ! is_owned_spinosa_shim "${SPINOSA_BIN_DIR}/spinosa"; then
     die "Refusing to overwrite non-Spinosa command: ${SPINOSA_BIN_DIR}/spinosa. Move it or choose --bin-dir."
@@ -595,38 +725,6 @@ ensure_opentui_links() {
   done
 }
 
-# Returns 0 if the user (or --yes / SPINOSA_REPAIR=1) wants a local dependency repair.
-prompt_dependency_repair() {
-  echo "" >&2
-  printf '  %s %sInstallation needs repair.%s\n' "${Y}⚠${RESET}" "${Y}" "${RESET}" >&2
-  printf '  %s Dependency install could not honour the published lockfile (or the tree is damaged).%s\n' "${DIM}" "${RESET}" >&2
-  if [ "${SPINOSA_REPAIR:-}" = "1" ]; then
-    info "Repairing automatically (SPINOSA_REPAIR=1)..."
-    return 0
-  fi
-  if [ "$YES" -eq 1 ]; then
-    info "Repairing automatically (--yes)..."
-    return 0
-  fi
-  printf '  %s Repair now?%s [Y/n]: ' "${BOLD}?${RESET}" "${RESET}" >&2
-  local reply
-  if ! read_from_tty reply; then
-    echo "" >&2
-    warn "No terminal for repair prompt. Re-run with --yes to auto-repair."
-    return 1
-  fi
-  reply="${reply:-Y}"
-  case "$reply" in
-    n|N|no|NO)
-      info "Repair cancelled."
-      return 1
-      ;;
-    *)
-      return 0
-      ;;
-  esac
-}
-
 # Validate that the installed framework can launch (same argv as the user shim).
 validate_framework_launch() {
   local fw_root="$1"
@@ -688,12 +786,11 @@ install_bun_dependencies() {
     fi
   done
 
-  # Frozen path failed — offer an interactive (or --yes) repair that regenerates
-  # the lockfile locally so upgraders are not stuck on a packaging mismatch.
+  # Frozen path failed — offer unified repair (non-frozen install) so upgraders are not stuck.
   if [[ $bun_ok -eq 0 ]]; then
     spinosa_log ERROR "bun install --frozen-lockfile failed after 2 attempts. Output:"
     while IFS= read -r line; do spinosa_log ERROR "$line"; done < "$bun_out"
-    if prompt_dependency_repair; then
+    if prompt_install_repair "Dependency install could not honour the published lockfile (or the tree is damaged)."; then
       info "Repairing dependencies (clean install, lockfile may update locally)..."
       rm -rf "${fw_root}/node_modules"
       : > "$bun_out"
@@ -1090,12 +1187,14 @@ repair_spinosa_home() {
       case "$base" in
         .*.staging.*|*.staging.*|.*.backup.*|*.backup.*)
           step_begin "Cleaning leftover install stage" 30
+          assert_path_inside_spinosa_home "$entry"
+          [ "$entry" != "$SPINOSA_HOME" ] || die "Refusing to delete SPINOSA_HOME"
           rm -rf "$entry"
           step_end 0
           repaired=1
           ;;
-      esac
-    done
+        esac
+      done
 
     # Incomplete version trees (missing stamp, framework files, or node_modules)
     for entry in "${SPINOSA_HOME}/versions"/*; do
@@ -1107,6 +1206,13 @@ repair_spinosa_home() {
       esac
       if ! version_install_complete "$version"; then
         info "Installation needs repair — removing incomplete install: versions/${version}"
+        assert_path_inside_spinosa_home "$entry"
+        [ "$entry" != "$SPINOSA_HOME" ] || die "Refusing to delete SPINOSA_HOME"
+        # Only version dirs under versions/ — never the home root.
+        case "$entry" in
+          "${SPINOSA_HOME}/versions/"*) ;;
+          *) die "Refusing to remove path outside versions/: ${entry}" ;;
+        esac
         rm -rf "$entry"
         repaired=1
       fi
@@ -1129,13 +1235,11 @@ repair_spinosa_home() {
       || { [ -d "${SPINOSA_HOME}/versions" ] && [ "$has_versions" -eq 0 ]; }; then
       info "Detected partial Spinosa home (no complete version) — cleaning runtime debris for repair"
       [ -n "${SPINOSA_HOME:-}" ] || die "SPINOSA_HOME is unset — refusing to clean"
-      rm -rf "${SPINOSA_HOME:?}/bin" "${SPINOSA_HOME:?}/lib" 2>/dev/null || true
-      rm -f "${SPINOSA_HOME}/env.sh" 2>/dev/null || true
-      # Drop empty versions shell so install recreates a clean tree
-      if [ -d "${SPINOSA_HOME}/versions" ] && [ "$has_versions" -eq 0 ]; then
-        # keep directory for lock creation later; only remove empties via rmdir if possible
-        :
-      fi
+      assert_spinosa_home_path_safe "$SPINOSA_HOME"
+      # Surgical: only bin/, lib/, env.sh — NEVER metadata or the home root.
+      remove_spinosa_home_entry "bin"
+      remove_spinosa_home_entry "lib"
+      remove_spinosa_home_entry "env.sh"
       repaired=1
     fi
   else
@@ -1151,6 +1255,11 @@ repair_spinosa_home() {
   if [ -n "${VERSION:-}" ] && [ -d "${SPINOSA_HOME}/versions/${VERSION}" ] \
     && ! version_install_complete "$VERSION"; then
     info "Installation needs repair — target v${VERSION} is incomplete; removing for clean reinstall"
+    assert_path_inside_spinosa_home "${SPINOSA_HOME}/versions/${VERSION}"
+    case "${SPINOSA_HOME}/versions/${VERSION}" in
+      "${SPINOSA_HOME}/versions/"*) ;;
+      *) die "Refusing to remove path outside versions/" ;;
+    esac
     rm -rf "${SPINOSA_HOME}/versions/${VERSION}"
     REINSTALL=1
     repaired=1
@@ -1159,6 +1268,147 @@ repair_spinosa_home() {
   if [ "$repaired" -eq 1 ]; then
     ok "Spinosa home prepared for repair install (workspace metadata kept)"
     spinosa_log INFO "repair_spinosa_home cleaned partial install home=${SPINOSA_HOME}"
+  fi
+}
+
+# ── SPINOSA_HOME destruction guards ──────────────────────────────────────────
+# HARD RULE: never delete SPINOSA_HOME itself, never wipe arbitrary children.
+# Only allowlisted relative names may be removed, and only after every guard passes.
+
+assert_spinosa_home_path_safe() {
+  local home="${1:-$SPINOSA_HOME}"
+  [ -n "$home" ] || die "SPINOSA_HOME is unset — refusing destructive repair"
+  case "$home" in
+    /*) ;;
+    *) die "SPINOSA_HOME must be absolute — refusing destructive repair: ${home}" ;;
+  esac
+  case "$home" in
+    /|/bin|/sbin|/usr|/usr/bin|/usr/sbin|/etc|/var|/lib|/lib64|/home|/Users|"$HOME")
+      die "Refusing destructive repair on unsafe SPINOSA_HOME: ${home}"
+      ;;
+  esac
+  # Must be the configured install home (no sneaky alternate path).
+  [ "$home" = "$SPINOSA_HOME" ] \
+    || die "Refusing destructive repair outside configured SPINOSA_HOME (${SPINOSA_HOME})"
+}
+
+# Resolve to a path that is strictly inside SPINOSA_HOME (or the home itself).
+# Rejects ., .., absolute escapes, and symlink escape via physical path when possible.
+assert_path_inside_spinosa_home() {
+  local candidate="$1"
+  local home="$SPINOSA_HOME"
+  local home_phys candidate_phys
+
+  assert_spinosa_home_path_safe "$home"
+  [ -n "$candidate" ] || die "Refusing empty path in Spinosa home"
+
+  case "$candidate" in
+    "$home"|"$home"/*) ;;
+    *) die "Refusing path outside SPINOSA_HOME: ${candidate}" ;;
+  esac
+  case "$candidate" in
+    *..*)
+      # Allow ".." only if physical resolution still stays under home.
+      ;;
+  esac
+
+  if [ -e "$home" ] && [ -e "$candidate" ]; then
+    home_phys="$(cd "$home" && pwd -P 2>/dev/null || printf '%s\n' "$home")"
+    if [ -d "$candidate" ]; then
+      candidate_phys="$(cd "$candidate" && pwd -P 2>/dev/null || printf '%s\n' "$candidate")"
+    else
+      candidate_phys="$(cd "$(dirname "$candidate")" && pwd -P 2>/dev/null)/$(basename "$candidate")"
+    fi
+    case "$candidate_phys" in
+      "$home_phys"|"$home_phys"/*) ;;
+      *) die "Refusing path that escapes SPINOSA_HOME via resolution: ${candidate}" ;;
+    esac
+  fi
+}
+
+# Remove one allowlisted relative entry under SPINOSA_HOME. Never deletes SPINOSA_HOME.
+remove_spinosa_home_entry() {
+  local rel="$1"
+  local target
+  case "$rel" in
+    ''|'.'|'..'|*'/'*|*'..'*)
+      die "Refusing unsafe relative entry name: ${rel}"
+      ;;
+  esac
+  target="${SPINOSA_HOME}/${rel}"
+  assert_path_inside_spinosa_home "$target"
+  [ "$target" != "$SPINOSA_HOME" ] || die "Refusing to delete SPINOSA_HOME itself"
+  if [ -e "$target" ] || [ -L "$target" ]; then
+    rm -rf "$target"
+  fi
+}
+
+# Virgin-install debris only. Allowlist is exhaustive — anything else aborts.
+# Callers must already have user consent via prompt_install_repair.
+clear_virgin_install_debris() {
+  local home="$SPINOSA_HOME"
+  local rel
+
+  assert_spinosa_home_path_safe "$home"
+
+  # Guard 1 — owned homes are never cleared here (workspace metadata stays forever).
+  if spinosa_home_is_owned "$home"; then
+    die "Refusing to clear owned Spinosa home: ${home}"
+  fi
+
+  # Guard 2 — any complete version means this is a real install; use version repair only.
+  if [ -d "${home}/versions" ]; then
+    local entry base
+    for entry in "${home}/versions"/*; do
+      [ -e "$entry" ] || continue
+      [ -d "$entry" ] || continue
+      base="$(basename "$entry")"
+      case "$base" in .*|*/*) continue ;; esac
+      if [ -f "${entry}/${SPINOSA_INSTALL_COMPLETE_STAMP:-.spinosa-install-complete}" ]; then
+        die "Refusing virgin debris clear — complete version present: ${base}"
+      fi
+    done
+  fi
+
+  # Guard 3 — must still classify as reclaimable immediately before deletes.
+  is_reclaimable_spinosa_home "$home" \
+    || die "Refusing virgin debris clear — home is not reclaimable installer debris"
+
+  # Guard 4 — delete ONLY this allowlist, one name at a time (never glob-wipe home).
+  for rel in logs env.sh bin lib metadata versions; do
+    # Re-check ownership before each delete (belt and suspenders).
+    if spinosa_home_is_owned "$home"; then
+      die "Refusing virgin debris clear — home became owned mid-repair"
+    fi
+    remove_spinosa_home_entry "$rel"
+  done
+
+  # Guard 5 — home directory itself must still exist; we never remove it.
+  [ -d "$home" ] || mkdir -p "$home"
+  ok "Removed virgin install debris under ${home} (home directory preserved)"
+}
+
+# Ask once (if needed). Virgin debris → surgical allowlist clear.
+# Incomplete owned trees → consent only; repair_spinosa_home runs under the lock.
+ensure_spinosa_home() {
+  local detail=""
+
+  assert_spinosa_home_path_safe "$SPINOSA_HOME"
+
+  if is_reclaimable_spinosa_home "$SPINOSA_HOME"; then
+    detail="Installer debris was found under ${SPINOSA_HOME} (likely a failed earlier attempt). Only known debris paths will be removed — your home directory is kept."
+  elif spinosa_home_needs_repair "$SPINOSA_HOME"; then
+    detail="An older or incomplete Spinosa install was found under ${SPINOSA_HOME}. Incomplete version trees can be cleaned; workspace metadata is kept."
+  else
+    return 0
+  fi
+
+  if ! prompt_install_repair "$detail"; then
+    die "Installation needs repair. Re-run with --yes (or SPINOSA_REPAIR=1) to allow repair, or choose an empty --prefix."
+  fi
+
+  if is_reclaimable_spinosa_home "$SPINOSA_HOME"; then
+    clear_virgin_install_debris
   fi
 }
 
@@ -1719,11 +1969,11 @@ main() {
   local archive_name="spinosa-v${VERSION}.tar.gz"
   local archive_url
 
-  # Read-only modes must not create logs, metadata, or locks.
-  if [[ "$DRY_RUN" -eq 1 || "$VERIFY_ONLY" -eq 1 ]]; then
-    SPINOSA_LOG_DISABLED=1
-  fi
+  # No writes under SPINOSA_HOME until preflight passes — otherwise a missing
+  # tool (e.g. unzip) leaves logs debris that blocks the next run.
+  SPINOSA_LOG_DISABLED=1
   validate_install_paths
+  preflight_tools
   detect_platform
   resolve_version
   archive_name="spinosa-v${VERSION}.tar.gz"
@@ -1736,15 +1986,15 @@ main() {
     handle_verify_only
     return 0
   fi
-  preflight_tools
-
-  spinosa_log_init "install.sh" "$0" "$@"
-  spinosa_log INFO "version=${VERSION} home=${SPINOSA_HOME} bin=${SPINOSA_BIN_DIR}"
 
   if [[ "$YES" -eq 0 ]]; then
     print_banner
   fi
   section "System check"
+
+  # Consent + reclaim before taking the lock (avoids wiping an active lockdir).
+  ensure_spinosa_home
+
   INSTALL_LOCKDIR="${SPINOSA_HOME}/versions/.install.lock"
   local lockdir="$INSTALL_LOCKDIR"
 
@@ -1771,10 +2021,13 @@ main() {
   trap 'rm -rf "${INSTALL_LOCKDIR:-}"' EXIT
   trap '_spinosa_install_signal 130' INT TERM HUP
 
-  # Repair only after owning the global lock. This preserves metadata and
-  # prevents one installer from deleting another installer's active lock.
+  # Repair incomplete owned trees only after owning the global lock.
   init_global_metadata
   repair_spinosa_home
+
+  SPINOSA_LOG_DISABLED=0
+  spinosa_log_init "install.sh" "$0" "$@"
+  spinosa_log INFO "version=${VERSION} home=${SPINOSA_HOME} bin=${SPINOSA_BIN_DIR}"
 
   check_release_age "$VERSION" "$MIN_DAYS"
 

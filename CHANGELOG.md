@@ -8,6 +8,13 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.0.3-beta.9] — 2026-07-31
+
+### Fixed
+
+- Installer repair is unified: one **Installation needs repair** / **Repair now? [Y/n]** path for virgin debris, incomplete homes, and dependency recovery (`--yes` / `SPINOSA_REPAIR=1` auto-accept). Logging no longer writes under `~/.spinosa` before preflight, so a missing `unzip` cannot leave blocking debris.
+- Virgin “repair” never wipes `SPINOSA_HOME`: only an allowlisted set of debris paths (`logs`, `env.sh`, `bin`, `lib`, `metadata`, `versions`) may be removed, each behind ownership / complete-version / reclaimable guards. The home directory itself is never deleted.
+
 ## [1.0.3-beta.8] — 2026-07-31
 
 ### Changed
