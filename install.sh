@@ -552,6 +552,44 @@ ensure_workspace_links() {
     local link="$nm/${pkg_name#@spinosa/}"
     [[ -L "$link" ]] || ln -sf "$pkg_dir" "$link" 2>/dev/null || true
   done
+  ensure_opentui_links "$fw_root"
+}
+
+# Launcher uses `bun --cwd <frameworkRoot> --preload @opentui/solid/preload`.
+# Bun only installs @opentui under workspace packages (kernel/tui), not the root,
+# so preload resolution fails on clean machines. Mirror the packages into root.
+ensure_opentui_links() {
+  local fw_root="$1"
+  local dest="${fw_root}/node_modules/@opentui"
+  local src=""
+  local candidate
+  for candidate in \
+    "${fw_root}/packages/spinosa-kernel/node_modules/@opentui" \
+    "${fw_root}/packages/tui/node_modules/@opentui"
+  do
+    if [[ -e "${candidate}/solid" ]]; then
+      src="$candidate"
+      break
+    fi
+  done
+  [[ -n "$src" ]] || return 0
+  if [[ -e "${dest}/solid" ]]; then
+    return 0
+  fi
+  mkdir -p "$dest"
+  local pkg
+  for pkg in solid core keymap; do
+    [[ -e "${src}/${pkg}" ]] || continue
+    [[ -e "${dest}/${pkg}" ]] && continue
+    # Prefer a relative link so the tree stays relocatable.
+    if [[ "$src" == "${fw_root}/packages/spinosa-kernel/node_modules/@opentui" ]]; then
+      ln -sfn "../../packages/spinosa-kernel/node_modules/@opentui/${pkg}" "${dest}/${pkg}" 2>/dev/null || true
+    elif [[ "$src" == "${fw_root}/packages/tui/node_modules/@opentui" ]]; then
+      ln -sfn "../../packages/tui/node_modules/@opentui/${pkg}" "${dest}/${pkg}" 2>/dev/null || true
+    else
+      ln -sfn "${src}/${pkg}" "${dest}/${pkg}" 2>/dev/null || true
+    fi
+  done
 }
 
 install_bun_dependencies() {
@@ -594,8 +632,12 @@ install_bun_dependencies() {
     if (cd "$fw_root" && PATH="$(dirname "$bun_bin"):$PATH" \
       "$bun_bin" run "$timeout_runner" "$timeout_seconds" "$bun_bin" "${install_args[@]}" 2>&1 | tee -a "$bun_out"); then
       ensure_workspace_links "$fw_root"
+      # Validate with the same argv shape as workspace-template/.bin/spinosa exec_kernel
+      # (bun --cwd <root> --preload @opentui/solid/preload <entry>). Plain `bun run`
+      # can pass via package-local node_modules while the launcher still fails.
       if SPINOSA_HOME="$SPINOSA_HOME" SPINOSA_TEMPLATE_ROOT="$fw_root" \
-        "$bun_bin" run "${fw_root}/packages/spinosa-kernel/src/index.ts" version >> "$bun_out" 2>&1; then
+        "$bun_bin" --cwd "$fw_root" --preload "@opentui/solid/preload" \
+        "${fw_root}/packages/spinosa-kernel/src/index.ts" version >> "$bun_out" 2>&1; then
         bun_ok=1
         break
       fi

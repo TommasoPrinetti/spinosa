@@ -52,3 +52,31 @@ EOF
   [ -n "$first_target" ]
   [ "$first_target" = "$second_target" ]
 }
+
+@test "ensure_opentui_links mirrors kernel @opentui into framework root" {
+  fw_root="$BATS_TEST_TMPDIR/fw-opentui"
+  mkdir -p "$fw_root/packages/spinosa-kernel/node_modules/@opentui/solid"
+  mkdir -p "$fw_root/packages/spinosa-kernel/node_modules/@opentui/core"
+  mkdir -p "$fw_root/packages/spinosa-kernel/node_modules/@opentui/keymap"
+  : >"$fw_root/packages/spinosa-kernel/node_modules/@opentui/solid/preload.ts"
+
+  ensure_opentui_links "$fw_root"
+
+  [ -L "$fw_root/node_modules/@opentui/solid" ]
+  [ -L "$fw_root/node_modules/@opentui/core" ]
+  [ -L "$fw_root/node_modules/@opentui/keymap" ]
+  [ -f "$fw_root/node_modules/@opentui/solid/preload.ts" ]
+}
+
+@test "ensure_opentui_links is a no-op when root solid already exists" {
+  fw_root="$BATS_TEST_TMPDIR/fw-opentui-existing"
+  mkdir -p "$fw_root/node_modules/@opentui/solid"
+  mkdir -p "$fw_root/packages/spinosa-kernel/node_modules/@opentui/solid"
+  : >"$fw_root/node_modules/@opentui/solid/keep"
+  : >"$fw_root/packages/spinosa-kernel/node_modules/@opentui/solid/other"
+
+  ensure_opentui_links "$fw_root"
+
+  [ -f "$fw_root/node_modules/@opentui/solid/keep" ]
+  [ ! -f "$fw_root/node_modules/@opentui/solid/other" ]
+}

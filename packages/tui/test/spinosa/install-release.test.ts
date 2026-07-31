@@ -311,6 +311,7 @@ describe("install and release flow", () => {
     expect(launcher).toContain('"${SCRIPT_DIR}/../versions"')
     expect(launcher).toContain("export SPINOSA_HOME")
     expect(launcher).toContain("exec_kernel()")
+    expect(launcher).toContain("link_opentui_packages()")
     expect(launcher).toContain('--cwd "$RESOLVED_ROOT"')
     expect(launcher).toContain('--preload "@opentui/solid/preload"')
     expect(launcher).toContain('"${RESOLVED_ROOT}/packages/spinosa-kernel/src/index.ts"')

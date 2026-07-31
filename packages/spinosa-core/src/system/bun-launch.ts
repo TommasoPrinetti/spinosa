@@ -24,9 +24,11 @@ export type KernelBunLaunch = {
  *
  * Prefer: `bun --cwd <frameworkRoot> --preload <opentui> <kernelEntry> …args`
  * `--cwd` resolves `@opentui/solid/preload` from the install/monorepo root (and
- * avoids a hostile project bunfig). It changes `process.cwd()` to the framework
- * root; the TUI must still open the caller's project via `PWD` (see
- * `resolveThreadDirectory` in the kernel). Shell `PWD` is left as the caller.
+ * avoids a hostile project bunfig). Bun does not hoist `@opentui` to the root by
+ * default — installer/`link_opentui_packages` must mirror it from the kernel
+ * package. `--cwd` also changes `process.cwd()` to the framework root; the TUI
+ * must still open the caller's project via `PWD` (see `resolveThreadDirectory`).
+ * Shell `PWD` is left as the caller.
  */
 export function buildKernelBunArgv(input: KernelBunLaunch): string[] {
   const frameworkRoot = input.frameworkRoot.trim()

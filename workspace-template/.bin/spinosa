@@ -104,16 +104,51 @@ ensure_runtime() {
 # Without these, bun cannot resolve @spinosa/* workspace imports.
 link_workspace_packages() {
   local root="$1" nm="${1}/node_modules/@spinosa"
-  [[ -d "$nm" && -L "${nm}/core" && -L "${nm}/kernel" ]] && return 0
-  mkdir -p "$nm" 2>/dev/null || true
-  for _pkg in "$root"/packages/*/; do
-    _name="$(basename "$_pkg")"
-    _pkgjson="$_pkg/package.json"
-    [[ -f "$_pkgjson" ]] || continue
-    _scoped="$(grep '"name"' "$_pkgjson" | head -1 | sed 's/.*"name": *"\([^"]*\)".*/\1/')"
-    [[ "$_scoped" == @spinosa/* ]] || continue
-    _short="${_scoped#@spinosa/}"
-    [[ -L "${nm}/${_short}" ]] || ln -sfn "../../packages/$_name" "${nm}/${_short}" 2>/dev/null || true
+  if [[ ! -d "$nm" || ! -L "${nm}/core" || ! -L "${nm}/kernel" ]]; then
+    mkdir -p "$nm" 2>/dev/null || true
+    for _pkg in "$root"/packages/*/; do
+      _name="$(basename "$_pkg")"
+      _pkgjson="$_pkg/package.json"
+      [[ -f "$_pkgjson" ]] || continue
+      _scoped="$(grep '"name"' "$_pkgjson" | head -1 | sed 's/.*"name": *"\([^"]*\)".*/\1/')"
+      [[ "$_scoped" == @spinosa/* ]] || continue
+      _short="${_scoped#@spinosa/}"
+      [[ -L "${nm}/${_short}" ]] || ln -sfn "../../packages/$_name" "${nm}/${_short}" 2>/dev/null || true
+    done
+  fi
+  link_opentui_packages "$root"
+}
+
+# Mirror @opentui into the framework root so `bun --cwd <root> --preload @opentui/solid/preload` resolves.
+# Bun installs @opentui under packages/spinosa-kernel (and tui), not the workspace root.
+link_opentui_packages() {
+  local root="$1"
+  local dest="${root}/node_modules/@opentui"
+  local src=""
+  local candidate
+  for candidate in \
+    "${root}/packages/spinosa-kernel/node_modules/@opentui" \
+    "${root}/packages/tui/node_modules/@opentui"
+  do
+    if [[ -e "${candidate}/solid" ]]; then
+      src="$candidate"
+      break
+    fi
+  done
+  [[ -n "$src" ]] || return 0
+  [[ -e "${dest}/solid" ]] && return 0
+  mkdir -p "$dest" 2>/dev/null || true
+  local pkg
+  for pkg in solid core keymap; do
+    [[ -e "${src}/${pkg}" ]] || continue
+    [[ -e "${dest}/${pkg}" ]] && continue
+    if [[ "$src" == "${root}/packages/spinosa-kernel/node_modules/@opentui" ]]; then
+      ln -sfn "../../packages/spinosa-kernel/node_modules/@opentui/${pkg}" "${dest}/${pkg}" 2>/dev/null || true
+    elif [[ "$src" == "${root}/packages/tui/node_modules/@opentui" ]]; then
+      ln -sfn "../../packages/tui/node_modules/@opentui/${pkg}" "${dest}/${pkg}" 2>/dev/null || true
+    else
+      ln -sfn "${src}/${pkg}" "${dest}/${pkg}" 2>/dev/null || true
+    fi
   done
 }
 

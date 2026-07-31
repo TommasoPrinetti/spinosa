@@ -36,6 +36,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Shellcheck passes on `install.sh` (legacy shim detection uses explicit disable comments).
 - `bun install` catalog entry for `@effect/platform-node-shared` restored.
 
+## [1.0.3-beta.5] — 2026-07-31
+
+### Fixed
+
+- Installer/launcher now link `@opentui/{solid,core,keymap}` into the framework root after `bun install`. The launch argv uses `bun --cwd <root> --preload @opentui/solid/preload`, but Bun only installs `@opentui` under workspace packages — clean VMs failed preload / `runtime_healthy` until manual symlinks. Install validation now uses the same argv as `exec_kernel`.
+
 ## [1.0.3-beta.4] — 2026-07-30
 
 ### Fixed
