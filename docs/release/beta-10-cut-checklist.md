@@ -42,6 +42,7 @@ Cannot run natively here: `darwin-x64` (needs Intel/Rosetta host), both Linux EL
 
 - **pdfjs canvas warnings**: product binary prints `Cannot load "@napi-rs/canvas"` / ImageData/Path2D polyfill warnings from pdfjs optional probes. Doctor still reports `Canvas: available`, `PDF engine: available`, smoke exits 0. Our render path uses explicit `import("@napi-rs/canvas")` (same as doctor). Follow-up: silence pdfjs optional resolve noise; not a cut blocker.
 - **darwin-x64 onnx**: upstream `onnxruntime-node@≥1.24` omits `darwin/x64`; build vendors `onnxruntime-node@1.23.2` slice fail-closed. OCR ABI on Intel Mac may need native soak before stable.
+- **onnx embed path**: companion libs must be on-disk under `src/generated/onnx-libs/` (not virtual `files` map alone); runtime stages into tmpdir for `$ORIGIN`/`@rpath`.
 
 ## Verify commands
 

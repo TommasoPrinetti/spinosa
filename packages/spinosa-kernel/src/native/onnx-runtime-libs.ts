@@ -1,12 +1,14 @@
 /**
  * Stage onnxruntime companion shared libraries into os.tmpdir() before any
  * `onnxruntime_binding.node` dlopen. Bun --compile extracts the `.node` addon
- * into the process temp dir and the loader resolves `@rpath` / `$ORIGIN` libs
- * next to that extraction (i.e. tmpdir).
+ * into the process temp dir as a hashed `.<id>.node`; the loader resolves
+ * `@rpath` / `$ORIGIN` libs next to that extraction (tmpdir root). Staging
+ * here is what makes OCR work without user-facing LD_LIBRARY_PATH.
  */
-import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
+import { isCompiledBinaryDistribution } from "@spinosa/core/distribution/bootstrap"
 import { ONNX_SHARED_LIB_FILES } from "../generated/onnx-native.gen"
 
 export type OnnxSharedLibFile = {
@@ -20,13 +22,32 @@ function readEmbeddedBytes(file: string): Uint8Array {
   return new Uint8Array(readFileSync(file))
 }
 
+function stageOne(dest: string, bytes: Uint8Array): "staged" | "skipped" {
+  if (existsSync(dest)) {
+    const existing = statSync(dest)
+    if (existing.size === bytes.byteLength) return "skipped"
+  }
+  mkdirSync(path.dirname(dest), { recursive: true })
+  writeFileSync(dest, bytes)
+  return "staged"
+}
+
 /** Idempotent: write each embedded shared lib into os.tmpdir() when missing/stale. */
 export function ensureOnnxRuntimeSharedLibs(
   files: readonly OnnxSharedLibFile[] = ONNX_SHARED_LIB_FILES,
 ): { staged: string[]; skipped: string[] } {
   const staged: string[] = []
   const skipped: string[] = []
-  if (!files.length) return { staged, skipped }
+  if (!files.length) {
+    // Empty embed means the binary was built without onnx companion libs — OCR
+    // will fail at dlopen. Surface once at startup instead of failing silently.
+    if (isCompiledBinaryDistribution()) {
+      console.error(
+        "[spinosa] onnxruntime companion libs were not embedded in this binary; OCR/ONNX will fail",
+      )
+    }
+    return { staged, skipped }
+  }
 
   const destDir = tmpdir()
   for (const entry of files) {
@@ -34,15 +55,12 @@ export function ensureOnnxRuntimeSharedLibs(
     const dest = path.join(destDir, entry.name)
     try {
       const bytes = readEmbeddedBytes(entry.file)
-      if (existsSync(dest)) {
-        const existing = statSync(dest)
-        if (existing.size === bytes.byteLength) {
-          skipped.push(dest)
-          continue
-        }
+      if (bytes.byteLength < 1024) {
+        throw new Error(`embedded ${entry.name} is too small (${bytes.byteLength} bytes)`)
       }
-      writeFileSync(dest, bytes)
-      staged.push(dest)
+      const result = stageOne(dest, bytes)
+      if (result === "staged") staged.push(dest)
+      else skipped.push(dest)
     } catch (error) {
       // Fail open at runtime: version/doctor should still run if OCR natives are
       // absent; OCR feature paths will surface the original dlopen error.

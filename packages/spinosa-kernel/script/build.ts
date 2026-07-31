@@ -12,6 +12,7 @@ import {
   napiCanvasForceModule,
   napiCanvasPlatformPackage,
   resolveOnnxRuntimeNodeRoot,
+  restoreOnnxNativeStub,
 } from "./onnx-native.ts"
 
 const __filename = fileURLToPath(import.meta.url)
@@ -139,6 +140,7 @@ export async function buildSpinosaBinaries(options: BuildSpinosaBinariesOptions)
   const binaries: Record<string, string> = {}
   const assets: Record<string, string> = {}
 
+  try {
   for (const item of options.targets) {
     const packageName = [
       pkg.name,
@@ -184,20 +186,25 @@ export async function buildSpinosaBinaries(options: BuildSpinosaBinariesOptions)
       files["src/generated/template-pack.gen.ts"] = options.templatePackModule
     }
 
-    // Fail closed: embed onnxruntime companion libs + force-include napi-rs canvas platform package.
+    // Fail closed: write onnx embed to disk only (template-blobs pattern).
+    // A Bun.build `files` virtual module cannot resolve sibling `with { type: "file" }`
+    // imports, so companion .so/.dylib never embed when injected only via `files`.
     const onnxEmbed = await materializeOnnxNativeEmbed({
       cwd,
       target: { os: item.os, arch: item.arch },
       fromDir: coreFrom,
     })
-    files["src/generated/onnx-native.gen.ts"] = onnxEmbed.moduleSource
     console.log(
-      `embedding onnxruntime natives for ${item.os}-${item.arch}: ${onnxEmbed.libs.map((l) => l.name).join(", ")}`,
+      `embedding onnxruntime natives for ${item.os}-${item.arch}: ${onnxEmbed.libs
+        .map((l) => `${l.name} (${fs.statSync(path.join(onnxEmbed.libsDir, l.name)).size} bytes)`)
+        .join(", ")}`,
     )
 
     const canvasTarget = { os: item.os, arch: item.arch, abi: item.abi }
     const canvasPkg = napiCanvasPlatformPackage(canvasTarget)
     assertNapiCanvasPlatformInstalled(canvasTarget, coreFrom)
+    // Package-only force module stays on the virtual files map (writing it to disk
+    // breaks Bun resolution of optional @napi-rs/canvas-* platform packages).
     files["src/generated/napi-canvas-force.gen.ts"] = napiCanvasForceModule(canvasPkg)
     console.log(`embedding ${canvasPkg} for ${item.os}-${item.arch}`)
 
@@ -254,6 +261,30 @@ export async function buildSpinosaBinaries(options: BuildSpinosaBinariesOptions)
     }
     fs.chmodSync(outfile, 0o755)
 
+    // Fail closed: companion lib bytes must appear in the compiled binary.
+    // Bun renames `with { type: "file" }` assets (hashed filenames), so path
+    // strings are not a reliable marker — fingerprint the lib contents instead.
+    const binBytes = fs.readFileSync(outfile)
+    for (const lib of onnxEmbed.libs) {
+      const libPath = path.join(onnxEmbed.libsDir, lib.name)
+      const libData = fs.readFileSync(libPath)
+      if (libData.byteLength < 1024) {
+        throw new Error(`onnx lib too small to fingerprint: ${libPath}`)
+      }
+      if (binBytes.byteLength < libData.byteLength) {
+        throw new Error(
+          `binary ${outfile} (${binBytes.byteLength} bytes) smaller than onnx lib ${lib.name} (${libData.byteLength} bytes)`,
+        )
+      }
+      const probeAt = Math.min(4096, libData.byteLength - 64)
+      const probe = libData.subarray(probeAt, probeAt + 64)
+      if (!binBytes.includes(probe)) {
+        throw new Error(
+          `binary ${outfile} missing embedded bytes for ${lib.name} (${item.os}-${item.arch}) — companion lib not packaged`,
+        )
+      }
+    }
+
     if (
       options.smokeHost !== false &&
       item.os === process.platform &&
@@ -262,10 +293,25 @@ export async function buildSpinosaBinaries(options: BuildSpinosaBinariesOptions)
     ) {
       console.log(`Running smoke test: ${outfile} version`)
       try {
+        // Clear any leftover staged lib so smoke proves embed→tmpdir staging works.
+        const { tmpdir } = await import("node:os")
+        for (const lib of onnxEmbed.libs) {
+          try {
+            fs.rmSync(path.join(tmpdir(), lib.name), { force: true })
+          } catch {
+            /* ignore */
+          }
+        }
         const versionOutput = await $`${outfile} version`.text()
         console.log(`Smoke test passed: ${versionOutput.trim()}`)
         if (!versionOutput.includes(options.version)) {
           throw new Error(`version smoke mismatch: expected ${options.version}, got ${versionOutput}`)
+        }
+        for (const lib of onnxEmbed.libs) {
+          const staged = path.join(tmpdir(), lib.name)
+          if (!fs.existsSync(staged) || fs.statSync(staged).size < 1024) {
+            throw new Error(`host smoke: onnx lib not staged to tmpdir after version: ${staged}`)
+          }
         }
       } catch (e) {
         const detail = e instanceof Error ? e.message : String(e)
@@ -298,6 +344,9 @@ export async function buildSpinosaBinaries(options: BuildSpinosaBinariesOptions)
 
     binaries[packageName] = options.version
     assets[assetName] = outfile
+  }
+  } finally {
+    restoreOnnxNativeStub(cwd)
   }
 
   return { binaries, assets }

@@ -8,7 +8,9 @@ describe("ensureOnnxRuntimeSharedLibs", () => {
   test("stages embedded bytes into os.tmpdir()", () => {
     const scratch = mkdtempSync(path.join(tmpdir(), "spinosa-onnx-stage-"))
     const src = path.join(scratch, "libonnxruntime.1.dylib")
-    const payload = Buffer.from("onnx-fixture-bytes")
+    // Mirror production minimum size gate (≥1024 bytes).
+    const payload = Buffer.alloc(2048, 0x61)
+    payload.write("onnx-fixture-bytes")
     writeFileSync(src, payload)
     const name = `spinosa-test-onnx-${process.pid}.dylib`
     const dest = path.join(tmpdir(), name)

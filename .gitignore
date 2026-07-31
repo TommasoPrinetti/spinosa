@@ -33,8 +33,9 @@ framework/bin/.build/
 /packages/spinosa-kernel/src/generated/template-blobs/
 /packages/spinosa-kernel/src/generated/template-files/
 /packages/spinosa-kernel/src/generated/template-pack-meta.json
-# template-pack.gen.ts / onnx-native.gen.ts keep tracked stubs; builds overwrite via Bun.build files
-# onnx companion libs are staged under packages/spinosa-kernel/.build/onnx-native/ (covered by .build/)
+# template-pack.gen.ts / onnx-native.gen.ts keep tracked stubs; builds overwrite on disk then restore stubs
+# onnx companion libs for Bun --compile (template-blobs pattern; also mirrored under .build/onnx-native/)
+/packages/spinosa-kernel/src/generated/onnx-libs/
 
 # Local checkout launcher symlink (use `bun run spinosa` / `bun run dev`)
 /spinosa

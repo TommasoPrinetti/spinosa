@@ -127,7 +127,8 @@ See `docs/release/stable-promotion-gates.md`.
 
 ## Known cut notes (native packaging)
 
-- Host `darwin-arm64` strict smoke (`version` / `doctor`) is green once onnx companion libs are embedded and staged at process start.
+- ONNX companion libs (`libonnxruntime.1.dylib` / `libonnxruntime.so.1`) are written under `src/generated/onnx-libs/<os>-<arch>/` and imported from on-disk `onnx-native.gen.ts` (same Bun `--compile` pattern as template-blobs). At process start they are staged into `os.tmpdir()` next to Bun’s extracted `.<hash>.node` so `@rpath` / `$ORIGIN` resolve without user `LD_LIBRARY_PATH`.
+- Host `darwin-arm64` strict smoke (`version` / `doctor`) clears any leftover staged lib first, then requires re-stage from the embed.
 - Upstream `onnxruntime-node` (≥1.24) omits `darwin/x64` binaries ([onnxruntime#27961](https://github.com/microsoft/onnxruntime/issues/27961)). The binary build vendors `onnxruntime-node@1.23.2` darwin/x64 fail-closed and pins Bun resolution to the workspace paddle-linked install (ignores polluted home `node_modules`).
 - pdfjs may warn that `@napi-rs/canvas` cannot load from some BunFS chunks while doctor still reports Canvas/PDF available. Non-blocking for CLI smoke; PDF raster follow-up tracked in the beta.10 checklist.
 
