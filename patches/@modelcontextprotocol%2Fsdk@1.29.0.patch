@@ -1,3 +1,7 @@
+# Why: MCP SDK type/runtime fix needed by Spinosa tool hosting.
+# Upstream: pending / re-check on @modelcontextprotocol/sdk upgrade.
+# Owner: spinosa maintainers
+# Remove when: upstream ships the same behaviour.
 diff --git a/dist/cjs/client/index.d.ts b/dist/cjs/client/index.d.ts
 index 1822bf749aec71d2bb295083d832114ee187bb67..58b859a7b32222fb5cb9f2011fdc5d010f3d05fb 100644
 --- a/dist/cjs/client/index.d.ts

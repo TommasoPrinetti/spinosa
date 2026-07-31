@@ -76,6 +76,9 @@ describe("E2E: Workspace creation flow", () => {
     expect(existsSync(path.join(ws, ".bin", "spinosa"))).toBe(true)
     expect(existsSync(path.join(ws, ".bin", "run-with-timeout.ts"))).toBe(false)
     expect(existsSync(path.join(ws, ".agents"))).toBe(true)
+    expect(existsSync(path.join(ws, ".spinosa", "framework-checksums.json"))).toBe(true)
+    const checksums = await Bun.file(path.join(ws, ".spinosa", "framework-checksums.json")).json() as Record<string, string>
+    expect(Object.keys(checksums).length).toBeGreaterThan(10)
     expect(existsSync(path.join(ws, ".opencode", "node_modules"))).toBe(false)
     expect(await Bun.file(path.join(ws, ".hermes", "workspace.config.yaml")).text()).toContain(`cwd: ${ws}`)
 

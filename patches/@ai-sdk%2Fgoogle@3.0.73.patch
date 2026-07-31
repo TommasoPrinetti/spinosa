@@ -1,3 +1,7 @@
+# Why: Google AI SDK fix required for Spinosa provider plumbing.
+# Upstream: pending / re-check on @ai-sdk/google upgrade.
+# Owner: spinosa maintainers
+# Remove when: upstream ships the same behaviour.
 diff --git a/dist/index.js b/dist/index.js
 index 546bf5509004510b023212d70b4c0875a24eb302..f211dcb23e01a393f7d5c6221bfb0ef52276520a 100644
 --- a/dist/index.js

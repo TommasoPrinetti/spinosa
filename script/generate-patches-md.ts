@@ -22,11 +22,17 @@ const rows: string[] = []
 const orphanPatches: string[] = []
 const missingPatches: string[] = []
 
+const missingRationale: string[] = []
 for (const [key, patchPath] of entries) {
   const at = key.lastIndexOf("@")
   const name = at > 0 ? key.slice(0, at) : key
   const version = at > 0 ? key.slice(at + 1) : "?"
-  if (!existsSync(resolve(root, patchPath))) missingPatches.push(patchPath)
+  const abs = resolve(root, patchPath)
+  if (!existsSync(abs)) missingPatches.push(patchPath)
+  else {
+    const head = readFileSync(abs, "utf-8").slice(0, 400)
+    if (!/^# Why:/m.test(head)) missingRationale.push(patchPath)
+  }
   rows.push(`| \`${name}\` | ${version} | \`${patchPath}\` |`)
 }
 
@@ -59,11 +65,12 @@ ${rows.join("\n")}
 
 - Missing patch files: ${missingPatches.length ? missingPatches.map((p) => `\`${p}\``).join(", ") : "none"}
 - Orphan patch files (not in patchedDependencies): ${orphanPatches.length ? orphanPatches.map((p) => `\`${p}\``).join(", ") : "none"}
+- Missing rationale headers (\`# Why:\`): ${missingRationale.length ? missingRationale.map((p) => `\`${p}\``).join(", ") : "none"}
 `
 
 writeFileSync(resolve(root, "patches/PATCHES.md"), body)
 console.log(`✓ Wrote patches/PATCHES.md (${entries.length} patches)`)
-if (missingPatches.length || orphanPatches.length) {
+if (missingPatches.length || orphanPatches.length || missingRationale.length) {
   console.error("Warning: patch manifest drift detected")
   process.exitCode = 1
 }

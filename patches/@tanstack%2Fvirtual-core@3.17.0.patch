@@ -1,3 +1,7 @@
+# Why: virtual-core companion fix for Spinosa TUI virtualization.
+# Upstream: pending / re-check on @tanstack/virtual-core upgrade.
+# Owner: spinosa maintainers
+# Remove when: upstream ships the same behaviour.
 diff --git a/dist/cjs/index.cjs b/dist/cjs/index.cjs
 index df75d0cf0347b62906e04e454d4f4ef062ed5c48..e5110715b049c6c8b992bd1375a7432df7c0182e 100644
 --- a/dist/cjs/index.cjs

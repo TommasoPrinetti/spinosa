@@ -41,11 +41,14 @@ The design is local-first. Workspace files and indexes remain on your machine. W
 ```bash
 # 1. Install (macOS / Linux)
 
-# Beta — current development / prerelease channel (recommended while Spinosa is in beta)
-curl -fsSL https://github.com/medialab/spinosa/releases/download/beta/install.sh | bash
+# Stable channel — use for production after a stable cut from main
+curl -fsSL https://github.com/medialab/spinosa/releases/download/stable/install.sh | bash
 
-# Stable — production channel
-# curl -fsSL https://github.com/medialab/spinosa/releases/download/stable/install.sh | bash
+# Beta channel — prerelease; may move faster than stable
+# curl -fsSL https://github.com/medialab/spinosa/releases/download/beta/install.sh | bash
+
+# Pin an immutable version when you need reproducibility:
+# curl -fsSL https://github.com/medialab/spinosa/releases/download/v1.0.3/install.sh | bash
 
 # 2. Launch the dashboard
 spinosa

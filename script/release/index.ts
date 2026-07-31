@@ -43,6 +43,7 @@ function parseStage(value: string): StageName {
     bump: "bump",
     build: "build",
     verifylocal: "verifyLocal",
+    smoke: "smoke",
     gittag: "gitTag",
     publishversion: "publishVersion",
     channel: "channel",

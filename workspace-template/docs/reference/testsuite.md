@@ -370,7 +370,7 @@ See [RELEASE_GUIDE.md](../../../RELEASE_GUIDE.md) § Linux VM testdrive. Summary
 5. Optional: `SPINOSA_TEST_VAULT_SCOPE=mixed|full` on VM before major releases
 6. Edge matrix: PDF-only, JPG-only, empty dir, unicode filenames — build subsets under `/tmp/TEST-VAULT/`; always pass `--cli other --launch copy`
 
-**Linux-specific:** if RapidOCR fails import, install `libgl1` and re-run doctor.
+**Linux-specific:** if PaddleOCR fails import, install `libgl1` and re-run doctor.
 
 ---
 
@@ -437,25 +437,28 @@ grep level=ERROR ~/.spinosa/logs/spinosa.log | tail -20
 
 ## Sign-off checklist
 
-Copy into release commit message or tag notes:
+Copy into `dist/vX.Y.Z/SIGNOFF.md` (or release notes) before promoting stable:
 
 ```markdown
 ## Release vX.Y.Z — test sign-off
 
-- [ ] Phase A automated — all scripts pass
-- [ ] Phase B install — clean + piped + basic test passed
-- [ ] Phase C CLI — version, help, doctor, upgrade, update dry-run, C1 smoke + C2 TEST-VAULT (`test-new-test-vault.sh`)
-- [ ] Phase D interactive — dashboard, new (full menu)
-- [ ] Phase E workspace — doctor + update on real workspace
-- [ ] Phase F Linux VM — install + new (or N/A with reason)
-- [ ] Phase G GitHub — 7 assets uploaded; latest PINNED_VERSION correct
+- [ ] Tester / date: ________
+- [ ] macOS arm64 + system Bash version: ________
+- [ ] Linux distro + arch (or N/A with reason): ________
+- [ ] Phase A — `bun run quality` passed
+- [ ] Phase B — archive structure smoke (`bun script/smoke-install.ts --archive …`); for stable also `SPINOSA_SMOKE_FULL=1 … --full`
+- [ ] Phase C — `spinosa version` / `doctor`
+- [ ] Phase D — TUI first frame renders; opens invoking project directory
+- [ ] Phase E — upgrade from 1.0.0 workspace (Pilosa agents retired, corpus intact)
+- [ ] Phase F — upgrade from latest beta
+- [ ] Phase G — GitHub assets: 3 immutable (`install.sh`, tarball, `checksums.txt`) + 2 rolling channel
 - [ ] CHANGELOG.md updated
-- [ ] No open P0/P1 bugs for this version
+- [ ] No open P0/P1 bugs for this version (triaged / deferred with notes)
 
-Tester: ________
-Date: ________
 Machine(s): ________
 ```
+
+Publish only via `bun run release …` (not manual `git tag`).
 
 ---
 
@@ -486,8 +489,8 @@ Warnings (cloud storage, Hermes merge, workspace behind CLI) are **not** blocker
 **Publish command** (only after full sign-off):
 
 ```bash
-git tag vX.Y.Z
-git push origin vX.Y.Z
+bun run release:stable:patch   # from main after beta→main PR
+# or: bun run release:beta:patch
 ```
 
-**User must explicitly approve** version bump and publish in chat before running publish.
+Do **not** use bare `git tag` / `git push` for product releases — the orchestrator owns tagging, assets, and channel sync.

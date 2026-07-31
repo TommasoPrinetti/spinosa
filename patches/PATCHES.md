@@ -30,3 +30,4 @@ Do not edit the table by hand — run `bun script/generate-patches-md.ts`.
 
 - Missing patch files: none
 - Orphan patch files (not in patchedDependencies): none
+- Missing rationale headers (`# Why:`): none

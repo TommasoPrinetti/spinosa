@@ -1,3 +1,7 @@
+# Why: OpenAPI convert vendor fix required by Spinosa schema tooling.
+# Upstream: pending / re-check on @standard-community/standard-openapi upgrade.
+# Owner: spinosa maintainers
+# Remove when: upstream ships the same behaviour.
 diff --git a/dist/vendors/convert.js b/dist/vendors/convert.js
 index 0d615eebfd7cd646937ec1b29f8332db73586ec1..7b146f903c07a9377d676753691cba67781879be 100644
 --- a/dist/vendors/convert.js

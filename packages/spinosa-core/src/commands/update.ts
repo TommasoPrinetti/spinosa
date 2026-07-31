@@ -1,25 +1,30 @@
 import {
   existsSync,
-  closeSync,
-  openSync,
   mkdirSync,
-  readSync,
   readFileSync,
   writeFileSync,
-  readdirSync,
   statSync,
   rmSync,
   cpSync,
   renameSync,
 } from "node:fs"
-import { createHash } from "node:crypto"
 import path from "node:path"
-import { safeCopy, copyDirContents, cleanMacMetadata, isCloudStoragePath, shouldSkipTemplateCopyEntry, writeTextAtomic } from "../utils/fs"
+import { safeCopy, copyDirContents, cleanMacMetadata, isCloudStoragePath, writeTextAtomic } from "../utils/fs"
 import { compareFrameworkVersions } from "../utils/version"
 import { writeWorkspaceFrameworkVersion } from "../workspace/meta"
 import { inspectWorkspacePresence, isUsableWorkspacePresence } from "../workspace/presence"
 import { loadRegistry } from "../workspace/registry"
 import { readFrameworkVersionFromRoot, resolveTemplateRootFromFrameworkRoot } from "../framework/discovery"
+import {
+  FRAMEWORK_CHECKSUMS_RELPATH,
+  filesMatch,
+  isRetiredManagedName,
+  managedFilesUnder,
+  readFrameworkChecksums,
+  recordFrameworkChecksums,
+  sha256File,
+  type FrameworkChecksums,
+} from "../framework/checksums"
 import { spinosaLogInfo, spinosaLogWarn } from "../utils/log"
 import { resolvePathWithinRoot } from "../utils/path"
 import { readFrameworkFilesTsv, type FrameworkManifestEntry } from "../framework/manifest"
@@ -70,79 +75,13 @@ function readWorkspaceFrameworkVersion(workspacePath: string): string | undefine
   return match?.[1]?.trim()
 }
 
-function filesMatch(a: string, b: string): boolean {
-  try {
-    const sa = statSync(a)
-    const sb = statSync(b)
-    if (sa.size !== sb.size) return false
-    if (!sa.isFile() || !sb.isFile()) return false
-    return sha256File(a) === sha256File(b)
-  } catch {
-    return false
-  }
-}
-
-// ── Template checksum tracking (replace_if_unmodified enforcement) ─────────
-
-const CHECKSUMS_RELPATH = ".spinosa/framework-checksums.json"
-
-interface FrameworkChecksums {
-  [relativePath: string]: string
-}
-
-function readFrameworkChecksums(wsPath: string): FrameworkChecksums {
-  const p = path.join(wsPath, CHECKSUMS_RELPATH)
-  if (!existsSync(p)) return {}
-  try {
-    return JSON.parse(readFileSync(p, "utf-8"))
-  } catch {
-    return {}
-  }
-}
-
-function writeFrameworkChecksums(wsPath: string, checksums: FrameworkChecksums): void {
-  const p = path.join(wsPath, CHECKSUMS_RELPATH)
-  mkdirSync(path.dirname(p), { recursive: true })
-  writeTextAtomic(p, JSON.stringify(checksums, null, 2) + "\n")
-}
-
-function sha256File(filePath: string): string {
-  const hash = createHash("sha256")
-  const buffer = Buffer.allocUnsafe(1024 * 1024)
-  const fd = openSync(filePath, "r")
-  try {
-    let bytesRead = 0
-    while ((bytesRead = readSync(fd, buffer, 0, buffer.length, null)) > 0) {
-      hash.update(buffer.subarray(0, bytesRead))
-    }
-  } finally {
-    closeSync(fd)
-  }
-  return hash.digest("hex")
-}
-
-function managedFilesUnder(root: string, relativePath: string): string[] {
-  const start = resolvePathWithinRoot(root, relativePath, "framework manifest path")
-  if (!existsSync(start)) return []
-  const result: string[] = []
-
-  const visit = (absolute: string, relative: string) => {
-    const stat = statSync(absolute)
-    if (stat.isFile()) {
-      result.push(relative)
-      return
-    }
-    if (!stat.isDirectory()) return
-    for (const entry of readdirSync(absolute, { withFileTypes: true })) {
-      if (shouldSkipTemplateCopyEntry(entry.name, entry.isDirectory())) continue
-      const childRelative = path.join(relative, entry.name)
-      const child = resolvePathWithinRoot(root, childRelative, "framework manifest path")
-      visit(child, childRelative)
-    }
-  }
-
-  visit(start, relativePath.replace(/[\\/]$/, ""))
-  return result
+function archiveToTrash(workspacePath: string, relative: string, bucket: string): void {
+  const archiveRoot = path.join(workspacePath, ".trash", bucket)
+  const target = resolvePathWithinRoot(workspacePath, relative, "workspace manifest path")
+  const archived = resolvePathWithinRoot(archiveRoot, relative, "workspace manifest path")
+  mkdirSync(path.dirname(archived), { recursive: true })
+  rmSync(archived, { force: true, recursive: true })
+  renameSync(target, archived)
 }
 
 function copyManagedDirectory(
@@ -173,6 +112,8 @@ function copyManagedDirectory(
     if (filesMatch(src, dst)) continue
 
     const storedHash = storedChecksums[relativeFile]
+    // Missing baseline ⇒ preserve (user edit or legacy). Create seeds baselines so
+    // subsequent updates can refresh unmodified managed files.
     const mayReplace = entry.policy === "always_replace"
       || force
       || (storedHash !== undefined && sha256File(dst) === storedHash)
@@ -182,6 +123,62 @@ function copyManagedDirectory(
     else failed = true
   }
   return { changed, failed }
+}
+
+/**
+ * Archive files inside managed framework directories that the template no longer ships,
+ * when safe: always_replace / force / unmodified baseline / known Pilosa retired names.
+ * Unknown user files inside those directories are left in place.
+ */
+function retireOrphanManagedFiles(options: {
+  sourceTemplateRoot: string
+  workspacePath: string
+  fwEntries: FrameworkManifestEntry[]
+  storedChecksums: FrameworkChecksums
+  force: boolean
+  dryRun: boolean
+}): { removed: number; failed: boolean } {
+  let removed = 0
+  let failed = false
+  const { sourceTemplateRoot, workspacePath, fwEntries, storedChecksums, force, dryRun } = options
+
+  for (const entry of fwEntries) {
+    if (entry.role === "user_state") continue
+    if (entry.policy === "never_replace" || entry.policy === "exclude_from_update") continue
+
+    const srcRoot = resolvePathWithinRoot(sourceTemplateRoot, entry.path, "framework manifest path")
+    if (!existsSync(srcRoot) || !statSync(srcRoot).isDirectory()) continue
+
+    const templateFiles = new Set(managedFilesUnder(sourceTemplateRoot, entry.path))
+    for (const relative of managedFilesUnder(workspacePath, entry.path)) {
+      if (templateFiles.has(relative)) continue
+
+      const dst = resolvePathWithinRoot(workspacePath, relative, "framework manifest path")
+      if (!existsSync(dst) || !statSync(dst).isFile()) continue
+
+      const storedHash = storedChecksums[relative]
+      const unmodified = storedHash !== undefined && sha256File(dst) === storedHash
+      const mayRetire = entry.policy === "always_replace"
+        || force
+        || unmodified
+        || isRetiredManagedName(relative)
+      if (!mayRetire) continue
+
+      if (dryRun) {
+        removed++
+        continue
+      }
+      try {
+        archiveToTrash(workspacePath, relative, "framework-update-retired")
+        removed++
+      } catch (error) {
+        failed = true
+        spinosaLogWarn("update", `retire failed: ${relative} — ${String(error)}`)
+      }
+    }
+  }
+
+  return { removed, failed }
 }
 
 async function updateWorkspaceUnlocked(options: UpdateOptions): Promise<UpdateResult> {
@@ -229,8 +226,6 @@ async function updateWorkspaceUnlocked(options: UpdateOptions): Promise<UpdateRe
 
   const manifestHasEntries = wsManifest.length > 0
   const declaredPaths = new Set(fwEntries.map((e) => e.path))
-
-  // Load stored checksums for replace_if_unmodified detection
   const storedChecksums = readFrameworkChecksums(workspacePath)
 
   const changedPaths: string[] = []
@@ -288,7 +283,6 @@ async function updateWorkspaceUnlocked(options: UpdateOptions): Promise<UpdateRe
     const srcStat = statSync(src)
     const dstStat = statSync(dst)
 
-
     // replace_if_unmodified: skip if user modified since last update
     if (entry.policy === "replace_if_unmodified" && srcStat.isFile() && dstStat.isFile() && !force) {
       const storedHash = storedChecksums[entry.path]
@@ -343,14 +337,14 @@ async function updateWorkspaceUnlocked(options: UpdateOptions): Promise<UpdateRe
     const filePath = path.join(workspacePath, relPath)
     if (!existsSync(filePath)) continue
     let content = readFileSync(filePath, "utf-8")
-    const updated = content.replaceAll("{{WORKSPACE_PATH}}", workspacePath)
-    if (updated !== content) {
-      writeFileSync(filePath, updated, "utf-8")
+    const replaced = content.replaceAll("{{WORKSPACE_PATH}}", workspacePath)
+    if (replaced !== content) {
+      writeFileSync(filePath, replaced, "utf-8")
       if (!changedPaths.includes(relPath)) changedPaths.push(relPath)
     }
   }
 
-  // Phase 3: remove files no longer in framework TSV
+  // Phase 3: remove top-level files no longer in framework TSV
   phase("3", "Remove files absent from framework")
   if (manifestHasEntries && !hadFailures) {
     for (const mentry of wsManifest) {
@@ -368,11 +362,7 @@ async function updateWorkspaceUnlocked(options: UpdateOptions): Promise<UpdateRe
         removed++
       } else {
         try {
-          const archiveRoot = path.join(workspacePath, ".trash", "framework-update-retired")
-          const archived = resolvePathWithinRoot(archiveRoot, mentry.path, "workspace manifest path")
-          mkdirSync(path.dirname(archived), { recursive: true })
-          rmSync(archived, { force: true, recursive: true })
-          renameSync(target, archived)
+          archiveToTrash(workspacePath, mentry.path, "framework-update-retired")
           removed++
         } catch (error) {
           hadFailures = true
@@ -382,37 +372,20 @@ async function updateWorkspaceUnlocked(options: UpdateOptions): Promise<UpdateRe
     }
   }
 
-  // Phase 4: remove known contaminant files (processing artifacts, backup files, etc.)
-  phase("4", "Clean processing artifacts")
-  if (!dryRun || true) {
-    const archiveRoot = path.join(workspacePath, ".trash", "framework-cleaned")
-    const contaminantPatterns = [
-      "*ocr-processed*",
-      "*.jsonl",
-      "*.bak",
-      "raw/*.log",
-    ]
-    let cleaned = 0
-    walkDir(workspacePath, (filePath) => {
-      const rel = path.relative(workspacePath, filePath)
-      for (const pattern of contaminantPatterns) {
-        if (matchSimpleGlob(rel, pattern)) {
-          if (!dryRun) {
-            try {
-              const archived = resolvePathWithinRoot(archiveRoot, rel, "workspace contaminant path")
-              mkdirSync(path.dirname(archived), { recursive: true })
-              rmSync(archived, { force: true, recursive: true })
-              renameSync(filePath, archived)
-              cleaned++
-            } catch (error) {
-              spinosaLogWarn("update", `clean failed: ${rel} — ${String(error)}`)
-            }
-          }
-          break
-        }
-      }
+  // Phase 4: retire orphaned files inside managed framework directories only.
+  // Never scan the corpus by extension — user .jsonl / .bak / logs stay put.
+  phase("4", "Retire orphaned managed files")
+  if (!hadFailures) {
+    const retired = retireOrphanManagedFiles({
+      sourceTemplateRoot,
+      workspacePath,
+      fwEntries,
+      storedChecksums,
+      force,
+      dryRun,
     })
-    phase("4", `Cleaned ${cleaned} processing artifacts`)
+    removed += retired.removed
+    if (retired.failed) hadFailures = true
   }
 
   // Regenerate manifest.tsv
@@ -429,34 +402,19 @@ async function updateWorkspaceUnlocked(options: UpdateOptions): Promise<UpdateRe
     writeTextAtomic(wsManifestPath, manifestLines.join("\n") + "\n")
   }
 
-  // Update workspace metadata
   if (!dryRun && !hadFailures && installedVersion && installedVersion !== "dev") {
     phase("5", "Update framework version")
     await writeWorkspaceFrameworkVersion(workspacePath, installedVersion)
   }
 
-  // Clean macOS metadata (skip on cloud storage, matching bash behavior)
   if (!dryRun && !hadFailures && !isCloudStoragePath(workspacePath)) {
     phase("5", "Clean macOS metadata")
     cleanMacMetadata(workspacePath)
   }
 
-  // ── Generate template file checksums (for next update's replace_if_unmodified) ──
   if (!dryRun && !hadFailures) {
     phase("5", "Record file checksums")
-    const newChecksums: FrameworkChecksums = {}
-    for (const entry of fwEntries) {
-      if (entry.role === "user_state" || entry.policy === "exclude_from_update") continue
-      for (const relativeFile of managedFilesUnder(sourceTemplateRoot, entry.path)) {
-        const sourceFile = resolvePathWithinRoot(sourceTemplateRoot, relativeFile, "framework manifest path")
-        const workspaceFile = resolvePathWithinRoot(workspacePath, relativeFile, "framework manifest path")
-        if (!existsSync(workspaceFile)) continue
-        if (statSync(sourceFile).isFile() && statSync(workspaceFile).isFile() && filesMatch(sourceFile, workspaceFile)) {
-          newChecksums[relativeFile] = sha256File(workspaceFile)
-        }
-      }
-    }
-    writeFrameworkChecksums(workspacePath, newChecksums)
+    recordFrameworkChecksums(sourceTemplateRoot, workspacePath)
   }
 
   return {
@@ -482,13 +440,24 @@ function createUpdateSnapshot(options: UpdateOptions): UpdateSnapshot | undefine
   const workspaceManifest = path.join(options.workspacePath, ".spinosa", "manifest.tsv")
   if (!existsSync(frameworkManifest)) return
 
+  const fwEntries = readFrameworkFilesTsv(frameworkManifest)
+  const managedNested: string[] = []
+  for (const entry of fwEntries) {
+    if (entry.policy === "never_replace" || entry.policy === "exclude_from_update") continue
+    const src = resolvePathWithinRoot(sourceTemplateRoot, entry.path, "framework manifest path")
+    if (existsSync(src) && statSync(src).isDirectory()) {
+      managedNested.push(...managedFilesUnder(options.workspacePath, entry.path))
+    }
+  }
+
   const candidates = [
-    ...readFrameworkFilesTsv(frameworkManifest)
+    ...fwEntries
       .filter((entry) => entry.policy !== "never_replace" && entry.policy !== "exclude_from_update")
       .map((entry) => entry.path),
     ...readWorkspaceManifest(workspaceManifest).map((entry) => entry.path),
+    ...managedNested,
     ".spinosa/manifest.tsv",
-    ".spinosa/framework-checksums.json",
+    FRAMEWORK_CHECKSUMS_RELPATH,
     ".spinosa/workspace",
   ].filter(Boolean)
   const unique = [...new Set(candidates)]
@@ -579,31 +548,4 @@ export async function updateWorkspace(options: UpdateOptions): Promise<UpdateRes
     if (snapshot) rmSync(snapshot.root, { recursive: true, force: true })
     rmSync(lockPath, { recursive: true, force: true })
   }
-}
-
-function walkDir(root: string, fn: (filePath: string) => void): void {
-  try {
-    for (const entry of readdirSync(root, { withFileTypes: true })) {
-      const fullPath = path.join(root, entry.name)
-      if (entry.name === ".trash" || entry.name === ".spinosa" || entry.name === "node_modules") continue
-      if (entry.isDirectory()) {
-        walkDir(fullPath, fn)
-      } else if (entry.isFile()) {
-        fn(fullPath)
-      }
-    }
-  } catch {}
-}
-
-function matchSimpleGlob(filePath: string, pattern: string): boolean {
-  if (!pattern.includes("*")) return filePath === pattern
-  const parts = pattern.split("*")
-  let pos = 0
-  for (let i = 0; i < parts.length; i++) {
-    if (parts[i] === "") continue
-    const idx = filePath.indexOf(parts[i], pos)
-    if (idx === -1) return false
-    pos = idx + parts[i].length
-  }
-  return true
 }

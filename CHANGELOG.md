@@ -8,11 +8,16 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.0.3-beta.6] — 2026-07-31
+
 ### Added
 
-- Local quality gate: `bun run quality` runs typecheck, dependency lint, knip, syncpack, shellcheck, and core/TUI/installer tests.
+- Fast local release quality gate: `bun run quality` → `script/quality-release.ts` (two parallel waves: product typechecks + light checks, then launch/workspace regressions). Deep sweep remains `bun run quality:full`.
 - Explicit republish path: `bun run release:republish -- vX.Y.Z` (replaces `script/release.sh`).
-- `bun script/generate-patches-md.ts` regenerates `patches/PATCHES.md` from `patchedDependencies`.
+- `bun script/generate-patches-md.ts` regenerates `patches/PATCHES.md` from `patchedDependencies` and fails when patch rationale headers are missing.
+- Workspace create seeds `.spinosa/framework-checksums.json` so managed agent/config dirs can refresh on later updates without `--force`.
+- Release `smoke` stage + `script/smoke-install.ts`: default repo smoke; archive mode is structure-only unless `--full` / `SPINOSA_SMOKE_FULL=1`.
+- Patch files document Why / Upstream / Owner / Remove-when headers.
 
 ### Changed
 
@@ -23,11 +28,17 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Document converter dependencies (`markitdown-ts`, `pdfjs-dist`, `ppu-paddle-ocr`, `@napi-rs/canvas`) owned by `@spinosa/core` only — removed from `@spinosa/tui`.
 - `bun run dev` entrypoint (`packages/spinosa-cli`) now declares `@spinosa/core` as a dependency.
 - Privacy and development documentation updated to describe local-first behavior with optional cloud model providers.
+- Installer dependency install uses `bun install --frozen-lockfile` (no `--force` rewrite path).
+- Release orchestrator: `beta`/`stable` must run from `beta`/`main`; release state SHA updates after bump; `git archive` uses that SHA; version tags must match HEAD; immutable version assets are not clobbered when checksums differ.
+- Workspace-template docs and glossary use PaddleOCR / `ppu-paddle-ocr` (RapidOCR references removed).
+- README install section documents stable, beta, and immutable version URLs without presenting beta as the only channel.
+- Release sign-off checklist matches the 3+2 asset model and the `bun run release` orchestrator.
 
 ### Removed
 
-- GitHub Actions quality workflow (`.github/workflows/quality.yml`). Release validation runs locally via `bun run release:validate` → `bun run quality`.
+- GitHub Actions quality workflow (`.github/workflows/quality.yml`). Release validation is local only: `bun run release:validate` → `bun run quality`.
 - Orphan `patches/solid-js@1.9.10.patch` (not in `patchedDependencies`).
+- Framework update recursive “contaminant” cleanup by extension (`*.jsonl`, `*.bak`, `*ocr-processed*`, `raw/*.log`). Updates no longer scavenge the corpus; orphan retirement is limited to managed framework directories (and known Pilosa names).
 
 ### Fixed
 
@@ -35,6 +46,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Framework discovery no longer falls back to a hardcoded maintainer machine path.
 - Shellcheck passes on `install.sh` (legacy shim detection uses explicit disable comments).
 - `bun install` catalog entry for `@effect/platform-node-shared` restored.
+- Workspace update archives retired Pilosa agent files under managed dirs while leaving legitimate user files (including corpus `.jsonl` / `.bak`) in place.
 
 ## [1.0.3-beta.5] — 2026-07-31
 

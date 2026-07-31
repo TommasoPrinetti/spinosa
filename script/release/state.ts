@@ -9,6 +9,7 @@ export const STAGE_ORDER = [
   "bump",
   "build",
   "verifyLocal",
+  "smoke",
   "gitTag",
   "publishVersion",
   "channel",
@@ -132,6 +133,7 @@ export function stageLabel(stage: StageName): string {
     case "bump": return "bump"
     case "build": return "build"
     case "verifyLocal": return "verify-local"
+    case "smoke": return "smoke"
     case "gitTag": return "git-tag"
     case "publishVersion": return "publish-version"
     case "channel": return "channel"

@@ -1,3 +1,7 @@
+# Why: GCP metadata client fix for Spinosa cloud provider environments.
+# Upstream: pending / re-check on gcp-metadata upgrade.
+# Owner: spinosa maintainers
+# Remove when: upstream ships the same behaviour.
 diff --git a/build/src/index.js b/build/src/index.js
 --- a/build/src/index.js
 +++ b/build/src/index.js

@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { cleanMacMetadata } from "../utils/fs"
+import { recordFrameworkChecksums } from "../framework/checksums"
 import { copyFrameworkManifestPaths } from "../framework/manifest"
 import { registerWorkspace, writeSetupFiles } from "../workspace/registry"
 import { writeWorkspaceStatus } from "../workspace/meta"
@@ -142,6 +143,12 @@ export async function createWorkspace(options: CreateWorkspaceOptions): Promise<
 
     cleanMacMetadata(workspacePath)
     materializePlaceholders(workspacePath)
+
+    // Seed replace_if_unmodified baselines so the first framework update can
+    // refresh managed agent/config files without a force flag.
+    if (!reservation.resumed) {
+      recordFrameworkChecksums(srcTemplate, workspacePath)
+    }
 
     // Ensure user-state dirs exist when an older installed template omits them.
     for (const dir of ["raw", "maps", ".logs", "agent_reports", ".trash"]) {

@@ -2,12 +2,15 @@
 // Spawns the kernel CLI with SPINOSA_TEMPLATE_ROOT set to the repo root.
 import { fileURLToPath } from "node:url"
 import { buildKernelBunArgv } from "@spinosa/core/system/bun-launch"
+import { ensureOpenTuiRootLinks } from "@spinosa/core/system/opentui-links"
 
 const kernelEntry = fileURLToPath(new URL("../../spinosa-kernel/src/index.ts", import.meta.url))
 const repoRoot = fileURLToPath(new URL("../../..", import.meta.url))
 
 process.env.SPINOSA_PRODUCT = "1"
 process.env.SPINOSA_TEMPLATE_ROOT ??= repoRoot
+
+ensureOpenTuiRootLinks(repoRoot)
 
 const args = process.argv.slice(2)
 const argv = buildKernelBunArgv({

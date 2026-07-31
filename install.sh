@@ -621,13 +621,12 @@ install_bun_dependencies() {
   local bun_ok=0
   : > "$bun_out"
   for attempt in 1 2; do
-    local install_args=(install)
+    local install_args=(install --frozen-lockfile)
     if [[ $attempt -eq 2 ]]; then
       info "Repairing dependency tree after failed validation (attempt 2/2, timeout ${timeout_seconds}s)"
       rm -rf "${fw_root}/node_modules"
-      install_args+=(--force)
     else
-      info "Installing dependencies (attempt 1/2, timeout ${timeout_seconds}s)"
+      info "Installing dependencies (attempt 1/2, timeout ${timeout_seconds}s, frozen lockfile)"
     fi
     if (cd "$fw_root" && PATH="$(dirname "$bun_bin"):$PATH" \
       "$bun_bin" run "$timeout_runner" "$timeout_seconds" "$bun_bin" "${install_args[@]}" 2>&1 | tee -a "$bun_out"); then
@@ -643,15 +642,15 @@ install_bun_dependencies() {
       fi
     fi
     if [[ $attempt -eq 1 ]]; then
-      spinosa_log WARN "bun install failed (attempt 1/2), retrying..."
+      spinosa_log WARN "bun install --frozen-lockfile failed (attempt 1/2), retrying with clean node_modules..."
       sleep 2
     fi
   done
   if [[ $bun_ok -eq 0 ]]; then
-    spinosa_log ERROR "bun install failed after 2 attempts. Output:"
+    spinosa_log ERROR "bun install --frozen-lockfile failed after 2 attempts. Output:"
     while IFS= read -r line; do spinosa_log ERROR "$line"; done < "$bun_out"
     rm -f "$bun_out"
-    die "Dependency repair failed. Metadata was preserved; check ${SPINOSA_HOME}/logs/spinosa.log and re-run the installer."
+    die "Dependency install failed (lockfile must be honoured). Metadata was preserved; check ${SPINOSA_HOME}/logs/spinosa.log and re-run the installer."
   fi
   rm -f "$bun_out"
   ok "Dependencies installed"

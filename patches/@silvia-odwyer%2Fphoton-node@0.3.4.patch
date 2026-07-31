@@ -1,3 +1,7 @@
+# Why: photon-node native binding/load fix for Spinosa image tooling.
+# Upstream: pending / re-check on @silvia-odwyer/photon-node upgrade.
+# Owner: spinosa maintainers
+# Remove when: upstream ships the same behaviour.
 diff --git a/photon_rs.js b/photon_rs.js
 index 8f4144d..29a964a 100644
 --- a/photon_rs.js

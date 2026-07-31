@@ -1,3 +1,7 @@
+# Why: Solid virtual list compatibility fix for Spinosa TUI lists.
+# Upstream: pending / re-check on @tanstack/solid-virtual upgrade.
+# Owner: spinosa maintainers
+# Remove when: upstream ships the same behaviour.
 diff --git a/dist/cjs/index.cjs b/dist/cjs/index.cjs
 index 7e97823ea769398ccd9cf449b178c77675ed252c..d75183f11421af0e20e4e8a996af99c300ad936d 100644
 --- a/dist/cjs/index.cjs

@@ -1,3 +1,7 @@
+# Why: pacote git fetch fix for Spinosa package resolution.
+# Upstream: pending / re-check on pacote upgrade.
+# Owner: spinosa maintainers
+# Remove when: upstream ships the same behaviour.
 diff --git a/lib/git.js b/lib/git.js
 index 000ee9fc..a2a6cbb7 100644
 --- a/lib/git.js

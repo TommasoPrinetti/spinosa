@@ -1,3 +1,7 @@
+# Why: FileTreeController fix for Spinosa TUI tree navigation.
+# Upstream: pending / re-check when @pierre/trees leaves beta.
+# Owner: spinosa maintainers
+# Remove when: upstream ships the same behaviour.
 diff --git a/dist/model/FileTreeController.js b/dist/model/FileTreeController.js
 index 37c5d1ffedd5aff0258dec41b1b5cedb240aa3a6..365c42ef4c824bfd13d14f0d09226929af625c73 100644
 --- a/dist/model/FileTreeController.js

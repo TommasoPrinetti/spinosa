@@ -12,7 +12,19 @@ done
 _btlog() { $_verbose && echo "[boot:bash:$1] $2" >&2 || true; }
 
 _btlog init "spinosa launcher started"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Resolve symlinks so `./spinosa` → workspace-template/.bin/spinosa still finds the repo.
+_source="${BASH_SOURCE[0]}"
+while [[ -L "$_source" ]]; do
+  _dir="$(cd "$(dirname "$_source")" && pwd)"
+  _link="$(readlink "$_source")"
+  if [[ "$_link" == /* ]]; then
+    _source="$_link"
+  else
+    _source="${_dir}/${_link}"
+  fi
+done
+SCRIPT_DIR="$(cd "$(dirname "${_source}")" && pwd)"
+unset _source _dir _link
 _btlog init "SCRIPT_DIR=$SCRIPT_DIR"
 RESOLVED_ROOT=""
 if [[ -z "${SPINOSA_HOME:-}" && -d "${SCRIPT_DIR}/../versions" && -d "${SCRIPT_DIR}/../metadata" ]]; then

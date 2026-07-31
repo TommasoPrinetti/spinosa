@@ -29,6 +29,9 @@ dist/
 framework/bin/.build/
 .build/
 
+# Local checkout launcher symlink (use `bun run spinosa` / `bun run dev`)
+/spinosa
+
 # Framework (generated per-workspace)
 framework/spinosa/manifest.tsv
 framework/spinosa/workspace

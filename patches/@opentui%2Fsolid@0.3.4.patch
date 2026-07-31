@@ -1,3 +1,8 @@
+# Why: (1) style attribute updates must replace flags so reactive false clears stale attrs;
+#      (2) jsx-runtime must resolve to solid-js/h for Bun preload/TUI rendering.
+# Upstream: OpenTUI — re-check on @opentui/solid > 0.3.4.
+# Owner: spinosa maintainers
+# Remove when: upstream ships both fixes.
 diff --git a/index.js b/index.js
 index e83f544..0e7d926 100644
 --- a/index.js

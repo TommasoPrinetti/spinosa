@@ -209,8 +209,11 @@ describe("install and release flow", () => {
     expect(installer).not.toContain('versions/.lock.${$}-${VERSION}')
     expect(installer.indexOf('install_bun_dependencies "$fw_root"')).toBeLessThan(installer.indexOf('mv "$INSTALL_STAGE_DIR" "$version_dir"'))
     expect(installer).toContain('mv "${INSTALL_BACKUP_DIR}" "${SPINOSA_HOME}/versions/${VERSION}"')
-    expect(installer).toContain('install_args+=(--force)')
+    expect(installer).toContain('install --frozen-lockfile')
+    expect(installer).not.toContain('install_args+=(--force)')
     expect(installer).toContain('src/index.ts" version')
+    expect(installer).toContain('ensure_opentui_links')
+    expect(installer).toContain('--preload "@opentui/solid/preload"')
   })
 
   test("installer repair preserves metadata and removes only broken runtime state", async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { isDefaultTitle, resolveSessionRuntimeStatus, sessionIsBusy } from "../../src/util/session"
+import { anySessionBusy, isDefaultTitle, resolveSessionRuntimeStatus, sessionIsBusy } from "../../src/util/session"
 
 describe("util.session", () => {
   test("recognizes generated parent and child titles", () => {
@@ -14,5 +14,22 @@ describe("util.session", () => {
     expect(sessionIsBusy({ type: "idle" }, "working")).toBeTrue()
     expect(sessionIsBusy({ type: "busy" }, "idle")).toBeTrue()
     expect(sessionIsBusy({ type: "idle" }, "idle")).toBeFalse()
+  })
+
+  test("blocks organisation switch when any session is busy", () => {
+    expect(
+      anySessionBusy({
+        sessionStatus: { a: { type: "idle" } },
+        sessions: [{ id: "a" }, { id: "b" }],
+        derivedStatus: (id) => (id === "b" ? "working" : "idle"),
+      }),
+    ).toBeTrue()
+    expect(
+      anySessionBusy({
+        sessionStatus: { a: { type: "idle" } },
+        sessions: [{ id: "a" }],
+        derivedStatus: () => "idle",
+      }),
+    ).toBeFalse()
   })
 })

@@ -7,7 +7,7 @@ import { useToast } from "../ui/toast"
 import { useTheme } from "../context/theme"
 import { useSync } from "../context/sync"
 import { errorMessage } from "../util/error"
-import { sessionIsBusy } from "../util/session"
+import { anySessionBusy } from "../util/session"
 import type { ExperimentalConsoleListOrgsResponse } from "@spinosa/sdk/v2"
 
 type OrgOption = ExperimentalConsoleListOrgsResponse["orgs"][number]
@@ -49,17 +49,12 @@ export function DialogConsoleOrg() {
 
   const current = createMemo(() => orgs()?.find((item) => item.active))
 
-  const anySessionBusy = () => {
-    const statuses = sync.data.session_status ?? {}
-    for (const sessionID of Object.keys(statuses)) {
-      if (sessionIsBusy(statuses[sessionID], sync.session.status(sessionID))) return true
-    }
-    for (const session of sync.data.session ?? []) {
-      if (sessionIsBusy(statuses[session.id], sync.session.status(session.id))) return true
-    }
-    return false
-  }
-
+  const sessionsBusy = () =>
+    anySessionBusy({
+      sessionStatus: sync.data.session_status,
+      sessions: sync.data.session,
+      derivedStatus: (sessionID) => sync.session.status(sessionID),
+    })
   const options = createMemo(() => {
     if (showError()) return []
     const listed = orgs()
@@ -110,7 +105,7 @@ export function DialogConsoleOrg() {
             return
           }
 
-          if (anySessionBusy()) {
+          if (sessionsBusy()) {
             toast.show({
               message: "Stop the running agent before switching org",
               variant: "warning",

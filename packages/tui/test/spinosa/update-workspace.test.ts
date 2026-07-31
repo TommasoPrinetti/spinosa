@@ -312,6 +312,171 @@ describe("workspace update flow", () => {
     expect(existsSync(path.join(workspace, "managed", "__pycache__"))).toBe(false)
   })
 
+  test("preserves legitimate corpus files that look like old contaminants", async () => {
+    await using tmp = await tmpdir()
+    const frameworkRoot = path.join(tmp.path, "install")
+    const templateRoot = path.join(frameworkRoot, "workspace-template")
+    const workspace = path.join(tmp.path, "workspace")
+    await mkdir(path.join(templateRoot, ".spinosa"), { recursive: true })
+    await mkdir(path.join(workspace, ".spinosa"), { recursive: true })
+    await mkdir(path.join(workspace, "raw", "notes"), { recursive: true })
+    await Bun.write(path.join(templateRoot, ".spinosa", "workspace-files.tsv"), "path\trole\tupdate_policy\nAGENTS.md\tframework\talways_replace\n")
+    await Bun.write(path.join(templateRoot, "AGENTS.md"), "# Agents\n")
+    await Bun.write(path.join(workspace, "AGENTS.md"), "old\n")
+    await Bun.write(path.join(workspace, "raw", "corpus.jsonl"), '{"id":1}\n')
+    await Bun.write(path.join(workspace, "raw", "notes", "session.bak"), "keep\n")
+    await Bun.write(path.join(workspace, "raw", "scan-ocr-processed-meta.txt"), "keep\n")
+    await Bun.write(path.join(workspace, "raw", "import.log"), "keep\n")
+    await Bun.write(path.join(workspace, "research.jsonlines"), "keep\n")
+
+    const result = await updateWorkspace({ workspacePath: workspace, frameworkRoot })
+
+    expect(result.success).toBe(true)
+    expect(await Bun.file(path.join(workspace, "raw", "corpus.jsonl")).text()).toBe('{"id":1}\n')
+    expect(await Bun.file(path.join(workspace, "raw", "notes", "session.bak")).text()).toBe("keep\n")
+    expect(await Bun.file(path.join(workspace, "raw", "scan-ocr-processed-meta.txt")).text()).toBe("keep\n")
+    expect(await Bun.file(path.join(workspace, "raw", "import.log")).text()).toBe("keep\n")
+    expect(await Bun.file(path.join(workspace, "research.jsonlines")).text()).toBe("keep\n")
+    expect(existsSync(path.join(workspace, ".trash", "framework-cleaned"))).toBe(false)
+  })
+
+  test("archives retired Pilosa agent files inside managed directories", async () => {
+    await using tmp = await tmpdir()
+    const frameworkRoot = path.join(tmp.path, "install")
+    const templateRoot = path.join(frameworkRoot, "workspace-template")
+    const workspace = path.join(tmp.path, "workspace")
+    await mkdir(path.join(templateRoot, ".spinosa"), { recursive: true })
+    await mkdir(path.join(templateRoot, ".agents"), { recursive: true })
+    await mkdir(path.join(workspace, ".spinosa"), { recursive: true })
+    await mkdir(path.join(workspace, ".agents"), { recursive: true })
+    await Bun.write(
+      path.join(templateRoot, ".spinosa", "workspace-files.tsv"),
+      "path\trole\tupdate_policy\n.agents/\tframework\treplace_if_unmodified\n",
+    )
+    await Bun.write(path.join(templateRoot, ".agents", "spinosa-searcher.md"), "new\n")
+    await Bun.write(path.join(workspace, ".agents", "spinosa-searcher.md"), "new\n")
+    await Bun.write(path.join(workspace, ".agents", "pilosa-searcher.md"), "legacy\n")
+    await Bun.write(path.join(workspace, ".agents", "user-notes.md"), "mine\n")
+
+    const result = await updateWorkspace({ workspacePath: workspace, frameworkRoot })
+
+    expect(result.success).toBe(true)
+    expect(existsSync(path.join(workspace, ".agents", "pilosa-searcher.md"))).toBe(false)
+    expect(await Bun.file(path.join(workspace, ".trash", "framework-update-retired", ".agents", "pilosa-searcher.md")).text()).toBe("legacy\n")
+    expect(await Bun.file(path.join(workspace, ".agents", "user-notes.md")).text()).toBe("mine\n")
+  })
+
+  test("refreshes nested managed files after a create-time checksum baseline", async () => {
+    await using tmp = await tmpdir()
+    const frameworkRoot = path.join(tmp.path, "install")
+    const templateRoot = path.join(frameworkRoot, "workspace-template")
+    const workspace = path.join(tmp.path, "workspace")
+    await mkdir(path.join(templateRoot, ".spinosa"), { recursive: true })
+    await mkdir(path.join(templateRoot, ".agents"), { recursive: true })
+    await mkdir(path.join(workspace, ".spinosa"), { recursive: true })
+    await mkdir(path.join(workspace, ".agents"), { recursive: true })
+    await Bun.write(
+      path.join(templateRoot, ".spinosa", "workspace-files.tsv"),
+      "path\trole\tupdate_policy\n.agents/\tframework\treplace_if_unmodified\n",
+    )
+    await Bun.write(path.join(templateRoot, ".agents", "agent.md"), "v1\n")
+    await Bun.write(path.join(workspace, ".agents", "agent.md"), "v1\n")
+
+    // First update seeds checksums (simulates create-time baseline + later bump)
+    expect((await updateWorkspace({ workspacePath: workspace, frameworkRoot })).success).toBe(true)
+    await Bun.write(path.join(templateRoot, ".agents", "agent.md"), "v2\n")
+    const result = await updateWorkspace({ workspacePath: workspace, frameworkRoot })
+
+    expect(result.success).toBe(true)
+    expect(await Bun.file(path.join(workspace, ".agents", "agent.md")).text()).toBe("v2\n")
+  })
+
+  test("skips contaminant cleanup after earlier update failures", async () => {
+    await using tmp = await tmpdir()
+    const frameworkRoot = path.join(tmp.path, "install")
+    const templateRoot = path.join(frameworkRoot, "workspace-template")
+    const workspace = path.join(tmp.path, "workspace")
+    await mkdir(path.join(templateRoot, ".spinosa"), { recursive: true })
+    await mkdir(path.join(templateRoot, "collision"), { recursive: true })
+    await mkdir(path.join(workspace, ".spinosa"), { recursive: true })
+    await mkdir(path.join(workspace, "raw"), { recursive: true })
+    await Bun.write(path.join(templateRoot, ".spinosa", "workspace-files.tsv"), [
+      "path\trole\tupdate_policy",
+      "AGENTS.md\tframework\talways_replace",
+      "collision/\tframework\talways_replace",
+    ].join("\n") + "\n")
+    await Bun.write(path.join(templateRoot, "AGENTS.md"), "new\n")
+    await Bun.write(path.join(templateRoot, "collision", "nested.md"), "nested\n")
+    await Bun.write(path.join(workspace, "AGENTS.md"), "old\n")
+    await Bun.write(path.join(workspace, "collision"), "not a directory\n")
+    await Bun.write(path.join(workspace, "raw", "corpus.jsonl"), '{"ok":true}\n')
+
+    const result = await updateWorkspace({ workspacePath: workspace, frameworkRoot })
+
+    expect(result.success).toBe(false)
+    expect(await Bun.file(path.join(workspace, "raw", "corpus.jsonl")).text()).toBe('{"ok":true}\n')
+    expect(await Bun.file(path.join(workspace, "AGENTS.md")).text()).toBe("old\n")
+  })
+
+  test("upgrades a simulated 1.0.0 workspace: Pilosa agents retired, corpus kept, checksums seeded", async () => {
+    await using tmp = await tmpdir()
+    const frameworkRoot = path.join(tmp.path, "install")
+    const templateRoot = path.join(frameworkRoot, "workspace-template")
+    const workspace = path.join(tmp.path, "legacy-1.0.0-workspace")
+
+    await mkdir(path.join(templateRoot, ".spinosa"), { recursive: true })
+    await mkdir(path.join(templateRoot, ".agents"), { recursive: true })
+    await mkdir(path.join(templateRoot, ".codex", "agents"), { recursive: true })
+    await mkdir(path.join(frameworkRoot, "metadata"), { recursive: true })
+    await mkdir(path.join(workspace, ".spinosa"), { recursive: true })
+    await mkdir(path.join(workspace, ".agents"), { recursive: true })
+    await mkdir(path.join(workspace, ".codex", "agents"), { recursive: true })
+    await mkdir(path.join(workspace, "raw"), { recursive: true })
+
+    await Bun.write(path.join(frameworkRoot, "metadata", "version"), "1.0.3-beta.5\n")
+    await Bun.write(
+      path.join(templateRoot, ".spinosa", "workspace-files.tsv"),
+      [
+        "path\trole\tupdate_policy",
+        "AGENTS.md\tframework\talways_replace",
+        ".agents/\tframework\treplace_if_unmodified",
+        ".codex/\tframework\treplace_if_unmodified",
+      ].join("\n") + "\n",
+    )
+    await Bun.write(path.join(templateRoot, "AGENTS.md"), "# Spinosa\n")
+    await Bun.write(path.join(templateRoot, ".agents", "spinosa-searcher.md"), "spinosa searcher\n")
+    await Bun.write(path.join(templateRoot, ".codex", "agents", "spinosa-searcher.toml"), "name = \"spinosa-searcher\"\n")
+
+    // Legacy 1.0.0 workspace: no checksum baseline, Pilosa names, user corpus
+    await Bun.write(
+      path.join(workspace, ".spinosa", "workspace"),
+      [
+        "workspace_version: 1",
+        "framework_version: 1.0.0",
+        "project_name: legacy",
+        "setup_status: cli_started",
+      ].join("\n") + "\n",
+    )
+    await Bun.write(path.join(workspace, "AGENTS.md"), "# Pilosa\n")
+    await Bun.write(path.join(workspace, ".agents", "pilosa-searcher.md"), "old agent\n")
+    await Bun.write(path.join(workspace, ".agents", "user-custom.md"), "keep me\n")
+    await Bun.write(path.join(workspace, ".codex", "agents", "pilosa-searcher.toml"), "name = \"pilosa-searcher\"\n")
+    await Bun.write(path.join(workspace, "raw", "interviews.jsonl"), '{"q":1}\n')
+    expect(existsSync(path.join(workspace, ".spinosa", "framework-checksums.json"))).toBe(false)
+
+    const result = await updateWorkspace({ workspacePath: workspace, frameworkRoot })
+
+    expect(result.success).toBe(true)
+    expect(await Bun.file(path.join(workspace, "AGENTS.md")).text()).toBe("# Spinosa\n")
+    expect(await Bun.file(path.join(workspace, ".agents", "spinosa-searcher.md")).text()).toBe("spinosa searcher\n")
+    expect(existsSync(path.join(workspace, ".agents", "pilosa-searcher.md"))).toBe(false)
+    expect(existsSync(path.join(workspace, ".codex", "agents", "pilosa-searcher.toml"))).toBe(false)
+    expect(await Bun.file(path.join(workspace, ".agents", "user-custom.md")).text()).toBe("keep me\n")
+    expect(await Bun.file(path.join(workspace, "raw", "interviews.jsonl")).text()).toBe('{"q":1}\n')
+    expect(await Bun.file(path.join(workspace, ".spinosa", "workspace")).text()).toContain("framework_version: 1.0.3-beta.5")
+    expect(existsSync(path.join(workspace, ".spinosa", "framework-checksums.json"))).toBe(true)
+  })
+
   test("real workspace manifest supports a fresh-workspace dry run", async () => {
     await using tmp = await tmpdir()
     const workspace = path.join(tmp.path, "workspace")

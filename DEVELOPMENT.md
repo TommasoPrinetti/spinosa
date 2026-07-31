@@ -1,14 +1,39 @@
 # Spinosa Development Guide
 
-## Quick Start
+## Quick Start (local test before publish)
 
 ```bash
 cd /path/to/spinosa
 bun install
+
+# From any project/workspace directory you want the TUI to open:
+cd ~/your-project
+bun run --cwd /path/to/spinosa dev
+
+# Or from the repo (opens this checkout as the project):
+cd /path/to/spinosa
 bun run dev
+bun run spinosa version    # same entrypoint
+bun run spinosa doctor
 ```
 
-`bun run dev` runs `packages/spinosa-cli/src/index.ts`, which spawns the kernel CLI with `SPINOSA_TEMPLATE_ROOT` set to the repo root. Edit any file and restart to see changes.
+`bun run dev` / `bun run spinosa` run `packages/spinosa-cli`, set `SPINOSA_TEMPLATE_ROOT` to the repo root, ensure `@opentui` is linked at the root for preload, and spawn the kernel. **PWD** is the project directory the TUI opens.
+
+### Local `./spinosa` shim (same as installed CLI)
+
+```bash
+cd /path/to/spinosa
+./spinosa version
+./spinosa doctor
+
+# Launch TUI against another folder:
+cd ~/your-project
+/path/to/spinosa/spinosa
+# equivalent:
+SPINOSA_HOME=~/.spinosa /path/to/spinosa/workspace-template/.bin/spinosa
+```
+
+The shim auto-detects this checkout from `workspace-template/.spinosa/workspace-files.tsv` and links `@opentui` when needed.
 
 ### Alternative: run via the spinosa shim (dev mode)
 

@@ -1,3 +1,7 @@
+# Why: xAI SDK compatibility fix for Spinosa provider auth/streaming.
+# Upstream: pending / re-check on @ai-sdk/xai upgrade.
+# Owner: spinosa maintainers
+# Remove when: upstream ships the same behaviour.
 diff --git a/dist/index.js b/dist/index.js
 index 135b95946139bbd1fc4b62239032931586189da0..7913520ad2f1c26b0f9621e7654f5fb570cba926 100644
 --- a/dist/index.js

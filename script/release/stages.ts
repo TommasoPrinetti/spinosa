@@ -7,7 +7,7 @@ import { syncProductVersion, assertChangelogHasVersion } from "../set-version.ts
 import { assertRollingChannelInstaller, publishRollingChannelRelease } from "./github.ts"
 import { RELEASE_ROOT, releasePaths, type ReleasePaths } from "./lib.ts"
 import type { Reporter } from "./reporter.ts"
-import { markStage, type ReleaseState, type StageName } from "./state.ts"
+import { markStage, writeState, type ReleaseState, type StageName } from "./state.ts"
 
 export interface StageContext {
   version: string
@@ -36,7 +36,13 @@ export async function runPreflight(ctx: StageContext): Promise<void> {
   if (branch !== "main" && branch !== "beta") {
     throw new Error(`releases must be cut from main or beta (current: ${branch})`)
   }
-  ctx.reporter.detail(`branch ${branch}`)
+  const expectedBranch = ctx.paths.channel === "stable" ? "main" : "beta"
+  if (branch !== expectedBranch) {
+    throw new Error(
+      `${ctx.paths.channel} releases must run from ${expectedBranch} (current: ${branch})`,
+    )
+  }
+  ctx.reporter.detail(`branch ${branch} (${ctx.paths.channel})`)
 
   assertChangelogHasVersion(RELEASE_ROOT, ctx.version)
   ctx.reporter.detail(`CHANGELOG has section for v${ctx.version}`)
@@ -88,6 +94,11 @@ export async function runBump(ctx: StageContext): Promise<string> {
     ctx.reporter.detail(`version commit pushed to ${branch}`)
   }
 
+  const sha = (await $`git rev-parse HEAD`.cwd(RELEASE_ROOT).text()).trim()
+  ctx.state = { ...ctx.state, sha, updatedAt: new Date().toISOString() }
+  writeState(ctx.version, ctx.state)
+  ctx.reporter.detail(`release state sha ${sha.slice(0, 8)}`)
+
   return ctx.version
 }
 
@@ -96,6 +107,14 @@ export async function runBuild(ctx: StageContext): Promise<void> {
   if (ctx.dryRun) {
     ctx.reporter.detail(`would build dist/v${version}/ and dist/${paths.channel}/`)
     return
+  }
+
+  const head = (await $`git rev-parse HEAD`.cwd(RELEASE_ROOT).text()).trim()
+  const archiveSha = ctx.state.sha || head
+  if (ctx.state.sha && ctx.state.sha !== head) {
+    throw new Error(
+      `refusing to build: release state sha ${ctx.state.sha.slice(0, 8)} ≠ HEAD ${head.slice(0, 8)}`,
+    )
   }
 
   mkdirSync(paths.dist, { recursive: true })
@@ -110,7 +129,7 @@ export async function runBuild(ctx: StageContext): Promise<void> {
   writeFileSync(paths.installPath, patchInstaller(installSource, version, paths.tag))
   writeFileSync(paths.channelInstallPath, patchInstaller(installSource, version, paths.channel))
 
-  await $`git archive --format=tar.gz --prefix=spinosa-${version}/ -o ${paths.archivePath} HEAD`.cwd(RELEASE_ROOT)
+  await $`git archive --format=tar.gz --prefix=spinosa-${version}/ -o ${paths.archivePath} ${archiveSha}`.cwd(RELEASE_ROOT)
 
   const checksums = await $`shasum -a 256 install.sh ${paths.archiveName}`.cwd(paths.dist).text()
   writeFileSync(paths.checksumsPath, formatChecksums(checksums))
@@ -120,6 +139,7 @@ export async function runBuild(ctx: StageContext): Promise<void> {
 
   ctx.reporter.detail(paths.dist)
   ctx.reporter.detail(paths.channelDist)
+  ctx.reporter.detail(`archived ${archiveSha.slice(0, 8)}`)
 }
 
 function formatChecksums(text: string): string {
@@ -163,6 +183,35 @@ export async function runVerifyLocal(ctx: StageContext): Promise<void> {
   assertChecksum(paths.channelInstallPath, channelChecksums.get("install.sh"), `${paths.channel}/install.sh`)
 }
 
+export async function runSmoke(ctx: StageContext): Promise<void> {
+  const { paths } = ctx
+  if (ctx.dryRun) {
+    ctx.reporter.detail(
+      process.env.SPINOSA_SMOKE_FULL === "1"
+        ? "would full-smoke local archive (install + version/doctor + cwd)"
+        : "would structure-smoke local archive (key paths; set SPINOSA_SMOKE_FULL=1 for install+launch)",
+    )
+    return
+  }
+  if (!existsSync(paths.archivePath)) {
+    throw new Error(`smoke requires archive at ${paths.archivePath}`)
+  }
+  // Default: structure-only (fast). Full frozen install + launch: SPINOSA_SMOKE_FULL=1.
+  // Skip deps inside a full smoke with SPINOSA_SMOKE_SKIP_DEPS=1 (local iteration only).
+  const flags = ["--archive", paths.archivePath]
+  if (process.env.SPINOSA_SMOKE_FULL === "1") flags.push("--full")
+  if (process.env.SPINOSA_SMOKE_SKIP_DEPS === "1") flags.push("--skip-deps")
+  const result = await $`bun script/smoke-install.ts ${flags}`.cwd(RELEASE_ROOT).nothrow()
+  if (result.exitCode !== 0) {
+    throw new Error("local archive smoke failed — see script/smoke-install.ts output")
+  }
+  ctx.reporter.detail(
+    process.env.SPINOSA_SMOKE_FULL === "1"
+      ? `full-smoked ${paths.archiveName}`
+      : `structure-smoked ${paths.archiveName}`,
+  )
+}
+
 function sha256(filePath: string): string {
   return createHash("sha256").update(readFileSync(filePath)).digest("hex")
 }
@@ -194,9 +243,24 @@ export async function runGitTag(ctx: StageContext): Promise<void> {
     return
   }
 
+  const head = (await $`git rev-parse HEAD`.cwd(RELEASE_ROOT).text()).trim()
+  if (ctx.state.sha && ctx.state.sha !== head) {
+    throw new Error(
+      `refusing to tag: release state sha ${ctx.state.sha.slice(0, 8)} ≠ HEAD ${head.slice(0, 8)}`,
+    )
+  }
+
   const tagExists = await $`git rev-parse ${paths.tag}`.cwd(RELEASE_ROOT).nothrow().quiet()
-  if (tagExists.exitCode !== 0) {
-    await $`git tag ${paths.tag}`.cwd(RELEASE_ROOT)
+  if (tagExists.exitCode === 0) {
+    const tagSha = (await $`git rev-list -1 ${paths.tag}`.cwd(RELEASE_ROOT).text()).trim()
+    if (tagSha !== head) {
+      throw new Error(
+        `refusing to reuse ${paths.tag}: points at ${tagSha.slice(0, 8)}, HEAD is ${head.slice(0, 8)}`,
+      )
+    }
+    ctx.reporter.detail(`tag ${paths.tag} already at HEAD`)
+  } else {
+    await $`git tag ${paths.tag} ${head}`.cwd(RELEASE_ROOT)
   }
   await $`git push origin refs/tags/${paths.tag}`.cwd(RELEASE_ROOT)
   ctx.reporter.detail(`tag ${paths.tag} pushed`)
@@ -226,10 +290,26 @@ export async function runPublishVersion(ctx: StageContext): Promise<void> {
 
   const existing = await $`gh release view ${paths.tag}`.cwd(RELEASE_ROOT).nothrow().quiet()
   if (existing.exitCode === 0) {
-    const uploadArgs = ["release", "upload", paths.tag, ...assets, "--clobber"]
-    await $`gh ${uploadArgs}`.cwd(RELEASE_ROOT)
-    ctx.reporter.detail(`uploaded assets to existing ${paths.tag}`)
-    return
+    const remoteCheck = resolve(paths.dist, ".remote-check")
+    mkdirSync(remoteCheck, { recursive: true })
+    const downloaded = await $`gh release download ${paths.tag} --pattern checksums.txt --dir ${remoteCheck} --clobber`
+      .cwd(RELEASE_ROOT)
+      .nothrow()
+      .quiet()
+    if (downloaded.exitCode === 0 && existsSync(resolve(remoteCheck, "checksums.txt"))) {
+      const localHash = sha256(paths.checksumsPath)
+      const remoteHash = sha256(resolve(remoteCheck, "checksums.txt"))
+      if (localHash !== remoteHash) {
+        throw new Error(
+          `refusing to clobber immutable release ${paths.tag}: checksums.txt differs (local ${localHash.slice(0, 12)} ≠ remote ${remoteHash.slice(0, 12)})`,
+        )
+      }
+      ctx.reporter.detail(`existing ${paths.tag} checksums match — skip upload`)
+      return
+    }
+    throw new Error(
+      `GitHub release ${paths.tag} already exists but checksums.txt could not be verified — refuse immutable republish`,
+    )
   }
 
   await $`gh ${createArgs}`.cwd(RELEASE_ROOT)
@@ -283,6 +363,21 @@ export async function runVerifyRemote(ctx: StageContext): Promise<void> {
     version,
   )
   ctx.reporter.detail(`versioned ${paths.tag} PINNED_VERSION=${versionPinned}`)
+
+  // Optional remote archive smoke. Structure-only by default; full install+launch with
+  // SPINOSA_SMOKE_FULL=1 (and SPINOSA_SMOKE_REMOTE=1 to enable the download).
+  if (process.env.SPINOSA_SMOKE_REMOTE === "1") {
+    const remoteDir = resolve(paths.dist, ".remote-smoke")
+    mkdirSync(remoteDir, { recursive: true })
+    await $`gh release download ${paths.tag} --pattern ${paths.archiveName} --dir ${remoteDir} --clobber`
+      .cwd(RELEASE_ROOT)
+    const remoteArchive = resolve(remoteDir, paths.archiveName)
+    const flags = ["--archive", remoteArchive]
+    if (process.env.SPINOSA_SMOKE_FULL === "1") flags.push("--full")
+    const smoke = await $`bun script/smoke-install.ts ${flags}`.cwd(RELEASE_ROOT).nothrow()
+    if (smoke.exitCode !== 0) throw new Error("remote archive smoke failed")
+    ctx.reporter.detail(`remote smoke passed for ${paths.tag}`)
+  }
 }
 
 async function assertLiveInstaller(url: string, label: string, version: string): Promise<string> {
@@ -302,6 +397,7 @@ const STAGE_RUNNERS: Record<StageName, (ctx: StageContext) => Promise<void | str
   bump: runBump,
   build: runBuild,
   verifyLocal: runVerifyLocal,
+  smoke: runSmoke,
   gitTag: runGitTag,
   publishVersion: runPublishVersion,
   channel: runChannel,

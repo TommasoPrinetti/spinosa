@@ -1,3 +1,7 @@
+# Why: Effect HttpApiSchema fix required on Effect 4 beta line used by Spinosa.
+# Upstream: re-check when Effect 4 leaves beta / newer beta lands the fix.
+# Owner: spinosa maintainers
+# Remove when: upstream ships the same behaviour.
 diff --git a/dist/unstable/httpapi/HttpApiSchema.js b/dist/unstable/httpapi/HttpApiSchema.js
 index ecb6603d1ee4e89e92174b3a1100e8c9c720b3f3..08b832b6b3e9e4d10df156eca36b16f571f67f6e 100644
 --- a/dist/unstable/httpapi/HttpApiSchema.js
