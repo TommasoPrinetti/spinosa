@@ -136,7 +136,10 @@ export function DialogSessionList() {
     route.data.type === "workspace" ? route.data.sessionID : undefined,
   )
   const sessions = createMemo(() => {
-    const result = searchResults() ?? browseResults() ?? sync.data.session
+    const result =
+      (searchResults.error ? undefined : searchResults()) ??
+      (browseResults.error ? undefined : browseResults()) ??
+      sync.data.session
     const synced = new Map(sync.data.session.map((session) => [session.id, session]))
     const ids = new Set(result.map((session) => session.id))
     const extra = [currentSessionID(), ...local.session.pinned()].flatMap((id) => {

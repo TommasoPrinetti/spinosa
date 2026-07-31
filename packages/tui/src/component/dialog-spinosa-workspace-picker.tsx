@@ -108,9 +108,9 @@ export function DialogSpinosaWorkspacePicker(props: { onClose?: () => void } = {
   const [workspaces, { refetch: refetchWorkspaces }] = createResource(() => spinosa.bootReady, async (bootReady) => {
     if (!bootReady) return []
     const list = await listRegisteredWorkspaces()
-    const bundled = await readBundledFrameworkVersion()
+    const bundled = await readBundledFrameworkVersion().catch(() => "unknown")
     const pairs = await Promise.all(
-      list.map(async (ws) => ({ ws, meta: await readWorkspaceMeta(ws.path) })),
+      list.map(async (ws) => ({ ws, meta: await readWorkspaceMeta(ws.path).catch(() => undefined) })),
     )
     return pairs.map(({ ws, meta }) => ({
       path: ws.path,
@@ -134,6 +134,8 @@ export function DialogSpinosaWorkspacePicker(props: { onClose?: () => void } = {
   })
 
   const sorted = createMemo(() => {
+    // Solid rethrows on workspaces() when the resource is errored — keep picker alive.
+    if (workspaces.error) return []
     const rows = workspaces() ?? []
     const col = sortColumn()
     const dir = sortDir()

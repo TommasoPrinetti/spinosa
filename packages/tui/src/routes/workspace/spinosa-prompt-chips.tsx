@@ -39,7 +39,7 @@ export function SpinosaPromptChips() {
   const workspaceReady = createMemo(() => Boolean(spinosa.activePath && !spinosa.genericMode))
   const [bundledVersion] = createResource(
     () => (workspaceReady() ? "bundled" : undefined),
-    () => readBundledFrameworkVersion(),
+    () => readBundledFrameworkVersion().catch(() => undefined),
   )
   const needsWorkspaceUpdate = createMemo(() =>
     workspaceNeedsFrameworkUpdate(spinosa.meta?.frameworkVersion, bundledVersion()),

@@ -15,6 +15,7 @@ import { useTuiConfig } from "../config"
 import { HomeSessionDestinationProvider } from "./home/session-destination"
 import { SpinosaPromptChips } from "./workspace/spinosa-prompt-chips"
 import { MAIN_CONTENT_MAX_WIDTH } from "../util/layout"
+import { safeResourceValue } from "../util/resource"
 import { CenteredColumn } from "../component/centered-column"
 import { useSpinosaWorkspace } from "../context/spinosa-workspace"
 import { useTheme } from "../context/theme"
@@ -88,7 +89,7 @@ export function Home() {
   const compactLayout = createMemo(() => dimensions().height < 24)
   const startupPrompt = createMemo(() => route.prompt ?? spinosa.pendingPrompt)
   const startupPromptIsQueued = createMemo(() => !route.prompt && Boolean(spinosa.pendingPrompt))
-  const [bundledVersion] = createResource(readBundledFrameworkVersion)
+  const [bundledVersion] = createResource(() => readBundledFrameworkVersion().catch(() => undefined))
   type RecentWorkspace = {
     path: string
     name: string
@@ -140,11 +141,11 @@ export function Home() {
   const [maintenanceChecksStarted, setMaintenanceChecksStarted] = createSignal(false)
   const [maintenance, { refetch: refetchMaintenance }] = createResource(
     maintenanceChecksStarted,
-    async (started) => (started ? inspectSpinosaMaintenance() : undefined),
+    async (started) => (started ? inspectSpinosaMaintenance().catch(() => undefined) : undefined),
   )
   const [maintenanceAction, setMaintenanceAction] = createSignal<"idle" | "cleaning" | "repairing">("idle")
-  const maintenanceCleanupAvailable = createMemo(() => (maintenance()?.staleInstallDirectories.length ?? 0) > 0)
-  const maintenanceRepairRequired = createMemo(() => maintenance()?.dependencyRepairRequired === true)
+  const maintenanceCleanupAvailable = createMemo(() => (safeResourceValue(maintenance)?.staleInstallDirectories.length ?? 0) > 0)
+  const maintenanceRepairRequired = createMemo(() => safeResourceValue(maintenance)?.dependencyRepairRequired === true)
 
   onMount(() => {
     const timer = setTimeout(() => setMaintenanceChecksStarted(true), MAINTENANCE_CHECK_DELAY_MS)
@@ -377,14 +378,14 @@ export function Home() {
               <text fg={theme.textMuted}>{versionLabel()}</text>
               <box height={1} />
             </Show>
-            <Show when={maintenance()?.installInProgress}>
+            <Show when={safeResourceValue(maintenance)?.installInProgress}>
               <text fg={theme.textMuted}>Maintenance checks will resume when this installation finishes.</text>
               <box height={1} />
             </Show>
             <Show when={maintenanceCleanupAvailable()}>
               <box flexDirection="row" alignItems="center" gap={1}>
                 <text fg={theme.warning}>
-                  Spinosa found {maintenance()?.staleInstallDirectories.length} leftover install file{maintenance()?.staleInstallDirectories.length === 1 ? "" : "s"}.
+                  Spinosa found {safeResourceValue(maintenance)?.staleInstallDirectories.length} leftover install file{safeResourceValue(maintenance)?.staleInstallDirectories.length === 1 ? "" : "s"}.
                 </text>
                 <box
                   paddingX={1}

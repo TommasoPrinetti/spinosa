@@ -18,6 +18,7 @@ import { DiffViewerFileTree } from "./diff-viewer-file-tree"
 import { Panel, PanelGroup, Separator } from "./diff-viewer-ui"
 import { DialogSelect } from "../../ui/dialog-select"
 import { getScrollAcceleration } from "../../util/scroll"
+import { safeResourceValue } from "../../util/resource"
 import {
   allExpandedFileTreeDirectories,
   buildFileTree,
@@ -128,7 +129,8 @@ function DiffViewer(props: { api: TuiPluginApi }) {
     )
     return normalizeDiffs(result.data ?? [])
   })
-  const files = createMemo(() => diff() ?? [])
+  // Never call diff() while errored — Solid rethrows and can hard-abort the TUI.
+  const files = createMemo(() => safeResourceValue(diff) ?? [])
   const [focus, setFocus] = createSignal<DiffViewerFocus>("patches")
   const [fileTreeEnabled, setFileTreeEnabled] = createSignal(
     props.api.kv.get<boolean>(KV_SHOW_FILE_TREE, true) !== false,
@@ -769,16 +771,16 @@ function DiffViewer(props: { api: TuiPluginApi }) {
                 <text fg={theme().textMuted}>Loading diff...</text>
               </box>
             </Match>
-            <Match when={!diff.loading && files().length === 0}>
-              <Separator axis="x" />
-              <box flexGrow={1} paddingLeft={1}>
-                <text fg={theme().textMuted}>No diff!</text>
-              </box>
-            </Match>
             <Match when={!diff.loading && diff.error}>
               <Separator axis="x" />
               <box flexGrow={1} paddingLeft={1}>
                 <text fg={theme().error}>Failed to load diff</text>
+              </box>
+            </Match>
+            <Match when={!diff.loading && files().length === 0}>
+              <Separator axis="x" />
+              <box flexGrow={1} paddingLeft={1}>
+                <text fg={theme().textMuted}>No diff!</text>
               </box>
             </Match>
             <Match when={!diff.loading}>

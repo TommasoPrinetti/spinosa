@@ -55,6 +55,7 @@ import { DialogConfirm } from "../../ui/dialog-confirm"
 import { DialogTimeline } from "./dialog-timeline"
 import { DialogForkFromTimeline } from "./dialog-fork-from-timeline"
 import { DialogMdViewer } from "./dialog-md-viewer"
+import { extractMdPaths } from "./extract-md-paths"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
 import { SessionFooter } from "./footer"
 import { SubagentFooter } from "./subagent-footer.tsx"
@@ -2160,27 +2161,6 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
       </TranscriptRow>
     </Show>
   )
-}
-
-const MD_PATH_RE = /[\w\/\\\-]+\.md/gi
-
-function extractMdPaths(text: string, workspaceRoot?: string): string[] {
-  const matches = text.match(MD_PATH_RE)
-  if (!matches) return []
-  const seen = new Set<string>()
-  return matches.filter((p) => {
-    if (seen.has(p)) return false
-    seen.add(p)
-    if (!p.includes("/") && !p.includes("\\")) return false
-    if (p.startsWith("http://") || p.startsWith("https://")) return false
-    if (workspaceRoot) {
-      try {
-        const resolved = path.resolve(workspaceRoot, p)
-        return resolved.startsWith(workspaceRoot)
-      } catch { return false }
-    }
-    return true
-  }).slice(0, 5)
 }
 
 // Pending messages moved to individual tool pending functions

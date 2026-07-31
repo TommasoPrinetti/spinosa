@@ -11,6 +11,7 @@ import { useSDK } from "../../context/sdk"
 import { useSync } from "../../context/sync"
 import { useData } from "../../context/data"
 import { getScrollAcceleration } from "../../util/scroll"
+import { safeResourceValue } from "../../util/resource"
 import { useTuiPaths } from "../../context/runtime"
 import { useTuiConfig } from "../../config"
 import { useLocation } from "../../context/location"
@@ -320,15 +321,20 @@ export function Autocomplete(props: {
       if (referenceMatch()) return []
       const { lineRange, baseQuery } = extractLineRange(input.query ?? "")
 
-      // Get files from SDK
-      const result = await sdk.client.v2.fs.find({
-        query: baseQuery,
-        limit: "20",
-        location: {
-          directory: input.location?.directory,
-          workspace: input.location?.workspaceID ?? project.workspace.current(),
-        },
-      })
+      // Get files from SDK — never reject into createResource (Solid rethrows on read).
+      let result: Awaited<ReturnType<typeof sdk.client.v2.fs.find>>
+      try {
+        result = await sdk.client.v2.fs.find({
+          query: baseQuery,
+          limit: "20",
+          location: {
+            directory: input.location?.directory,
+            workspace: input.location?.workspaceID ?? project.workspace.current(),
+          },
+        })
+      } catch {
+        return []
+      }
 
       const options: AutocompleteOption[] = []
 
@@ -474,7 +480,7 @@ export function Autocomplete(props: {
   })
 
   const options = createMemo((prev: AutocompleteOption[] | undefined) => {
-    const filesValue = files()
+    const filesValue = safeResourceValue(files)
     const referenceMatchValue = referenceMatch()
     const agentsValue = agents()
     const referenceAliasesValue = referenceAliases()

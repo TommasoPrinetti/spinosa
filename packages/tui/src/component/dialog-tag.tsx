@@ -17,13 +17,16 @@ export function DialogTag(props: { onSelect?: (value: string) => void }) {
   const [files] = createResource(
     () => ({ filter: store.filter, workspace: project.workspace.current() }),
     async (params) => {
-      const result = await sdk.client.find.files({
-        query: params.filter,
-        workspace: params.workspace,
-      })
-      if (result.error) return []
-      const sliced = (result.data ?? []).slice(0, 5)
-      return sliced
+      try {
+        const result = await sdk.client.find.files({
+          query: params.filter,
+          workspace: params.workspace,
+        })
+        if (result.error) return []
+        return (result.data ?? []).slice(0, 5)
+      } catch {
+        return []
+      }
     },
   )
 
