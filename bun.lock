@@ -279,7 +279,7 @@
     },
     "packages/spinosa-cli": {
       "name": "@spinosa/cli",
-      "version": "1.0.3-beta.6",
+      "version": "1.0.3-beta.7",
       "dependencies": {
         "@spinosa/core": "workspace:*",
       },
@@ -292,7 +292,7 @@
     },
     "packages/spinosa-core": {
       "name": "@spinosa/core",
-      "version": "1.0.3-beta.6",
+      "version": "1.0.3-beta.7",
       "dependencies": {
         "@napi-rs/canvas": "catalog:",
         "@spinosa/harness": "workspace:*",
@@ -320,7 +320,7 @@
     },
     "packages/spinosa-harness": {
       "name": "@spinosa/harness",
-      "version": "1.0.3-beta.6",
+      "version": "1.0.3-beta.7",
       "dependencies": {
         "@spinosa/sdk": "workspace:*",
       },
@@ -459,7 +459,7 @@
     },
     "packages/spinosa-runtime": {
       "name": "@spinosa/runtime",
-      "version": "1.0.3-beta.6",
+      "version": "1.0.3-beta.7",
       "devDependencies": {
         "@tsconfig/bun": "catalog:",
         "@types/bun": "catalog:",
