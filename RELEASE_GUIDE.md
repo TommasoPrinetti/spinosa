@@ -61,7 +61,7 @@ State is tracked in `dist/v{VERSION}/.release-state.json` so releases can be res
 
 | Command | When | What |
 | ------- | ---- | ---- |
-| `bun run quality` | Every beta cut / `release:validate` | Parallel: product typechecks, shellcheck, release-critical unit/TUI tests, installer bats, repo smoke |
+| `bun run quality` | Every beta cut / `release:validate` | Parallel: product typechecks, frozen lockfile, shellcheck, release-critical unit/TUI tests, installer bats, repo smoke |
 | `bun run smoke` | Local iteration | Repo-root `version`/`doctor` + cwd (same as quality’s smoke) |
 | `bun run quality:full` | Before stable / deep sweep | Full typecheck-all, knip, syncpack, depcruise, all core+tui spinosa tests |
 | `SPINOSA_SMOKE_FULL=1` | Before stable / archive confidence | Full tarball install+launch smoke |

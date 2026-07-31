@@ -101,6 +101,12 @@ const started = performance.now()
 
 const wave1 = await wave("wave 1: typecheck + light checks", [
   runJob("typecheck product", typecheckProduct),
+  runJob("frozen lockfile", async () => {
+    const result = await $`bun install --frozen-lockfile`.cwd(root).nothrow()
+    if (result.exitCode !== 0) {
+      throw new Error("bun.lock out of sync with package.json — run `bun install` and commit bun.lock")
+    }
+  }),
   runJob("shellcheck installers", async () => {
     const result = await $`bun run lint:shell`.cwd(root).nothrow()
     if (result.exitCode !== 0) throw new Error("shellcheck failed")

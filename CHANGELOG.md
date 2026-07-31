@@ -8,6 +8,13 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.0.3-beta.7] — 2026-07-31
+
+### Fixed
+
+- Release bump refreshes and commits `bun.lock` after version sync so `bun install --frozen-lockfile` works for published archives (beta.6 install failed with “lockfile had changes”).
+- `bun run quality` asserts `bun install --frozen-lockfile` before shipping.
+
 ## [1.0.3-beta.6] — 2026-07-31
 
 ### Added

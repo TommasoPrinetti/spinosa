@@ -79,9 +79,22 @@ export async function runBump(ctx: StageContext): Promise<string> {
     ctx.reporter.detail(`synced packages: ${syncedPackages.join(", ")}`)
   }
 
+  // Version bumps rewrite workspace package.json versions; refresh bun.lock so
+  // user installs with `bun install --frozen-lockfile` succeed.
+  const lock = await $`bun install`.cwd(RELEASE_ROOT).nothrow()
+  if (lock.exitCode !== 0) {
+    throw new Error("bun install failed after version sync — lockfile not refreshed")
+  }
+  ctx.reporter.detail("bun.lock refreshed for frozen installs")
+
   // Root + installer are source of truth; product packages (spinosa-core/cli/…) are synced too.
   // Kernel/tui stay on their own 1.17.x fork versions — see script/set-version.ts.
-  const versionPaths = ["package.json", "install.sh", ...syncedPackages.map((dir) => `${dir}/package.json`)]
+  const versionPaths = [
+    "package.json",
+    "install.sh",
+    "bun.lock",
+    ...syncedPackages.map((dir) => `${dir}/package.json`),
+  ]
   const dirty = await $`git status --porcelain ${versionPaths}`.cwd(RELEASE_ROOT).text()
   if (dirty.trim()) {
     await $`git add ${versionPaths}`.cwd(RELEASE_ROOT)
