@@ -340,13 +340,15 @@ export function Autocomplete(props: {
 
       // Add file options. Trust the order returned by fff (frecency, fuzzy
       // score, filename bonus, etc. are already factored in).
-      if (!result.error && result.data) {
+      // Narrow on data — some SDK success shapes omit `error` on the union.
+      if (result.data) {
         const width = props.anchor().width - 4
+        const directory = result.data.location.directory
         options.push(
           ...result.data.data.map((item): AutocompleteOption => {
             const { filename, part } = createFilePart(
               item,
-              path.join(result.data.location.directory, item.path),
+              path.join(directory, item.path),
               lineRange,
             )
             return {
