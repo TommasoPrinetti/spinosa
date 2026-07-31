@@ -1,9 +1,17 @@
 import { readFile } from "node:fs/promises"
 import { createRequire } from "node:module"
 import { pathToFileURL } from "node:url"
+// Before pdfjs: install ImageData/Path2D/DOMMatrix from ESM @napi-rs/canvas
+// (pdfjs createRequire fails on Linux Bun --compile; see pdfjs-canvas-globals.ts).
+import "./pdfjs-canvas-globals"
 import { getDocument, GlobalWorkerOptions, type PDFDocumentProxy } from "pdfjs-dist/legacy/build/pdf.mjs"
 import { createCanvas, type Canvas } from "@napi-rs/canvas"
 import stripAnsi from "strip-ansi"
+import {
+  canvasDebugLog,
+  debugCanvasEnvironment,
+  isCanvasDebugEnabled,
+} from "./canvas-debug"
 
 const require = createRequire(import.meta.url)
 
@@ -31,10 +39,30 @@ export function bufferToPdfJsUint8Array(data: Buffer): Uint8Array {
  */
 class NodeCanvasFactory {
   create(width: number, height: number): NodeCanvasAndContext {
-    const canvas = createCanvas(Math.max(1, Math.ceil(width)), Math.max(1, Math.ceil(height)))
-    return {
-      canvas,
-      context: canvas.getContext("2d"),
+    const w = Math.max(1, Math.ceil(width))
+    const h = Math.max(1, Math.ceil(height))
+    try {
+      const canvas = createCanvas(w, h)
+      const context = canvas.getContext("2d")
+      canvasDebugLog("NodeCanvasFactory.create", {
+        ok: true,
+        width: w,
+        height: h,
+        hasContext: Boolean(context),
+        ImageData: typeof (globalThis as { ImageData?: unknown }).ImageData,
+        Path2D: typeof (globalThis as { Path2D?: unknown }).Path2D,
+      })
+      return { canvas, context }
+    } catch (e) {
+      canvasDebugLog("NodeCanvasFactory.create", {
+        ok: false,
+        width: w,
+        height: h,
+        error: e instanceof Error ? e.message : String(e),
+        ImageData: typeof (globalThis as { ImageData?: unknown }).ImageData,
+        Path2D: typeof (globalThis as { Path2D?: unknown }).Path2D,
+      })
+      throw e
     }
   }
 
@@ -142,8 +170,20 @@ export async function pdfRenderPageToPng(pdfPath: string, pageNumber: number, dp
 }
 
 export async function pdfRenderDocumentPageToPng(doc: PDFDocumentProxy, pageNumber: number, dpi = 180): Promise<Buffer> {
+  if (isCanvasDebugEnabled()) {
+    await debugCanvasEnvironment(`pdfRenderDocumentPageToPng:page=${pageNumber}`)
+  }
   const pg = await doc.getPage(pageNumber)
   const viewport = pg.getViewport({ scale: dpi / 72 })
+  canvasDebugLog("pdfRenderDocumentPageToPng.before-create", {
+    pageNumber,
+    dpi,
+    viewportWidth: viewport.width,
+    viewportHeight: viewport.height,
+    ImageData: typeof (globalThis as { ImageData?: unknown }).ImageData,
+    Path2D: typeof (globalThis as { Path2D?: unknown }).Path2D,
+    DOMMatrix: typeof (globalThis as { DOMMatrix?: unknown }).DOMMatrix,
+  })
   const factory = new NodeCanvasFactory()
   const canvasAndContext = factory.create(viewport.width, viewport.height)
   const { canvas, context } = canvasAndContext
@@ -154,7 +194,19 @@ export async function pdfRenderDocumentPageToPng(doc: PDFDocumentProxy, pageNumb
       canvasContext: context as unknown as CanvasRenderingContext2D,
       viewport,
     }).promise
-    return canvas.toBuffer("image/png")
+    const png = canvas.toBuffer("image/png")
+    canvasDebugLog("pdfRenderDocumentPageToPng.ok", { pageNumber, pngBytes: png.byteLength })
+    return png
+  } catch (e) {
+    canvasDebugLog("pdfRenderDocumentPageToPng.fail", {
+      pageNumber,
+      error: e instanceof Error ? e.message : String(e),
+      name: e instanceof Error ? e.name : undefined,
+      ImageData: typeof (globalThis as { ImageData?: unknown }).ImageData,
+      Path2D: typeof (globalThis as { Path2D?: unknown }).Path2D,
+      stack: e instanceof Error ? e.stack?.split("\n").slice(0, 8) : undefined,
+    })
+    throw e
   } finally {
     factory.destroy(canvasAndContext)
   }

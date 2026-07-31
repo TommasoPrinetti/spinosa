@@ -6,6 +6,7 @@ import {
   convertedOutputExists,
   looksLikeBinaryDocument,
 } from "../src/import/frontmatter"
+import { ensurePdfJsCanvasGlobals } from "../src/extension/pdfjs-canvas-globals"
 import { bufferToPdfJsUint8Array, pdfRenderPageToPng } from "../src/extension/pdf-js"
 import { bufferToOcrArrayBuffer } from "../src/import/ppu-ocr"
 import {
@@ -64,6 +65,31 @@ describe("pdfjs getDocument input", () => {
     expect(bytes.byteLength).toBe(data.byteLength)
     expect(bytes.byteLength).toBe(bytes.buffer.byteLength)
     expect([...bytes]).toEqual([...data])
+  })
+})
+
+describe("pdfjs canvas globals (Linux createRequire bypass)", () => {
+  test("ensurePdfJsCanvasGlobals installs ImageData/Path2D/DOMMatrix on globalThis", () => {
+    const g = globalThis as Record<string, unknown>
+    const prev = { ImageData: g.ImageData, Path2D: g.Path2D, DOMMatrix: g.DOMMatrix }
+    try {
+      delete g.ImageData
+      delete g.Path2D
+      delete g.DOMMatrix
+      expect(g.ImageData).toBeUndefined()
+      ensurePdfJsCanvasGlobals()
+      expect(typeof g.ImageData).toBe("function")
+      expect(typeof g.Path2D).toBe("function")
+      expect(typeof g.DOMMatrix).toBe("function")
+      const ImageDataCtor = g.ImageData as new (w: number, h: number) => { width: number; height: number }
+      const id = new ImageDataCtor(2, 3)
+      expect(id.width).toBe(2)
+      expect(id.height).toBe(3)
+    } finally {
+      g.ImageData = prev.ImageData
+      g.Path2D = prev.Path2D
+      g.DOMMatrix = prev.DOMMatrix
+    }
   })
 })
 
