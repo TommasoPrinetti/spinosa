@@ -39,6 +39,27 @@ describe("normalizeRoute", () => {
     })
   })
 
+  test("preserves workspace conversation boot flag", () => {
+    expect(
+      normalizeRoute({
+        type: "workspace",
+        sessionID: "ses_test",
+        conversationBooting: true,
+      }),
+    ).toEqual({
+      type: "workspace",
+      sessionID: "ses_test",
+      conversationBooting: true,
+    })
+  })
+
+  test("drops conversation boot flag when omitted", () => {
+    expect(normalizeRoute({ type: "workspace", sessionID: "ses_test" })).toEqual({
+      type: "workspace",
+      sessionID: "ses_test",
+    })
+    expect("conversationBooting" in normalizeRoute({ type: "workspace", sessionID: "ses_test" })).toBe(false)
+  })
   test("preserves plugin routes for feature plugins", () => {
     expect(normalizeRoute({ type: "plugin", id: "diff-viewer", data: { path: "a" } })).toEqual({
       type: "plugin",
@@ -49,6 +70,62 @@ describe("normalizeRoute", () => {
 
   test("normalizes unknown runtime routes to the global", () => {
     expect(normalizeRoute({ type: "future-route" } as never)).toEqual({ type: "global" })
+  })
+})
+
+describe("conversation booting", () => {
+  test("pending signal clears after finishConversationBoot", () => {
+    createRoot((dispose) => {
+      let route!: ReturnType<typeof useRoute>
+      createComponent(TuiStartupProvider, {
+        value: { skipInitialLoading: true },
+        get children() {
+          return createComponent(RouteProvider, {
+            get children() {
+              return createComponent(() => {
+                route = useRoute()
+                return null
+              }, {})
+            },
+          })
+        },
+      })
+
+      expect(route.conversationBooting()).toBe(false)
+      route.startConversationBoot()
+      expect(route.conversationBooting()).toBe(true)
+      route.finishConversationBoot()
+      expect(route.conversationBooting()).toBe(false)
+
+      dispose()
+    })
+  })
+
+  test("finishConversationBoot drops workspace route meta", () => {
+    createRoot((dispose) => {
+      let route!: ReturnType<typeof useRoute>
+      createComponent(TuiStartupProvider, {
+        value: { skipInitialLoading: true },
+        get children() {
+          return createComponent(RouteProvider, {
+            get children() {
+              return createComponent(() => {
+                route = useRoute()
+                return null
+              }, {})
+            },
+          })
+        },
+      })
+
+      route.navigate({ type: "workspace", sessionID: "ses_test", conversationBooting: true })
+      expect(route.conversationBooting()).toBe(true)
+      route.finishConversationBoot()
+      expect(route.conversationBooting()).toBe(false)
+      expect(route.data).toEqual({ type: "workspace", sessionID: "ses_test" })
+
+      dispose()
+    })
   })
 })
 

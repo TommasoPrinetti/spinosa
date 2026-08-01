@@ -10,6 +10,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Home Enter → conversation shows an immediate full-screen **Loading conversation engine…** overlay while the session shell boots (optimistic navigate + background `session.create`); dismisses when the session is synced and the prompt is mounted, with a 30s timeout toast on failure.
 - Harness loop-control: turn snapshots + save points, `prepareNextTurn` / `shouldStopAfterTurn` / `beforeToolCall` hooks in the V2 runner, phase→`idle|busy|retry` mapping, optional tool `terminate`, busy rejection for structural ops (model/agent switch, compact), and mid-run `delivery: steer|queue` on the live V2 prompt path (TUI default-on via `SPINOSA_SESSION_V2_PROMPT`, set `0` to force V1).
 - V2 SessionExecution publishes busy/idle onto existing `session.status`; V1 `session.abort` also interrupts V2 execution so ESC/double-ESC keeps working.
 - TUI projects `session.next.*` and `permission.v2.*` into the shipped conversation/permission UX.

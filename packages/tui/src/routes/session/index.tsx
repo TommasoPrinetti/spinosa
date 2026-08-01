@@ -267,7 +267,7 @@ const resolveExportPath = (filename: string): string => {
   }
   const pluginRuntime = usePluginRuntime()
   const route = useSessionRoute()
-  const { navigate } = useRoute()
+  const { navigate, finishConversationBoot, conversationBooting } = useRoute()
   const sync = useSync()
   const event = useEvent()
   const project = useProject()
@@ -330,6 +330,18 @@ const resolveExportPath = (filename: string): string => {
   })
   const visible = createMemo(() => !session()?.parentID && permissions().length === 0 && questions().length === 0)
   const disabled = createMemo(() => permissions().length > 0 || questions().length > 0)
+
+  const conversationReady = createMemo(() => {
+    if (!session()) return false
+    if (!visible()) return true
+    return promptMounted()
+  })
+
+  createEffect(() => {
+    if (!conversationBooting()) return
+    if (!conversationReady()) return
+    finishConversationBoot()
+  })
 
   const pending = createMemo(() => {
     const completed = messages().findLast((x) => x.role === "assistant" && x.time.completed)?.id
@@ -499,9 +511,11 @@ const resolveExportPath = (filename: string): string => {
   let seeded = false
   let scroll: ScrollBoxRenderable
   let prompt: PromptRef | undefined
+  const [promptMounted, setPromptMounted] = createSignal(false)
   const bind = (r: PromptRef | undefined) => {
     prompt = r
     promptRef.set(r)
+    setPromptMounted(Boolean(r))
     if (seeded || !route.prompt || !r) return
     seeded = true
     r.set(route.prompt)
@@ -1354,7 +1368,10 @@ const resolveExportPath = (filename: string): string => {
   })
 
   // snap to bottom when session changes
-  createEffect(on(() => route.sessionID, toBottom))
+  createEffect(on(() => route.sessionID, () => {
+    setPromptMounted(false)
+    toBottom()
+  }))
 
   return (
     <LocationProvider location={location()}>

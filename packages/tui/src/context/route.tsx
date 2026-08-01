@@ -1,3 +1,4 @@
+import { createSignal } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import { createSimpleContext } from "./helper"
 import type { PromptInfo } from "../prompt/history"
@@ -12,6 +13,8 @@ export type WorkspaceRoute = {
   type: "workspace"
   sessionID: string
   prompt?: PromptInfo
+  /** Home Enter → conversation: show boot overlay until the session shell is ready. */
+  conversationBooting?: boolean
 }
 
 export type OnboardingRoute = {
@@ -51,6 +54,7 @@ export const { use: useRoute, provider: RouteProvider } = createSimpleContext({
   name: "Route",
   init: (props: { initialRoute?: RouteNavigateInput }) => {
     const startup = useTuiStartup()
+    const [conversationBootingPending, setConversationBootingPending] = createSignal(false)
     const [store, setStore] = createStore<Route>(
       normalizeRoute(props.initialRoute ?? initialRoute(startup.initialRoute) ?? { type: "global" }),
     )
@@ -58,6 +62,23 @@ export const { use: useRoute, provider: RouteProvider } = createSimpleContext({
     return {
       get data() {
         return store
+      },
+      conversationBooting() {
+        return conversationBootingPending() || (store.type === "workspace" && store.conversationBooting === true)
+      },
+      startConversationBoot() {
+        setConversationBootingPending(true)
+      },
+      finishConversationBoot() {
+        setConversationBootingPending(false)
+        if (store.type === "workspace" && store.conversationBooting) {
+          const next: WorkspaceRoute = {
+            type: "workspace",
+            sessionID: store.sessionID,
+            ...(store.prompt ? { prompt: store.prompt } : {}),
+          }
+          setStore(reconcile(next))
+        }
       },
       navigate(route: RouteNavigateInput) {
         // Replace the route object wholesale so stale workspace keys do not linger across screen changes.
@@ -102,7 +123,8 @@ export function normalizeRoute(route: RouteNavigateInput): Route {
     return {
       type: "workspace",
       sessionID: route.sessionID,
-      prompt: route.prompt,
+      ...(route.prompt ? { prompt: route.prompt } : {}),
+      ...(route.conversationBooting ? { conversationBooting: true } : {}),
     }
   }
   return { type: "global" }

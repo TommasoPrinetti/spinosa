@@ -33,6 +33,7 @@ import { EditorContextProvider } from "./context/editor"
 import { useEvent } from "./context/event"
 import { SDKProvider, useSDK } from "./context/sdk"
 import { StartupLoading } from "./component/startup-loading"
+import { ConversationLoading } from "./component/conversation-loading"
 import { SyncProvider, useSync } from "./context/sync"
 import { DataProvider } from "./context/data"
 import { LocationProvider } from "./context/location"
@@ -1289,6 +1290,18 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
           onComplete={() => setStartupLoadingComplete(true)}
         />
       </Show>
+      <ConversationLoading
+        active={() => route.conversationBooting()}
+        onTimeout={() => {
+          route.finishConversationBoot()
+          toast.show({
+            title: "Conversation is taking longer than expected",
+            message: "Check your connection or try again.",
+            variant: "warning",
+            duration: 8000,
+          })
+        }}
+      />
       {/* Viewport-relative host: parent is full terminal width×height, not content column */}
       <Toast />
     </box>

@@ -1128,13 +1128,18 @@ export function Prompt(props: PromptProps) {
     }
 
     if (sessionID == null) {
+      route.startConversationBoot()
+
       const selectedWorkspace = workspace.selection()
       const workspaceID = selectedWorkspace?.type === "existing" ? selectedWorkspace.workspaceID : undefined
 
       const directory =
         (await move.getDirectory(store.prompt.input)) ??
         (spinosa.activePath && !spinosa.genericMode ? spinosa.activePath : undefined)
-      if (move.pending() && !directory) return false
+      if (move.pending() && !directory) {
+        route.finishConversationBoot()
+        return false
+      }
       finishMoveProgress = Boolean(move.progress())
       sessionDirectory = directory
 
@@ -1154,6 +1159,7 @@ export function Prompt(props: PromptProps) {
         route.navigate({
           type: "workspace",
           sessionID,
+          conversationBooting: true,
         })
         navigatedBeforeCreate = true
       } else {
@@ -1170,6 +1176,7 @@ export function Prompt(props: PromptProps) {
 
         if (res.error) {
           if (finishMoveProgress) move.finishSubmit()
+          route.finishConversationBoot()
           console.log("Creating a session failed:", res.error)
 
           toast.show({
@@ -1199,6 +1206,7 @@ export function Prompt(props: PromptProps) {
       route.navigate({
         type: "workspace",
         sessionID,
+        conversationBooting: true,
       })
     }
 
@@ -1385,6 +1393,7 @@ export function Prompt(props: PromptProps) {
             duration: 10000,
           })
           route.navigate({ type: "global" })
+          route.finishConversationBoot()
           return
         }
         if (res.data) sync.session.upsert(res.data)
