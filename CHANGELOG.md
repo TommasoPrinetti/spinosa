@@ -8,6 +8,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Harness loop-control: turn snapshots (frozen tools/system/model per provider turn), phase→`idle|busy|retry` mapping, optional tool `terminate`, and mid-run `delivery: steer|queue` on the live V2 prompt path (TUI default-on via `SPINOSA_SESSION_V2_PROMPT`, set `0` to force V1).
+- V2 SessionExecution publishes busy/idle onto existing `session.status`; V1 `session.abort` also interrupts V2 execution so ESC/double-ESC keeps working.
+- TUI projects `session.next.*` and `permission.v2.*` into the shipped conversation/permission UX.
+
 ### Fixed
 
 - Workspace template / agent protocol: startup indexing never dispatches `spinosa-overseer` or `agent-interception`; overseer refuses while `setup_status: cli_started` and prefers in-workspace coverage analysis (soft-fail without external sessions). Aligned extraction naming to `extraction_{batch_id}.md`, startup serendipity to `NN_startup-serendipity-*.md`, map writing to mapper `map_write`, startup-mode AGENTS/CLAUDE overrides (no question tool, no 120s mapper timeout, host-default model), classification Q0, add-files prompt (no full startup re-run), and removed `systematic-bugfinder` from end-user workspace template packaging.

@@ -43,6 +43,11 @@ import { agentDisplayName } from "../../util/agent"
 import { errorMessage } from "../../util/error"
 import { formatDuration } from "../../util/format"
 import { resolveSessionRuntimeStatus } from "../../util/session"
+import {
+  partsToV2Prompt,
+  resolvePromptDelivery,
+  useV2SessionPrompt,
+} from "../../util/session-prompt-v2"
 import { createColors, createFrames } from "../../ui/spinner"
 import { useDialog } from "../../ui/dialog"
 import { DialogProvider as DialogProviderConnect } from "../dialog-provider"
@@ -1205,32 +1210,59 @@ export function Prompt(props: PromptProps) {
       if (editorParts.length > 0) editor.markSelectionSent()
     } else {
       move.startSubmit()
-      sdk.client.session
-        .prompt(
-          {
-            sessionID,
-            ...selectedModel,
-            agent: agent.name,
-            model: selectedModel,
-            variant,
-            parts: [
-              ...editorParts,
+      const promptParts = [
+        ...editorParts,
+        {
+          type: "text" as const,
+          text: outboundText,
+        },
+        ...nonTextParts,
+      ]
+      const busy = status().type !== "idle"
+      const delivery = resolvePromptDelivery({ busy })
+      const submit = useV2SessionPrompt()
+        ? (async () => {
+            // Prefer V2 durable admission + steer/queue delivery as the live path.
+            // Model/agent switches are best-effort so a missing V2 session row
+            // still allows prompt admission after V1 create.
+            await sdk.client.v2.session
+              .switchModel({
+                sessionID,
+                model: {
+                  providerID: selectedModel.providerID,
+                  id: selectedModel.modelID,
+                  ...(variant ? { variant } : {}),
+                },
+              })
+              .catch(() => undefined)
+            await sdk.client.v2.session.switchAgent({ sessionID, agent: agent.name }).catch(() => undefined)
+            await sdk.client.v2.session.prompt(
               {
-                type: "text",
-                text: outboundText,
+                sessionID,
+                prompt: partsToV2Prompt(promptParts),
+                delivery,
               },
-              ...nonTextParts,
-            ],
-          },
-          { throwOnError: true },
-        )
-        .catch((error) => {
-          toast.show({
-            title: "Couldn’t send prompt",
-            message: errorMessage(error),
-            variant: "error",
-          })
+              { throwOnError: true },
+            )
+          })()
+        : sdk.client.session.prompt(
+            {
+              sessionID,
+              ...selectedModel,
+              agent: agent.name,
+              model: selectedModel,
+              variant,
+              parts: promptParts,
+            },
+            { throwOnError: true },
+          )
+      void submit.catch((error) => {
+        toast.show({
+          title: "Couldn’t send prompt",
+          message: errorMessage(error),
+          variant: "error",
         })
+      })
       if (editorParts.length > 0) editor.markSelectionSent()
     }
     history.append({

@@ -66,6 +66,8 @@ import { SessionProjector } from "@spinosa/kernel-core/session/projector"
 import { SessionV2 } from "@spinosa/kernel-core/session"
 import { SessionExecution } from "@spinosa/kernel-core/session/execution"
 import * as SessionExecutionLocal from "@spinosa/kernel-core/session/execution/local"
+import { SessionExecutionStatus } from "@spinosa/kernel-core/session/execution-status"
+import { SessionExecutionStatusBridge } from "@/session/execution-status-bridge"
 import { lazy } from "@/util/lazy"
 import { CorsConfig, isAllowedCorsOrigin, type CorsOptions } from "@spinosa/server/cors"
 import { ServerAuth as SharedServerAuth } from "@spinosa/server/auth"
@@ -301,6 +303,7 @@ export function createRoutes(
       AppNodeBuilderV1.build(SessionV2.node, [
         [LocationServiceMap.node, locationServiceMapV2],
         [SessionExecution.node, SessionExecutionLocal.node],
+        [SessionExecutionStatus.node, SessionExecutionStatusBridge.node],
       ]),
     ),
     Layer.provide(locationServiceMapV2),

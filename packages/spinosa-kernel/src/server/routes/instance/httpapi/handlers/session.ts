@@ -15,6 +15,7 @@ import { SessionStatus } from "@/session/status"
 import { SessionSummary } from "@/session/summary"
 import { Todo } from "@/session/todo"
 import { MessageID, PartID, SessionID } from "@/session/schema"
+import { SessionV2 } from "@spinosa/kernel-core/session"
 import { WorkspaceV2 } from "@spinosa/kernel-core/workspace"
 import { NamedError } from "@spinosa/kernel-core/util/error"
 import { Cause, Effect, Option, Schema, Scope } from "effect"
@@ -58,6 +59,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     const statusSvc = yield* SessionStatus.Service
     const todoSvc = yield* Todo.Service
     const summary = yield* SessionSummary.Service
+    const sessionV2 = yield* SessionV2.Service
     const events = yield* EventV2Bridge.Service
     const scope = yield* Scope.Scope
 
@@ -233,7 +235,10 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     })
 
     const abort = Effect.fn("SessionHttpApi.abort")(function* (ctx: { params: { sessionID: SessionID } }) {
+      // Cancel the legacy V1 loop and the V2 SessionExecution owner so ESC /
+      // double-ESC keeps working regardless of which path admitted the turn.
       yield* promptSvc.cancel(ctx.params.sessionID)
+      yield* sessionV2.interrupt(SessionV2.ID.make(ctx.params.sessionID))
       return true
     })
 

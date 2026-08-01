@@ -38,6 +38,7 @@ import { MAX_STEPS_PROMPT } from "./max-steps"
 import { Snapshot } from "../../snapshot"
 import { makeLocationNode } from "../../effect/app-node"
 import { llmClient } from "../../effect/app-node-platform"
+import { SessionLoopControl } from "../loop-control"
 
 /**
  * Runs one durable coding-agent Session until it settles.
@@ -196,13 +197,28 @@ const layer = Layer.effect(
       const context = entries.map((entry) => entry.message)
       const isLastStep = agent.info?.steps !== undefined && currentStep >= agent.info.steps
       const toolMaterialization = isLastStep ? undefined : yield* tools.materialize(agent.info?.permissions)
+      const systemParts = [agent.info?.system, system.baseline].filter(
+        (part): part is string => part !== undefined && part.length > 0,
+      )
+      // Freeze tools/system/model for this turn — mid-run setters affect the next turn only.
+      const turnSnapshot = SessionLoopControl.freezeTurn({
+        sessionID: session.id,
+        step: currentStep,
+        promotion,
+        system: systemParts,
+        toolNames: (toolMaterialization?.definitions ?? []).map((definition) => definition.name),
+        model: {
+          id: model.id,
+          provider: model.provider,
+          ...(session.model?.variant === undefined ? {} : { variant: session.model.variant }),
+        },
+      })
+      void turnSnapshot
       const promptCacheKey = /^ses_[0-9a-f]{64}$/.test(session.id) ? session.id.slice(4) : session.id
       const request = LLM.request({
         model,
         providerOptions: { openai: { promptCacheKey } },
-        system: [agent.info?.system, system.baseline]
-          .filter((part): part is string => part !== undefined && part.length > 0)
-          .map(SystemPart.make),
+        system: systemParts.map(SystemPart.make),
         messages: [...toLLMMessages(context, model), ...(isLastStep ? [Message.assistant(MAX_STEPS_PROMPT)] : [])],
         tools: toolMaterialization?.definitions ?? [],
         toolChoice: isLastStep ? "none" : undefined,
@@ -224,6 +240,7 @@ const layer = Layer.effect(
       const publish = (event: LLMEvent, outputPaths: ReadonlyArray<string> = []) =>
         withPublication(publisher.publish(event, outputPaths))
       let overflowFailure: ProviderErrorEvent | undefined
+      let terminateAfterTools = false
       const providerStream = llm.stream(request).pipe(
         Stream.runForEach((event) =>
           Effect.gen(function* () {
@@ -251,8 +268,22 @@ const layer = Layer.effect(
                   call: event,
                 }),
               ).pipe(
-                Effect.flatMap((settlement) =>
-                  publish(
+                Effect.flatMap((settlement) => {
+                  // Optional tool terminate: skip the next LLM call when a tool
+                  // signals completion (Pi beforeToolCall / terminate). Default tools omit this.
+                  const structured =
+                    settlement.output && "structured" in settlement.output
+                      ? (settlement.output as { structured?: unknown }).structured
+                      : undefined
+                  if (
+                    SessionLoopControl.isToolTerminate(structured) ||
+                    (settlement.result.type === "json" &&
+                      SessionLoopControl.isToolTerminate(settlement.result.value))
+                  ) {
+                    terminateAfterTools = true
+                    needsContinuation = false
+                  }
+                  return publish(
                     LLMEvent.toolResult({
                       id: event.id,
                       name: event.name,
@@ -260,8 +291,8 @@ const layer = Layer.effect(
                       output: settlement.output,
                     }),
                     settlement.outputPaths ?? [],
-                  ),
-                ),
+                  )
+                }),
               ),
             ).pipe(FiberSet.run(toolFibers))
           }),
@@ -337,7 +368,10 @@ const layer = Layer.effect(
           if (stream._tag === "Failure") return yield* Effect.failCause(stream.cause)
           if (settled._tag === "Failure" && Cause.hasInterrupts(settled.cause))
             return yield* Effect.failCause(settled.cause)
-          return { needsContinuation: !publisher.hasProviderError() && needsContinuation, step: currentStep }
+          return {
+            needsContinuation: !terminateAfterTools && !publisher.hasProviderError() && needsContinuation,
+            step: currentStep,
+          }
         }),
       )
     }, Effect.scoped)

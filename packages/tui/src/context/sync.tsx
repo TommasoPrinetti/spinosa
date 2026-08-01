@@ -374,6 +374,239 @@ export const {
           break
         }
 
+        // V2 session.next.* → V1 message/part store so the shipped conversation
+        // UI keeps rendering when prompts run through SessionV2.
+        case "session.next.prompted": {
+          const sessionID = event.properties.sessionID as string
+          const messageID = event.properties.messageID as string
+          const created =
+            typeof event.properties.timestamp === "number"
+              ? event.properties.timestamp
+              : Date.parse(String(event.properties.timestamp ?? "")) || Date.now()
+          const text =
+            typeof event.properties.prompt?.text === "string" ? event.properties.prompt.text : ""
+          const info = {
+            id: messageID,
+            sessionID,
+            role: "user" as const,
+            time: { created },
+            agent: "build",
+            model: { providerID: "unknown", modelID: "unknown" },
+          }
+          touchMessage(sessionID, messageID)
+          const messages = store.message[sessionID]
+          if (!messages) setStore("message", sessionID, [info])
+          else {
+            const result = search(messages, messageID, (m) => m.id)
+            if (!result.found) {
+              setStore(
+                "message",
+                sessionID,
+                produce((draft) => {
+                  draft.splice(result.index, 0, info)
+                }),
+              )
+            }
+          }
+          const part = {
+            id: `part_${messageID}_text`,
+            sessionID,
+            messageID,
+            type: "text" as const,
+            text,
+          }
+          setStore("part", messageID, [part])
+          break
+        }
+
+        case "session.next.step.started": {
+          const sessionID = event.properties.sessionID as string
+          const messageID = event.properties.assistantMessageID as string
+          const created =
+            typeof event.properties.timestamp === "number"
+              ? event.properties.timestamp
+              : Date.parse(String(event.properties.timestamp ?? "")) || Date.now()
+          const model = event.properties.model as
+            | { providerID?: string; id?: string; variant?: string }
+            | undefined
+          const info = {
+            id: messageID,
+            sessionID,
+            role: "assistant" as const,
+            time: { created },
+            parentID: messageID,
+            modelID: model?.id ?? "unknown",
+            providerID: model?.providerID ?? "unknown",
+            mode: "build",
+            agent: typeof event.properties.agent === "string" ? event.properties.agent : "build",
+            path: { cwd: "", root: "" },
+            cost: 0,
+            tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          }
+          touchMessage(sessionID, messageID)
+          const messages = store.message[sessionID]
+          if (!messages) setStore("message", sessionID, [info])
+          else {
+            const result = search(messages, messageID, (m) => m.id)
+            if (result.found) setStore("message", sessionID, result.index, reconcile(info))
+            else {
+              setStore(
+                "message",
+                sessionID,
+                produce((draft) => {
+                  draft.splice(result.index, 0, info)
+                }),
+              )
+            }
+          }
+          if (!store.part[messageID]) setStore("part", messageID, [])
+          break
+        }
+
+        case "session.next.text.started": {
+          const sessionID = event.properties.sessionID as string
+          const messageID = event.properties.assistantMessageID as string
+          const partID = event.properties.textID as string
+          const part = {
+            id: partID,
+            sessionID,
+            messageID,
+            type: "text" as const,
+            text: "",
+            time: { start: Date.now() },
+          }
+          touchPart(sessionID, partID)
+          const parts = store.part[messageID]
+          if (!parts) setStore("part", messageID, [part])
+          else {
+            const result = search(parts, partID, (p) => p.id)
+            if (!result.found) {
+              setStore(
+                "part",
+                messageID,
+                produce((draft) => {
+                  draft.splice(result.index, 0, part)
+                }),
+              )
+            }
+          }
+          break
+        }
+
+        case "session.next.text.delta": {
+          const messageID = event.properties.assistantMessageID as string
+          const partID = event.properties.textID as string
+          const delta = typeof event.properties.delta === "string" ? event.properties.delta : ""
+          const parts = store.part[messageID]
+          if (!parts) break
+          const result = search(parts, partID, (p) => p.id)
+          if (!result.found) break
+          touchPart(event.properties.sessionID, partID)
+          setStore(
+            "part",
+            messageID,
+            produce((draft) => {
+              const part = draft[result.index]
+              if (part && part.type === "text") part.text = (part.text ?? "") + delta
+            }),
+          )
+          break
+        }
+
+        case "session.next.step.ended":
+        case "session.next.step.failed": {
+          const sessionID = event.properties.sessionID as string
+          const messageID = event.properties.assistantMessageID as string
+          const messages = store.message[sessionID]
+          if (!messages) break
+          const result = search(messages, messageID, (m) => m.id)
+          if (!result.found) break
+          const completed =
+            typeof event.properties.timestamp === "number"
+              ? event.properties.timestamp
+              : Date.parse(String(event.properties.timestamp ?? "")) || Date.now()
+          setStore(
+            "message",
+            sessionID,
+            result.index,
+            produce((message) => {
+              if (message.role !== "assistant") return
+              message.time.completed = completed
+              if (event.type === "session.next.step.ended" && typeof event.properties.finish === "string") {
+                message.finish = event.properties.finish
+              }
+              if (event.type === "session.next.step.failed") {
+                message.finish = "error"
+              }
+            }),
+          )
+          break
+        }
+
+        case "permission.v2.asked": {
+          const request = event.properties as {
+            id: string
+            sessionID: string
+            action: string
+            resources: string[]
+            save?: string[]
+            metadata?: Record<string, unknown>
+            source?: { type: "tool"; messageID: string; callID: string }
+          }
+          const mapped = {
+            id: request.id,
+            sessionID: request.sessionID,
+            permission: request.action,
+            patterns: request.resources,
+            metadata: { ...(request.metadata ?? {}), __v2: true },
+            always: request.save ?? [],
+            ...(request.source?.type === "tool"
+              ? { tool: { messageID: request.source.messageID, callID: request.source.callID } }
+              : {}),
+          }
+          if (permission.mode === "auto") {
+            void sdk.client.v2.session.permission.reply({
+              sessionID: mapped.sessionID,
+              requestID: mapped.id,
+              reply: "once",
+            })
+            break
+          }
+          const requests = store.permission[mapped.sessionID]
+          if (!requests) {
+            setStore("permission", mapped.sessionID, [mapped])
+            break
+          }
+          const match = search(requests, mapped.id, (r) => r.id)
+          if (match.found) {
+            setStore("permission", mapped.sessionID, match.index, reconcile(mapped))
+            break
+          }
+          setStore(
+            "permission",
+            mapped.sessionID,
+            produce((draft) => {
+              draft.splice(match.index, 0, mapped)
+            }),
+          )
+          break
+        }
+
+        case "permission.v2.replied": {
+          const requests = store.permission[event.properties.sessionID]
+          if (!requests) break
+          const match = search(requests, event.properties.requestID, (r) => r.id)
+          if (!match.found) break
+          setStore(
+            "permission",
+            event.properties.sessionID,
+            produce((draft) => {
+              draft.splice(match.index, 1)
+            }),
+          )
+          break
+        }
+
         case "message.updated": {
           touchMessage(event.properties.info.sessionID, event.properties.info.id)
           const messages = store.message[event.properties.info.sessionID]
