@@ -1,5 +1,7 @@
 import { value as envValue } from "@spinosa/kernel-core/flag/flag"
+import { InstallationVersion } from "@spinosa/kernel-core/installation/version"
 import { SessionLoopControl as Loop } from "@spinosa/kernel-core/session/loop-control"
+import type { Session } from "@spinosa/sdk/v2"
 
 export type PromptPart =
   | { type: "text"; text: string; ignored?: boolean; synthetic?: boolean; metadata?: Record<string, unknown> }
@@ -63,23 +65,60 @@ export function useV2SessionPrompt(): boolean {
 }
 
 /**
+ * Home / workspace-ready Enter must not wait on `session.create` (instance bootstrap
+ * for a Spinosa workspace path can take seconds). Generate the id client-side, seed
+ * sync, and navigate before the create request returns.
+ */
+export function createPendingSessionID(): string {
+  return `ses_${crypto.randomUUID().replace(/-/g, "").slice(0, 26)}`
+}
+
+export function buildOptimisticSession(input: {
+  id: string
+  directory: string
+  projectID?: string
+  title?: string
+  workspaceID?: string
+}): Session {
+  const now = Date.now()
+  return {
+    id: input.id,
+    slug: "",
+    projectID: input.projectID ?? "",
+    directory: input.directory,
+    ...(input.workspaceID ? { workspaceID: input.workspaceID } : {}),
+    title: input.title?.trim() || "New session",
+    version: InstallationVersion,
+    time: {
+      created: now,
+      updated: now,
+    },
+  }
+}
+
+/**
  * New-session Enter (Home → conversation) must:
- * 1. seed `session.create` into the sync store (Session UI is gated on `session()`)
- * 2. navigate immediately
+ * 1. seed an optimistic session into the sync store (Session UI is gated on `session()`)
+ * 2. navigate immediately — before `session.create` returns
  * Spinosa prepare / V2 admission / first token stay async after the route change.
  */
 export function shouldNavigateBeforePrepare(hasExistingSessionID: boolean): boolean {
   return !hasExistingSessionID
 }
 
-/** Same gate as navigate: seed create response before route change on new sessions. */
+/** Same gate as navigate: seed before route change on new sessions. */
 export function shouldSeedSessionBeforeNavigate(hasExistingSessionID: boolean): boolean {
   return shouldNavigateBeforePrepare(hasExistingSessionID)
 }
 
+/** Navigate before awaiting `session.create` on new-session submits. */
+export function shouldNavigateBeforeCreate(hasExistingSessionID: boolean): boolean {
+  return shouldNavigateBeforePrepare(hasExistingSessionID)
+}
+
 /** Contract order for Home Enter → conversation (regression lock). */
-export type NewSessionSubmitPhase = "create" | "seed" | "navigate" | "prepare" | "prompt"
+export type NewSessionSubmitPhase = "seed" | "navigate" | "create" | "prepare" | "prompt"
 
 export function newSessionSubmitPhases(): readonly NewSessionSubmitPhase[] {
-  return ["create", "seed", "navigate", "prepare", "prompt"] as const
+  return ["seed", "navigate", "create", "prepare", "prompt"] as const
 }

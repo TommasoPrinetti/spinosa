@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test"
 import {
+  buildOptimisticSession,
+  createPendingSessionID,
   partsToV2Prompt,
   resolvePromptDelivery,
+  shouldNavigateBeforeCreate,
   shouldNavigateBeforePrepare,
   shouldSeedSessionBeforeNavigate,
   newSessionSubmitPhases,
@@ -36,6 +39,25 @@ describe("session-prompt-v2", () => {
     expect(shouldNavigateBeforePrepare(true)).toBe(false)
     expect(shouldSeedSessionBeforeNavigate(false)).toBe(true)
     expect(shouldSeedSessionBeforeNavigate(true)).toBe(false)
-    expect([...newSessionSubmitPhases()]).toEqual(["create", "seed", "navigate", "prepare", "prompt"])
+    expect(shouldNavigateBeforeCreate(false)).toBe(true)
+    expect(shouldNavigateBeforeCreate(true)).toBe(false)
+    expect([...newSessionSubmitPhases()]).toEqual(["seed", "navigate", "create", "prepare", "prompt"])
+  })
+
+  test("buildOptimisticSession seeds a conversation-ready session", () => {
+    const id = createPendingSessionID()
+    expect(id.startsWith("ses_")).toBe(true)
+    const session = buildOptimisticSession({
+      id,
+      directory: "/tmp/workspace",
+      projectID: "proj_test",
+      title: "  Hello  ",
+    })
+    expect(session.id).toBe(id)
+    expect(session.directory).toBe("/tmp/workspace")
+    expect(session.projectID).toBe("proj_test")
+    expect(session.title).toBe("Hello")
+    expect(session.version).toBeTruthy()
+    expect(session.time.created).toBeGreaterThan(0)
   })
 })

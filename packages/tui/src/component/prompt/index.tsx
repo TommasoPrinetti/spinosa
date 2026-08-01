@@ -49,6 +49,9 @@ import {
   useV2SessionPrompt,
   shouldNavigateBeforePrepare,
   shouldSeedSessionBeforeNavigate,
+  shouldNavigateBeforeCreate,
+  createPendingSessionID,
+  buildOptimisticSession,
 } from "../../util/session-prompt-v2"
 import { createColors, createFrames } from "../../ui/spinner"
 import { useDialog } from "../../ui/dialog"
@@ -1072,47 +1075,7 @@ export function Prompt(props: PromptProps) {
     let sessionID = props.sessionID
     let sessionDirectory = sessionID ? sync.session.get(sessionID)?.directory : undefined
     let finishMoveProgress = false
-    if (sessionID == null) {
-      const selectedWorkspace = workspace.selection()
-      const workspaceID = selectedWorkspace?.type === "existing" ? selectedWorkspace.workspaceID : undefined
-
-      const directory = await move.getDirectory(store.prompt.input)
-      if (move.pending() && !directory) return false
-      finishMoveProgress = Boolean(move.progress())
-      sessionDirectory = directory
-
-      const res = await sdk.client.session.create({
-        directory,
-        workspace: workspaceID,
-        agent: agent.name,
-        model: {
-          providerID: selectedModel.providerID,
-          id: selectedModel.modelID,
-          variant,
-        },
-      })
-
-      if (res.error) {
-        if (finishMoveProgress) move.finishSubmit()
-        console.log("Creating a session failed:", res.error)
-
-        toast.show({
-          title: "Couldn’t start a session",
-          message: errorMessage(res.error),
-          variant: "error",
-          duration: 10000,
-        })
-
-        return true
-      }
-
-      sessionID = res.data.id
-      // Session UI gates transcript+prompt on sync.session.get — seed before navigate
-      // so conversation activates immediately (don't wait for SSE / sync.session.sync).
-      if (shouldSeedSessionBeforeNavigate(false) && res.data) {
-        sync.session.upsert(res.data)
-      }
-    }
+    let navigatedBeforeCreate = false
 
     const inputText = expandTrackedPastedText(
       store.prompt.input,
@@ -1125,7 +1088,7 @@ export function Prompt(props: PromptProps) {
     )
 
     // Snapshot prompt state before any clear / navigate. New-session Enter must
-    // seed sync + leave Home as soon as session.create returns — prepareSpinosaSubmit
+    // seed sync + leave Home immediately — session.create, prepareSpinosaSubmit,
     // and first-token / V2 admission must not gate the conversation route.
     const nonTextParts = store.prompt.parts.filter((part) => part.type !== "text")
     const currentMode = store.mode
@@ -1164,8 +1127,72 @@ export function Prompt(props: PromptProps) {
       input.clear()
     }
 
+    if (sessionID == null) {
+      const selectedWorkspace = workspace.selection()
+      const workspaceID = selectedWorkspace?.type === "existing" ? selectedWorkspace.workspaceID : undefined
+
+      const directory =
+        (await move.getDirectory(store.prompt.input)) ??
+        (spinosa.activePath && !spinosa.genericMode ? spinosa.activePath : undefined)
+      if (move.pending() && !directory) return false
+      finishMoveProgress = Boolean(move.progress())
+      sessionDirectory = directory
+
+      if (shouldNavigateBeforeCreate(false) && directory) {
+        sessionID = createPendingSessionID()
+        sync.session.upsert(
+          buildOptimisticSession({
+            id: sessionID,
+            directory,
+            projectID: project.project(),
+            workspaceID,
+            title: store.prompt.input.trim().slice(0, 80),
+          }),
+        )
+        clearPromptUi()
+        if (editorParts.length > 0) editor.preserveSelectionFromNewSession()
+        route.navigate({
+          type: "workspace",
+          sessionID,
+        })
+        navigatedBeforeCreate = true
+      } else {
+        const res = await sdk.client.session.create({
+          directory,
+          workspace: workspaceID,
+          agent: agent.name,
+          model: {
+            providerID: selectedModel.providerID,
+            id: selectedModel.modelID,
+            variant,
+          },
+        })
+
+        if (res.error) {
+          if (finishMoveProgress) move.finishSubmit()
+          console.log("Creating a session failed:", res.error)
+
+          toast.show({
+            title: "Couldn’t start a session",
+            message: errorMessage(res.error),
+            variant: "error",
+            duration: 10000,
+          })
+
+          return true
+        }
+
+        sessionID = res.data.id
+        // Session UI gates transcript+prompt on sync.session.get — seed before navigate
+        // so conversation activates immediately (don't wait for SSE / sync.session.sync).
+        if (shouldSeedSessionBeforeNavigate(false) && res.data) {
+          sync.session.upsert(res.data)
+        }
+      }
+    }
+
     const isNewSession = shouldNavigateBeforePrepare(Boolean(props.sessionID))
-    if (isNewSession) {
+    if (isNewSession && !navigatedBeforeCreate) {
       if (!sessionID) return false
       clearPromptUi()
       if (editorParts.length > 0) editor.preserveSelectionFromNewSession()
@@ -1175,7 +1202,7 @@ export function Prompt(props: PromptProps) {
       })
     }
 
-    const admitAfterPrepare = async () => {
+    const admitAfterPrepare = async (targetSessionID: string) => {
     let outboundText = inputText
     let preparedSpinosa: Awaited<ReturnType<typeof prepareSpinosaSubmit>> | undefined
     if (sessionDirectory && !store.prompt.forceAgent) {
@@ -1196,7 +1223,7 @@ export function Prompt(props: PromptProps) {
     if (currentMode === "shell") {
       move.startSubmit()
       void sdk.client.session.shell({
-        sessionID,
+        sessionID: targetSessionID,
         agent: agent.name,
         model: {
           providerID: selectedModel.providerID,
@@ -1218,7 +1245,7 @@ export function Prompt(props: PromptProps) {
       const args = firstLineArgs.join(" ") + (restOfInput ? "\n" + restOfInput : "")
 
       void sdk.client.session.command({
-        sessionID,
+        sessionID: targetSessionID,
         command: command.slice(1),
         arguments: args,
         agent: agent.name,
@@ -1231,7 +1258,7 @@ export function Prompt(props: PromptProps) {
       void sdk.client.session
         .prompt(
           {
-            sessionID,
+            sessionID: targetSessionID,
             ...selectedModel,
             agent: agent.name,
             model: selectedModel,
@@ -1248,7 +1275,7 @@ export function Prompt(props: PromptProps) {
         .then(() =>
           executeSpinosaSubmit({
             client: sdk.client,
-            sessionID,
+            sessionID: targetSessionID,
             prepared: preparedSpinosa,
             model: {
               providerID: selectedModel.providerID,
@@ -1290,7 +1317,7 @@ export function Prompt(props: PromptProps) {
             if (!busy) {
               await sdk.client.v2.session
                 .switchModel({
-                  sessionID,
+                  sessionID: targetSessionID,
                   model: {
                     providerID: selectedModel.providerID,
                     id: selectedModel.modelID,
@@ -1298,11 +1325,11 @@ export function Prompt(props: PromptProps) {
                   },
                 })
                 .catch(() => undefined)
-              await sdk.client.v2.session.switchAgent({ sessionID, agent: agent.name }).catch(() => undefined)
+              await sdk.client.v2.session.switchAgent({ sessionID: targetSessionID, agent: agent.name }).catch(() => undefined)
             }
             await sdk.client.v2.session.prompt(
               {
-                sessionID,
+                sessionID: targetSessionID,
                 prompt: partsToV2Prompt(promptParts),
                 delivery,
               },
@@ -1311,7 +1338,7 @@ export function Prompt(props: PromptProps) {
           })()
         : sdk.client.session.prompt(
             {
-              sessionID,
+              sessionID: targetSessionID,
               ...selectedModel,
               agent: agent.name,
               model: selectedModel,
@@ -1331,14 +1358,50 @@ export function Prompt(props: PromptProps) {
     }
     }
 
-    // New-session: navigate already happened — prepare/admit must not block submit return.
-    if (isNewSession) {
+    if (navigatedBeforeCreate && sessionID) {
+      const pendingSessionID = sessionID
+      const selectedWorkspace = workspace.selection()
+      const workspaceID = selectedWorkspace?.type === "existing" ? selectedWorkspace.workspaceID : undefined
+      const directory = sessionDirectory
       if (finishMoveProgress) move.finishSubmit()
-      void admitAfterPrepare()
+      void (async () => {
+        const res = await sdk.client.session.create({
+          id: pendingSessionID,
+          directory,
+          workspace: workspaceID,
+          agent: agent.name,
+          model: {
+            providerID: selectedModel.providerID,
+            id: selectedModel.modelID,
+            variant,
+          },
+        })
+        if (res.error) {
+          console.log("Creating a session failed:", res.error)
+          toast.show({
+            title: "Couldn’t start a session",
+            message: errorMessage(res.error),
+            variant: "error",
+            duration: 10000,
+          })
+          route.navigate({ type: "global" })
+          return
+        }
+        if (res.data) sync.session.upsert(res.data)
+        await admitAfterPrepare(pendingSessionID)
+      })()
       return true
     }
 
-    await admitAfterPrepare()
+    // New-session: navigate already happened — prepare/admit must not block submit return.
+    if (isNewSession) {
+      if (!sessionID) return false
+      if (finishMoveProgress) move.finishSubmit()
+      void admitAfterPrepare(sessionID)
+      return true
+    }
+
+    await admitAfterPrepare(sessionID!)
     clearPromptUi()
     if (finishMoveProgress) move.finishSubmit()
     return true
