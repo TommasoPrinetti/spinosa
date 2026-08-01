@@ -21,3 +21,8 @@ export function shouldBounceMissingSession(input: {
   if (input.conversationBooting && input.hasLocalSession) return false
   return true
 }
+
+/** Back from a running conversation should confirm before aborting the agent. */
+export function shouldConfirmLeaveBusySession(busy: boolean): boolean {
+  return busy
+}

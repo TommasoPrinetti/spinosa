@@ -41,7 +41,7 @@ import type {
 } from "@spinosa/sdk/v2"
 import { useLocal } from "../../context/local"
 import { Locale } from "../../util/locale"
-import { webSearchProviderLabel } from "../../util/tool-display"
+import { ellipsisToolLine, toolFilePath, webSearchProviderLabel } from "../../util/tool-display"
 import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import { useSDK } from "../../context/sdk"
 import { useEditorContext } from "../../context/editor"
@@ -50,7 +50,7 @@ import { useDialog } from "../../ui/dialog"
 import { DialogAlert } from "../../ui/dialog-alert"
 import { TodoItem } from "../../component/todo-item"
 import { DialogMessage } from "./dialog-message"
-import { isConversationShellReady, shouldBounceMissingSession } from "./conversation-shell-ready"
+import { isConversationShellReady, shouldBounceMissingSession, shouldConfirmLeaveBusySession } from "./conversation-shell-ready"
 import type { PromptInfo } from "../../component/prompt/history"
 import { DialogConfirm } from "../../ui/dialog-confirm"
 import { DialogTimeline } from "./dialog-timeline"
@@ -1426,7 +1426,21 @@ const resolveExportPath = (filename: string): string => {
               onMouseOut={() => setBackHover(false)}
               onMouseUp={async () => {
                 const currentID = route.sessionID
-                if (currentID && sessionIsBusy(sync.data.session_status?.[currentID], sync.session.status(currentID))) {
+                const busy =
+                  !!currentID &&
+                  sessionIsBusy(sync.data.session_status?.[currentID], sync.session.status(currentID))
+                if (shouldConfirmLeaveBusySession(busy)) {
+                  const leave = await DialogConfirm.show(
+                    dialog,
+                    "Stop agent?",
+                    "Going back will stop the agent that is currently working.",
+                    {
+                      confirmLabel: "Yes, go back",
+                      cancelLabel: "No, stay",
+                      defaultChoice: "cancel",
+                    },
+                  )
+                  if (!leave) return
                   await sdk.client.session.abort({ sessionID: currentID }).catch(() => {})
                 }
                 const s = session()
@@ -2045,7 +2059,12 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
   const { theme } = useTheme()
   const sync = useSync()
   const messages = createMemo(() => sync.data.message[props.message.sessionID] ?? [])
-  const model = createMemo(() => Model.name(ctx.providers(), props.message.providerID, props.message.modelID))
+  const model = createMemo(() => {
+    const providerID = props.message.providerID
+    const modelID = props.message.modelID
+    if (!providerID || !modelID || providerID === "unknown" || modelID === "unknown") return ""
+    return Model.name(ctx.providers(), providerID, modelID)
+  })
 
   const final = createMemo(() => {
     return props.message.finish && !["tool-calls", "unknown"].includes(props.message.finish)
@@ -2138,7 +2157,9 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
                   ▣{" "}
                 </span>{" "}
                 <span style={{ fg: theme.text }}>{agentDisplayName(props.message.mode)}</span>
-                <span style={{ fg: theme.textMuted }}> · {model()}</span>
+                <Show when={model()}>
+                  <span style={{ fg: theme.textMuted }}> · {model()}</span>
+                </Show>
                 <Show when={duration()}>
                   <span style={{ fg: theme.textMuted }}> · {Locale.duration(duration())}</span>
                 </Show>
@@ -2727,12 +2748,8 @@ export function InlineToolRow(props: {
       onMouseUp={props.onMouseUp}
       ref={(el: BoxRenderable) => {
         if (props.separate) alwaysSeparate.add(el)
-        setPreLayoutSiblingMargin(el, (previous) => {
-          return props.separate ||
-            (previous instanceof BoxRenderable && (previous.height > 1 || alwaysSeparate.has(previous)))
-            ? 1
-            : 0
-        })
+        // Space sequential tool rows; keep each callout to a single visible line.
+        setPreLayoutSiblingMargin(el, (previous) => (previous ? 1 : 0))
       }}
     >
       <Switch>
@@ -2944,7 +2961,14 @@ function Glob(props: ToolProps) {
 function Read(props: ToolProps) {
   const { theme } = useTheme()
   const pathFormatter = usePathFormatter()
+  const ctx = use()
   const isRunning = createMemo(() => props.part.state.status === "running")
+  const filePath = createMemo(() => toolFilePath(props.input, props.part.state))
+  const displayPath = createMemo(() => {
+    const value = filePath()
+    if (!value) return undefined
+    return ellipsisToolLine(pathFormatter.format(value), Math.max(24, ctx.width - 18))
+  })
   const loaded = createMemo(() => {
     if (props.part.state.status !== "completed") return []
     if (props.part.state.time.compacted) return []
@@ -2956,18 +2980,18 @@ function Read(props: ToolProps) {
     <>
       <InlineTool
         icon="→"
-        pending="Reading file..."
-        complete={stringValue(props.input.filePath)}
+        pending={displayPath() ? `Reading ${displayPath()}...` : "Reading file..."}
+        complete={filePath()}
         spinner={isRunning()}
         part={props.part}
       >
-        Read {pathFormatter.format(stringValue(props.input.filePath))} {input(props.input, ["filePath"])}
+        Read {displayPath()} {input(props.input, ["filePath"])}
       </InlineTool>
       <For each={loaded()}>
         {(filepath) => (
           <box paddingLeft={3}>
-            <text paddingLeft={3} fg={theme.textMuted}>
-              ↳ Loaded {pathFormatter.format(filepath)}
+            <text paddingLeft={3} fg={theme.textMuted} wrapMode="none">
+              ↳ Loaded {ellipsisToolLine(pathFormatter.format(filepath), Math.max(24, ctx.width - 18))}
             </text>
           </box>
         )}

@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test"
-import { toolDisplayMetadata, webSearchProviderLabel } from "../../src/util/tool-display"
+import {
+  ellipsisToolLine,
+  toolDisplayMetadata,
+  toolFilePath,
+  webSearchProviderLabel,
+} from "../../src/util/tool-display"
 
 describe("webSearchProviderLabel", () => {
   test("labels known providers", () => {
@@ -36,5 +41,38 @@ describe("toolDisplayMetadata", () => {
     expect(toolDisplayMetadata({ status: "completed", structured: null })).toEqual({})
     expect(toolDisplayMetadata({ status: "completed", structured: [] })).toEqual({})
     expect(toolDisplayMetadata(undefined)).toEqual({})
+  })
+})
+
+describe("toolFilePath", () => {
+  test("prefers explicit input filePath", () => {
+    expect(toolFilePath({ filePath: "raw/a.md" }, { status: "pending", raw: '{"filePath":"other.md"}' })).toBe(
+      "raw/a.md",
+    )
+  })
+
+  test("parses filePath from pending raw JSON", () => {
+    expect(
+      toolFilePath({}, { status: "pending", raw: '{"filePath":"raw/Markdowns/COHORT3/page.md","offset":1}' }),
+    ).toBe("raw/Markdowns/COHORT3/page.md")
+  })
+
+  test("ignores non-pending states without input", () => {
+    expect(toolFilePath({}, { status: "running", input: {} })).toBeUndefined()
+  })
+})
+
+describe("ellipsisToolLine", () => {
+  test("keeps short lines intact", () => {
+    expect(ellipsisToolLine("Read notes.md", 72)).toBe("Read notes.md")
+  })
+
+  test("ellipses long lines to one visible segment", () => {
+    const long = "raw/Markdowns/COHORT3/" + "X".repeat(80) + "_PAGE38.md"
+    const out = ellipsisToolLine(long, 40)
+    expect(out.length).toBeLessThanOrEqual(40)
+    expect(out.includes("…")).toBe(true)
+    expect(out.startsWith("raw/")).toBe(true)
+    expect(out.endsWith(".md")).toBe(true)
   })
 })

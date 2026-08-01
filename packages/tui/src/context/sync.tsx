@@ -476,7 +476,7 @@ export const {
             role: "user" as const,
             time: { created },
             agent: "build",
-            model: { providerID: "unknown", modelID: "unknown" },
+            model: { providerID: "", modelID: "" },
           }
           touchMessage(sessionID, messageID)
           const messages = store.message[sessionID]
@@ -531,16 +531,21 @@ export const {
               ? event.properties.timestamp
               : Date.parse(String(event.properties.timestamp ?? "")) || Date.now()
           const model = event.properties.model as
-            | { providerID?: string; id?: string; variant?: string }
+            | { providerID?: string; id?: string; modelID?: string; variant?: string }
             | undefined
+          const modelID =
+            (typeof model?.id === "string" && model.id) ||
+            (typeof model?.modelID === "string" && model.modelID) ||
+            ""
+          const providerID = typeof model?.providerID === "string" ? model.providerID : ""
           const info = {
             id: messageID,
             sessionID,
             role: "assistant" as const,
             time: { created },
             parentID: messageID,
-            modelID: model?.id ?? "unknown",
-            providerID: model?.providerID ?? "unknown",
+            modelID,
+            providerID,
             mode: "build",
             agent: typeof event.properties.agent === "string" ? event.properties.agent : "build",
             path: { cwd: "", root: "" },

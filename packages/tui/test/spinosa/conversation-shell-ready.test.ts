@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import {
   isConversationShellReady,
   shouldBounceMissingSession,
+  shouldConfirmLeaveBusySession,
 } from "../../src/routes/session/conversation-shell-ready"
 
 describe("isConversationShellReady", () => {
@@ -41,5 +42,12 @@ describe("shouldBounceMissingSession", () => {
     expect(
       shouldBounceMissingSession({ conversationBooting: true, hasLocalSession: false }),
     ).toBe(true)
+  })
+})
+
+describe("shouldConfirmLeaveBusySession", () => {
+  test("requires confirm only while the agent is busy", () => {
+    expect(shouldConfirmLeaveBusySession(true)).toBe(true)
+    expect(shouldConfirmLeaveBusySession(false)).toBe(false)
   })
 })
