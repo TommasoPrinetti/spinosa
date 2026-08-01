@@ -43,6 +43,7 @@ import {
   suggestWorkspacePath,
   type NewWorkspacePreview,
 } from "../../spinosa/onboarding-preview"
+import { shouldClearActiveOnOnboardingCancel } from "../../spinosa/onboarding-leave"
 import {
   blurIfFocused,
   confirmSpinosaBack,
@@ -484,14 +485,26 @@ let nameInput: TextareaRenderable | undefined
     setWaitingForGate(false)
   }
 
-  const goHome = () => {
-    // Match add-files: Esc/Back returns to Home without clearing the active workspace
-    // into generic mode (resume onboarding previously surprise-cleared via useGenericMode).
+  const goHome = (reason: "cancel" | "finish" = "finish") => {
+    // Resume-incomplete cancel must not leave an unfinished workspace active
+    // (that would show Import/Switch/Visualizer). Brand-new create cancel keeps
+    // a ready workspace. Add-files is a separate route and never hits this.
+    // Finish paths keep whatever openWorkspace / active state they already set.
+    if (
+      reason === "cancel" &&
+      shouldClearActiveOnOnboardingCancel({
+        isResume: Boolean(resumeWorkspacePath),
+        activePath: spinosa.activePath,
+        setupStatus: spinosa.meta?.setupStatus,
+      })
+    ) {
+      spinosa.clearActiveWorkspace()
+    }
     navigate({ type: "global" })
   }
   const navigateBackFrom = (from: WizardStep) => {
-    if (from === "path") { goHome(); return }
-    if (from === "name" && resumeSourceAccepted) { logAction("back", `from ${from} to global`); goHome(); return }
+    if (from === "path") { goHome("cancel"); return }
+    if (from === "name" && resumeSourceAccepted) { logAction("back", `from ${from} to global`); goHome("cancel"); return }
     if (from === "name") { logAction("back", `from ${from} to path`); setStep("path"); return }
     if (from === "tools") { logAction("back", `from ${from} to name`); setStep("name"); return }
     if (from === "scan") { logAction("back", `from ${from} to path`); setStep("path"); return }

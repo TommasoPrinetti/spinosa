@@ -559,7 +559,11 @@ test("the top arrow exits resumed onboarding to global home", async () => {
     })
 
     expect(frame).toContain("Recent workspaces")
+    expect(frame).toContain("New workspace")
+    expect(frame).toContain("Pick a workspace")
     expect(frame).not.toContain("Switch workspace")
+    expect(frame).not.toContain("Import files")
+    expect(frame).not.toContain("Visualizer")
   } finally {
     rmSync(root, { recursive: true, force: true })
   }

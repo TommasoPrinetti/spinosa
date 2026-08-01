@@ -156,13 +156,19 @@ export const { use: useSpinosaWorkspace, provider: SpinosaWorkspaceProvider } = 
     }, 3000)
     onCleanup(() => clearInterval(cwdDiscoveryTimer))
 
-    const useGenericMode = () => {
+    /** Unset active workspace so Home is not workspace-ready (blocks cwd rediscovery). */
+    const clearActiveWorkspace = () => {
       kv.set(SPINOSA_GENERIC_MODE_KV, true)
       kv.set(SPINOSA_ACTIVE_WORKSPACE_KV, undefined)
       kv.set(SPINOSA_ACTIVE_WORKSPACE_ID_KV, undefined)
+      setActiveWorkspacePath(undefined)
       setActivePath(undefined)
       setGenericMode(true)
       setPickerRequested(false)
+    }
+
+    const useGenericMode = () => {
+      clearActiveWorkspace()
       route.navigate({ type: "global" })
     }
 
@@ -241,6 +247,7 @@ export const { use: useSpinosaWorkspace, provider: SpinosaWorkspaceProvider } = 
         return pending !== undefined && pending.workspacePath === activePath() ? pending.prompt : undefined
       },
       openWorkspace,
+      clearActiveWorkspace,
       useGenericMode,
       showPicker,
       clearPickerRequest() {
