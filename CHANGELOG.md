@@ -20,6 +20,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Preflight **Y** on a stale template pack now force-refreshes managed protocol probes (e.g. `.agents/references/classification.md`, overseer agent/skill) and re-checks freshness afterward — previously `replace_if_unmodified` silently skipped nested files with no checksum baseline and still printed success while the pack stayed stale.
 - **New workspace** no longer resumes another workspace’s unfinished onboarding: route navigation now replaces store state wholesale (Solid `setStore` was shallow-merging and leaving `workspacePath` / source metadata from a prior Resume → Home path).
 - Mid-run V2 prompt (`delivery: steer|queue`) and ESC busy/idle status failed with `InstanceRef not provided` because `SessionExecutionStatusBridge` called instance-scoped `SessionStatus.set` from V2 `/api/session` fibers that lack InstanceRef. Bridge now loads the session directory and binds InstanceRef/WorkspaceRef before publishing busy/idle so steer admission and double-ESC interrupt work again.
 - Home Enter → conversation no longer waits on `prepareSpinosaSubmit` or a post-submit timer: navigate as soon as `session.create` returns, then prepare/admit the prompt in the background.

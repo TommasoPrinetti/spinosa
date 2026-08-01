@@ -178,6 +178,45 @@ describe("workspace update flow", () => {
     expect(await Bun.file(path.join(workspace, ".agents", "new.md")).text()).toBe("new managed file\n")
   })
 
+  test("refreshes protocol probe files under .agents even without checksum baseline", async () => {
+    await using tmp = await tmpdir()
+    const frameworkRoot = path.join(tmp.path, "install")
+    const templateRoot = path.join(frameworkRoot, "workspace-template")
+    const workspace = path.join(tmp.path, "workspace")
+
+    const probeDirs = [
+      path.join(".agents", "references"),
+      path.join(".agents", "agents"),
+      path.join(".agents", "skills", "spinosa-overseer"),
+    ]
+    for (const root of [templateRoot, workspace]) {
+      await mkdir(path.join(root, ".spinosa"), { recursive: true })
+      for (const dir of probeDirs) await mkdir(path.join(root, dir), { recursive: true })
+    }
+    await Bun.write(
+      path.join(templateRoot, ".spinosa", "workspace-files.tsv"),
+      "path\trole\tupdate_policy\n.agents/\tframework\treplace_if_unmodified\n",
+    )
+    await Bun.write(path.join(templateRoot, ".agents", "references", "classification.md"), "template classification\n")
+    await Bun.write(path.join(templateRoot, ".agents", "agents", "spinosa-overseer.md"), "template overseer\n")
+    await Bun.write(path.join(templateRoot, ".agents", "skills", "spinosa-overseer", "SKILL.md"), "template skill\n")
+    await Bun.write(path.join(templateRoot, ".agents", "custom.md"), "template custom\n")
+    await Bun.write(path.join(workspace, ".agents", "references", "classification.md"), "stale classification\n")
+    await Bun.write(path.join(workspace, ".agents", "agents", "spinosa-overseer.md"), "stale overseer\n")
+    await Bun.write(path.join(workspace, ".agents", "skills", "spinosa-overseer", "SKILL.md"), "stale skill\n")
+    await Bun.write(path.join(workspace, ".agents", "custom.md"), "user custom\n")
+    // No framework-checksums.json — missing baseline previously skipped nested probes forever.
+
+    const result = await updateWorkspace({ workspacePath: workspace, frameworkRoot })
+
+    expect(result.success).toBe(true)
+    expect(await Bun.file(path.join(workspace, ".agents", "references", "classification.md")).text()).toBe("template classification\n")
+    expect(await Bun.file(path.join(workspace, ".agents", "agents", "spinosa-overseer.md")).text()).toBe("template overseer\n")
+    expect(await Bun.file(path.join(workspace, ".agents", "skills", "spinosa-overseer", "SKILL.md")).text()).toBe("template skill\n")
+    // Non-probe managed files still preserve edits without a baseline.
+    expect(await Bun.file(path.join(workspace, ".agents", "custom.md")).text()).toBe("user custom\n")
+  })
+
   test("updates an unmodified managed file after a checksum baseline exists", async () => {
     await using tmp = await tmpdir()
     const frameworkRoot = path.join(tmp.path, "install")

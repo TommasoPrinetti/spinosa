@@ -31,7 +31,15 @@ import { readFrameworkFilesTsv, type FrameworkManifestEntry } from "../framework
 import {
   mergeStartupPromptTemplate,
   stripStartupPromptWorkspaceSuffix,
+  TEMPLATE_PACK_PROTOCOL_PROBES,
 } from "../framework/template-pack-freshness"
+
+const PROTOCOL_PROBE_SET = new Set<string>(TEMPLATE_PACK_PROTOCOL_PROBES)
+
+/** Freshness-critical protocol files always refresh even under replace_if_unmodified. */
+function isProtocolProbePath(relativePath: string): boolean {
+  return PROTOCOL_PROBE_SET.has(relativePath)
+}
 
 export interface UpdateOptions {
   workspacePath: string
@@ -118,10 +126,12 @@ function copyManagedDirectory(
     if (filesMatch(src, dst)) continue
 
     const storedHash = storedChecksums[relativeFile]
-    // Missing baseline ⇒ preserve (user edit or legacy). Create seeds baselines so
-    // subsequent updates can refresh unmodified managed files.
+    // Missing baseline ⇒ preserve (user edit or legacy), except protocol probes
+    // which freshness treats as pack identity — skipping them leaves forever-stale.
+    // Create seeds baselines so subsequent updates can refresh unmodified files.
     const mayReplace = entry.policy === "always_replace"
       || force
+      || isProtocolProbePath(relativeFile)
       || (storedHash !== undefined && sha256File(dst) === storedHash)
     if (!mayReplace) continue
 

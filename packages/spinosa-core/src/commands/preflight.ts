@@ -53,11 +53,20 @@ export type StaleTemplatePackWorkspace = {
   freshness: TemplatePackFreshness
 }
 
+export type UpdateWorkspaceOptions = {
+  /** When true, overwrite replace_if_unmodified managed files (explicit pack refresh). */
+  force?: boolean
+}
+
 export interface WorkspaceUpgradeOfferDeps {
   confirm(question: string, defaultYes?: boolean): Promise<boolean>
   /** Resolve template/framework root for the installed version (binary cache or legacy tree). */
   frameworkRoot(version: string): string
-  updateWorkspace(workspacePath: string, frameworkRoot: string): Promise<UpdateResult>
+  updateWorkspace(
+    workspacePath: string,
+    frameworkRoot: string,
+    options?: UpdateWorkspaceOptions,
+  ): Promise<UpdateResult>
   out(message: string): void
 }
 
@@ -135,13 +144,30 @@ export async function defaultListPackCheckCandidates(targetWorkspace?: string): 
 const defaults: PreflightDependencies = {
   checkUpgradeAvailable,
   upgradeFramework: () => upgradeFramework({ yes: true }),
-  updateWorkspace: (workspacePath, frameworkRoot) => updateWorkspace({ workspacePath, frameworkRoot }),
+  updateWorkspace: (workspacePath, frameworkRoot, options) =>
+    updateWorkspace({ workspacePath, frameworkRoot, force: options?.force }),
   confirm: (question, defaultYes) => confirmPrompt(question, defaultYes),
   frameworkRoot: defaultFrameworkRootForVersion,
   currentFrameworkRoot: () => resolveFrameworkRoot() ?? process.env.SPINOSA_TEMPLATE_ROOT,
   listPackCheckCandidates: defaultListPackCheckCandidates,
   canPrompt: defaultCanPrompt,
   out: (message) => process.stdout.write(`${message}\n`),
+}
+
+async function inspectPackFreshness(
+  deps: PreflightDependencies,
+  workspacePath: string,
+  frameworkRoot: string,
+): Promise<TemplatePackFreshness> {
+  if (deps.inspectPack) return deps.inspectPack(workspacePath, frameworkRoot)
+  const meta = await readWorkspaceMeta(workspacePath).catch(() => undefined)
+  return inspectTemplatePackFreshness({
+    workspacePath,
+    frameworkRoot,
+    templateRoot: resolveTemplateRootFromFrameworkRoot(frameworkRoot),
+    workspaceVersion: meta?.frameworkVersion,
+    bundledVersion: readFrameworkVersionFromRoot(frameworkRoot),
+  })
 }
 
 /** Print the final launch line before the TUI worker starts. */
@@ -220,15 +246,7 @@ export async function offerStaleTemplatePackUpdates(
   for (const workspacePath of candidates) {
     try {
       const meta = await readWorkspaceMeta(workspacePath).catch(() => undefined)
-      const freshness = deps.inspectPack
-        ? await deps.inspectPack(workspacePath, frameworkRoot)
-        : inspectTemplatePackFreshness({
-            workspacePath,
-            frameworkRoot,
-            templateRoot: resolveTemplateRootFromFrameworkRoot(frameworkRoot),
-            workspaceVersion: meta?.frameworkVersion,
-            bundledVersion: readFrameworkVersionFromRoot(frameworkRoot),
-          })
+      const freshness = await inspectPackFreshness(deps, workspacePath, frameworkRoot)
       if (!freshness.refreshRecommended) continue
       stale.push({
         path: workspacePath,
@@ -259,20 +277,38 @@ export async function offerStaleTemplatePackUpdates(
   let failed = 0
   for (const entry of stale) {
     try {
-      const result = await deps.updateWorkspace(entry.path, frameworkRoot)
+      // Explicit Y means refresh the pack the user was shown as stale — force
+      // replace_if_unmodified managed files so probes cannot stay forever-stale.
+      const result = await deps.updateWorkspace(entry.path, frameworkRoot, { force: true })
       if (result.success && result.presence) {
         deps.out(`↷ Skipped ${entry.name}: ${result.presence.replaceAll("_", " ").toUpperCase()}`)
-      } else if (result.success) deps.out(`✓ Updated ${entry.name}`)
-      else {
+        continue
+      }
+      if (!result.success) {
         failed++
         deps.out(`⚠ Could not update ${entry.name}${result.error ? `: ${result.error}` : ""}`)
+        continue
+      }
+
+      const after = await inspectPackFreshness(deps, entry.path, frameworkRoot)
+      if (after.refreshRecommended) {
+        failed++
+        const detail = formatStalePaths(after)
+        deps.out(`⚠ ${entry.name} still stale after update${detail ? `: ${detail}` : ""}`)
+        spinosaLogInfo(
+          "preflight",
+          `template pack still stale after forced update: ${entry.path} (${detail || "version behind"})`,
+        )
+      } else {
+        deps.out(`✓ Updated ${entry.name} — template pack current`)
+        spinosaLogInfo("preflight", `template pack refreshed: ${entry.path}`)
       }
     } catch (error) {
       failed++
       deps.out(`⚠ Could not update ${entry.name}: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
-  if (failed > 0) deps.out(`⚠ ${failed} workspace update(s) failed; run 'spinosa update <workspace>' to retry.`)
+  if (failed > 0) deps.out(`⚠ ${failed} workspace update(s) failed; run 'spinosa update <workspace> --force' to retry.`)
 }
 
 /**

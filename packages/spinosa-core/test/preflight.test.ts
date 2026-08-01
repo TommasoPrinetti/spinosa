@@ -122,19 +122,57 @@ describe("launch preflight", () => {
   })
 
   test("offers stale template pack update and continues into TUI after accept", async () => {
-    const { deps, output, updated } = dependencies({
+    const forced: boolean[] = []
+    const updated: string[] = []
+    let inspectCalls = 0
+    const { deps, output } = dependencies({
       canPrompt: () => true,
       listPackCheckCandidates: async () => ["/work/stale"],
-      inspectPack: async () => freshness(),
+      inspectPack: async () => {
+        inspectCalls++
+        if (inspectCalls === 1) return freshness()
+        return freshness({
+          refreshRecommended: false,
+          stale: false,
+          protocolBehind: false,
+          stalePaths: [],
+          missingPaths: [],
+        })
+      },
       confirm: async () => true,
+      updateWorkspace: async (workspace, _root, options) => {
+        updated.push(workspace)
+        forced.push(Boolean(options?.force))
+        return { success: true, added: 0, updated: 1, removed: 0, skipped: 0, changes: true }
+      },
     })
 
     expect(await runLaunchPreflight(deps)).toBe("continue")
     expect(updated).toEqual(["/work/stale"])
+    expect(forced).toEqual([true])
+    expect(inspectCalls).toBe(2)
     expect(output).toContain("Workspace template pack update available for 1 workspace(s):")
     expect(output).toContain("  • stale — AGENTS.md, startup-prompt.md")
-    expect(output).toContain("✓ Updated stale")
+    expect(output).toContain("✓ Updated stale — template pack current")
     expect(output).not.toContain(LAUNCH_STATUS_UPGRADE_DONE)
+  })
+
+  test("reports when forced pack update leaves probes stale", async () => {
+    const { deps, output, updated } = dependencies({
+      canPrompt: () => true,
+      listPackCheckCandidates: async () => ["/work/stale"],
+      inspectPack: async () => freshness({ stalePaths: [".agents/references/classification.md"] }),
+      confirm: async () => true,
+      updateWorkspace: async (workspace) => {
+        updated.push(workspace)
+        return { success: true, added: 0, updated: 0, removed: 0, skipped: 10, changes: false }
+      },
+    })
+
+    expect(await runLaunchPreflight(deps)).toBe("continue")
+    expect(updated).toEqual(["/work/stale"])
+    expect(output).toContain("⚠ stale still stale after update: .agents/references/classification.md")
+    expect(output).toContain("⚠ 1 workspace update(s) failed; run 'spinosa update <workspace> --force' to retry.")
   })
 
   test("continues without updating when user declines pack refresh", async () => {
@@ -166,13 +204,24 @@ describe("launch preflight", () => {
 describe("offerStaleTemplatePackUpdates", () => {
   test("uses target workspace candidates when provided", async () => {
     const seen: Array<string | undefined> = []
+    let inspectCalls = 0
     const { deps, updated } = dependencies({
       canPrompt: () => true,
       listPackCheckCandidates: async (target) => {
         seen.push(target)
         return target ? [target] : []
       },
-      inspectPack: async () => freshness(),
+      inspectPack: async () => {
+        inspectCalls++
+        if (inspectCalls === 1) return freshness()
+        return freshness({
+          refreshRecommended: false,
+          stale: false,
+          protocolBehind: false,
+          stalePaths: [],
+          missingPaths: [],
+        })
+      },
       confirm: async () => true,
     })
 
