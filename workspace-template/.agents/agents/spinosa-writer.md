@@ -271,5 +271,5 @@ Process files are intermediate artifacts created during search and synthesis:
 | [[evidence_appendix.md]] | Searcher | Overflow evidence (when >300 lines) | Moved to `.trash/` automatically by evaluator (step 8) |
 | `g_{session_id}.md` | Orchestrator | Goal artifact | Moved to `.trash/` automatically by evaluator (step 8) |
 | `analysis_{session_id}.md` | Analyst | Contextual analysis | Archived/moved by evaluator (step 8) |
-| `extraction_batch_*.md` | Mapper | Extraction packets per batch | Moved to `.trash/` after indexing complete |
+| `extraction_{batch_id}.md` | Mapper | Extraction packets per batch (`extraction_*.md`) | Moved to `.trash/` by **startup Phase 7** after indexing (not by evaluator) |
 | `NN_*.md` | Writer/Serendippo | Numbered final reports | Keep in `agent_reports/` |

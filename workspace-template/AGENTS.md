@@ -81,14 +81,24 @@ Chain rules:
 - Past session history from orchestrator-notes.md is consulted before choosing the next agent.
 - `spinosa-verifier` is required at the end of every route that produces claims, citations, or quotes.
 - `spinosa-evaluator` is required after verifier completes, to audit the route and decide if framework evolution is needed.
-- **Model:** Use `gpt-5.4-mini` for all sub-agent dispatches (small model is sufficient for search, analysis, writing, and verification).
+- **Model:** Use the host default / `preferred_llm_cli` from `system/configuration.md` for sub-agent dispatches. Do not hard-code a model id (e.g. do not force `gpt-5.4-mini`).
+
+### Startup mode overrides (`cli_started` / running `startup-prompt.md`)
+
+While `setup_status` is `cli_started` or the current task is startup indexing per [[startup-prompt.md]]:
+
+- Follow [[startup-prompt.md]] only (classification **Q0**). Orchestrator + indexing pipeline agents (`spinosa-mapper`, `spinosa-serendippo`, `spinosa-verifier`, `spinosa-evaluator` as named in startup phases).
+- **Never** dispatch `spinosa-overseer`. **Never** invoke `agent-interception`. Overseer is not the orchestrator and is forbidden during indexing.
+- Do **not** use the `question` tool.
+- Do **not** apply the steady-state 120s sub-agent timeout to `spinosa-mapper` — mapper batches are minutes-scale; wait for mapper completion (or a minutes-scale host limit) before treating as blocked.
+- Do **not** hard-code a model id; use host-default / preferred CLI from configuration.
 
 ### 4. Execute → Inspect → Decide Loop
 
 ```
 1. Route Split → fast_path (direct) or non-fast-path (orchestrated)
 2. Frame → Write goal artifact in agent_reports/g_{session_id}.md
-3. Select → Pick next agent type and decide parallel count (check overseer advisories)
+3. Select → Pick next agent type and decide parallel count (check overseer advisories only after workspace_started)
 4. Dispatch → Call agent(s) with goal + prior artifact paths (parallel for multiple same-type instances)
 5. Execute → Each agent reads inputs, writes artifact, logs metrics
 6. Inspect → Does each output clear its gate?
@@ -115,7 +125,7 @@ Advance through pipeline phases sequentially: searcher → [analyst] → [serend
 
 All agents in a phase must complete (OK or blocker) before the next phase begins. Omit phases whose agents are not in the route.
 
-If an agent does not return an artifact within 120 seconds, record a timeout and proceed to step 6 (Inspect) with the gate set to `blocked`. The orchestrator may re-dispatch once with a tightened scope before aborting the route. For parallel dispatches, a timeout on one instance does not cancel the others — wait for all to finish, then record each result.
+If an agent does not return an artifact within 120 seconds, record a timeout and proceed to step 6 (Inspect) with the gate set to `blocked`. **Exception:** `spinosa-mapper` (and startup indexing under `cli_started`) is exempt from the 120s limit — use a minutes-scale wait. The orchestrator may re-dispatch once with a tightened scope before aborting the route. For parallel dispatches, a timeout on one instance does not cancel the others — wait for all to finish, then record each result.
 
 #### 4b. Inspect
 
@@ -177,7 +187,9 @@ When goal gates are satisfied or a blocker stops progress:
 
 ### 6. Periodic — Coverage Audit (spinosa-overseer)
 
-The orchestrator maintains a counter of completed non-fast-path routes since the last `spinosa-overseer` invocation. Run the overseer between route dispatches when:
+**Overseer ≠ orchestrator.** The orchestrator routes Q* work and runs startup. `spinosa-overseer` is a separate coverage/retrospective agent. **Never dispatch overseer (or `agent-interception`) while `setup_status` is `cli_started` or while executing [[startup-prompt.md]].**
+
+The orchestrator maintains a counter of completed non-fast-path routes since the last `spinosa-overseer` invocation. Run the overseer between route dispatches **only after `workspace_started`** when:
   a) The counter reaches 5 (mandatory minimum), OR
   b) The user explicitly requests coverage analysis, OR
   c) The orchestrator detects a discretionary trigger:
@@ -188,13 +200,14 @@ The orchestrator maintains a counter of completed non-fast-path routes since the
      - **Coverage intuition** — orchestrator senses the current direction may be over-indexing a narrow area
 
 1. Dispatch `spinosa-overseer` with the last coverage report path (if one exists) and recent artifact paths.
-2. The overseer reads [[.spinosa/memory/orchestrator-notes.md]], [[maps/]], [[system/dictionary.md]], and [[system/configuration.md]].
+2. The overseer prefers in-workspace sources ([[.spinosa/memory/orchestrator-notes.md]], [[maps/]], [[system/dictionary.md]], [[system/configuration.md]], [[agent_reports/]]). External session digs via `agent-interception` are optional enrichment only — never a startup step.
 3. It writes `agent_reports/c_{session_id}.md` and returns an `Orchestrator Advisories` block.
 4. Update the counter (reset to 0). Log the invocation as a note in orchestrator-notes.md.
 5. Consume `Orchestrator Advisories` per the standing rules below.
 
 **Rules:**
 - This is NOT a per-request step. Skip it if the counter is below 5 and the user did not ask for coverage and no discretionary trigger fires.
+- **Forbidden during startup indexing (`cli_started`).** Skip entirely until `workspace_started`.
 - If the overseer invocation overlaps with an active route, queue it to run after the route finishes.
 - The counter persists across orchestrator restarts (read from [[.spinosa/memory/orchestrator-notes.md]] — count completed routes since last overseer entry).
 - Before dispatching the next user request, consume any unread `Orchestrator Advisories` from the last overseer run:
@@ -288,7 +301,7 @@ user request.
 | `spinosa-evaluator`  | Audits the completed route and decides whether framework evolution is justified                                               |
 | `spinosa-evolver`    | Applies tightly scoped control/doc updates when evaluator approves                                                            |
 | `spinosa-janitor`    | Audits hygiene and writes a cleanup artifact before any confirmed move                                                        |
-| `spinosa-overseer`   | Audits session logs and corpus coverage; finds gaps, stale areas, underutilized agents; writes coverage report with orchestrator advisories |
+| `spinosa-overseer`   | Coverage/retrospective agent (not the orchestrator); in-workspace-first gap audit after `workspace_started`; never during startup |
 
 Canonical agent definitions: [[.agents/agents/]]. Agent vendor mirrors are pre-baked in this workspace: [[.opencode/agents/]], [[.claude/agents/]], [[.codex/agents/]]. Hermes mirror: [[.hermes/skills/]], [[.hermes/references/]], [[.hermes/workspace.config.yaml]] (pre-baked; no native sub-agent profiles). Shared references: [[.agents/references/]].
 
@@ -304,9 +317,10 @@ Canonical agent definitions: [[.agents/agents/]]. Agent vendor mirrors are pre-b
 
 - Never read, list, or index `.DS_Store` or `._*` files. Always skip them in glob, find, ls, and read operations.
 - **Workspace boundary:** You are confined to `{{WORKSPACE_PATH}}`. You must never read, write, edit, or list files outside this directory. If a task requires external data, use the `webfetch` tool instead — never access files outside the workspace.
+  - **Exception (post-startup only):** when `spinosa-overseer` is explicitly dispatched for a coverage audit after `setup_status: workspace_started`, it may optionally read host session logs for forensics. This exception does **not** apply during `cli_started` / startup, and never authorizes the orchestrator or other agents to leave the workspace.
 - No fixed set of maps is required. Maps can be created and enriched as needed.
 - Report blockers honestly. Never invent support.
-- Use the `question` tool when missing context or direction.
+- Use the `question` tool when missing context or direction — **except** during `cli_started` / [[startup-prompt.md]] (no questions during startup indexing).
 - Sub-agents never ask questions directly.
 
 ## Sub-Agent Gateway
@@ -322,7 +336,7 @@ Dispatch order (see [[docs/diagrams.md]] §9).
 **Codex / OpenCode / Claude / Cursor / Grok:**
 
 1. **Native spawn** — Codex/OpenCode/Claude project sub-agents via vendor config ([[.codex/config.toml]], etc.).
-2. **Task-tool spawn** — Cursor/Grok and other hosts without native `spinosa-*` roles: use the Task tool with the agent definition body as the prompt. Model may differ from `gpt-5.4-mini` when the host does not support it.
+2. **Task-tool spawn** — Cursor/Grok and other hosts without native `spinosa-*` roles: use the Task tool with the agent definition body as the prompt. Use the host-default model / preferred CLI from configuration (do not hard-code a model id).
 3. **Skill inject fallback** — read [[.agents/agents/<agent-name>.md]] or [[.agents/skills/<agent-name>/SKILL.md]] and inject the instruction body as the task prompt.
 
 All paths must write the same session-scoped artifact paths declared in the goal artifact. Reference files in [[.agents/references/]] (mirrored under [[.hermes/references/]] and other vendor `references/`) are available for templates and format guidance.

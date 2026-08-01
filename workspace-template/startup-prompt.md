@@ -2,12 +2,23 @@
 
 Read `raw/`, build the master dictionary, extract content-grounded fragments, write navigation maps, validate everything. One-time indexing pass. After this, the workspace is ready for search and retrieval.
 
-[[AGENTS.md]] — full orchestration contract. For this indexing pass: delegate everything to sub-agents. Extraction → mappers. Maps → writer/analyst. Serendipity → serendippo. Verification → verifier. Evaluation → evaluator.
+[[AGENTS.md]] — full orchestration contract. For this indexing pass: delegate everything to sub-agents. Extraction → `spinosa-mapper` (`map_extract`). Maps → `spinosa-mapper` Phase 2 (`map_write`) only — **not** writer or analyst. Serendipity → `spinosa-serendippo`. Verification → `spinosa-verifier`. Evaluation → `spinosa-evaluator`.
+
+## Hard ban during startup
+
+**Do not invoke `spinosa-overseer` or `agent-interception` during startup.** Startup is the normal orchestrator following this file plus the indexing pipeline agents above. Overseer is a separate coverage agent for after `workspace_started` only. Session forensics are never part of indexing.
+
+While `setup_status: cli_started` / this prompt is running:
+
+- No `question` tool
+- No overseer, no agent-interception
+- No 120s timeout for `spinosa-mapper` (minutes-scale)
+- No hard-coded model id — use host-default / preferred CLI from configuration
 
 ## Context: what onboarding already did
 
 - Collected project name and preferred LLM CLI
-- Imported accepted files into `raw/` (text, native-readable, PDFs)
+- Imported accepted files into `raw/`
 - Wrote `system/context.md` and `system/configuration.md` with `setup_status: cli_started`
 
 Do not repeat onboarding. Startup takes the raw corpus and builds the workspace content.
@@ -32,7 +43,7 @@ Before Phase 1 dispatch, write `agent_reports/g_{session_id}.md` using `.agents/
 
 ## Hard rules
 
-- **Do not edit `raw/`.** Startup may write maps, dictionary, workspace index, context, configuration, and startup reports.
+- **Do not edit `raw/`.** Startup may write maps, dictionary, workspace index, context, configuration, and startup reports. Exception: YAML frontmatter semantic fields on raw files (summary and related) as specified in Phase 3.
 - Treat `raw/` as the active working corpus.
 - PDFs were converted by onboarding (MarkItDown for text-based, PaddleOCR for scanned). Account for skipped media (audio, video) as uncovered.
 - Treat every `AGENTS.md` file as control instructions, not corpus evidence.
@@ -85,19 +96,19 @@ One pass over the corpus. Build the dictionary and extraction packets together. 
 
 **What the dictionary is:** a shared vocabulary of canonical names, places, organizations, and concepts extracted from the corpus. Every agent uses it for consistent terminology across maps and reports. Inferred concepts are marked as inferred. Uncertain terms are marked for review.
 
-1. **Batch and spawn all mappers in parallel.** Survey all files in `raw/` (skip `.DS_Store`, `AGENTS.md`, system files, empty dirs). Record total as `TOTAL_FILES` in `workspace_index.md`. Split into batches of 20–25, grouped by parent directory. Assign each batch a unique `batch_id` (`batch_001`, `batch_002`, ...). Keep each batch under the sub-agent's context window (~30K–60K tokens). Reduce size for dense files (PDFs, long transcripts).
+1. **Batch and spawn all mappers in parallel.** Survey all files in `raw/` (skip `.DS_Store`, `AGENTS.md`, system files, empty dirs). Record total as `TOTAL_FILES` in `workspace_index.md`. Split into batches of 20–25, grouped by parent directory. Assign each batch a **descriptive** `batch_id` (e.g. `interviews-batch-001`, `policy-pdfs-batch-002`) — never bare `batch_001`. See `.agents/references/artifact-naming.md`. Keep each batch under the sub-agent's context window (~30K–60K tokens). Reduce size for dense files (PDFs, long transcripts).
 
-    Now spawn **all** `spinosa-mapper` sub-agents in a **single message** — one per batch. Do not spawn sequentially. Do not wait for one to finish before spawning the next. Each mapper instruction includes its assigned file list directly — no intermediate batch list file written.
+    Now spawn **all** `spinosa-mapper` sub-agents in a **single message** — one per batch. Do not spawn sequentially. Do not wait for one to finish before spawning the next. Each mapper instruction includes its assigned file list directly — no intermediate batch list file written. Mapper runs are minutes-scale; do not apply the steady-state 120s timeout.
 
     ```spinosa-subagent
     agent: spinosa-mapper
-    batch_id: batch_001
+    batch_id: interviews-batch-001
     task: |
       Your batch covers:
         - raw/group/file1.md
         - raw/group/file2.md
-      Read each file, extract dictionary terms and content-grounded extraction packets. Write to agent_reports/extraction_batch_001.md.
-    output: agent_reports/extraction_batch_001.md
+      Read each file, extract dictionary terms and content-grounded extraction packets. Write to agent_reports/extraction_interviews-batch-001.md.
+    output: agent_reports/extraction_interviews-batch-001.md
     ```
 
     Each mapper reads its assigned files and extracts:
@@ -120,11 +131,11 @@ One pass over the corpus. Build the dictionary and extraction packets together. 
 
     **Language rule:** summaries in the source document's language. French source → French summary.
 
-    Each mapper writes to `agent_reports/extraction_batch_{batch_id}.md`. No shared state, no locks.
+    Each mapper writes to `agent_reports/extraction_{batch_id}.md` (e.g. `extraction_interviews-batch-001.md`). No shared state, no locks. Never use `extraction_batch_*.md` or bare `batch_001` filenames.
 
     **Metrics checkpoint:** after all mappers return, verify each expected `batch_id` has an extraction packet. The orchestrator records per-mapper operational counts after each returns.
 
-2. **Collect and merge.** After all sub-agents return, read every `agent_reports/extraction_batch_*.md`:
+2. **Collect and merge.** After all sub-agents return, read every `agent_reports/extraction_*.md` for this startup (skip unrelated session-scoped packets):
     - Merge all dictionary terms into the master dictionary (dedup by canonical form, union source files)
     - Append all extraction packets to `agent_reports/extraction_checkpoint.md`
     - Update `workspace_index.md` "Extraction Progress": `files_read == TOTAL_FILES`
@@ -132,11 +143,11 @@ One pass over the corpus. Build the dictionary and extraction packets together. 
     No per-batch accumulation loop. One merge pass.
 
     Extraction-batch validation:
-    - Every batch has valid `type: extraction_batch` frontmatter, assigned `batch_id`, `files_processed`, and `created`
+    - Every batch has valid `type: extraction_batch` frontmatter, assigned descriptive `batch_id`, `files_processed`, and `created`
     - Every processed file has path, source type, language, summary, key passages with line references, concept signals, tags, and connections
     - Key passages quoting or closely paraphrasing a raw source use `[[raw/path/file]]` followed by `L<n>` or `L<n>-L<n>`
 
-3. **Write per-file keyword summaries into YAML headers.** After all batches complete, write a `summary` into each raw file's YAML frontmatter. Read `system/yaml_header_template.md` for the canonical schema. The summary is a dense keyword string optimized for future search — terms an agent would grep for to find this file's concepts. Not prose. Single line. Spawn a **summarizer sub-agent** for this batch work. Use a smaller/cheaper model when available. For each file, it reads the extraction packet and distills the key concepts into a searchable keyword summary, then writes the `summary` field into the YAML header.
+3. **Write per-file keyword summaries into YAML headers.** After all batches complete, write a `summary` into each raw file's YAML frontmatter. Read `system/yaml_header_template.md` for the canonical schema. The summary is a dense keyword string optimized for future search — terms an agent would grep for to find this file's concepts. Not prose. Single line. Spawn a **`spinosa-mapper`** sub-agent (or do this inline in the orchestrator for small corpora) for this batch work — there is no separate "summarizer" agent. Use a smaller/cheaper model when available. For each file, it reads the extraction packet and distills the key concepts into a searchable keyword summary, then writes the `summary` field into the YAML header.
 
     **Frontmatter note:** the import pipeline already injects cold structural fields (type, source, original_format, converter_engine, processing_status, generated_by) into each raw/ file's YAML header. Do not rewrite these. Only add the missing semantic fields: summary, source_type, language, people, places, organizations, topics, explicit_source_terms, canonical_aliases, uncertain_terms, machine_artifacts, metadata_uncertainty, related_sources. Then update `generated_by` to `startup_agent`.
 
@@ -148,7 +159,7 @@ One pass over the corpus. Build the dictionary and extraction packets together. 
 
 ## Phase 4: Write navigation maps
 
-Delegate map writing to `spinosa-writer` or `spinosa-analyst`. Pass them the extraction checkpoint and the survey results.
+Delegate map writing to **`spinosa-mapper` Phase 2 (`map_write`) only** — not `spinosa-writer` or `spinosa-analyst`. Pass the extraction checkpoint and the survey results.
 
 The maps structure:
 
@@ -185,7 +196,7 @@ The maps structure:
 
 ## Phase 5: Serendipity
 
-Spawn `spinosa-serendippo` with access to `maps/` and `raw/`. It roams raw files, finds hidden connections, writes a report to `agent_reports/serendipity_report.md`, and proposes map updates. Open-ended — continue until the report indicates diminishing returns.
+Spawn `spinosa-serendippo` with access to `maps/` and `raw/`. It roams raw files, finds hidden connections, writes a report to `agent_reports/NN_startup-serendipity-{theme-slug}.md` (e.g. `02_startup-serendipity-cross-theme-links.md`) per `.agents/references/artifact-naming.md` — **never** `serendipity_report.md` — and proposes map updates. Open-ended — continue until the report indicates diminishing returns.
 
 ---
 
@@ -234,7 +245,7 @@ If available, use the Spinosa TUI health checks to validate startup structure, Y
 After validation passes:
 
 1. Replace `setup_status: cli_started` with `setup_status: workspace_started` in `system/context.md` and `system/configuration.md`
-2. Move process-only extraction batch files (`agent_reports/extraction_batch_*.md`, extraction appendices, intermediate checkpoints) to `.trash/`. Keep final startup report, dictionary, workspace index, and maps in place.
+2. **Startup owns cleanup:** move process-only extraction artifacts (`agent_reports/extraction_*.md` for this indexing run, `extraction_checkpoint.md`, extraction appendices, intermediate checkpoints) to `.trash/`. Keep final startup report, serendipity `NN_startup-serendipity-*.md`, dictionary, workspace index, and maps in place. Do not leave this to the evaluator.
 3. Update `.spinosa/memory/orchestrator-notes.md` with a startup summary (files processed, maps created, dictionary terms, validation result).
 
 ---
@@ -252,6 +263,6 @@ After validation passes:
 3. Keep `setup_status: cli_started` until validation passes
 
 **Resume on restart:**
-1. List `agent_reports/extraction_batch_*.md` to find completed batches
+1. List `agent_reports/extraction_*.md` (descriptive batch files such as `extraction_interviews-batch-001.md`) to find completed batches — also accept legacy `extraction_batch_*.md` if present from older runs
 2. Re-spawn only missing batches — include the file list directly in each mapper's task instruction
 3. Skip batches whose output file exists

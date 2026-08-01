@@ -85,7 +85,7 @@ Rules:
 - `ocr_confidence` is optional and applies when OCR or scan conversion produced the text. Use `unknown` when OCR quality was not measured.
 - `language` is the ISO 639-1 code of the source file's primary language (en, fr, pt, es, etc.).
 - `people`, `places`, `organizations` MUST use canonical forms from [[dictionary]].
-- `summary` is a dense keyword string optimized for future search — terms an agent would grep for to find this file's concepts. Not prose. Single line. Written during startup by a summarizer sub-agent; no automated extraction tools involved.
+- `summary` is a dense keyword string optimized for future search — terms an agent would grep for to find this file's concepts. Not prose. Single line. Written during startup by `spinosa-mapper` (or inline by the orchestrator for small corpora); no automated extraction tools involved.
 - `explicit_source_terms` are terms visibly present in the source.
 - `canonical_aliases` lists dictionary aliases included for retrieval.
 - `uncertain_terms`, `machine_artifacts`, and `metadata_uncertainty` quarantine noisy or incomplete metadata.

@@ -96,32 +96,36 @@ The CLI has already imported and converted the new files into raw/.
 
 The raw/ corpus now contains approximately ${rawCount} Markdown files.
 
+This is an incremental add — NOT full startup indexing. Do not re-run startup-prompt.md end-to-end. Do not invoke spinosa-overseer or agent-interception.
+
 Read these files first, in this order:
-1. AGENTS.md
+1. AGENTS.md (routing / write boundaries only)
 2. system/configuration.md
 3. system/context.md
-4. startup-prompt.md (for extraction format and map structure reference)
-5. system/dictionary.md
-6. system/workspace_index.md
-7. .spinosa/add-summary.md
+4. .agents/skills/spinosa-mapper/SKILL.md (extraction + map_write protocol)
+5. .agents/references/artifact-naming.md
+6. system/dictionary.md
+7. system/workspace_index.md
+8. .spinosa/add-summary.md
 
 Tasks to perform:
 
 1. Detect new files in raw/ that are not yet in maps/ or system/dictionary.md.
-2. Group the new files into batches of 20-25.
+2. Group the new files into batches of 20-25 with descriptive batch_id values (e.g. add-interviews-batch-001). Write agent_reports/extraction_{batch_id}.md — never bare batch_001 or extraction_batch_*.md.
 3. Spawn a spinosa-mapper sub-agent per batch to:
     - Update each raw/ file's YAML frontmatter with semantic fields (type, summary, concepts, language, people, places, organizations, topics) — these are pre-structured as empty scaffold fields from the import pipeline, fill them with content-derived values
    - Extract dictionary terms (names, places, organizations, domain terms, concepts)
    - Extract content signatures (one-paragraph summary, key passages with line refs, concept signals, connections)
 4. Merge all extraction results into agent_reports/extraction_checkpoint.md.
 5. Update system/dictionary.md with new terms from the new files.
-6. Update navigation maps in maps/ to include the new files:
+6. Dispatch spinosa-mapper Phase 2 (map_write) — not writer/analyst — to update navigation maps in maps/:
    - Update maps/corpus_overview.md with new structural groups if needed.
    - Update or create group maps for any new natural groups.
    - Update theme maps with cross-cutting concepts from the new files.
 7. Update system/workspace_index.md to reflect the expanded corpus.
 8. Run spinosa-verifier on new content to truth-check claims and passages.
 9. Run the built-in Spinosa verifier or TUI health checks to validate workspace integrity.
+10. Move process-only extraction_{batch_id}.md / extraction_checkpoint.md for this add pass to .trash/ when validation passes (same cleanup ownership as startup).
 
 Corpus boundary:
 - Treat raw/ as the only source corpus.
@@ -133,7 +137,7 @@ Preferred LLM CLI: ${preferredCli}
 Finished means:
 - Every new file has been accounted for in dictionary, maps, and index.
 - system/workspace_index.md records updated coverage, maps, and gaps.
-- agent_reports/ contains an add report with validation and retrieval-test results.
+- agent_reports/ contains an add report with validation and retrieval-test results (NN_add-files-{slug}.md).
 
 Do not re-index files that are already mapped. Only process additions.
 `

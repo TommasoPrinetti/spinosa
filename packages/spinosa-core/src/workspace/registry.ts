@@ -761,7 +761,7 @@ setup_status: cli_started
 connects_to:
   - AGENTS.md
   - system/configuration.md
-  - system/startup.md
+  - startup-prompt.md
   - .logs/user_requests.md
 ---
 
