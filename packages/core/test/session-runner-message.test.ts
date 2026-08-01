@@ -47,6 +47,32 @@ describe("toLLMMessages", () => {
     expect(messages.map((message) => message.id)).toEqual([id("text"), id("reasoning")])
   })
 
+  test("omits failed assistant turns without replayable output", () => {
+    const messages = toLLMMessages(
+      [
+        SessionMessage.Assistant.make({
+          id: id("assistant-failed-empty"),
+          type: "assistant",
+          agent: "build",
+          model: { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") },
+          content: [],
+          finish: "error",
+          error: { type: "unknown", message: "Provider unavailable" },
+          time: { created, completed: created },
+        }),
+        SessionMessage.User.make({
+          id: id("user-after-error"),
+          type: "user",
+          text: "Heyy",
+          time: { created },
+        }),
+      ],
+      model,
+    )
+
+    expect(messages.map((message) => message.role)).toEqual(["user"])
+  })
+
   test("maps every top-level V2 Session message type", () => {
     const file = FileAttachment.make({ uri: "data:image/png;base64,aGVsbG8=", mime: "image/png", name: "hello.png" })
     const messages = toLLMMessages(

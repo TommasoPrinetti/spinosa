@@ -3,7 +3,7 @@ import { Effect, Schema, Stream } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
 import { LLM, LLMError, LLMEvent, Message, Model, ToolCallPart, Usage } from "../../src"
 import * as Azure from "../../src/providers/azure"
-import * as OpenAI from "../../src/providers/openai"
+import * as OpenAICompatible from "../../src/providers/openai-compatible"
 import * as OpenAIChat from "../../src/protocols/openai-chat"
 import { ProviderShared } from "../../src/protocols/shared"
 import { Auth, LLMClient } from "../../src/route"
@@ -669,6 +669,41 @@ describe("OpenAI Chat route", () => {
         yield* LLMClient.stream(request).pipe(Stream.take(1), Stream.runCollect, Effect.provide(fixedResponse(body))),
       )
       expect(events.map((event) => event.type)).toEqual(["step-start"])
+    }),
+  )
+
+  it.effect("omits empty assistant messages from prepared requests", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+        LLM.request({
+          model,
+          messages: [
+            Message.user("Hi"),
+            Message.make({ role: "assistant", content: [] }),
+            Message.user("Again"),
+          ],
+        }),
+      )
+
+      expect(prepared.body.messages.map((message) => message.role)).toEqual(["user", "user"])
+    }),
+  )
+
+  it.effect("omits reasoning-only assistant rows for DeepSeek", () =>
+    Effect.gen(function* () {
+      const deepseek = OpenAICompatible.deepseek.configure({ apiKey: "test" }).model("deepseek-chat")
+      const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+        LLM.request({
+          model: deepseek,
+          messages: [
+            Message.user("Hi"),
+            Message.assistant({ type: "reasoning", text: "thinking" }),
+            Message.user("Again"),
+          ],
+        }),
+      )
+
+      expect(prepared.body.messages.map((message) => message.role)).toEqual(["user", "user"])
     }),
   )
 })

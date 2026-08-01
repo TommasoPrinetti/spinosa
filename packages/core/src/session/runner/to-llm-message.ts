@@ -67,6 +67,12 @@ const toolResult = (tool: SessionMessage.AssistantTool, providerMetadata: Provid
   }
 }
 
+const isMeaningfulPart = (part: ContentPart) => {
+  if (part.type === "text") return part.text !== ""
+  if (part.type !== "reasoning") return true
+  return part.text !== "" || (part.providerMetadata !== undefined && Object.keys(part.providerMetadata).length > 0)
+}
+
 const assistant = (message: SessionMessage.Assistant, model: Model) => {
   const sameModel =
     String(message.model.providerID) === String(model.provider) && String(message.model.id) === String(model.id)
@@ -93,11 +99,9 @@ const assistant = (message: SessionMessage.Assistant, model: Model) => {
     )
     return result ? [call, result] : [call]
   })
-  const meaningful = content.filter((part) => {
-    if (part.type === "text") return part.text !== ""
-    if (part.type !== "reasoning") return true
-    return part.text !== "" || (part.providerMetadata !== undefined && Object.keys(part.providerMetadata).length > 0)
-  })
+  const meaningful = content.filter(isMeaningfulPart)
+  // Match V1 replay policy: failed turns are not model-facing unless they still carry replayable output.
+  if (message.error !== undefined && meaningful.length === 0) return []
   const results = message.content
     .filter((item): item is SessionMessage.AssistantTool => item.type === "tool" && item.provider?.executed !== true)
     .map((item) =>

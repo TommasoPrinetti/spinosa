@@ -290,6 +290,22 @@ const lowerMessage = Effect.fn("OpenAIChat.lowerMessage")(function* (message: Op
   return (yield* lowerToolMessages(message)).messages
 })
 
+const isDeepSeekModel = (request: LLMRequest) => {
+  const provider = String(request.model.provider).toLowerCase()
+  const id = String(request.model.id).toLowerCase()
+  return provider.includes("deepseek") || id.includes("deepseek")
+}
+
+/** DeepSeek rejects assistant rows with neither `content` nor `tool_calls`; reasoning-only rows are not enough. */
+const shouldOmitAssistant = (message: OpenAIChatMessage, request: LLMRequest) => {
+  if (message.role !== "assistant") return false
+  const hasContent = message.content !== null && message.content !== ""
+  const hasTools = message.tool_calls !== undefined && message.tool_calls.length > 0
+  if (hasContent || hasTools) return false
+  if (isDeepSeekModel(request)) return true
+  return message.reasoning_content === undefined || message.reasoning_content === ""
+}
+
 const lowerMessages = Effect.fn("OpenAIChat.lowerMessages")(function* (request: LLMRequest) {
   const system: OpenAIChatMessage[] =
     request.system.length === 0 ? [] : [{ role: "system", content: ProviderShared.joinText(request.system) }]
@@ -324,7 +340,9 @@ const lowerMessages = Effect.fn("OpenAIChat.lowerMessages")(function* (request: 
       continue
     }
     flushImages()
-    messages.push(...(yield* lowerMessage(message)))
+    for (const lowered of yield* lowerMessage(message)) {
+      if (!shouldOmitAssistant(lowered, request)) messages.push(lowered)
+    }
   }
   flushImages()
   return messages

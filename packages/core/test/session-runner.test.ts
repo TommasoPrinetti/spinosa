@@ -2931,6 +2931,33 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("omits durable empty failed assistant turns from later provider requests", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Fail durably" }), resume: false })
+
+      requests.length = 0
+      response = [LLMEvent.stepStart({ index: 0 }), LLMEvent.providerError({ message: "Provider unavailable" })]
+      yield* session.resume(sessionID)
+
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Heyy" }), resume: false })
+      response = [
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.textStart({ id: "text-retry" }),
+        LLMEvent.textDelta({ id: "text-retry", text: "Hello" }),
+        LLMEvent.textEnd({ id: "text-retry" }),
+        LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+        LLMEvent.finish({ reason: "stop" }),
+      ]
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(2)
+      expect(requests[1]?.messages.map((message) => message.role)).toEqual(["user", "user"])
+      expect(requests[1]?.messages.some((message) => message.role === "assistant")).toBe(false)
+    }),
+  )
+
   it.effect("projects provider errors emitted before assistant step start", () =>
     Effect.gen(function* () {
       yield* setup
