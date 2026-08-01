@@ -8,6 +8,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.0.3-beta.13] — 2026-08-01
+
 ### Added
 
 - Home Enter → conversation shows an immediate full-screen **Loading conversation engine…** overlay while the session shell boots (optimistic navigate + background `session.create`); dismisses when the session is synced and the prompt is mounted, with a 30s timeout toast on failure.
