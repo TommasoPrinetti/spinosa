@@ -279,6 +279,16 @@ export const {
     }
 
     event.subscribe((event, { directory, workspace }) => {
+      // SDK gen can lag schema for newer session.next.* types; handle those first.
+      if ((event as { type: string }).type === "session.next.prompt.delivery.changed") {
+        const properties = (event as { properties: { messageID?: string; delivery?: string } }).properties
+        const messageID = properties.messageID
+        const delivery = properties.delivery
+        if (messageID && (delivery === "queue" || delivery === "steer")) {
+          setStore("prompt_delivery", messageID, delivery)
+        }
+        return
+      }
       switch (event.type) {
         case "server.instance.disposed":
           void bootstrap()
@@ -549,15 +559,6 @@ export const {
                 delete draft[messageID]
               }),
             )
-          }
-          break
-        }
-
-        case "session.next.prompt.delivery.changed": {
-          const messageID = event.properties.messageID as string
-          const delivery = event.properties.delivery
-          if (delivery === "queue" || delivery === "steer") {
-            setStore("prompt_delivery", messageID, delivery)
           }
           break
         }

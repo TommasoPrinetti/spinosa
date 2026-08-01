@@ -30,6 +30,8 @@ describe("tui sync V2 → V1 part bridge", () => {
             sessionID: childID,
             info: {
               id: childID,
+              slug: "child",
+              projectID: "proj_test",
               parentID,
               title: "Inspect (@explore subagent)",
               time: { created: 1, updated: 1 },
@@ -336,7 +338,6 @@ describe("tui sync V2 → V1 part bridge", () => {
             sessionID,
             attempt: 2,
             error: {
-              name: "APIError",
               message: "rate limited",
               statusCode: 429,
               isRetryable: true,

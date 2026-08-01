@@ -657,6 +657,7 @@ test("direct queued prompt panel renders pending prompt actions", async () => {
           onClose={() => {}}
           onEdit={() => {}}
           onDelete={() => {}}
+          onSteer={() => {}}
         />
       </box>
     ),
