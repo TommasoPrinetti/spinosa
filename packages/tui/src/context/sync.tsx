@@ -959,6 +959,20 @@ export const {
           if (match.found) return store.session[match.index]
           return undefined
         },
+        /** Insert/replace a session optimistically (e.g. right after session.create). */
+        upsert(info: Session) {
+          setStore(
+            "session",
+            produce((draft) => {
+              const match = search(draft, info.id, (s) => s.id)
+              if (match.found) {
+                draft[match.index] = info
+                return
+              }
+              draft.splice(match.index, 0, info)
+            }),
+          )
+        },
         query() {
           return sessionListQuery()
         },

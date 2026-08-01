@@ -48,6 +48,7 @@ import {
   resolvePromptDelivery,
   useV2SessionPrompt,
   shouldNavigateBeforePrepare,
+  shouldSeedSessionBeforeNavigate,
 } from "../../util/session-prompt-v2"
 import { createColors, createFrames } from "../../ui/spinner"
 import { useDialog } from "../../ui/dialog"
@@ -1098,6 +1099,11 @@ export function Prompt(props: PromptProps) {
       }
 
       sessionID = res.data.id
+      // Session UI gates transcript+prompt on sync.session.get — seed before navigate
+      // so conversation activates immediately (don't wait for SSE / sync.session.sync).
+      if (shouldSeedSessionBeforeNavigate(false) && res.data) {
+        sync.session.upsert(res.data)
+      }
     }
 
     const inputText = expandTrackedPastedText(
@@ -1111,8 +1117,8 @@ export function Prompt(props: PromptProps) {
     )
 
     // Snapshot prompt state before any clear / navigate. New-session Enter must
-    // leave Home as soon as session.create returns — prepareSpinosaSubmit and
-    // first-token / V2 admission must not gate the conversation route.
+    // seed sync + leave Home as soon as session.create returns — prepareSpinosaSubmit
+    // and first-token / V2 admission must not gate the conversation route.
     const nonTextParts = store.prompt.parts.filter((part) => part.type !== "text")
     const currentMode = store.mode
     const promptSnapshot = {
@@ -1161,6 +1167,7 @@ export function Prompt(props: PromptProps) {
       })
     }
 
+    const admitAfterPrepare = async () => {
     let outboundText = inputText
     let preparedSpinosa: Awaited<ReturnType<typeof prepareSpinosaSubmit>> | undefined
     if (sessionDirectory) {
@@ -1314,8 +1321,17 @@ export function Prompt(props: PromptProps) {
       })
       if (editorParts.length > 0) editor.markSelectionSent()
     }
+    }
 
-    if (!isNewSession) clearPromptUi()
+    // New-session: navigate already happened — prepare/admit must not block submit return.
+    if (isNewSession) {
+      if (finishMoveProgress) move.finishSubmit()
+      void admitAfterPrepare()
+      return true
+    }
+
+    await admitAfterPrepare()
+    clearPromptUi()
     if (finishMoveProgress) move.finishSubmit()
     return true
   }

@@ -1,25 +1,38 @@
 import { describe, expect, test } from "bun:test"
-import { shouldNavigateBeforePrepare } from "../../../src/util/session-prompt-v2"
+import {
+  newSessionSubmitPhases,
+  shouldNavigateBeforePrepare,
+  shouldSeedSessionBeforeNavigate,
+} from "../../../src/util/session-prompt-v2"
 
 // Regression for Home Enter → conversation lag in
 // packages/tui/src/component/prompt/index.tsx (`submitInner`).
 //
-// Before the fix, new-session submit awaited `prepareSpinosaSubmit` (and the
-// old 50ms setTimeout) before `route.navigate`. Research-route prepare does
-// disk I/O, so the user sat on Home until framing finished.
+// History:
+// - Pre-3f97ea0d: awaited prepareSpinosaSubmit (+ 50ms timer) before navigate
+// - 3f97ea0d: navigate after create, prepare in background — but Session UI stays
+//   blank until sync has the session (`<Show when={session()}>`), so activation
+//   still felt delayed while waiting for SSE / sync.session.sync
 //
-// Contract: as soon as `session.create` returns an id, navigate immediately;
-// prepare + prompt admission continue after the route change.
+// Contract: create → seed sync → navigate immediately; prepare + prompt continue
+// afterward without blocking submit return.
 
 type Timeline = {
+  createdAt?: number
+  seededAt?: number
   navigatedAt?: number
   preparedAt?: number
   promptedAt?: number
+  returnedAt?: number
 }
+
+type SessionInfo = { id: string; title: string }
 
 type Harness = {
   timeline: Timeline
-  createSession(): Promise<string>
+  sessions: Map<string, SessionInfo>
+  createSession(): Promise<SessionInfo>
+  seed(session: SessionInfo): void
   prepare(): Promise<void>
   sendPrompt(sessionID: string): Promise<void>
   navigate(sessionID: string): void
@@ -27,12 +40,19 @@ type Harness = {
 
 function createHarness(opts: { prepareDelayMs: number }): Harness {
   const timeline: Timeline = {}
+  const sessions = new Map<string, SessionInfo>()
   let tick = 0
   return {
     timeline,
+    sessions,
     async createSession() {
       tick += 1
-      return `ses_${tick}`
+      timeline.createdAt = Date.now()
+      return { id: `ses_${tick}`, title: "New session" }
+    },
+    seed(session) {
+      sessions.set(session.id, session)
+      timeline.seededAt = Date.now()
     },
     async prepare() {
       await Bun.sleep(opts.prepareDelayMs)
@@ -41,38 +61,72 @@ function createHarness(opts: { prepareDelayMs: number }): Harness {
     async sendPrompt(_sessionID: string) {
       timeline.promptedAt = Date.now()
     },
-    navigate(_sessionID: string) {
+    navigate(sessionID: string) {
+      // Session route only "activates" when the session is already in sync.
+      if (!sessions.has(sessionID)) {
+        throw new Error("navigate before seed: Session UI would stay blank")
+      }
       timeline.navigatedAt = Date.now()
     },
   }
 }
 
-async function submitNewSession(h: Harness) {
-  const sessionID = await h.createSession()
+async function submitNewSession(h: Harness): Promise<void> {
+  const session = await h.createSession()
+  if (shouldSeedSessionBeforeNavigate(false)) {
+    h.seed(session)
+  }
   if (shouldNavigateBeforePrepare(false)) {
-    h.navigate(sessionID)
+    h.navigate(session.id)
   }
-  await h.prepare()
-  void h.sendPrompt(sessionID)
+  // Fire-and-forget prepare+prompt (must not gate submit return / navigate).
+  void (async () => {
+    await h.prepare()
+    await h.sendPrompt(session.id)
+  })()
   if (!shouldNavigateBeforePrepare(false)) {
-    h.navigate(sessionID)
+    h.navigate(session.id)
   }
+  h.timeline.returnedAt = Date.now()
 }
 
 describe("Prompt.submit new-session navigate", () => {
   test("shouldNavigateBeforePrepare is true only for new sessions", () => {
     expect(shouldNavigateBeforePrepare(false)).toBe(true)
     expect(shouldNavigateBeforePrepare(true)).toBe(false)
+    expect(shouldSeedSessionBeforeNavigate(false)).toBe(true)
+    expect(shouldSeedSessionBeforeNavigate(true)).toBe(false)
   })
 
-  test("navigates before prepare completes", async () => {
-    const h = createHarness({ prepareDelayMs: 25 })
+  test("submit phase order is create → seed → navigate → prepare → prompt", () => {
+    expect([...newSessionSubmitPhases()]).toEqual(["create", "seed", "navigate", "prepare", "prompt"])
+  })
+
+  test("seeds sync and navigates before prepare; submit returns without waiting", async () => {
+    const h = createHarness({ prepareDelayMs: 40 })
     const started = Date.now()
     await submitNewSession(h)
 
+    expect(h.timeline.createdAt).toBeDefined()
+    expect(h.timeline.seededAt).toBeDefined()
     expect(h.timeline.navigatedAt).toBeDefined()
-    expect(h.timeline.preparedAt).toBeDefined()
-    expect(h.timeline.navigatedAt!).toBeLessThan(h.timeline.preparedAt!)
+    expect(h.timeline.returnedAt).toBeDefined()
+    expect(h.timeline.preparedAt).toBeUndefined() // prepare still in flight
+
+    expect(h.timeline.seededAt!).toBeGreaterThanOrEqual(h.timeline.createdAt!)
+    expect(h.timeline.navigatedAt!).toBeGreaterThanOrEqual(h.timeline.seededAt!)
     expect(h.timeline.navigatedAt! - started).toBeLessThan(20)
+    expect(h.timeline.returnedAt! - started).toBeLessThan(20)
+
+    await Bun.sleep(50)
+    expect(h.timeline.preparedAt).toBeDefined()
+    expect(h.timeline.promptedAt).toBeDefined()
+    expect(h.timeline.navigatedAt!).toBeLessThan(h.timeline.preparedAt!)
+  })
+
+  test("refuses navigate when session was not seeded (activation gate)", async () => {
+    const h = createHarness({ prepareDelayMs: 1 })
+    const session = await h.createSession()
+    expect(() => h.navigate(session.id)).toThrow(/navigate before seed/)
   })
 })

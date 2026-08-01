@@ -63,10 +63,23 @@ export function useV2SessionPrompt(): boolean {
 }
 
 /**
- * New-session Enter (Home → conversation) must navigate as soon as
- * `session.create` returns. Spinosa prepare / V2 admission / first token stay
- * async after the route change.
+ * New-session Enter (Home → conversation) must:
+ * 1. seed `session.create` into the sync store (Session UI is gated on `session()`)
+ * 2. navigate immediately
+ * Spinosa prepare / V2 admission / first token stay async after the route change.
  */
 export function shouldNavigateBeforePrepare(hasExistingSessionID: boolean): boolean {
   return !hasExistingSessionID
+}
+
+/** Same gate as navigate: seed create response before route change on new sessions. */
+export function shouldSeedSessionBeforeNavigate(hasExistingSessionID: boolean): boolean {
+  return shouldNavigateBeforePrepare(hasExistingSessionID)
+}
+
+/** Contract order for Home Enter → conversation (regression lock). */
+export type NewSessionSubmitPhase = "create" | "seed" | "navigate" | "prepare" | "prompt"
+
+export function newSessionSubmitPhases(): readonly NewSessionSubmitPhase[] {
+  return ["create", "seed", "navigate", "prepare", "prompt"] as const
 }

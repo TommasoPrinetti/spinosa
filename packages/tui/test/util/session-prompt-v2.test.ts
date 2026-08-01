@@ -3,6 +3,8 @@ import {
   partsToV2Prompt,
   resolvePromptDelivery,
   shouldNavigateBeforePrepare,
+  shouldSeedSessionBeforeNavigate,
+  newSessionSubmitPhases,
 } from "../../src/util/session-prompt-v2"
 
 describe("session-prompt-v2", () => {
@@ -32,5 +34,8 @@ describe("session-prompt-v2", () => {
   test("navigates to conversation before Spinosa prepare on new sessions only", () => {
     expect(shouldNavigateBeforePrepare(false)).toBe(true)
     expect(shouldNavigateBeforePrepare(true)).toBe(false)
+    expect(shouldSeedSessionBeforeNavigate(false)).toBe(true)
+    expect(shouldSeedSessionBeforeNavigate(true)).toBe(false)
+    expect([...newSessionSubmitPhases()]).toEqual(["create", "seed", "navigate", "prepare", "prompt"])
   })
 })
