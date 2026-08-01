@@ -554,6 +554,21 @@ export const {
             typeof event.properties.timestamp === "number"
               ? event.properties.timestamp
               : Date.parse(String(event.properties.timestamp ?? "")) || Date.now()
+          const endedTokens =
+            event.type === "session.next.step.ended" &&
+            event.properties.tokens &&
+            typeof event.properties.tokens === "object"
+              ? (event.properties.tokens as {
+                  input?: number
+                  output?: number
+                  reasoning?: number
+                  cache?: { read?: number; write?: number }
+                })
+              : undefined
+          const endedCost =
+            event.type === "session.next.step.ended" && typeof event.properties.cost === "number"
+              ? event.properties.cost
+              : undefined
           setStore(
             "message",
             sessionID,
@@ -564,11 +579,37 @@ export const {
               if (event.type === "session.next.step.ended" && typeof event.properties.finish === "string") {
                 message.finish = event.properties.finish
               }
+              if (endedTokens) {
+                message.tokens = {
+                  input: endedTokens.input ?? 0,
+                  output: endedTokens.output ?? 0,
+                  reasoning: endedTokens.reasoning ?? 0,
+                  cache: {
+                    read: endedTokens.cache?.read ?? 0,
+                    write: endedTokens.cache?.write ?? 0,
+                  },
+                }
+              }
+              if (endedCost !== undefined) message.cost = endedCost
               if (event.type === "session.next.step.failed") {
                 message.finish = "error"
               }
             }),
           )
+          // Keep session aggregate cost in sync with V2 step settlements (prompt footer).
+          if (endedCost !== undefined && endedCost > 0) {
+            const sessions = store.session
+            const sessionIndex = sessions.findIndex((item) => item.id === sessionID)
+            if (sessionIndex >= 0) {
+              setStore(
+                "session",
+                sessionIndex,
+                produce((session) => {
+                  session.cost = (session.cost ?? 0) + endedCost
+                }),
+              )
+            }
+          }
           break
         }
 
