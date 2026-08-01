@@ -20,6 +20,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **New workspace** no longer resumes another workspace’s unfinished onboarding: route navigation now replaces store state wholesale (Solid `setStore` was shallow-merging and leaving `workspacePath` / source metadata from a prior Resume → Home path).
 - Mid-run V2 prompt (`delivery: steer|queue`) and ESC busy/idle status failed with `InstanceRef not provided` because `SessionExecutionStatusBridge` called instance-scoped `SessionStatus.set` from V2 `/api/session` fibers that lack InstanceRef. Bridge now loads the session directory and binds InstanceRef/WorkspaceRef before publishing busy/idle so steer admission and double-ESC interrupt work again.
 - Home Enter → conversation no longer waits on `prepareSpinosaSubmit` or a post-submit timer: navigate as soon as `session.create` returns, then prepare/admit the prompt in the background.
 - Connect-a-provider dialog was empty (only “Other / Custom provider”) because V2 `SessionExecutionStatusBridge` used the wrong LayerNode tag, crashing app bootstrap with `Cannot replace @spinosa/v2/SessionExecutionStatus across tags`. Bridge now uses `makeGlobalNode` so serve/TUI start and the provider catalog loads again.

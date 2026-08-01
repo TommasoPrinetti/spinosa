@@ -468,6 +468,61 @@ test("a present incomplete Recent workspace resumes at Step 2 and bottom Back re
   }
 }, 30_000)
 
+test("New workspace after leaving resumed onboarding starts fresh create flow", async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "spinosa-new-after-resume-"))
+  const home = path.join(root, "home")
+  const source = path.join(root, "importing-source")
+  mkdirSync(home, { recursive: true })
+  mkdirSync(source, { recursive: true })
+  await Bun.write(path.join(source, "paper.md"), "partial import\n")
+  try {
+    await createRegisteredWorkspace({
+      root,
+      home,
+      projectName: "dbg",
+      setupStatus: "importing",
+      sourceLocation: source,
+    })
+    const frame = await renderRouteFrame("global", {
+      home,
+      act: async (setup) => {
+        const recentFrame = await waitForText(setup, "dbg")
+        expect(recentFrame).toContain("Import incomplete")
+        const recentLines = recentFrame.split("\n")
+        const recentY = recentLines.findIndex((line) => line.includes("dbg"))
+        const recentX = recentLines[recentY]!.indexOf("dbg") + 1
+        await setup.mockMouse.moveTo(recentX, recentY)
+        await setup.mockMouse.click(recentX, recentY)
+        await waitForText(setup, "Resume Spinosa workspace")
+
+        const resumedFrame = await waitForText(setup, "Workspace name")
+        const resumedLines = resumedFrame.split("\n")
+        const backY = resumedLines.findIndex((line) => line.includes("Back"))
+        const backX = resumedLines[backY]!.indexOf("Back") + 1
+        await setup.mockMouse.moveTo(backX, backY)
+        await setup.mockMouse.click(backX, backY)
+        await waitForText(setup, "Recent workspaces")
+
+        const homeFrame = await waitForText(setup, "New workspace")
+        const homeLines = homeFrame.split("\n")
+        const newY = homeLines.findIndex((line) => line.includes("New workspace"))
+        const newX = homeLines[newY]!.indexOf("New workspace") + 1
+        await setup.mockMouse.moveTo(newX, newY)
+        await setup.mockMouse.click(newX, newY)
+        await waitForText(setup, "Create Spinosa workspace")
+        await waitForText(setup, "Source folders")
+      },
+    })
+
+    expect(frame).toContain("Create Spinosa workspace")
+    expect(frame).toContain("Source folders")
+    expect(frame).not.toContain("Resume Spinosa workspace")
+    expect(frame).not.toContain("Workspace name")
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+}, 30_000)
+
 test("the top arrow exits resumed onboarding to global home", async () => {
   const root = mkdtempSync(path.join(tmpdir(), "spinosa-resume-arrow-back-"))
   const home = path.join(root, "home")

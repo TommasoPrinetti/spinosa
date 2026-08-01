@@ -1,4 +1,4 @@
-import { createStore } from "solid-js/store"
+import { createStore, reconcile } from "solid-js/store"
 import { createSimpleContext } from "./helper"
 import type { PromptInfo } from "../prompt/history"
 import { useTuiStartup } from "./runtime"
@@ -61,15 +61,35 @@ export const { use: useRoute, provider: RouteProvider } = createSimpleContext({
       },
       navigate(route: RouteNavigateInput) {
         // Replace the route object wholesale so stale workspace keys do not linger across screen changes.
-        setStore(normalizeRoute(route))
+        // createStore's setStore(object) shallow-merges; reconcile is required to drop keys
+        // (e.g. onboarding workspacePath after Resume → Home → New workspace).
+        setStore(reconcile(normalizeRoute(route)))
       },
     }
   },
 })
 
 export function normalizeRoute(route: RouteNavigateInput): Route {
-  if (route.type === "global" || route.type === "onboarding" || route.type === "add-files" || route.type === "visualizer") {
-    return route
+  if (route.type === "global") {
+    return route.prompt ? { type: "global", prompt: route.prompt } : { type: "global" }
+  }
+  if (route.type === "onboarding") {
+    return {
+      type: "onboarding",
+      ...(route.workspacePath !== undefined ? { workspacePath: route.workspacePath } : {}),
+      ...(route.sourceLocation !== undefined ? { sourceLocation: route.sourceLocation } : {}),
+      ...(route.workspaceName !== undefined ? { workspaceName: route.workspaceName } : {}),
+    }
+  }
+  if (route.type === "add-files") {
+    return { type: "add-files" }
+  }
+  if (route.type === "visualizer") {
+    return {
+      type: "visualizer",
+      ...(route.workspacePath !== undefined ? { workspacePath: route.workspacePath } : {}),
+      ...(route.sessionID !== undefined ? { sessionID: route.sessionID } : {}),
+    }
   }
   if (route.type === "plugin") {
     return {
