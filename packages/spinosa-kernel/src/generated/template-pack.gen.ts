@@ -292,7 +292,7 @@ import file_288 from "./template-blobs/511aeb589273c14cf34c9267d0c395d891132fbf9
 import file_289 from "./template-blobs/217b5ee0909632e8775c785a3c9d3dddc2c8e37d6640e6f8d221ee64231eb2c5.bin" with { type: "file" };
 
 export const templatePack = {
-  version: "1.0.3-beta.10",
+  version: "1.0.3-beta.11",
   packId: "4c21fd8ab1598dda22c0c235dda95e16e94fd028168b184d6d7df542734ee249",
   files: [
   { path: ".agents/agents/spinosa-analyst.md", mode: 420, sha256: "1e4e006ad3037dfc523038747011ae9cb6604bd8a138be996f346e74297c0201", contentPath: file_0 },
