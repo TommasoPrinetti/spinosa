@@ -8,17 +8,18 @@ export function isDefaultTitle(title: string) {
 export type DerivedSessionStatus = "idle" | "working" | "compacting"
 
 /**
- * Prefer live server status; fall back to transcript-derived working/compacting
- * so interrupt/spinner UI survives dispose/bootstrap races that clear session_status.
+ * Prefer live server status when present (including explicit idle after abort).
+ * Fall back to transcript-derived working/compacting only when session_status was
+ * wiped (undefined) so interrupt/spinner UI survives dispose/bootstrap races.
  * Transcript "compacting" maps to busy (SDK SessionStatus has no compacting variant).
  */
 export function resolveSessionRuntimeStatus(
   fromServer: SessionStatus | undefined,
   derived?: DerivedSessionStatus,
 ): SessionStatus {
-  if (fromServer && fromServer.type !== "idle") return fromServer
+  if (fromServer !== undefined) return fromServer
   if (derived === "working" || derived === "compacting") return { type: "busy" }
-  return fromServer ?? { type: "idle" }
+  return { type: "idle" }
 }
 
 export function sessionIsBusy(

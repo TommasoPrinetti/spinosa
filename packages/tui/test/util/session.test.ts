@@ -8,12 +8,17 @@ describe("util.session", () => {
     expect(isDefaultTitle("New session - custom")).toBeFalse()
   })
 
-  test("falls back to transcript-derived busy when session_status is idle/missing", () => {
-    expect(resolveSessionRuntimeStatus({ type: "idle" }, "working")).toEqual({ type: "busy" })
-    expect(resolveSessionRuntimeStatus(undefined, "compacting")).toEqual({ type: "busy" })
-    expect(sessionIsBusy({ type: "idle" }, "working")).toBeTrue()
+  test("trusts explicit server idle over transcript-derived working", () => {
+    expect(resolveSessionRuntimeStatus({ type: "idle" }, "working")).toEqual({ type: "idle" })
+    expect(sessionIsBusy({ type: "idle" }, "working")).toBeFalse()
     expect(sessionIsBusy({ type: "busy" }, "idle")).toBeTrue()
     expect(sessionIsBusy({ type: "idle" }, "idle")).toBeFalse()
+  })
+
+  test("falls back to transcript-derived busy when session_status is missing", () => {
+    expect(resolveSessionRuntimeStatus(undefined, "working")).toEqual({ type: "busy" })
+    expect(resolveSessionRuntimeStatus(undefined, "compacting")).toEqual({ type: "busy" })
+    expect(sessionIsBusy(undefined, "working")).toBeTrue()
   })
 
   test("blocks organisation switch when any session is busy", () => {
