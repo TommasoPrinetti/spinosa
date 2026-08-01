@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test"
-import { partsToV2Prompt, resolvePromptDelivery } from "../../src/util/session-prompt-v2"
+import {
+  partsToV2Prompt,
+  resolvePromptDelivery,
+  shouldNavigateBeforePrepare,
+} from "../../src/util/session-prompt-v2"
 
 describe("session-prompt-v2", () => {
   test("maps V1 parts into V2 PromptInput", () => {
@@ -22,5 +26,10 @@ describe("session-prompt-v2", () => {
     expect(resolvePromptDelivery({ busy: true, preferQueue: true })).toBe("queue")
     expect(resolvePromptDelivery({ busy: false, preferQueue: true })).toBe("steer")
     expect(resolvePromptDelivery({ busy: true, requested: "queue" })).toBe("queue")
+  })
+
+  test("navigates to conversation before Spinosa prepare on new sessions only", () => {
+    expect(shouldNavigateBeforePrepare(false)).toBe(true)
+    expect(shouldNavigateBeforePrepare(true)).toBe(false)
   })
 })
