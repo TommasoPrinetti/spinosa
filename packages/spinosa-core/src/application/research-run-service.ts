@@ -9,6 +9,7 @@ import {
   FileResearchRunRepository,
   isTerminal,
   isNonFastPath,
+  isStartupIndexingPrompt,
   nextExecution,
   type RouteClass,
 } from "@spinosa/runtime"
@@ -33,6 +34,9 @@ export class ResearchRunService {
 
   async prepare(workspacePath: string, promptText: string): Promise<PreparedResearchRun> {
     const cleanedPrompt = stripExistingPreamble(promptText)
+    if (isStartupIndexingPrompt(cleanedPrompt)) {
+      return { text: cleanedPrompt, route: "fast_path", framed: false }
+    }
     const route = classifyPrompt(cleanedPrompt)
     if (!isSpinosaWorkspace(workspacePath) || !isNonFastPath(route)) {
       return { text: cleanedPrompt, route, framed: false }

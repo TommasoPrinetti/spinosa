@@ -1,3 +1,5 @@
+import { isStartupIndexingPrompt } from "./startup"
+
 export type RouteClass = "fast_path" | "Q1" | "Q2" | "Q3" | "Q4" | "Q5"
 
 const FAST_PATH = [
@@ -41,6 +43,8 @@ const AGENTS: Record<RouteClass, readonly string[]> = {
 export function classifyPrompt(prompt: string): RouteClass {
   const trimmed = prompt.trim()
   if (!trimmed) return "fast_path"
+  // Startup indexing is orchestrator-only — never route through Q5/overseer heuristics.
+  if (isStartupIndexingPrompt(trimmed)) return "fast_path"
   if (FAST_PATH.some((pattern) => pattern.test(trimmed))) return "fast_path"
   if (!hasResearchIntent(trimmed)) return "fast_path"
   if (ARCHIVE_SEARCH.test(trimmed)) return "Q1"

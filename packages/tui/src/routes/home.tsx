@@ -320,7 +320,7 @@ export function Home() {
     if (!r || !prompt) return
     // Queued / routed startup briefs always run as the orchestrator.
     local.agent.set(ORCHESTRATOR_AGENT_ID)
-    r.set(prompt)
+    r.set({ ...prompt, forceAgent: prompt.forceAgent ?? ORCHESTRATOR_AGENT_ID })
 
     if (!prompt.autoSubmit && startupPromptIsQueued()) {
       const hintKey = JSON.stringify({ input: prompt.input, parts: prompt.parts })

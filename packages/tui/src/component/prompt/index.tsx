@@ -39,7 +39,7 @@ import { type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import type { AssistantMessage, FilePart, UserMessage } from "@spinosa/sdk/v2"
 import { Locale } from "../../util/locale"
-import { agentDisplayName, ORCHESTRATOR_AGENT_ID } from "../../util/agent"
+import { agentDisplayName, ORCHESTRATOR_AGENT_ID, resolveSubmitAgent } from "../../util/agent"
 import { errorMessage } from "../../util/error"
 import { formatDuration } from "../../util/format"
 import { resolveSessionRuntimeStatus } from "../../util/session"
@@ -1037,7 +1037,10 @@ export function Prompt(props: PromptProps) {
     if (auto()?.visible) return false
     if (!store.prompt.input) return false
     if (store.prompt.forceAgent) local.agent.set(store.prompt.forceAgent)
-    const agent = local.agent.current()
+    const agent = resolveSubmitAgent(local.agent.list(), {
+      current: local.agent.current()?.name,
+      forceAgent: store.prompt.forceAgent,
+    })
     if (!agent) return false
     const trimmed = store.prompt.input.trim()
     if (trimmed === "exit" || trimmed === "quit" || trimmed === ":q") {
@@ -1175,7 +1178,7 @@ export function Prompt(props: PromptProps) {
     const admitAfterPrepare = async () => {
     let outboundText = inputText
     let preparedSpinosa: Awaited<ReturnType<typeof prepareSpinosaSubmit>> | undefined
-    if (sessionDirectory) {
+    if (sessionDirectory && !store.prompt.forceAgent) {
       try {
         const prepared = await prepareSpinosaSubmit(sessionDirectory, inputText)
         preparedSpinosa = prepared

@@ -23,3 +23,18 @@ export function resolveDefaultPrimaryAgent<T extends { name: string }>(
   }
   return agents.find((agent) => agent.name === ORCHESTRATOR_AGENT_ID) ?? agents.at(0)
 }
+
+/** Agent used for prompt submit — honors `forceAgent` even when sync lags or sticky state differs. */
+export function resolveSubmitAgent<T extends { name: string }>(
+  agents: readonly T[],
+  options: { current?: string; forceAgent?: string },
+): T | undefined {
+  if (options.forceAgent) {
+    const forced = agents.find((agent) => agent.name === options.forceAgent)
+    if (forced) return forced
+    if (options.forceAgent === ORCHESTRATOR_AGENT_ID) {
+      return { name: ORCHESTRATOR_AGENT_ID } as T
+    }
+  }
+  return resolveDefaultPrimaryAgent(agents, options.current)
+}

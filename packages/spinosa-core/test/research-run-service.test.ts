@@ -1,10 +1,16 @@
 import { describe, expect, test } from "bun:test"
 import { mkdir } from "node:fs/promises"
+import { readFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { MockHarness } from "@spinosa/harness"
 import { FileResearchRunRepository } from "@spinosa/runtime"
 import { ResearchRunService } from "../src"
+
+const STARTUP_PROMPT = readFileSync(
+  path.join(import.meta.dirname, "../../../workspace-template/startup-prompt.md"),
+  "utf8",
+)
 
 describe("ResearchRunService", () => {
   async function workspace(): Promise<string> {
@@ -23,6 +29,16 @@ describe("ResearchRunService", () => {
     expect(prepared.runID).toBeDefined()
     expect(await Bun.file(path.join(root, ".spinosa", "runs", prepared.runID!, "run.json")).exists()).toBe(true)
     expect(await Bun.file(path.join(root, prepared.goalPath!)).exists()).toBe(true)
+  })
+
+  test("does not frame workspace startup indexing as a research run", async () => {
+    const root = await workspace()
+    const prepared = await new ResearchRunService().prepare(root, STARTUP_PROMPT)
+
+    expect(prepared.framed).toBe(false)
+    expect(prepared.route).toBe("fast_path")
+    expect(prepared.runID).toBeUndefined()
+    expect(prepared.goalPath).toBeUndefined()
   })
 
   test("advances the complete route through the harness", async () => {
