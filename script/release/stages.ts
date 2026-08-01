@@ -42,10 +42,10 @@ export async function runPreflight(ctx: StageContext): Promise<void> {
   const rawBranch = (await $`git branch --show-current`.text()).trim()
     || (await $`git rev-parse --abbrev-ref HEAD`.text()).trim()
   const branch = rawBranch.replace(/^heads\//, "")
-  if (branch !== "main" && branch !== "beta") {
-    throw new Error(`releases must be cut from main or beta (current: ${branch})`)
+  if (branch !== "main" && branch !== "beta-dev") {
+    throw new Error(`releases must be cut from main or beta-dev (current: ${branch})`)
   }
-  const expectedBranch = ctx.paths.channel === "stable" ? "main" : "beta"
+  const expectedBranch = ctx.paths.channel === "stable" ? "main" : "beta-dev"
   if (branch !== expectedBranch) {
     throw new Error(
       `${ctx.paths.channel} releases must run from ${expectedBranch} (current: ${branch})`,
@@ -109,7 +109,7 @@ export async function runBump(ctx: StageContext): Promise<string> {
     await $`git add ${versionPaths}`.cwd(RELEASE_ROOT)
     await $`git commit -m ${`release: v${ctx.version}`}`.cwd(RELEASE_ROOT)
     // Push the current branch tip by SHA-backed HEAD, but name the destination
-    // ref explicitly so a local `beta`/`stable` tag cannot make `git push origin beta` ambiguous.
+    // ref explicitly so rolling channel tags (`beta`/`stable`) cannot collide with branch names.
     const branch = ((await $`git branch --show-current`.cwd(RELEASE_ROOT).text()).trim()
       || (await $`git rev-parse --abbrev-ref HEAD`.cwd(RELEASE_ROOT).text()).trim()).replace(/^heads\//, "")
     await $`git push origin HEAD:refs/heads/${branch}`.cwd(RELEASE_ROOT)

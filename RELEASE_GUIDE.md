@@ -5,17 +5,17 @@
 ```bash
 export GH_TOKEN=$(gh auth token)   # auto-detected if gh is logged in
 
-# Beta release (from beta branch only)
+# Beta release (from beta-dev branch only)
 bun run release:beta:patch
 
-# Stable release (from main branch only — after beta→main promotion PR)
+# Stable release (from main branch only — after beta-dev→main promotion PR)
 bun run release:stable:patch
 
 # Preview without side effects
 bun run release beta patch --dry-run
 ```
 
-Requirements: clean tree, matching branch (`beta` for beta, `main` for stable), `gh` authenticated.
+Requirements: clean tree, matching branch (`beta-dev` for beta channel, `main` for stable), `gh` authenticated.
 
 Binary releases should be built where native verification is possible. Cross-compiled assets are unproven until each target passes native smoke (see stable gates below).
 
