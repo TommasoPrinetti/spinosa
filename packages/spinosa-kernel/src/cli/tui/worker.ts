@@ -3,6 +3,8 @@ import { InstanceRuntime } from "@/project/instance-runtime"
 import { Rpc } from "@/util/rpc"
 import { Config } from "@/config/config"
 import { GlobalBus } from "@/bus/global"
+import { publishJobEvent } from "@/job/bus"
+import type { JobEvent } from "@spinosa/core/progress/job-event"
 import { ServerAuth } from "@/server/auth"
 import { writeHeapSnapshot } from "node:v8"
 import { Heap } from "@/cli/heap"
@@ -84,6 +86,10 @@ export const rpc = {
     } catch (e) {
       bootLog("worker.checkUpgrade.load.error", "InstanceRuntime.load failed", { error: String(e) })
     }
+  },
+  /** Parent-process import progress → worker GlobalBus (SSE + global.event RPC). */
+  async emitJobEvent(input: { directory?: string; workspace?: string; event: JobEvent }) {
+    publishJobEvent(input)
   },
   async reload() {
     await AppRuntime.runPromise(

@@ -8,8 +8,9 @@ import { useTheme } from "../../context/theme"
 import { useRoute } from "../../context/route"
 import { useSpinosaWorkspace } from "../../context/spinosa-workspace"
 import { Toast } from "../../ui/toast"
-import { ProgressEmitter } from "@spinosa/core/progress/progress"
 import { createWorkspace, resolveWorkspacePath } from "@spinosa/core/commands/create"
+import { useSDK } from "../../context/sdk"
+import { createImportJob } from "../../spinosa/job-events"
 import { prepareOnboarding, completeOnboarding } from "@spinosa/core/commands/onboard"
 import type { OnboardingContext, PhaseAccumulator, OnboardingResult } from "@spinosa/core/commands/onboard"
 import { scanAndClassifySource, processDirectCopy, processMarkitdown, processOcr, type PhaseResult } from "@spinosa/core/import/pipeline"
@@ -214,6 +215,7 @@ export function Onboarding() {
   const route = useRoute()
   const { navigate } = route
   const spinosa = useSpinosaWorkspace()
+  const sdk = useSDK()
   const dimensions = useTerminalDimensions()
   const keymap = useOpencodeKeymap()
   const modeStack = useOpencodeModeStack()
@@ -724,7 +726,15 @@ let nameInput: TextareaRenderable | undefined
     let totalFailed = 0
     let totalRenamed = 0
 
-    const sharedProg = new ProgressEmitter()
+    const job = createImportJob({
+      kind: "import",
+      title: "Onboarding import",
+      directory: plannedWorkspace ?? sdk.directory,
+      publish: sdk.publishJobEvent,
+      localEmit: (event) => sdk.event.emit("event", event),
+    })
+    job.start()
+    const sharedProg = job.prog
     sharedProg.on((e) => {
       // Use the emitter as the source of truth for both numerator and denominator
       // so the bar self-corrects even if the pre-set total was wrong/empty.
@@ -732,7 +742,7 @@ let nameInput: TextareaRenderable | undefined
       if (e.current >= 0) setProgCurrent(e.current)
       if (e.relPath) setProcessingFile(e.relPath)
     })
-    const onPhaseLog = (msg: string) => {
+    const onPhaseLog = job.wrapLog((msg: string) => {
       if (msg.startsWith("  ")) {
         // Per-file progress lines (e.g. "file → OCR ...") are shown as the
         // status only; the emitter already drives processingFile, so setting it
@@ -742,7 +752,7 @@ let nameInput: TextareaRenderable | undefined
         return
       }
       appendLogLine(msg)
-    }
+    })
 
     try {
       setStep("setup")
@@ -913,28 +923,33 @@ let nameInput: TextareaRenderable | undefined
         totalFailed += extraFailed
 
         setFailedCount(totalFailed)
-        setImportSummary(
+        const summary =
           `${dr.converted}/${totalDirect + extraDirect} copied · ${mr.converted}/${totalMd + extraMdTotal} markitdown · ${or.converted}/${totalOcr + extraOcrTotal} ocr` +
           (totalRenamed > 0 ? ` · ${totalRenamed} renamed` : "") +
-          (totalFailed > 0 ? ` · ${totalFailed} failed → _failed_files/` : ""),
-        )
+          (totalFailed > 0 ? ` · ${totalFailed} failed → _failed_files/` : "")
+        setImportSummary(summary)
         setProcessingDone(true)
         setProcessingStatus("All done")
+        job.finish("completed", summary)
         setGateLabel("Go to the workspace")
         setGateAction(() => () => { setWaitingForGate(false); void finishProvider("spinosa") })
         setWaitingForGate(true)
       } else {
+        job.finish("error", "Onboarding import failed")
         setStep("error")
       }
     } catch (err) {
       if (isSpinosaCancellationError(err) || shouldAbort()) {
         appendLogLine("Spinosa import cancelled.")
         setProcessingStatus("Cancelled.")
+        job.cancel()
         return
       }
       appendLogLine(`Error: ${err instanceof Error ? err.message : String(err)}`)
+      job.finish("error", err instanceof Error ? err.message : String(err))
       setStep("error")
     } finally {
+      if (shouldAbort() && !processingDone()) job.cancel()
       spinOff()
       setBusy(false)
     }

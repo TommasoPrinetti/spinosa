@@ -149,6 +149,8 @@ export type TuiInput = {
   fetch?: typeof fetch
   headers?: RequestInit["headers"]
   events?: EventSource
+  /** Host → worker GlobalBus publish for non-durable import/OCR job events. */
+  publishJobEvent?: import("./context/sdk").PublishJobEvent
   pluginHost: TuiPluginHost
 }
 
@@ -355,6 +357,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                           fetch={input.fetch}
                                           headers={input.headers}
                                           events={input.events}
+                                          publishJobEvent={input.publishJobEvent}
                                         >
                                           <PermissionProvider>
                                             <ProjectProvider>

@@ -56,6 +56,12 @@ function createEventSource(client: RpcClient): EventSource {
   }
 }
 
+function createPublishJobEvent(client: RpcClient) {
+  return (input: Parameters<(typeof rpc)["emitJobEvent"]>[0]) => {
+    void client.call("emitJobEvent", input)
+  }
+}
+
 async function target() {
   if (typeof SPINOSA_WORKER_PATH !== "undefined") return SPINOSA_WORKER_PATH
   const dist = new URL("./cli/tui/worker.js", import.meta.url)
@@ -344,6 +350,7 @@ export const TuiThreadCommand = cmd({
             fetch: transport.fetch,
             headers: transport.headers,
             events: transport.events,
+            publishJobEvent: createPublishJobEvent(client),
             args: {
               continue: args.continue,
               sessionID: args.session,

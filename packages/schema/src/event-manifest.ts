@@ -7,6 +7,7 @@ import { FileSystem } from "./filesystem"
 import { FileSystemWatcher } from "./filesystem-watcher"
 import { InstallationEvent } from "./installation-event"
 import { Integration } from "./integration"
+import { JobEvent } from "./job-event"
 import { LegacyEvent } from "./legacy-event"
 import { LspEvent } from "./lsp-event"
 import { McpEvent } from "./mcp-event"
@@ -79,6 +80,7 @@ export const Definitions = Event.inventory(
   ...WorkspaceEvent.Definitions,
   ...WorktreeEvent.Definitions,
   ...ServerEvent.Definitions,
+  ...JobEvent.Definitions,
 )
 export const Latest = Event.latest(Definitions)
 export { Durable }

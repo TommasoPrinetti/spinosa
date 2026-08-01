@@ -12,8 +12,9 @@ import { useSpinosaWorkspace } from "../../context/spinosa-workspace"
 import { Toast, useToast } from "../../ui/toast"
 import { scanAndClassifySource, processDirectCopy, processMarkitdown, processOcr } from "@spinosa/core/import/pipeline"
 import { isSpinosaCancellationError } from "@spinosa/core/import/cancellation"
-import { ProgressEmitter } from "@spinosa/core/progress/progress"
 import { ImportBatchManager } from "@spinosa/core/import/batch"
+import { useSDK } from "../../context/sdk"
+import { createImportJob } from "../../spinosa/job-events"
 import { tuiLog, logStep, logAction, logTool, logGate, logError, setToastError } from "../../spinosa/log"
 import { CenteredColumn } from "../../component/centered-column"
 import { SPINOSA_BASE_MODE, useOpencodeKeymap, useOpencodeModeStack } from "../../keymap"
@@ -155,6 +156,7 @@ export function AddFiles() {
   const toast = useToast()
   const { navigate } = useRoute()
   const spinosa = useSpinosaWorkspace()
+  const sdk = useSDK()
   const dimensions = useTerminalDimensions()
   const keymap = useOpencodeKeymap()
   const modeStack = useOpencodeModeStack()
@@ -594,6 +596,28 @@ export function AddFiles() {
     let mdConverted = 0
     let ocrConverted = 0
 
+    const job = createImportJob({
+      kind: "import",
+      title: "Add files import",
+      directory: workspacePath,
+      publish: sdk.publishJobEvent,
+      localEmit: (event) => sdk.event.emit("event", event),
+    })
+    job.start()
+    const sharedProg = job.prog
+    sharedProg.on((e) => {
+      if (e.total > 0) setProgTotal(e.total)
+      if (e.current >= 0) setProgCurrent(e.current)
+      if (e.relPath) setProcessingFile(e.relPath)
+    })
+    const onPhaseLog = job.wrapLog((msg: string) => {
+      if (msg.startsWith("  ")) {
+        setProcessingStatus(msg.trim())
+        return
+      }
+      appendLogLine(msg)
+    })
+
     try {
       for (const src of resolved) {
         if (shouldAbort()) break
@@ -607,20 +631,6 @@ export function AddFiles() {
 
         // ── Phase A: Direct copy ────────────────────────────────────────────
         setStep("direct")
-        const sharedProg = new ProgressEmitter()
-        sharedProg.on((e) => {
-          if (e.total > 0) setProgTotal(e.total)
-          if (e.current >= 0) setProgCurrent(e.current)
-          if (e.relPath) setProcessingFile(e.relPath)
-        })
-
-        const onPhaseLog = (msg: string) => {
-          if (msg.startsWith("  ")) {
-            setProcessingStatus(msg.trim())
-            return
-          }
-          appendLogLine(msg)
-        }
 
         const directCount = classified.directFiles.length
         setProgTotal(directCount > 0 ? directCount : 1)
@@ -682,23 +692,27 @@ export function AddFiles() {
       }
 
       setFailedCount(totalFailed)
-      setImportSummary(
+      const summary =
         `${dirConverted}/${totalDirect} copied · ${mdConverted}/${totalMd} markitdown · ${ocrConverted}/${totalOcr} ocr` +
         (totalRenamed > 0 ? ` · ${totalRenamed} renamed` : "") +
-        (totalFailed > 0 ? ` · ${totalFailed} failed` : ""),
-      )
+        (totalFailed > 0 ? ` · ${totalFailed} failed` : "")
+      setImportSummary(summary)
       setProcessingDone(true)
       setStep("done")
+      job.finish("completed", summary)
     } catch (err) {
       if (isSpinosaCancellationError(err) || shouldAbort()) {
         appendLogLine("Spinosa import cancelled.")
         setProcessingStatus("Cancelled.")
+        job.cancel()
         return
       }
       logError("startProcessing", err)
       appendLogLine(`Error: ${err instanceof Error ? err.message : String(err)}`)
+      job.finish("error", err instanceof Error ? err.message : String(err))
       setStep("error")
     } finally {
+      if (shouldAbort() && !processingDone()) job.cancel()
       spinOff()
       setBusy(false)
     }

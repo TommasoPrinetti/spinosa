@@ -1,5 +1,6 @@
 import { createSpinosaClient } from "@spinosa/sdk/v2"
 import type { GlobalEvent } from "@spinosa/sdk/v2"
+import type { JobEvent } from "@spinosa/core/progress/job-event"
 import { Flag } from "@spinosa/kernel-core/flag/flag"
 import { createSimpleContext } from "./helper"
 import { batch, onCleanup, onMount } from "solid-js"
@@ -7,6 +8,12 @@ import { batch, onCleanup, onMount } from "solid-js"
 export type EventSource = {
   subscribe: (handler: (event: GlobalEvent) => void) => Promise<() => void>
 }
+
+export type PublishJobEvent = (input: {
+  directory?: string
+  workspace?: string
+  event: JobEvent
+}) => void | Promise<void>
 
 export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
   name: "SDK",
@@ -16,6 +23,7 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
     fetch?: typeof fetch
     headers?: RequestInit["headers"]
     events?: EventSource
+    publishJobEvent?: PublishJobEvent
   }) => {
     const abort = new AbortController()
     let sse: AbortController | undefined
@@ -146,6 +154,7 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       event: emitter,
       fetch: props.fetch ?? fetch,
       url: props.url,
+      publishJobEvent: props.publishJobEvent,
     }
   },
 })
