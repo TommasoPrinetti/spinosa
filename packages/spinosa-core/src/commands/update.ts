@@ -28,6 +28,10 @@ import {
 import { spinosaLogInfo, spinosaLogWarn } from "../utils/log"
 import { resolvePathWithinRoot } from "../utils/path"
 import { readFrameworkFilesTsv, type FrameworkManifestEntry } from "../framework/manifest"
+import {
+  mergeStartupPromptTemplate,
+  stripStartupPromptWorkspaceSuffix,
+} from "../framework/template-pack-freshness"
 
 export interface UpdateOptions {
   workspacePath: string
@@ -320,6 +324,28 @@ async function updateWorkspaceUnlocked(options: UpdateOptions): Promise<UpdateRe
         }
       }
     }
+
+    // startup-prompt.md always has an onboarding footer — compare protocol body only.
+    if (entry.path === "startup-prompt.md" && srcStat.isFile() && dstStat.isFile()) {
+      const templateBody = stripStartupPromptWorkspaceSuffix(readFileSync(src, "utf-8"))
+      const workspaceBody = stripStartupPromptWorkspaceSuffix(readFileSync(dst, "utf-8"))
+      if (templateBody === workspaceBody) {
+        skipped++
+        continue
+      }
+      if (dryRun) {
+        updated++
+        changedPaths.push(entry.path)
+        continue
+      }
+      phase("2", "Update startup-prompt.md (preserve workspace metadata)")
+      const merged = mergeStartupPromptTemplate(readFileSync(src, "utf-8"), readFileSync(dst, "utf-8"))
+      writeFileSync(dst, merged, "utf-8")
+      updated++
+      changedPaths.push(entry.path)
+      continue
+    }
+
     if (srcStat.isFile() && dstStat.isFile() && filesMatch(src, dst)) {
       skipped++
       continue

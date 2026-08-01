@@ -11,7 +11,7 @@ import {
   SPINOSA_GENERIC_MODE_KV,
   SPINOSA_LAST_SESSION_KV,
 } from "../spinosa/entry"
-import { isSpinosaWorkspace, readWorkspaceMeta } from "../spinosa/service"
+import { inspectWorkspaceTemplatePack, isSpinosaWorkspace, readWorkspaceMeta } from "../spinosa/service"
 import type { SpinosaWorkspaceMeta } from "../spinosa/types"
 import { setActiveWorkspacePath, tuiLog } from "../spinosa/log"
 import { inspectRegisteredWorkspacePresence, isUsableWorkspacePresence } from "@spinosa/core/workspace/presence"
@@ -132,6 +132,25 @@ export const { use: useSpinosaWorkspace, provider: SpinosaWorkspaceProvider } = 
               workspaceName: loaded.projectName,
             }))
       route.navigate(nextRoute)
+
+      // Non-blocking: surface stale protocol/template packs (version can match while files lag).
+      void inspectWorkspaceTemplatePack({
+        workspacePath,
+        workspaceVersion: loaded.frameworkVersion,
+      })
+        .then((freshness) => {
+          if (activePath() !== workspacePath || !freshness.refreshRecommended) return
+          toast.show({
+            variant: "warning",
+            title: "Workspace template pack is stale",
+            message:
+              freshness.protocolBehind && !freshness.versionBehind
+                ? "Protocol files differ from the current pack — refresh recommended (Home → Refresh stale template pack)."
+                : "Refresh recommended (Home → Update workspace files).",
+            duration: 8000,
+          })
+        })
+        .catch(() => {})
     }
 
     const cwdDiscoveryTimer = setInterval(() => {

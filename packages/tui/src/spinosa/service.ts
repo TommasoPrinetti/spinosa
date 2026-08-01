@@ -35,7 +35,12 @@ import {
   listRegisteredWorkspaces,
   unregisterWorkspace,
 } from "@spinosa/core/workspace/registry"
-import { readFrameworkVersionFromRoot, resolveFrameworkRoot } from "@spinosa/core/framework/discovery"
+import { readFrameworkVersionFromRoot, resolveFrameworkRoot, resolveTemplateRootFromFrameworkRoot } from "@spinosa/core/framework/discovery"
+import {
+  inspectTemplatePackFreshness,
+  workspaceVersionBehindBundled,
+  type TemplatePackFreshness,
+} from "@spinosa/core/framework/template-pack-freshness"
 import type {
   CorpusSummary,
   GoalArtifactSummary,
@@ -128,8 +133,40 @@ export function workspaceNeedsFrameworkUpdate(
   const targetStream = bundledFrameworkStream(bundled) ?? installStream
   if (workspaceStream && targetStream && workspaceStream !== targetStream) return false
 
-  return compareFrameworkVersions(bundled, workspaceVersion) === 1
+  return workspaceVersionBehindBundled(workspaceVersion, bundledVersion)
 }
+
+/** Version-or-protocol stale pack check against the current template root. */
+export async function inspectWorkspaceTemplatePack(input: {
+  workspacePath: string
+  workspaceVersion?: string
+  bundledVersion?: string
+  frameworkRoot?: string
+}): Promise<TemplatePackFreshness> {
+  const frameworkRoot = input.frameworkRoot ?? resolveFrameworkRoot() ?? undefined
+  const bundledVersion = input.bundledVersion ?? (await readBundledFrameworkVersion().catch(() => undefined))
+  const templateRoot = frameworkRoot ? resolveTemplateRootFromFrameworkRoot(frameworkRoot) : undefined
+  return inspectTemplatePackFreshness({
+    workspacePath: input.workspacePath,
+    frameworkRoot,
+    templateRoot,
+    workspaceVersion: input.workspaceVersion,
+    bundledVersion,
+  })
+}
+
+/** True when framework version or protocol probe files need a template refresh. */
+export async function workspaceNeedsTemplatePackRefresh(input: {
+  workspacePath: string
+  workspaceVersion?: string
+  bundledVersion?: string
+  frameworkRoot?: string
+}): Promise<boolean> {
+  const freshness = await inspectWorkspaceTemplatePack(input)
+  return freshness.refreshRecommended
+}
+
+export type { TemplatePackFreshness }
 
 async function listMapPaths(workspacePath: string) {
   const mapsDir = path.join(workspacePath, "maps")

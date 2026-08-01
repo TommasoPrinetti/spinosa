@@ -7,9 +7,11 @@ import { useSpinosaWorkspace } from "../../context/spinosa-workspace"
 import { updateWorkspace } from "@spinosa/core/commands/update"
 import { resolveFrameworkRoot } from "@spinosa/core/framework/discovery"
 import {
+  inspectWorkspaceTemplatePack,
   readBundledFrameworkVersion,
   workspaceNeedsFrameworkUpdate,
   writeWorkspaceFrameworkVersion,
+  type TemplatePackFreshness,
 } from "../../spinosa/service"
 import { useBindings, SPINOSA_BASE_MODE } from "../../keymap"
 import { usePromptRef } from "../../context/prompt"
@@ -43,9 +45,30 @@ export function SpinosaPromptChips(props: { suppressEnter?: boolean }) {
     () => (workspaceReady() ? "bundled" : undefined),
     () => readBundledFrameworkVersion().catch(() => undefined),
   )
-  const needsWorkspaceUpdate = createMemo(() =>
-    workspaceNeedsFrameworkUpdate(spinosa.meta?.frameworkVersion, bundledVersion()),
+  const [packFreshness] = createResource(
+    () => {
+      const workspacePath = spinosa.activePath
+      if (!workspacePath || spinosa.genericMode) return undefined
+      return {
+        workspacePath,
+        workspaceVersion: spinosa.meta?.frameworkVersion,
+        bundledVersion: bundledVersion(),
+      }
+    },
+    (input) => inspectWorkspaceTemplatePack(input).catch((): TemplatePackFreshness | undefined => undefined),
   )
+  const needsWorkspaceUpdate = createMemo(() => {
+    const freshness = packFreshness()
+    if (freshness) return freshness.refreshRecommended
+    return workspaceNeedsFrameworkUpdate(spinosa.meta?.frameworkVersion, bundledVersion())
+  })
+  const updateChipLabel = createMemo(() => {
+    if (busyAction() === "completed") return "Updated workspace!"
+    if (busyAction() === "update") return updateLabel()
+    const freshness = packFreshness()
+    if (freshness?.protocolBehind && !freshness.versionBehind) return "Refresh stale template pack"
+    return "Update workspace files"
+  })
 
   const runWorkspaceUpdate = async () => {
     const workspacePath = spinosa.activePath
@@ -143,12 +166,7 @@ export function SpinosaPromptChips(props: { suppressEnter?: boolean }) {
             ? [
                 {
                   key: "update-workspace",
-                  label:
-                    busyAction() === "completed"
-                      ? "Updated workspace!"
-                      : busyAction() === "update"
-                        ? updateLabel()
-                        : "Update workspace files",
+                  label: updateChipLabel(),
                   onPress: () => void runWorkspaceUpdate(),
                 },
               ]

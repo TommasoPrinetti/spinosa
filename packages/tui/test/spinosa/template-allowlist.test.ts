@@ -78,6 +78,7 @@ describe("workspace template allowlist", () => {
 
     const allowedPostCopy = new Set([
       ".spinosa/workspace",
+      ".spinosa/framework-checksums.json",
     ])
 
     const result = await createWorkspace({

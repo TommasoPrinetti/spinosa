@@ -38,6 +38,53 @@ describe("workspace update flow", () => {
     }
   })
 
+  test("refreshes stale startup-prompt.md while preserving workspace metadata", async () => {
+    await using tmp = await tmpdir()
+    const frameworkRoot = path.join(tmp.path, "install")
+    const templateRoot = path.join(frameworkRoot, "workspace-template")
+    const workspace = path.join(tmp.path, "workspace")
+
+    await mkdir(path.join(templateRoot, ".spinosa"), { recursive: true })
+    await mkdir(path.join(workspace, ".spinosa"), { recursive: true })
+    await Bun.write(path.join(frameworkRoot, "package.json"), JSON.stringify({ version: "1.2.3" }) + "\n")
+    await Bun.write(
+      path.join(templateRoot, ".spinosa", "workspace-files.tsv"),
+      ["path\trole\tupdate_policy", "startup-prompt.md\tframework\talways_replace"].join("\n") + "\n",
+    )
+    await Bun.write(
+      path.join(templateRoot, "startup-prompt.md"),
+      ["# Index This Workspace", "", "## Hard ban during startup", "", "Do not invoke spinosa-overseer", ""].join("\n"),
+    )
+    await Bun.write(
+      path.join(workspace, "startup-prompt.md"),
+      [
+        "# Index This Workspace",
+        "",
+        "Maps → writer/analyst",
+        "extraction_batch_001.md",
+        "",
+        "## Workspace Metadata",
+        "",
+        "- **Project title:** FINALSPINOSATEST",
+        "- **Preferred CLI:** Spinosa",
+        "",
+      ].join("\n"),
+    )
+    await Bun.write(
+      path.join(workspace, ".spinosa", "workspace"),
+      ["framework_version: 1.2.3", "setup_status: cli_started", "project_name: FINALSPINOSATEST"].join("\n") + "\n",
+    )
+
+    const result = await updateWorkspace({ workspacePath: workspace, frameworkRoot })
+    expect(result.success).toBe(true)
+    const prompt = await Bun.file(path.join(workspace, "startup-prompt.md")).text()
+    expect(prompt).toContain("## Hard ban during startup")
+    expect(prompt).toContain("Do not invoke spinosa-overseer")
+    expect(prompt).not.toContain("extraction_batch_001.md")
+    expect(prompt).toContain("## Workspace Metadata")
+    expect(prompt).toContain("FINALSPINOSATEST")
+  })
+
   test("updates a workspace from repo-root workspace-template layout", async () => {
     await using tmp = await tmpdir()
     const frameworkRoot = path.join(tmp.path, "install")

@@ -251,7 +251,7 @@ import file_247 from "./template-blobs/01ba4719c80b6fe911b091a7c05124b64eeece964
 import file_248 from "./template-blobs/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.bin" with { type: "file" };
 import file_249 from "./template-blobs/431c453b1be47285fe282a80f8e222950a6ba4b63f593bd0b50da10f38dfa9f3.bin" with { type: "file" };
 import file_250 from "./template-blobs/8ebb4935ed91b21354491840c34fcaf0bde15928da5ede702cb5b31b85e25579.bin" with { type: "file" };
-import file_251 from "./template-blobs/e981d6cb6e77afe9272e6c4ab9c34cfb447dbbb8f12ff1a5ef0abf3cfc5d4d7b.bin" with { type: "file" };
+import file_251 from "./template-blobs/0dc4256e0fbc8444c10615db4670f21a1a96c0d72e644542f272555d1c273315.bin" with { type: "file" };
 import file_252 from "./template-blobs/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.bin" with { type: "file" };
 import file_253 from "./template-blobs/54cc7712dd3360e1121544ffff86dcfb80231986b9863aefaedc9c29b965ec08.bin" with { type: "file" };
 import file_254 from "./template-blobs/b56a0ffaaad73ebd24d82d4d7820cff1c514df0193985a1f2112c6aa509de650.bin" with { type: "file" };
@@ -283,7 +283,7 @@ import file_279 from "./template-blobs/a2e855a23f53ba682e6dee9d65019b4717b6330fd
 
 export const templatePack = {
   version: "1.0.3-beta.12",
-  packId: "404a171f93dad5df32219759e7b58c2c5f0d76a1bbe1ea39999ab316aa017e18",
+  packId: "c6fd3f6204382bdca61c3938f0fd4eb6ef3fb82e102577deb5ce5280b8c2541c",
   files: [
   { path: ".agents/agents/spinosa-analyst.md", mode: 420, sha256: "1e4e006ad3037dfc523038747011ae9cb6604bd8a138be996f346e74297c0201", contentPath: file_0 },
   { path: ".agents/agents/spinosa-evaluator.md", mode: 420, sha256: "41572a3010fb44a18d59215e76070eecd6bd41ca124f4cb434242980a712754f", contentPath: file_1 },
@@ -536,7 +536,7 @@ export const templatePack = {
   { path: ".spinosa/memory/.gitkeep", mode: 420, sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", contentPath: file_248 },
   { path: ".spinosa/memory/AGENTS.md", mode: 420, sha256: "431c453b1be47285fe282a80f8e222950a6ba4b63f593bd0b50da10f38dfa9f3", contentPath: file_249 },
   { path: ".spinosa/memory/orchestrator-notes.md", mode: 420, sha256: "8ebb4935ed91b21354491840c34fcaf0bde15928da5ede702cb5b31b85e25579", contentPath: file_250 },
-  { path: ".spinosa/workspace-files.tsv", mode: 420, sha256: "e981d6cb6e77afe9272e6c4ab9c34cfb447dbbb8f12ff1a5ef0abf3cfc5d4d7b", contentPath: file_251 },
+  { path: ".spinosa/workspace-files.tsv", mode: 420, sha256: "0dc4256e0fbc8444c10615db4670f21a1a96c0d72e644542f272555d1c273315", contentPath: file_251 },
   { path: ".trash/.gitkeep", mode: 420, sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", contentPath: file_252 },
   { path: ".trash/AGENTS.md", mode: 420, sha256: "54cc7712dd3360e1121544ffff86dcfb80231986b9863aefaedc9c29b965ec08", contentPath: file_253 },
   { path: "AGENTS.md", mode: 420, sha256: "b56a0ffaaad73ebd24d82d4d7820cff1c514df0193985a1f2112c6aa509de650", contentPath: file_254 },

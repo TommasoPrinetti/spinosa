@@ -7,6 +7,7 @@ import { useTheme } from "../context/theme"
 import { useRoute } from "../context/route"
 import { useOpencodeKeymap } from "../keymap"
 import {
+  inspectWorkspaceTemplatePack,
   listRegisteredWorkspaces,
   readBundledFrameworkVersion,
   readWorkspaceMeta,
@@ -109,19 +110,33 @@ export function DialogSpinosaWorkspacePicker(props: { onClose?: () => void } = {
     const pairs = await Promise.all(
       list.map(async (ws) => ({ ws, meta: await readWorkspaceMeta(ws.path).catch(() => undefined) })),
     )
-    return pairs.map(({ ws, meta }) => ({
-      path: ws.path,
-      name: resolveWorkspaceDisplayName(ws.path, meta?.projectName ?? ws.projectName),
-      projectName: meta?.projectName ?? ws.projectName,
-      workspaceID: ws.workspaceID,
-      parentFolder: getParentFolder(ws.path),
-      status: meta?.setupStatus || "unknown",
-      version: meta?.frameworkVersion || "unknown",
-      needsUpdate: workspaceNeedsFrameworkUpdate(meta?.frameworkVersion, bundled),
-      lastAccessed: getLastAccessed(ws.path),
-      presence: ws.presence,
-      available: !!meta && isUsableWorkspaceStatus(ws.presence),
-    } satisfies SelectWorkspaceRow))
+    const rows = await Promise.all(
+      pairs.map(async ({ ws, meta }) => {
+        const freshness = meta
+          ? await inspectWorkspaceTemplatePack({
+              workspacePath: ws.path,
+              workspaceVersion: meta.frameworkVersion,
+              bundledVersion: bundled,
+            }).catch(() => undefined)
+          : undefined
+        return {
+          path: ws.path,
+          name: resolveWorkspaceDisplayName(ws.path, meta?.projectName ?? ws.projectName),
+          projectName: meta?.projectName ?? ws.projectName,
+          workspaceID: ws.workspaceID,
+          parentFolder: getParentFolder(ws.path),
+          status: meta?.setupStatus || "unknown",
+          version: meta?.frameworkVersion || "unknown",
+          needsUpdate:
+            freshness?.refreshRecommended ??
+            workspaceNeedsFrameworkUpdate(meta?.frameworkVersion, bundled),
+          lastAccessed: getLastAccessed(ws.path),
+          presence: ws.presence,
+          available: !!meta && isUsableWorkspaceStatus(ws.presence),
+        } satisfies SelectWorkspaceRow
+      }),
+    )
+    return rows
   })
 
   const workspaceError = createMemo(() => {

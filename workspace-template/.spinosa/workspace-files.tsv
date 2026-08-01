@@ -2,7 +2,7 @@ path	role	update_policy
 AGENTS.md	framework	always_replace
 README.md	framework	replace_if_unmodified
 .bin/spinosa	framework	replace_if_unmodified
-startup-prompt.md	framework	replace_if_unmodified
+startup-prompt.md	framework	always_replace
 .opencode/	framework	replace_if_unmodified
 .codex/	framework	replace_if_unmodified
 .claude/	framework	replace_if_unmodified

@@ -6,7 +6,12 @@ import {
   isSpinosaWorkspace,
   getFrameworkHealth,
 } from "@spinosa/core/workspace/meta"
-import { readFrameworkVersionFromRoot, resolveFrameworkRoot } from "@spinosa/core/framework/discovery"
+import {
+  readFrameworkVersionFromRoot,
+  resolveFrameworkRoot,
+  resolveTemplateRootFromFrameworkRoot,
+} from "@spinosa/core/framework/discovery"
+import { inspectTemplatePackFreshness } from "@spinosa/core/framework/template-pack-freshness"
 import { detectDocumentTools } from "@spinosa/core/scan/scanner"
 import {
   isCompiledBinaryDistribution,
@@ -156,6 +161,25 @@ export const DoctorCommand = {
         log(fmt, `Workspace: ${workspacePath}`)
         log(fmt, `Workspace version: ${meta.frameworkVersion}`)
         log(fmt, `Workspace registry: valid`)
+        const frameworkRootForPack = resolveFrameworkRoot()
+        const packFreshness = inspectTemplatePackFreshness({
+          workspacePath,
+          frameworkRoot: frameworkRootForPack,
+          templateRoot: frameworkRootForPack
+            ? resolveTemplateRootFromFrameworkRoot(frameworkRootForPack)
+            : undefined,
+          workspaceVersion: meta.frameworkVersion,
+          bundledVersion: readFrameworkVersionFromRoot(frameworkRootForPack),
+        })
+        if (packFreshness.stale) {
+          healthy = false
+          log(fmt, `template pack: stale — ${packFreshness.message}`)
+          for (const relative of [...packFreshness.stalePaths, ...packFreshness.missingPaths]) {
+            log(fmt, `stale: ${relative}`)
+          }
+        } else {
+          log(fmt, "template pack: current")
+        }
         for (const check of getFrameworkHealth(workspacePath)) {
           if (!check.ok) healthy = false
           log(fmt, `${check.ok ? "ok" : "missing"}: ${check.label}`)

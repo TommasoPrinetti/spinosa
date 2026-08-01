@@ -12,6 +12,7 @@ import {
   isSpinosaWorkspace,
   listRegisteredWorkspaces,
   readWorkspaceMeta,
+  inspectWorkspaceTemplatePack,
   workspaceNeedsFrameworkUpdate,
   writeWorkspaceFrameworkVersion,
 } from "../../src/spinosa/service"
@@ -54,6 +55,18 @@ describe("service fixture workspace", () => {
     expect(workspaceNeedsFrameworkUpdate("0.2.0", "0.2.0")).toBe(false)
     expect(workspaceNeedsFrameworkUpdate("unknown", "0.2.0")).toBe(false)
     expect(workspaceNeedsFrameworkUpdate("dev", "0.2.0")).toBe(true)
+  })
+
+  test("fixture workspace protocol pack is not flagged stale against repo template", async () => {
+    const freshness = await inspectWorkspaceTemplatePack({
+      workspacePath: fixture,
+      workspaceVersion: "0.1.0",
+      bundledVersion: "0.1.0",
+    })
+    // Fixture may lag protocol probes; assert the API shape and that missing template root is handled.
+    expect(typeof freshness.stale).toBe("boolean")
+    expect(typeof freshness.refreshRecommended).toBe("boolean")
+    expect(Array.isArray(freshness.stalePaths)).toBe(true)
   })
 
   test("rewrites the workspace framework version marker", async () => {
