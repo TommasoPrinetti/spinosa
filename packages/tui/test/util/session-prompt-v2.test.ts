@@ -4,10 +4,14 @@ import {
   createPendingSessionID,
   partsToV2Prompt,
   resolvePromptDelivery,
+  assistantPartGapBefore,
+  steerControlLabel,
+  toggleSteerDelivery,
   shouldNavigateBeforeCreate,
   shouldNavigateBeforePrepare,
   shouldSeedSessionBeforeNavigate,
   newSessionSubmitPhases,
+  useV2SessionPrompt,
 } from "../../src/util/session-prompt-v2"
 
 describe("session-prompt-v2", () => {
@@ -26,12 +30,45 @@ describe("session-prompt-v2", () => {
     })
   })
 
+  test("defaults to V1 session prompt unless explicitly enabled", () => {
+    const previous = process.env.SPINOSA_SESSION_V2_PROMPT
+    try {
+      delete process.env.SPINOSA_SESSION_V2_PROMPT
+      expect(useV2SessionPrompt()).toBe(false)
+      process.env.SPINOSA_SESSION_V2_PROMPT = "1"
+      expect(useV2SessionPrompt()).toBe(true)
+      process.env.SPINOSA_SESSION_V2_PROMPT = "0"
+      expect(useV2SessionPrompt()).toBe(false)
+    } finally {
+      if (previous === undefined) delete process.env.SPINOSA_SESSION_V2_PROMPT
+      else process.env.SPINOSA_SESSION_V2_PROMPT = previous
+    }
+  })
+
   test("defaults mid-run delivery to queue", () => {
     expect(resolvePromptDelivery({ busy: true })).toBe("queue")
     expect(resolvePromptDelivery({ busy: true, preferSteer: true })).toBe("steer")
     expect(resolvePromptDelivery({ busy: true, preferQueue: true })).toBe("queue")
     expect(resolvePromptDelivery({ busy: false, preferQueue: true })).toBe("steer")
     expect(resolvePromptDelivery({ busy: true, requested: "steer" })).toBe("steer")
+  })
+
+  test("spaces tool rows after text or reasoning", () => {
+    expect(assistantPartGapBefore(undefined, "tool")).toBe(0)
+    expect(assistantPartGapBefore("tool", "tool")).toBe(0)
+    expect(assistantPartGapBefore("text", "tool")).toBe(1)
+    expect(assistantPartGapBefore("reasoning", "tool")).toBe(1)
+    expect(assistantPartGapBefore("text", "text")).toBe(0)
+    expect(assistantPartGapBefore("tool", "reasoning")).toBe(0)
+  })
+
+  test("steer control toggles waiting label and delivery", () => {
+    expect(steerControlLabel({ delivery: "queue" })).toBe("Steer")
+    expect(steerControlLabel({ delivery: "steer" })).toBe("waiting for steering")
+    expect(steerControlLabel({ delivery: "queue", pending: "steer" })).toBe("waiting for steering")
+    expect(steerControlLabel({ delivery: "steer", pending: "queue" })).toBe("Steer")
+    expect(toggleSteerDelivery("queue")).toBe("steer")
+    expect(toggleSteerDelivery("steer")).toBe("queue")
   })
 
   test("navigates after server create on new sessions only", () => {

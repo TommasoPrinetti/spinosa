@@ -60,7 +60,12 @@ import { extractMdPaths } from "./extract-md-paths"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
 import { DialogQueuedPrompts } from "../../component/dialog-queued-prompts"
 import { SessionFooter } from "./footer"
-import { useV2SessionPrompt } from "../../util/session-prompt-v2"
+import {
+  assistantPartGapBefore,
+  steerControlLabel,
+  toggleSteerDelivery,
+  useV2SessionPrompt,
+} from "../../util/session-prompt-v2"
 import { SubagentFooter } from "./subagent-footer.tsx"
 import { filetype } from "../../util/filetype"
 import parsers from "../../parsers-config"
@@ -1667,6 +1672,8 @@ const resolveExportPath = (filename: string): string => {
 function TranscriptRow(props: {
   id?: string
   children: JSX.Element
+  /** Extra top gap (e.g. blank line before a tool that follows text/reasoning). */
+  marginTop?: number
   callout?: () =>
     | {
         side: ToolCalloutSide
@@ -1692,11 +1699,15 @@ function TranscriptRow(props: {
     return callout?.side === "right" ? callout : undefined
   })
   const rightFirst = createMemo(() => rightCallout()?.offsetTop === 0)
+  const gap = () => props.marginTop ?? 0
 
   return (
-    <Show when={layout()} fallback={props.children}>
+    <Show
+      when={layout()}
+      fallback={gap() > 0 ? <box width="100%" marginTop={gap()}>{props.children}</box> : props.children}
+    >
       {(calloutLayout) => (
-        <box id={props.id} width="100%">
+        <box id={props.id} width="100%" marginTop={gap()}>
           <box flexDirection="row" width="100%">
             <box width={calloutLayout().railWidth} justifyContent="flex-end" alignItems="flex-start">
                 <Show when={leftCallout()}>
@@ -1842,7 +1853,7 @@ function buildCopyCommand(tool: string, input: Record<string, unknown>, summary:
     return stringValue(input.command) ?? summary.command
   }
   if (display === "read") {
-    const filePath = stringValue(input.filePath)
+    const filePath = stringValue(input.filePath) ?? stringValue(input.path)
     return filePath ? `cat "${filePath}"` : summary.command
   }
   if (display === "grep") {
@@ -1866,11 +1877,11 @@ function buildCopyCommand(tool: string, input: Record<string, unknown>, summary:
     return query ? `search: ${query}` : summary.command
   }
   if (display === "write") {
-    const filePath = stringValue(input.filePath)
+    const filePath = stringValue(input.filePath) ?? stringValue(input.path)
     return filePath ? `cat > "${filePath}"` : summary.command
   }
   if (display === "edit") {
-    const filePath = stringValue(input.filePath)
+    const filePath = stringValue(input.filePath) ?? stringValue(input.path)
     return filePath ? `edit "${filePath}"` : summary.command
   }
   if (display === "task") {
@@ -1915,39 +1926,53 @@ function UserMessage(props: {
   const { theme } = useTheme()
   const [hover, setHover] = createSignal(false)
   const [steerHover, setSteerHover] = createSignal(false)
-  const [steering, setSteering] = createSignal(false)
+  const [steerPending, setSteerPending] = createSignal<"steer" | "queue" | null>(null)
   const queued = createMemo(() => props.pending && props.message.id > props.pending)
   const delivery = createMemo(() => sync.data.prompt_delivery[props.message.id])
   const canSteer = createMemo(() => delivery() === "queue" && Boolean(text()))
+  const waitingSteer = createMemo(() => delivery() === "steer" && Boolean(text()))
+  const showSteer = createMemo(() => canSteer() || waitingSteer())
   const color = createMemo(() => local.agent.color(props.message.agent))
   const queuedFg = createMemo(() => selectedForeground(theme, color()))
-  const metadataVisible = createMemo(() => queued() || canSteer() || ctx.showTimestamps())
+  const metadataVisible = createMemo(() => queued() || showSteer() || ctx.showTimestamps())
+  const steerLabel = createMemo(() =>
+    steerControlLabel({ delivery: delivery(), pending: steerPending() }),
+  )
 
   const compaction = createMemo(() => props.parts.find((x) => x.type === "compaction"))
 
-  const steerQueued = () => {
-    if (!canSteer() || steering()) return
+  createEffect(() => {
+    const current = delivery()
+    const pending = steerPending()
+    if (!pending) return
+    if (current === pending || current === undefined) setSteerPending(null)
+  })
+
+  const toggleSteer = () => {
+    const current = delivery()
+    if ((current !== "queue" && current !== "steer") || steerPending() || !text()) return
     const body = text()
     if (!body) return
-    setSteering(true)
+    const next = toggleSteerDelivery(current)
+    setSteerPending(next)
     void sdk.client.v2.session
       .prompt(
         {
           sessionID: props.message.sessionID,
           id: props.message.id,
           prompt: { text: body },
-          delivery: "steer",
+          delivery: next,
         },
         { throwOnError: true },
       )
       .catch((error) => {
+        setSteerPending(null)
         toast.show({
-          title: "Couldn’t steer",
+          title: next === "steer" ? "Couldn’t steer" : "Couldn’t cancel steer",
           message: errorMessage(error),
           variant: "error",
         })
       })
-      .finally(() => setSteering(false))
   }
 
   return (
@@ -2000,7 +2025,7 @@ function UserMessage(props: {
                 </box>
               </Show>
               <Show
-                when={queued() || canSteer()}
+                when={queued() || showSteer()}
                 fallback={
                   <Show when={ctx.showTimestamps()}>
                     <text fg={theme.textMuted}>
@@ -2015,20 +2040,20 @@ function UserMessage(props: {
                   <text fg={theme.textMuted}>
                     <span style={{ bg: color(), fg: queuedFg(), bold: true }}> QUEUED </span>
                   </text>
-                  <Show when={canSteer()}>
+                  <Show when={showSteer()}>
                     <box
                       onMouseOver={() => setSteerHover(true)}
                       onMouseOut={() => setSteerHover(false)}
                       onMouseUp={(e: { stopPropagation?: () => void }) => {
                         e.stopPropagation?.()
-                        steerQueued()
+                        toggleSteer()
                       }}
                       backgroundColor={buttonBackground(theme, steerHover())}
                       paddingLeft={1}
                       paddingRight={1}
                     >
                       <text fg={buttonText(theme, steerHover(), theme.primary)}>
-                        {steering() ? "Steering…" : "Steer"}
+                        {steerLabel()}
                       </text>
                     </box>
                   </Show>
@@ -2086,6 +2111,14 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
       <For each={props.parts}>
         {(part, index) => {
           const component = createMemo(() => PART_MAPPING[part.type as keyof typeof PART_MAPPING])
+          const gapBefore = createMemo(() => {
+            for (let i = index() - 1; i >= 0; i--) {
+              const prev = props.parts[i]
+              if (!prev || !(prev.type in PART_MAPPING)) continue
+              return assistantPartGapBefore(prev.type, part.type)
+            }
+            return 0
+          })
           return (
             <Show when={component()}>
               <Dynamic
@@ -2093,6 +2126,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
                 component={component()}
                 part={part as any}
                 message={props.message}
+                gapBefore={gapBefore()}
               />
             </Show>
           )
@@ -2183,7 +2217,7 @@ const PART_MAPPING = {
 
 const INLINE_TOOL_ICON_WIDTH = 2
 
-function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: AssistantMessage }) {
+function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: AssistantMessage; gapBefore?: number }) {
   const { theme } = useTheme()
   const ctx = use()
   // Collapsed by default in hide mode: a single line throughout, so the
@@ -2292,7 +2326,7 @@ function ReasoningHeader(props: {
   )
 }
 
-function TextPart(props: { last: boolean; part: TextPart; message: AssistantMessage }) {
+function TextPart(props: { last: boolean; part: TextPart; message: AssistantMessage; gapBefore?: number }) {
   const ctx = use()
   const { theme, syntax } = useTheme()
   const dialog = useDialog()
@@ -2338,7 +2372,7 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
 
 // Pending messages moved to individual tool pending functions
 
-function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMessage }) {
+function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMessage; gapBefore?: number }) {
   const ctx = use()
   const display = createMemo(() => toolDisplay(props.part.tool))
   const pathFormatter = usePathFormatter()
@@ -2393,7 +2427,7 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
   })
 
   return (
-    <TranscriptRow callout={callout}>
+    <TranscriptRow callout={callout} marginTop={props.gapBefore}>
       <Show when={!shouldHide()}>
           <Switch>
           <Match when={display() === "bash"}>
@@ -2477,9 +2511,10 @@ export function buildToolCalloutSummary(
     return { tag: "GLOB", command: `"${stringValue(inputValue.pattern) ?? ""}"${inPath}`.trim() }
   }
   if (display === "read") {
+    const filePath = toolFilePath(inputValue)
     return {
       tag: "READ",
-      command: `Read ${formatPath(stringValue(inputValue.filePath))} ${input(inputValue, ["filePath"])}`.trim(),
+      command: `Read ${formatPath(filePath)} ${input(inputValue, ["filePath", "path"])}`.trim(),
     }
   }
   if (display === "grep") {
@@ -2496,10 +2531,10 @@ export function buildToolCalloutSummary(
     }
   }
   if (display === "write") {
-    return { tag: "WRITE", command: formatPath(stringValue(inputValue.filePath)) }
+    return { tag: "WRITE", command: formatPath(toolFilePath(inputValue)) }
   }
   if (display === "edit") {
-    return { tag: "EDIT", command: formatPath(stringValue(inputValue.filePath)) }
+    return { tag: "EDIT", command: formatPath(toolFilePath(inputValue)) }
   }
   if (display === "task") {
     return { tag: "SUB-AGENT", command: cleanSystemReminderText(stringValue(inputValue.description)) ?? "Delegate task" }
@@ -2550,15 +2585,15 @@ export function estimateToolCalloutHeight(
     return Math.min(16, Math.max(4, lines + 4))
   }
   if (display === "write") {
-    if (!metadata?.diagnostics) return visibleRows
+    if (!metadata?.diagnostics && !stringValue(input?.content)) return visibleRows
     const lines = (stringValue(input?.content) || "").split("\n").filter(l => l).length
-    const diagnosticCount = parseDiagnostics(metadata?.diagnostics, stringValue(input?.filePath) ?? "").length
+    const diagnosticCount = parseDiagnostics(metadata?.diagnostics, toolFilePath(input ?? {}) ?? "").length
     return Math.min(16, Math.max(4, lines + diagnosticCount + 3))
   }
   if (display === "edit") {
     if (!stringValue(metadata?.diff)) return visibleRows
     const lines = (stringValue(metadata!.diff) || "").split("\n").filter(l => l).length
-    const diagnosticCount = parseDiagnostics(metadata?.diagnostics, stringValue(input?.filePath) ?? "").length
+    const diagnosticCount = parseDiagnostics(metadata?.diagnostics, toolFilePath(input ?? {}) ?? "").length
     return Math.min(16, Math.max(4, lines + diagnosticCount + 3))
   }
   if (display === "apply_patch") {
@@ -2911,34 +2946,41 @@ function Shell(props: ToolProps) {
 function Write(props: ToolProps) {
   const { theme, syntax } = useTheme()
   const pathFormatter = usePathFormatter()
+  const filePath = createMemo(() => toolFilePath(props.input, props.part.state))
   const code = createMemo(() => {
     return stringValue(props.input.content) ?? ""
+  })
+  // V1 always attached diagnostics (even empty); V2 write has no LSP yet.
+  // Show the content block once completed (or when diagnostics arrived).
+  const showBody = createMemo(() => {
+    if (props.metadata.diagnostics !== undefined) return true
+    return props.part.state.status === "completed" && Boolean(filePath() && code())
   })
 
   return (
     <Switch>
-      <Match when={props.metadata.diagnostics !== undefined}>
-        <BlockTool title={"# Wrote " + pathFormatter.format(stringValue(props.input.filePath))} part={props.part}>
+      <Match when={showBody()}>
+        <BlockTool title={"# Wrote " + pathFormatter.format(filePath())} part={props.part}>
           <line_number fg={theme.textMuted} minWidth={3} paddingRight={1}>
             <code
               conceal={false}
               fg={theme.text}
-              filetype={filetype(stringValue(props.input.filePath))}
+              filetype={filetype(filePath())}
               syntaxStyle={syntax()}
               content={code()}
             />
           </line_number>
-          <Diagnostics diagnostics={props.metadata.diagnostics} filePath={stringValue(props.input.filePath) ?? ""} />
+          <Diagnostics diagnostics={props.metadata.diagnostics} filePath={filePath() ?? ""} />
         </BlockTool>
       </Match>
       <Match when={true}>
         <InlineTool
           icon="←"
-          pending="Preparing write..."
-          complete={stringValue(props.input.filePath)}
+          pending={filePath() ? `Preparing write ${pathFormatter.format(filePath())}...` : "Preparing write..."}
+          complete={filePath()}
           part={props.part}
         >
-          Write {pathFormatter.format(stringValue(props.input.filePath))}
+          Write {pathFormatter.format(filePath())}
         </InlineTool>
       </Match>
     </Switch>
@@ -2985,7 +3027,7 @@ function Read(props: ToolProps) {
         spinner={isRunning()}
         part={props.part}
       >
-        Read {displayPath()} {input(props.input, ["filePath"])}
+        Read {displayPath()} {input(props.input, ["filePath", "path"])}
       </InlineTool>
       <For each={loaded()}>
         {(filepath) => (
@@ -3151,6 +3193,7 @@ function Edit(props: ToolProps) {
   const ctx = use()
   const { theme, syntax } = useTheme()
   const pathFormatter = usePathFormatter()
+  const filePath = createMemo(() => toolFilePath(props.input, props.part.state))
 
   const view = createMemo(() => {
     const diffStyle = ctx.tui.diff_style
@@ -3159,14 +3202,14 @@ function Edit(props: ToolProps) {
     return ctx.width > 120 ? "split" : "unified"
   })
 
-  const ft = createMemo(() => filetype(stringValue(props.input.filePath)))
+  const ft = createMemo(() => filetype(filePath()))
 
   const diffContent = createMemo(() => stringValue(props.metadata.diff) ?? "")
 
   return (
     <Switch>
       <Match when={stringValue(props.metadata.diff) !== undefined}>
-        <BlockTool title={"← Edit " + pathFormatter.format(stringValue(props.input.filePath))} part={props.part}>
+        <BlockTool title={"← Edit " + pathFormatter.format(filePath())} part={props.part}>
           <box paddingLeft={1}>
             <diff
               diff={diffContent()}
@@ -3188,12 +3231,12 @@ function Edit(props: ToolProps) {
               removedLineNumberBg={theme.diffRemovedLineNumberBg}
             />
           </box>
-          <Diagnostics diagnostics={props.metadata.diagnostics} filePath={stringValue(props.input.filePath) ?? ""} />
+          <Diagnostics diagnostics={props.metadata.diagnostics} filePath={filePath() ?? ""} />
         </BlockTool>
       </Match>
       <Match when={true}>
-        <InlineTool icon="←" pending="Preparing edit..." complete={stringValue(props.input.filePath)} part={props.part}>
-          Edit {pathFormatter.format(stringValue(props.input.filePath))} {input({ replaceAll: props.input.replaceAll })}
+        <InlineTool icon="←" pending="Preparing edit..." complete={filePath()} part={props.part}>
+          Edit {pathFormatter.format(filePath())} {input({ replaceAll: props.input.replaceAll })}
         </InlineTool>
       </Match>
     </Switch>

@@ -55,6 +55,9 @@ test("refresh scopes sessions to the active Spinosa workspace", async () => {
     await sync.session.refresh()
 
     expect(calls.session.at(-1)?.searchParams.get("directory")).toBe(workspaceB)
+    expect(calls.session.at(-1)?.searchParams.get("scope")).toBeNull()
+    expect(calls.session.at(-1)?.searchParams.get("workspace")).toBeNull()
+    expect(sync.session.query()).toEqual({ directory: workspaceB })
   } finally {
     app.renderer.destroy()
   }

@@ -11,17 +11,20 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - Home Enter → conversation shows an immediate full-screen **Loading conversation engine…** overlay while the session shell boots (optimistic navigate + background `session.create`); dismisses when the session is synced and the prompt is mounted, with a 30s timeout toast on failure.
-- Harness loop-control: turn snapshots + save points, `prepareNextTurn` / `shouldStopAfterTurn` / `beforeToolCall` hooks in the V2 runner, phase→`idle|busy|retry` mapping, optional tool `terminate`, busy rejection for structural ops (model/agent switch, compact), and mid-run `delivery: steer|queue` on the live V2 prompt path (TUI default-on via `SPINOSA_SESSION_V2_PROMPT`, set `0` to force V1).
+- Harness loop-control: turn snapshots + save points, `prepareNextTurn` / `shouldStopAfterTurn` / `beforeToolCall` hooks in the V2 runner, phase→`idle|busy|retry` mapping, optional tool `terminate`, busy rejection for structural ops (model/agent switch, compact), and mid-run `delivery: steer|queue` on the opt-in V2 prompt path (`SPINOSA_SESSION_V2_PROMPT=1`; **TUI chat defaults to V1** `session.prompt`).
 - V2 SessionExecution publishes busy/idle onto existing `session.status`; V1 `session.abort` also interrupts V2 execution so ESC/double-ESC keeps working.
-- TUI projects `session.next.*` and `permission.v2.*` into the shipped conversation/permission UX.
+- TUI projects `session.next.*` and `permission.v2.*` into the shipped conversation/permission UX (used when V2 prompt is enabled).
 
 ### Changed
 
+- **TUI chat defaults to V1** again (`session.prompt` + classic `message.part` transcript). Set `SPINOSA_SESSION_V2_PROMPT=1` to opt into SessionV2 steer/queue. Keeps create-before-navigate, loading overlay, read-path tool rows, workspace-scoped `/session`, and related TUI fixes.
 - **Temporary:** TUI research auto-framing is disabled by default (`SPINOSA_SKIP_RESEARCH_PREP`, default on). Enter sends prompts directly to the orchestrator harness (V1/V2 `session.prompt`) instead of `prepareSpinosaSubmit` → Q1–Q5 classify → goal artifact → `executeSpinosaSubmit`. Set `SPINOSA_SKIP_RESEARCH_PREP=0` to restore the research prep layer.
-- Mid-run prompts now **queue by default** (Enter while busy). Queued user messages show a **Steer** control to promote that admission immediately; `<leader>return` / `prompt.submit_queue` also steers the draft. Mini-TUI queued-prompt menu: Return steers (abort active + run next).
+- When V2 prompt is enabled, mid-run prompts **queue by default** (Enter while busy). Queued user messages show a **Steer** control to promote that admission immediately; `<leader>return` / `prompt.submit_queue` also steers the draft. Mini-TUI queued-prompt menu: Return steers (abort active + run next).
 
 ### Fixed
 
+- Workspace `/session` list no longer leaks global/unscoped sessions when a Spinosa workspace is selected (directory-scoped filter; `workspaceID === undefined` is not treated as a match).
+- V2 write/edit/read tool rows accept `path` as well as legacy `filePath` so writes leave “Preparing write…” and show content; edit maps `files[].patch` → `diff`.
 - Home Enter → conversation loading overlay no longer crashes with `ReferenceError: Cannot access 'promptMounted' before initialization` when navigating to a new session (Solid `createMemo` ran before the `promptMounted` signal was declared).
 - V2 session history no longer sends empty assistant rows to OpenAI-compatible providers (including DeepSeek): failed turns without replayable output are dropped when building provider context, and Chat Completions lowering omits assistant messages with neither `content` nor `tool_calls` (reasoning-only rows are omitted for DeepSeek).
 - OCR import progress in onboarding/add-files shows completed files in green (✓) during the phase: worker `progress` ticks are label-only (no `processing` status), terminal `done` rows are not downgraded, and the live results scrollbox lists succeeded files before the phase hits 100%.

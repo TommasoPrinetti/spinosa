@@ -35,6 +35,8 @@ import { useKV } from "./kv"
 import { usePermission } from "./permission"
 import { dbg } from "../util/debug-log"
 import { KV } from "../constants/kv-keys"
+import { normalizeToolInputForDisplay, normalizeToolMetadataForDisplay } from "../util/tool-display"
+import { sessionMatchesWorkspaceScope } from "../util/session"
 
 const emptyConsoleState: ConsoleState = {
   consoleManagedProviders: [],
@@ -207,9 +209,13 @@ export const {
       if (!filterEnabled) {
         return { scope: "project" as const, workspace: directory ? undefined : wrkWorkspace }
       }
-      if (wrkWorkspace) return { directory, workspace: wrkWorkspace }
+      // Spinosa workspaces scope by directory. Prefer that over experimental
+      // workspace ID so we do not AND-filter and drop directory-bound sessions.
       if (directory) return { directory }
-      if (!project.data.instance.path.worktree || !project.data.instance.path.directory) return { scope: "project" as const, workspace: wrkWorkspace }
+      if (wrkWorkspace) return { workspace: wrkWorkspace }
+      if (!project.data.instance.path.worktree || !project.data.instance.path.directory) {
+        return { scope: "project" as const, workspace: wrkWorkspace }
+      }
       return { directory: project.data.instance.path.directory, workspace: wrkWorkspace }
     }
 
@@ -259,10 +265,11 @@ export const {
         }
       }
       let result = [...merged.values()]
-      if (workspaceDir) {
+      const filterEnabled = kv.get(KV.SESSION_DIRECTORY_FILTER, true)
+      if (workspaceDir && filterEnabled) {
         const wrkID = project.workspace.current()
-        result = result.filter(
-          (s) => s.workspaceID === wrkID || (s.directory && s.directory.startsWith(workspaceDir!)),
+        result = result.filter((s) =>
+          sessionMatchesWorkspaceScope(s, { workspaceDir, workspaceID: wrkID }),
         )
       }
       result = result.toSorted((a, b) => a.id.localeCompare(b.id))
@@ -383,16 +390,19 @@ export const {
           }
           break
         }
+        case "session.created":
         case "session.updated": {
-          const result = search(store.session, event.properties.info.id, (s) => s.id)
+          const info = event.properties.info
+          if (!info || typeof info !== "object" || typeof (info as { id?: unknown }).id !== "string") break
+          const result = search(store.session, (info as { id: string }).id, (s) => s.id)
           if (result.found) {
-            setStore("session", result.index, reconcile(event.properties.info))
+            setStore("session", result.index, reconcile(info))
             break
           }
           setStore(
             "session",
             produce((draft) => {
-              draft.splice(result.index, 0, event.properties.info)
+              draft.splice(result.index, 0, info as never)
             }),
           )
           break
@@ -500,7 +510,36 @@ export const {
             type: "text" as const,
             text,
           }
-          if (!store.part[messageID]) setStore("part", messageID, [part])
+          const attachmentParts: Array<Record<string, unknown>> = [part]
+          const files = Array.isArray(event.properties.prompt?.files) ? event.properties.prompt.files : []
+          for (const [index, file] of files.entries()) {
+            if (!file || typeof file !== "object") continue
+            const row = file as { uri?: unknown; mime?: unknown; name?: unknown }
+            if (typeof row.uri !== "string" || typeof row.mime !== "string") continue
+            attachmentParts.push({
+              id: `part_${messageID}_file_${index}`,
+              sessionID,
+              messageID,
+              type: "file",
+              url: row.uri,
+              mime: row.mime,
+              ...(typeof row.name === "string" ? { filename: row.name } : {}),
+            })
+          }
+          const agents = Array.isArray(event.properties.prompt?.agents) ? event.properties.prompt.agents : []
+          for (const [index, agent] of agents.entries()) {
+            if (!agent || typeof agent !== "object") continue
+            const row = agent as { name?: unknown }
+            if (typeof row.name !== "string") continue
+            attachmentParts.push({
+              id: `part_${messageID}_agent_${index}`,
+              sessionID,
+              messageID,
+              type: "agent",
+              name: row.name,
+            })
+          }
+          if (!store.part[messageID]) setStore("part", messageID, attachmentParts as never)
           if (event.type === "session.next.prompt.admitted" && delivery) {
             setStore("prompt_delivery", messageID, delivery)
           } else if (event.type === "session.next.prompted") {
@@ -519,6 +558,334 @@ export const {
           const delivery = event.properties.delivery
           if (delivery === "queue" || delivery === "steer") {
             setStore("prompt_delivery", messageID, delivery)
+          }
+          break
+        }
+
+        case "session.next.agent.switched": {
+          const sessionID = event.properties.sessionID as string
+          const agent = typeof event.properties.agent === "string" ? event.properties.agent : undefined
+          if (!agent) break
+          const messages = store.message[sessionID]
+          if (!messages?.length) break
+          // Prefer the named message, else the latest assistant footer label.
+          const targetID = typeof event.properties.messageID === "string" ? event.properties.messageID : undefined
+          const index = targetID
+            ? messages.findIndex((m) => m.id === targetID)
+            : [...messages].reverse().findIndex((m) => m.role === "assistant")
+          const resolved = targetID
+            ? index
+            : index >= 0
+              ? messages.length - 1 - index
+              : -1
+          if (resolved < 0) break
+          setStore(
+            "message",
+            sessionID,
+            resolved,
+            produce((message) => {
+              if (message.role === "assistant" || message.role === "user") {
+                message.agent = agent
+              }
+            }),
+          )
+          break
+        }
+
+        case "session.next.model.switched": {
+          const sessionID = event.properties.sessionID as string
+          const model = event.properties.model as
+            | { providerID?: string; id?: string; modelID?: string }
+            | undefined
+          const modelID =
+            (typeof model?.id === "string" && model.id) ||
+            (typeof model?.modelID === "string" && model.modelID) ||
+            ""
+          const providerID = typeof model?.providerID === "string" ? model.providerID : ""
+          if (!modelID && !providerID) break
+          const messages = store.message[sessionID]
+          if (!messages?.length) break
+          const targetID = typeof event.properties.messageID === "string" ? event.properties.messageID : undefined
+          const index = targetID
+            ? messages.findIndex((m) => m.id === targetID)
+            : [...messages].reverse().findIndex((m) => m.role === "assistant")
+          const resolved = targetID
+            ? index
+            : index >= 0
+              ? messages.length - 1 - index
+              : -1
+          if (resolved < 0) break
+          setStore(
+            "message",
+            sessionID,
+            resolved,
+            produce((message) => {
+              if (message.role === "assistant") {
+                if (modelID) message.modelID = modelID
+                if (providerID) message.providerID = providerID
+              } else if (message.role === "user") {
+                message.model = {
+                  providerID: providerID || message.model?.providerID || "",
+                  modelID: modelID || message.model?.modelID || "",
+                }
+              }
+            }),
+          )
+          break
+        }
+
+        case "session.next.synthetic":
+        case "session.next.context.updated": {
+          const sessionID = event.properties.sessionID as string
+          const messageID = event.properties.messageID as string
+          const created = eventTimestamp(event.properties.timestamp)
+          const text = typeof event.properties.text === "string" ? event.properties.text : ""
+          const info = {
+            id: messageID,
+            sessionID,
+            role: "user" as const,
+            time: { created },
+            agent: "build",
+            model: { providerID: "", modelID: "" },
+          }
+          touchMessage(sessionID, messageID)
+          const messages = store.message[sessionID]
+          if (!messages) setStore("message", sessionID, [info])
+          else {
+            const result = search(messages, messageID, (m) => m.id)
+            if (!result.found) {
+              setStore(
+                "message",
+                sessionID,
+                produce((draft) => {
+                  draft.splice(result.index, 0, info)
+                }),
+              )
+            }
+          }
+          const part = {
+            id: `part_${messageID}_synthetic`,
+            sessionID,
+            messageID,
+            type: "text" as const,
+            text,
+            synthetic: true as const,
+          }
+          if (!store.part[messageID]) setStore("part", messageID, [part])
+          else {
+            const parts = store.part[messageID]
+            const existing = search(parts, part.id, (p) => p.id)
+            if (!existing.found) {
+              setStore(
+                "part",
+                messageID,
+                produce((draft) => {
+                  draft.splice(existing.index, 0, part)
+                }),
+              )
+            }
+          }
+          break
+        }
+
+        case "session.next.shell.started": {
+          const sessionID = event.properties.sessionID as string
+          const messageID = event.properties.messageID as string
+          const callID = event.properties.callID as string
+          const command = typeof event.properties.command === "string" ? event.properties.command : ""
+          const created = eventTimestamp(event.properties.timestamp)
+          const info = {
+            id: messageID,
+            sessionID,
+            role: "assistant" as const,
+            time: { created },
+            parentID: messageID,
+            modelID: "",
+            providerID: "",
+            mode: "build",
+            agent: "build",
+            path: { cwd: "", root: "" },
+            cost: 0,
+            tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          }
+          touchMessage(sessionID, messageID)
+          touchPart(sessionID, callID)
+          const messages = store.message[sessionID]
+          if (!messages) setStore("message", sessionID, [info])
+          else {
+            const result = search(messages, messageID, (m) => m.id)
+            if (!result.found) {
+              setStore(
+                "message",
+                sessionID,
+                produce((draft) => {
+                  draft.splice(result.index, 0, info)
+                }),
+              )
+            }
+          }
+          const part = {
+            id: callID,
+            sessionID,
+            messageID,
+            type: "tool" as const,
+            callID,
+            tool: "bash",
+            state: {
+              status: "running" as const,
+              input: { command },
+              time: { start: created },
+            },
+          }
+          const parts = store.part[messageID]
+          if (!parts) setStore("part", messageID, [part])
+          else {
+            const existing = search(parts, callID, (p) => p.id)
+            if (!existing.found) {
+              setStore(
+                "part",
+                messageID,
+                produce((draft) => {
+                  draft.splice(existing.index, 0, part)
+                }),
+              )
+            } else {
+              setStore(
+                "part",
+                messageID,
+                produce((draft) => {
+                  const row = draft[existing.index]
+                  if (!row || row.type !== "tool") return
+                  row.tool = "bash"
+                  row.state = {
+                    status: "running",
+                    input: { command },
+                    time: { start: created },
+                  }
+                }),
+              )
+            }
+          }
+          break
+        }
+
+        case "session.next.shell.ended": {
+          const sessionID = event.properties.sessionID as string
+          const callID = event.properties.callID as string
+          const output = typeof event.properties.output === "string" ? event.properties.output : ""
+          const ended = eventTimestamp(event.properties.timestamp)
+          let messageID: string | undefined
+          for (const [id, parts] of Object.entries(store.part)) {
+            if (parts.some((p) => p.id === callID || (p.type === "tool" && p.callID === callID))) {
+              messageID = id
+              break
+            }
+          }
+          if (!messageID) break
+          const parts = store.part[messageID]
+          const result = search(parts, callID, (p) => p.id)
+          if (!result.found) break
+          touchPart(sessionID, callID)
+          setStore(
+            "part",
+            messageID,
+            produce((draft) => {
+              const part = draft[result.index]
+              if (!part || part.type !== "tool") return
+              const input =
+                part.state.status === "pending"
+                  ? { command: "" }
+                  : ((part.state.input as Record<string, unknown> | undefined) ?? { command: "" })
+              const start =
+                part.state.status === "running" || part.state.status === "completed" || part.state.status === "error"
+                  ? (part.state.time?.start ?? ended)
+                  : ended
+              part.tool = "bash"
+              part.state = {
+                status: "completed",
+                input,
+                output,
+                title: "shell",
+                metadata: {
+                  ...(part.state.status === "running" ? (part.state.metadata ?? {}) : {}),
+                  output,
+                },
+                time: { start, end: ended },
+              }
+            }),
+          )
+          break
+        }
+
+        case "session.next.retried": {
+          const sessionID = event.properties.sessionID as string
+          const attempt = typeof event.properties.attempt === "number" ? event.properties.attempt : 0
+          const error = event.properties.error as { message?: unknown } | undefined
+          const message =
+            error && typeof error.message === "string" && error.message.length > 0
+              ? error.message
+              : "Retrying…"
+          setStore("session_status", sessionID, {
+            type: "retry",
+            attempt,
+            message,
+            next: eventTimestamp(event.properties.timestamp) + 1000,
+          })
+          break
+        }
+
+        case "session.next.compaction.started":
+        case "session.next.compaction.delta":
+          break
+
+        case "session.next.compaction.ended": {
+          const sessionID = event.properties.sessionID as string
+          const messageID = event.properties.messageID as string
+          const created = eventTimestamp(event.properties.timestamp)
+          const reason = event.properties.reason === "manual" ? "manual" : "auto"
+          const info = {
+            id: messageID,
+            sessionID,
+            role: "user" as const,
+            time: { created },
+            agent: "build",
+            model: { providerID: "", modelID: "" },
+          }
+          touchMessage(sessionID, messageID)
+          const messages = store.message[sessionID]
+          if (!messages) setStore("message", sessionID, [info])
+          else {
+            const result = search(messages, messageID, (m) => m.id)
+            if (!result.found) {
+              setStore(
+                "message",
+                sessionID,
+                produce((draft) => {
+                  draft.splice(result.index, 0, info)
+                }),
+              )
+            }
+          }
+          const part = {
+            id: `part_${messageID}_compaction`,
+            sessionID,
+            messageID,
+            type: "compaction" as const,
+            auto: reason === "auto",
+          }
+          if (!store.part[messageID]) setStore("part", messageID, [part])
+          else {
+            const parts = store.part[messageID]
+            const existing = search(parts, part.id, (p) => p.id)
+            if (!existing.found) {
+              setStore(
+                "part",
+                messageID,
+                produce((draft) => {
+                  draft.splice(existing.index, 0, part)
+                }),
+              )
+            }
           }
           break
         }
@@ -812,10 +1179,11 @@ export const {
             typeof event.properties.tool === "string" && event.properties.tool.length > 0
               ? event.properties.tool
               : "tool"
-          const input =
+          const input = normalizeToolInputForDisplay(
             event.properties.input && typeof event.properties.input === "object"
               ? (event.properties.input as Record<string, unknown>)
-              : {}
+              : {},
+          )
           const started = eventTimestamp(event.properties.timestamp)
           const parts = store.part[messageID]
           const existing = parts ? search(parts, callID, (p) => p.id) : { found: false, index: 0 }
@@ -911,10 +1279,11 @@ export const {
             produce((draft) => {
               const part = draft[result.index]
               if (!part || part.type !== "tool") return
-              const input =
+              const input = normalizeToolInputForDisplay(
                 part.state.status === "pending"
                   ? {}
-                  : ((part.state.input as Record<string, unknown> | undefined) ?? {})
+                  : ((part.state.input as Record<string, unknown> | undefined) ?? {}),
+              )
               const start =
                 part.state.status === "running" || part.state.status === "completed" || part.state.status === "error"
                   ? (part.state.time?.start ?? ended)
@@ -923,15 +1292,14 @@ export const {
                 typeof structured.title === "string"
                   ? structured.title
                   : part.tool
+              const prior =
+                part.state.status === "running" ? ((part.state.metadata as Record<string, unknown> | undefined) ?? {}) : {}
               part.state = {
                 status: "completed",
                 input,
                 output: toolOutputFromV2(event.properties.content, event.properties.result),
                 title,
-                metadata: {
-                  ...(part.state.status === "running" ? (part.state.metadata ?? {}) : {}),
-                  ...structured,
-                },
+                metadata: normalizeToolMetadataForDisplay(part.tool, { ...prior, ...structured }, input),
                 time: { start, end: ended },
               }
             }),
@@ -955,10 +1323,11 @@ export const {
               const part = draft[result.index]
               if (!part || part.type !== "tool") return
               if (part.state.status !== "pending" && part.state.status !== "running") return
-              const input =
+              const input = normalizeToolInputForDisplay(
                 part.state.status === "pending"
                   ? {}
-                  : ((part.state.input as Record<string, unknown> | undefined) ?? {})
+                  : ((part.state.input as Record<string, unknown> | undefined) ?? {}),
+              )
               const start = part.state.status === "running" ? (part.state.time?.start ?? ended) : ended
               part.state = {
                 status: "error",

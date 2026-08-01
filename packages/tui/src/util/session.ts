@@ -48,3 +48,17 @@ export function anySessionBusy(input: {
   }
   return false
 }
+
+/**
+ * Whether a session belongs to the active Spinosa directory and/or experimental
+ * workspace. Never treat `workspaceID === undefined` as a match — that leaked
+ * every unscoped/global session into workspace-scoped lists.
+ */
+export function sessionMatchesWorkspaceScope(
+  session: { workspaceID?: string; directory?: string },
+  scope: { workspaceDir?: string; workspaceID?: string },
+): boolean {
+  if (scope.workspaceID && session.workspaceID === scope.workspaceID) return true
+  if (scope.workspaceDir && session.directory?.startsWith(scope.workspaceDir)) return true
+  return false
+}

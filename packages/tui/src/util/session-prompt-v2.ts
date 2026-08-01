@@ -56,10 +56,35 @@ export function resolvePromptDelivery(input: {
   return Loop.resolveDelivery(input)
 }
 
-/** Default-on V2 prompt path; set SPINOSA_SESSION_V2_PROMPT=0 to force V1. */
+/** Blank lines before a transcript part when the previous visible part differs in kind. */
+export function assistantPartGapBefore(
+  previousType: string | undefined,
+  currentType: string,
+): number {
+  if (currentType !== "tool") return 0
+  if (previousType === "text" || previousType === "reasoning") return 1
+  return 0
+}
+
+/** Steer control label while a queued mid-run prompt awaits promote. */
+export function steerControlLabel(input: {
+  delivery?: "steer" | "queue"
+  pending?: "steer" | "queue" | null
+}): "Steer" | "waiting for steering" {
+  if (input.pending === "queue") return "Steer"
+  if (input.pending === "steer" || input.delivery === "steer") return "waiting for steering"
+  return "Steer"
+}
+
+/** Next delivery when toggling Steer / de-steer on an unpromoted admission. */
+export function toggleSteerDelivery(delivery: "steer" | "queue"): "steer" | "queue" {
+  return delivery === "queue" ? "steer" : "queue"
+}
+
+/** Default-off V2 prompt path; set SPINOSA_SESSION_V2_PROMPT=1 to opt into SessionV2. */
 export function useV2SessionPrompt(): boolean {
   const entry = envValue("SPINOSA_SESSION_V2_PROMPT")
-  if (entry === undefined) return true
+  if (entry === undefined) return false
   const normalized = entry.toLowerCase()
   return normalized === "1" || normalized === "true"
 }

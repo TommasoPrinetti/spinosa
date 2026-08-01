@@ -2,6 +2,14 @@ import { describe, expect, test } from "bun:test"
 import { createDialogSessionListQuery, loadDialogSessionList } from "../../src/component/dialog-session-list"
 
 describe("dialog session list", () => {
+  test("requests root sessions scoped to a workspace directory", () => {
+    expect(createDialogSessionListQuery({ filter: { directory: "/tmp/spinosa/ws" } })).toEqual({
+      roots: true,
+      limit: 100,
+      directory: "/tmp/spinosa/ws",
+    })
+  })
+
   test("requests root sessions for the default browse list", () => {
     expect(createDialogSessionListQuery({ filter: { path: "packages/tui" } })).toEqual({
       roots: true,

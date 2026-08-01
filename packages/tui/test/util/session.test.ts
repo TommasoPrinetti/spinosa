@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test"
-import { anySessionBusy, isDefaultTitle, resolveSessionRuntimeStatus, sessionIsBusy } from "../../src/util/session"
+import {
+  anySessionBusy,
+  isDefaultTitle,
+  resolveSessionRuntimeStatus,
+  sessionIsBusy,
+  sessionMatchesWorkspaceScope,
+} from "../../src/util/session"
 
 describe("util.session", () => {
   test("recognizes generated parent and child titles", () => {
@@ -35,6 +41,37 @@ describe("util.session", () => {
         sessions: [{ id: "a" }],
         derivedStatus: () => "idle",
       }),
+    ).toBeFalse()
+  })
+
+  test("scopes sessions to workspace directory without matching undefined workspace IDs", () => {
+    const workspaceDir = "/tmp/spinosa/workspace-a"
+    const sessions = [
+      { id: "in", directory: `${workspaceDir}/chat`, workspaceID: undefined },
+      { id: "exact", directory: workspaceDir, workspaceID: undefined },
+      { id: "out", directory: "/tmp/other", workspaceID: undefined },
+      { id: "wrk", directory: "/tmp/other", workspaceID: "wrk_a" },
+    ]
+
+    const filtered = sessions.filter((s) =>
+      sessionMatchesWorkspaceScope(s, { workspaceDir, workspaceID: undefined }),
+    )
+
+    expect(filtered.map((s) => s.id)).toEqual(["in", "exact"])
+  })
+
+  test("matches experimental workspace ID when selected", () => {
+    expect(
+      sessionMatchesWorkspaceScope(
+        { directory: "/tmp/other", workspaceID: "wrk_a" },
+        { workspaceDir: "/tmp/spinosa/ws", workspaceID: "wrk_a" },
+      ),
+    ).toBeTrue()
+    expect(
+      sessionMatchesWorkspaceScope(
+        { directory: "/tmp/other", workspaceID: "wrk_b" },
+        { workspaceDir: "/tmp/spinosa/ws", workspaceID: "wrk_a" },
+      ),
     ).toBeFalse()
   })
 })

@@ -20,7 +20,7 @@ import { useCommandShortcut } from "../keymap"
 import { useEvent } from "../context/event"
 import { readdir, readFile } from "node:fs/promises"
 import { dbg } from "../util/debug-log"
-import { sessionIsBusy } from "../util/session"
+import { sessionIsBusy, sessionMatchesWorkspaceScope } from "../util/session"
 
 type SessionListFilter = { scope?: "project"; directory?: string; path?: string; workspace?: string }
 
@@ -111,8 +111,8 @@ export function DialogSessionList() {
     let filtered = result
     if (workspaceDir) {
       const wrkID = project.workspace.current()
-      filtered = result.filter(
-        (s) => s.workspaceID === wrkID || (s.directory && s.directory.startsWith(workspaceDir)),
+      filtered = result.filter((s) =>
+        sessionMatchesWorkspaceScope(s, { workspaceDir, workspaceID: wrkID }),
       )
     }
     const rootCount = filtered.filter((s) => s.parentID == null).length
