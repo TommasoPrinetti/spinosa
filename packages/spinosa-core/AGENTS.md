@@ -14,7 +14,7 @@ This package owns workspace, corpus, import, artifact, and application-domain co
 | `framework/manifest.ts` | `readFrameworkFilesTsv()`, `copyFrameworkManifestPaths()` |
 | `commands/create.ts` | Workspace creation from manifest-declared template paths |
 | `commands/upgrade.ts` | `upgradeFramework()`, `checkUpgradeAvailable()`, version cache |
-| `commands/preflight.ts` | `runLaunchPreflight()`, launch status lines, exit code `10` |
+| `commands/preflight.ts` | `runLaunchPreflight()`, Spinosa upgrade offer, stale template-pack Y/n before TUI, launch status lines, exit code `10` |
 | `utils/version.ts` | `compareFrameworkVersions()`, `releaseChannel()`, `parseInstallPinnedVersion()` |
 | `system/channels.ts` | Reads `beta: true\|false` from `~/.spinosa/metadata/config.yaml` |
 

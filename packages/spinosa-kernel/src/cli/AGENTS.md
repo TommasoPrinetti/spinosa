@@ -16,12 +16,12 @@ The terminal application lives in `packages/tui`. Do not add full TUI features h
 
 Default command (`spinosa` with no args) runs `cmd/tui.ts`.
 
-1. `runLaunchPreflight()` in `@spinosa/core/commands/preflight` checks for updates (runs **before** the TUI worker spawns).
+1. `runLaunchPreflight()` in `@spinosa/core/commands/preflight` checks for Spinosa updates, then offers a Y/n refresh for stale workspace template packs (runs **before** the TUI worker spawns).
 2. The terminal prints status lines. Then `printLaunchingTui()` prints `launching TUI...`.
 3. `cli/tui/layer.ts` starts `@spinosa/tui`.
 4. `cli/tui/worker.ts` hosts the in-process server for fetch and events.
 
-Preflight runs once per launch. After a successful launch-time upgrade it exits cleanly and the user relaunches manually.
+Preflight runs once per launch. After a successful launch-time Spinosa upgrade it exits cleanly and the user relaunches manually. Template-pack updates apply in place and then continue into the TUI.
 
 ## Launch and upgrade commands
 

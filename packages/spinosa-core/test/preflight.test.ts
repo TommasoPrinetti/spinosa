@@ -4,9 +4,24 @@ import {
   LAUNCH_STATUS_LAUNCHING,
   LAUNCH_STATUS_NO_UPDATES,
   LAUNCH_STATUS_UPGRADE_DONE,
+  offerStaleTemplatePackUpdates,
   runLaunchPreflight,
   type PreflightDependencies,
 } from "../src/commands/preflight"
+import type { TemplatePackFreshness } from "../src/framework/template-pack-freshness"
+
+function freshness(overrides: Partial<TemplatePackFreshness> = {}): TemplatePackFreshness {
+  return {
+    stale: true,
+    refreshRecommended: true,
+    versionBehind: false,
+    protocolBehind: true,
+    stalePaths: ["AGENTS.md", "startup-prompt.md"],
+    missingPaths: [],
+    message: "stale",
+    ...overrides,
+  }
+}
 
 function dependencies(overrides: Partial<PreflightDependencies> = {}) {
   const output: string[] = []
@@ -24,6 +39,9 @@ function dependencies(overrides: Partial<PreflightDependencies> = {}) {
     },
     confirm: async () => false,
     frameworkRoot: (version) => `/home/versions/${version}`,
+    currentFrameworkRoot: () => "/framework",
+    listPackCheckCandidates: async () => [],
+    canPrompt: () => false,
     out: (message) => output.push(message),
     ...overrides,
   }
@@ -101,6 +119,66 @@ describe("launch preflight", () => {
     expect(await runLaunchPreflight(deps)).toBe("exit")
     expect(output).toContain("⚠ Could not update missing: workspace is missing")
     expect(output.at(-1)).toBe(LAUNCH_STATUS_UPGRADE_DONE)
+  })
+
+  test("offers stale template pack update and continues into TUI after accept", async () => {
+    const { deps, output, updated } = dependencies({
+      canPrompt: () => true,
+      listPackCheckCandidates: async () => ["/work/stale"],
+      inspectPack: async () => freshness(),
+      confirm: async () => true,
+    })
+
+    expect(await runLaunchPreflight(deps)).toBe("continue")
+    expect(updated).toEqual(["/work/stale"])
+    expect(output).toContain("Workspace template pack update available for 1 workspace(s):")
+    expect(output).toContain("  • stale — AGENTS.md, startup-prompt.md")
+    expect(output).toContain("✓ Updated stale")
+    expect(output).not.toContain(LAUNCH_STATUS_UPGRADE_DONE)
+  })
+
+  test("continues without updating when user declines pack refresh", async () => {
+    const { deps, output, updated } = dependencies({
+      canPrompt: () => true,
+      listPackCheckCandidates: async () => ["/work/stale"],
+      inspectPack: async () => freshness(),
+      confirm: async () => false,
+    })
+
+    expect(await runLaunchPreflight(deps)).toBe("continue")
+    expect(updated).toEqual([])
+    expect(output).toContain("Continuing without updating — you can run Update workspace from Home later.")
+  })
+
+  test("skips pack prompt when non-interactive", async () => {
+    const { deps, output, updated } = dependencies({
+      canPrompt: () => false,
+      listPackCheckCandidates: async () => ["/work/stale"],
+      inspectPack: async () => freshness(),
+    })
+
+    expect(await runLaunchPreflight(deps)).toBe("continue")
+    expect(updated).toEqual([])
+    expect(output).toEqual([LAUNCH_STATUS_CHECKING, LAUNCH_STATUS_NO_UPDATES])
+  })
+})
+
+describe("offerStaleTemplatePackUpdates", () => {
+  test("uses target workspace candidates when provided", async () => {
+    const seen: Array<string | undefined> = []
+    const { deps, updated } = dependencies({
+      canPrompt: () => true,
+      listPackCheckCandidates: async (target) => {
+        seen.push(target)
+        return target ? [target] : []
+      },
+      inspectPack: async () => freshness(),
+      confirm: async () => true,
+    })
+
+    await offerStaleTemplatePackUpdates(deps, { targetWorkspace: "/work/target" })
+    expect(seen).toEqual(["/work/target"])
+    expect(updated).toEqual(["/work/target"])
   })
 })
 

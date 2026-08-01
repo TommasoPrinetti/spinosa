@@ -23,6 +23,9 @@ function dependencies(overrides: Partial<PreflightDependencies> = {}) {
     },
     confirm: async () => false,
     frameworkRoot: (version) => `/home/versions/${version}`,
+    canPrompt: () => false,
+    listPackCheckCandidates: async () => [],
+    currentFrameworkRoot: () => undefined,
     out: (message) => output.push(message),
     ...overrides,
   }

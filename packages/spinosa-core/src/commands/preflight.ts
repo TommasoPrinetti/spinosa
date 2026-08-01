@@ -2,10 +2,13 @@
  * Launch preflight for the Spinosa TUI.
  *
  * This module runs before the TUI starts. It checks for framework updates,
- * prints user-facing status lines, and can install an upgrade.
+ * prints user-facing status lines, and can install an upgrade. After the
+ * Spinosa upgrade check, it also offers to refresh workspaces whose template
+ * pack (protocol / AGENTS / agents) is stale vs the current install.
  *
  * Returns "exit" after a successful launch-time upgrade so the launcher can
- * stop without auto-starting the TUI.
+ * stop without auto-starting the TUI. Template-pack updates continue into the
+ * TUI (update happens before launch, so no restart dance).
  */
 import path from "node:path"
 import { existsSync } from "node:fs"
@@ -20,6 +23,17 @@ import {
   type AutoUpgradeResult,
   type UpgradeResult,
 } from "./upgrade"
+import {
+  inspectTemplatePackFreshness,
+  type TemplatePackFreshness,
+} from "../framework/template-pack-freshness"
+import {
+  readFrameworkVersionFromRoot,
+  resolveFrameworkRoot,
+  resolveTemplateRootFromFrameworkRoot,
+} from "../framework/discovery"
+import { isSpinosaWorkspace, readWorkspaceMeta } from "../workspace/meta"
+import { listRegisteredWorkspaces } from "../workspace/registry"
 
 /** User-facing line printed before the remote version check. */
 export const LAUNCH_STATUS_CHECKING = "checking for updates..."
@@ -33,6 +47,12 @@ export const LAUNCH_STATUS_LAUNCHING = "launching TUI..."
 /** User-facing line printed after a successful launch-time upgrade. */
 export const LAUNCH_STATUS_UPGRADE_DONE = "upgrade complete — run spinosa again to launch"
 
+export type StaleTemplatePackWorkspace = {
+  path: string
+  name: string
+  freshness: TemplatePackFreshness
+}
+
 export interface WorkspaceUpgradeOfferDeps {
   confirm(question: string, defaultYes?: boolean): Promise<boolean>
   /** Resolve template/framework root for the installed version (binary cache or legacy tree). */
@@ -44,6 +64,23 @@ export interface WorkspaceUpgradeOfferDeps {
 export interface PreflightDependencies extends WorkspaceUpgradeOfferDeps {
   checkUpgradeAvailable(): Promise<AutoUpgradeResult>
   upgradeFramework(): Promise<UpgradeResult>
+  /** Current install root used for pack freshness + update (optional override for tests). */
+  currentFrameworkRoot?(): string | undefined
+  /** Resolve workspaces to scan for stale packs (optional override for tests). */
+  listPackCheckCandidates?(targetWorkspace?: string): Promise<string[]>
+  /** Inspect pack freshness (optional override for tests). */
+  inspectPack?(workspacePath: string, frameworkRoot: string): TemplatePackFreshness | Promise<TemplatePackFreshness>
+  /** When false, skip interactive pack prompts (CI / no TTY). */
+  canPrompt?(): boolean
+}
+
+export interface LaunchPreflightOptions {
+  /**
+   * Workspace being opened (`spinosa /path`, `--project`, or cwd when it is a
+   * Spinosa workspace). When set and valid, only that workspace is checked for
+   * a stale pack; otherwise registered present/legacy workspaces are scanned.
+   */
+  targetWorkspace?: string
 }
 
 function defaultFrameworkRootForVersion(version: string): string {
@@ -70,12 +107,40 @@ function defaultFrameworkRootForVersion(version: string): string {
   return path.join(home, "versions", version)
 }
 
+function defaultCanPrompt(): boolean {
+  if (process.env.SPINOSA_NO_UPGRADE_CHECK === "1") return false
+  if (process.env.CI === "1" || process.env.CI === "true") return false
+  if (process.argv.includes("--yes") || process.argv.includes("-y")) return false
+  if (!process.stdin.isTTY) return false
+  return true
+}
+
+export async function defaultListPackCheckCandidates(targetWorkspace?: string): Promise<string[]> {
+  if (targetWorkspace) {
+    const resolved = path.resolve(targetWorkspace)
+    if (isSpinosaWorkspace(resolved)) return [resolved]
+  }
+
+  try {
+    const registered = await listRegisteredWorkspaces()
+    return registered
+      .filter((entry) => entry.presence === "present" || entry.presence === "legacy")
+      .map((entry) => entry.path)
+      .filter((workspacePath) => isSpinosaWorkspace(workspacePath))
+  } catch {
+    return []
+  }
+}
+
 const defaults: PreflightDependencies = {
   checkUpgradeAvailable,
   upgradeFramework: () => upgradeFramework({ yes: true }),
   updateWorkspace: (workspacePath, frameworkRoot) => updateWorkspace({ workspacePath, frameworkRoot }),
   confirm: (question, defaultYes) => confirmPrompt(question, defaultYes),
   frameworkRoot: defaultFrameworkRootForVersion,
+  currentFrameworkRoot: () => resolveFrameworkRoot() ?? process.env.SPINOSA_TEMPLATE_ROOT,
+  listPackCheckCandidates: defaultListPackCheckCandidates,
+  canPrompt: defaultCanPrompt,
   out: (message) => process.stdout.write(`${message}\n`),
 }
 
@@ -117,36 +182,135 @@ export async function offerWorkspaceUpgrades(
   if (failed > 0) deps.out(`⚠ ${failed} workspace update(s) failed; run 'spinosa update <workspace>' to retry.`)
 }
 
+function formatStalePaths(freshness: TemplatePackFreshness): string {
+  const paths = [...freshness.stalePaths, ...freshness.missingPaths]
+  if (paths.length === 0) return "framework version behind"
+  const shown = paths.slice(0, 4)
+  const more = paths.length > shown.length ? ` (+${paths.length - shown.length} more)` : ""
+  return shown.join(", ") + more
+}
+
+/**
+ * Offer to refresh workspaces whose template pack is stale vs the current install.
+ * On accept, updates in place and returns so the TUI can launch with fresh files.
+ */
+export async function offerStaleTemplatePackUpdates(
+  deps: PreflightDependencies,
+  options: LaunchPreflightOptions = {},
+): Promise<void> {
+  const canPrompt = deps.canPrompt ?? defaultCanPrompt
+  if (!canPrompt()) {
+    spinosaLogInfo("preflight", "template pack check skipped (non-interactive)")
+    return
+  }
+
+  const frameworkRoot =
+    (deps.currentFrameworkRoot ?? defaults.currentFrameworkRoot)?.() ??
+    undefined
+  if (!frameworkRoot) {
+    spinosaLogInfo("preflight", "template pack check skipped (no framework root)")
+    return
+  }
+
+  const listCandidates = deps.listPackCheckCandidates ?? defaultListPackCheckCandidates
+  const candidates = await listCandidates(options.targetWorkspace)
+  if (candidates.length === 0) return
+
+  const stale: StaleTemplatePackWorkspace[] = []
+  for (const workspacePath of candidates) {
+    try {
+      const meta = await readWorkspaceMeta(workspacePath).catch(() => undefined)
+      const freshness = deps.inspectPack
+        ? await deps.inspectPack(workspacePath, frameworkRoot)
+        : inspectTemplatePackFreshness({
+            workspacePath,
+            frameworkRoot,
+            templateRoot: resolveTemplateRootFromFrameworkRoot(frameworkRoot),
+            workspaceVersion: meta?.frameworkVersion,
+            bundledVersion: readFrameworkVersionFromRoot(frameworkRoot),
+          })
+      if (!freshness.refreshRecommended) continue
+      stale.push({
+        path: workspacePath,
+        name: meta?.projectName || path.basename(workspacePath) || workspacePath,
+        freshness,
+      })
+    } catch {
+      /* individual workspace read failure is non-fatal */
+    }
+  }
+
+  if (stale.length === 0) {
+    spinosaLogInfo("preflight", "template packs current")
+    return
+  }
+
+  deps.out(`Workspace template pack update available for ${stale.length} workspace(s):`)
+  for (const entry of stale) {
+    deps.out(`  • ${entry.name} — ${formatStalePaths(entry.freshness)}`)
+  }
+  deps.out("  (updates protocol files, AGENTS.md, and agent skills)")
+
+  if (!(await deps.confirm(`Update ${stale.length} workspace template pack(s) now?`, true))) {
+    deps.out("Continuing without updating — you can run Update workspace from Home later.")
+    return
+  }
+
+  let failed = 0
+  for (const entry of stale) {
+    try {
+      const result = await deps.updateWorkspace(entry.path, frameworkRoot)
+      if (result.success && result.presence) {
+        deps.out(`↷ Skipped ${entry.name}: ${result.presence.replaceAll("_", " ").toUpperCase()}`)
+      } else if (result.success) deps.out(`✓ Updated ${entry.name}`)
+      else {
+        failed++
+        deps.out(`⚠ Could not update ${entry.name}${result.error ? `: ${result.error}` : ""}`)
+      }
+    } catch (error) {
+      failed++
+      deps.out(`⚠ Could not update ${entry.name}: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+  if (failed > 0) deps.out(`⚠ ${failed} workspace update(s) failed; run 'spinosa update <workspace>' to retry.`)
+}
+
 /**
  * Check for updates before the TUI opens.
  * Returns "exit" when an upgrade was installed and the launcher should stop.
  */
-export async function runLaunchPreflight(deps: PreflightDependencies = defaults): Promise<"continue" | "exit"> {
+export async function runLaunchPreflight(
+  deps?: PreflightDependencies | null,
+  options: LaunchPreflightOptions = {},
+): Promise<"continue" | "exit"> {
+  const resolved = deps ?? defaults
   spinosaLogInfo("preflight", `preflight check started (pid=${process.pid})`)
-  deps.out(LAUNCH_STATUS_CHECKING)
+  resolved.out(LAUNCH_STATUS_CHECKING)
 
-  const available = await deps.checkUpgradeAvailable()
+  const available = await resolved.checkUpgradeAvailable()
   spinosaLogInfo("preflight", `upgrade check: available=${available.available} latest=${available.latestVersion ?? "none"}`)
 
   if (!available.available || !available.latestVersion) {
-    deps.out(LAUNCH_STATUS_NO_UPDATES)
+    resolved.out(LAUNCH_STATUS_NO_UPDATES)
     spinosaLogInfo("preflight", "no upgrade needed, continuing")
+    await offerStaleTemplatePackUpdates(resolved, options)
     return "continue"
   }
 
   const current = available.currentVersion ? ` (current \x1b[32mv${available.currentVersion}\x1b[0m)` : ""
-  if (!(await deps.confirm(`✨ \x1b[1mSpinosa v${available.latestVersion}\x1b[0m is available${current}. Upgrade now?`, true))) {
+  if (!(await resolved.confirm(`✨ \x1b[1mSpinosa v${available.latestVersion}\x1b[0m is available${current}. Upgrade now?`, true))) {
+    await offerStaleTemplatePackUpdates(resolved, options)
     return "continue"
   }
 
-  const upgraded = await deps.upgradeFramework()
+  const upgraded = await resolved.upgradeFramework()
   if (!upgraded.success || !upgraded.newVersion) {
     const detail = upgraded.error ? `: ${upgraded.error}` : ""
     throw new Error(`Spinosa upgrade failed${detail}. Run 'spinosa upgrade' for details.`)
   }
 
-  await offerWorkspaceUpgrades(upgraded.workspaceUpgradesNeeded, upgraded.newVersion, deps)
+  await offerWorkspaceUpgrades(upgraded.workspaceUpgradesNeeded, upgraded.newVersion, resolved)
 
-  deps.out(LAUNCH_STATUS_UPGRADE_DONE)
+  resolved.out(LAUNCH_STATUS_UPGRADE_DONE)
   return "exit"
 }

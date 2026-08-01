@@ -21,6 +21,7 @@ import {
   printLaunchingTui,
   runLaunchPreflight,
 } from "@spinosa/core/commands/preflight"
+import { isSpinosaWorkspace } from "@spinosa/core/workspace/meta"
 
 declare global {
   const SPINOSA_WORKER_PATH: string
@@ -252,10 +253,12 @@ export const TuiThreadCommand = cmd({
       const cwd = Filesystem.resolve(process.cwd())
 
       // Launch preflight before spawning the worker so an accepted upgrade does not
-      // start background infrastructure from the previous installation.
+      // start background infrastructure from the previous installation. Also offers
+      // a Y/n template-pack refresh for the target (or registered) workspaces.
       if (!Flag.SPINOSA_DISABLE_AUTOUPDATE) {
         try {
-          const preflight = await runLaunchPreflight()
+          const targetWorkspace = isSpinosaWorkspace(cwd) ? cwd : undefined
+          const preflight = await runLaunchPreflight(undefined, { targetWorkspace })
           if (preflight === "exit") {
             process.exit(0)
           }
