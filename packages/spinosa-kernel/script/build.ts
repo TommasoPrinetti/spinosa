@@ -343,11 +343,13 @@ export async function buildSpinosaBinaries(options: BuildSpinosaBinariesOptions)
       try {
         // Clear any leftover staged lib so smoke proves embed→tmpdir staging works.
         const { tmpdir } = await import("node:os")
-        for (const lib of onnxEmbed.libs) {
-          try {
-            fs.rmSync(path.join(tmpdir(), lib.name), { force: true })
-          } catch {
-            /* ignore */
+        if (onnxEmbed) {
+          for (const lib of onnxEmbed.libs) {
+            try {
+              fs.rmSync(path.join(tmpdir(), lib.name), { force: true })
+            } catch {
+              /* ignore */
+            }
           }
         }
         const versionOutput = await $`${outfile} version`.text()
@@ -355,10 +357,12 @@ export async function buildSpinosaBinaries(options: BuildSpinosaBinariesOptions)
         if (!versionOutput.includes(options.version)) {
           throw new Error(`version smoke mismatch: expected ${options.version}, got ${versionOutput}`)
         }
-        for (const lib of onnxEmbed.libs) {
-          const staged = path.join(tmpdir(), lib.name)
-          if (!fs.existsSync(staged) || fs.statSync(staged).size < 1024) {
-            throw new Error(`host smoke: onnx lib not staged to tmpdir after version: ${staged}`)
+        if (onnxEmbed) {
+          for (const lib of onnxEmbed.libs) {
+            const staged = path.join(tmpdir(), lib.name)
+            if (!fs.existsSync(staged) || fs.statSync(staged).size < 1024) {
+              throw new Error(`host smoke: onnx lib not staged to tmpdir after version: ${staged}`)
+            }
           }
         }
       } catch (e) {

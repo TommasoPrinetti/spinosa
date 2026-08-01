@@ -60,7 +60,7 @@ export function createImportJob(input: {
     input.localEmit?.({
       directory: input.directory ?? "global",
       workspace: input.workspace,
-      payload: event as GlobalEvent["payload"],
+      payload: event as unknown as GlobalEvent["payload"],
     } as GlobalEvent)
   }
 

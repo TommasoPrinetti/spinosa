@@ -58,7 +58,7 @@ describe("ensureCanvasNativeBinding", () => {
         env,
       })
       expect(result.nativePath).toBe(path.join(stageDir, "skia.linux-arm64-gnu.node"))
-      expect(env.NAPI_RS_NATIVE_LIBRARY_PATH).toBe(result.nativePath)
+      expect(env.NAPI_RS_NATIVE_LIBRARY_PATH).toBe(result.nativePath ?? undefined)
       expect(existsSync(result.nativePath!)).toBe(true)
       expect(readFileSync(result.nativePath!).equals(payload)).toBe(true)
       expect(result.staged).toBe(result.nativePath)
@@ -70,7 +70,7 @@ describe("ensureCanvasNativeBinding", () => {
       })
       expect(again.skipped).toBe(true)
       expect(again.staged).toBeNull()
-      expect(env.NAPI_RS_NATIVE_LIBRARY_PATH).toBe(result.nativePath)
+      expect(env.NAPI_RS_NATIVE_LIBRARY_PATH).toBe(result.nativePath ?? undefined)
     } finally {
       rmSync(scratch, { recursive: true, force: true })
     }

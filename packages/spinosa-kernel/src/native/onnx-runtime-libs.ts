@@ -221,7 +221,7 @@ export function ensureOnnxRuntimeSharedLibs(
 ): { staged: string[]; skipped: string[]; stageDir: string } {
   const options: EnsureOnnxRuntimeSharedLibsOptions = Array.isArray(filesOrOptions)
     ? { files: filesOrOptions }
-    : filesOrOptions
+    : (filesOrOptions as EnsureOnnxRuntimeSharedLibsOptions)
   const files = options.files ?? ONNX_SHARED_LIB_FILES
   const staged: string[] = []
   const skipped: string[] = []
