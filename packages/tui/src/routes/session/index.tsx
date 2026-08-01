@@ -50,6 +50,7 @@ import { useDialog } from "../../ui/dialog"
 import { DialogAlert } from "../../ui/dialog-alert"
 import { TodoItem } from "../../component/todo-item"
 import { DialogMessage } from "./dialog-message"
+import { isConversationShellReady } from "./conversation-shell-ready"
 import type { PromptInfo } from "../../component/prompt/history"
 import { DialogConfirm } from "../../ui/dialog-confirm"
 import { DialogTimeline } from "./dialog-timeline"
@@ -330,12 +331,16 @@ const resolveExportPath = (filename: string): string => {
   })
   const visible = createMemo(() => !session()?.parentID && permissions().length === 0 && questions().length === 0)
   const disabled = createMemo(() => permissions().length > 0 || questions().length > 0)
+  // Must be declared before conversationReady — createMemo runs its getter immediately.
+  const [promptMounted, setPromptMounted] = createSignal(false)
 
-  const conversationReady = createMemo(() => {
-    if (!session()) return false
-    if (!visible()) return true
-    return promptMounted()
-  })
+  const conversationReady = createMemo(() =>
+    isConversationShellReady({
+      hasSession: Boolean(session()),
+      promptVisible: visible(),
+      promptMounted: promptMounted(),
+    }),
+  )
 
   createEffect(() => {
     if (!conversationBooting()) return
@@ -511,7 +516,6 @@ const resolveExportPath = (filename: string): string => {
   let seeded = false
   let scroll: ScrollBoxRenderable
   let prompt: PromptRef | undefined
-  const [promptMounted, setPromptMounted] = createSignal(false)
   const bind = (r: PromptRef | undefined) => {
     prompt = r
     promptRef.set(r)
