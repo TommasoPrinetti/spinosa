@@ -8,6 +8,7 @@ import { useTheme } from "../context/theme"
 import { useSync } from "../context/sync"
 import { errorMessage } from "../util/error"
 import { anySessionBusy } from "../util/session"
+import { safeResourceValue } from "../util/resource"
 import type { ExperimentalConsoleListOrgsResponse } from "@spinosa/sdk/v2"
 
 type OrgOption = ExperimentalConsoleListOrgsResponse["orgs"][number]
@@ -47,7 +48,7 @@ export function DialogConsoleOrg() {
 
   const showError = createMemo(() => Boolean(loadError()))
 
-  const current = createMemo(() => orgs()?.find((item) => item.active))
+  const current = createMemo(() => safeResourceValue(orgs)?.find((item) => item.active))
 
   const sessionsBusy = () =>
     anySessionBusy({
@@ -57,7 +58,7 @@ export function DialogConsoleOrg() {
     })
   const options = createMemo(() => {
     if (showError()) return []
-    const listed = orgs()
+    const listed = safeResourceValue(orgs)
     if (listed === undefined) {
       return [
         {

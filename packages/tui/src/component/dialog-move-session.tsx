@@ -18,6 +18,7 @@ import { Spinner } from "./spinner"
 import { DialogWorkspaceFileChanges } from "./dialog-workspace-file-changes"
 import type { ProjectDirectories } from "@spinosa/sdk/v2"
 import { useRoute } from "../context/route"
+import { safeResourceValue } from "../util/resource"
 
 export type MoveSessionSelection = { type: "directory"; directory: string; subdirectory: boolean } | { type: "new" }
 /** Selection result for a move-session target */
@@ -69,7 +70,7 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
   )
   const currentCheckout = createMemo(() => {
     if (projectContext.project() === props.projectID) return projectContext.instance.path().worktree
-    return loadedProject()
+    return safeResourceValue(loadedProject)
   })
 
   const [directories, { refetch }] = createResource<ProjectDirectory[] | undefined, string | undefined>(
@@ -91,7 +92,7 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
       }
     },
   )
-  const directoryData = createMemo<ProjectDirectory[] | undefined>(() => directories() ?? props.initialDirectories)
+  const directoryData = createMemo<ProjectDirectory[] | undefined>(() => safeResourceValue(directories) ?? props.initialDirectories)
   // Show the locked error view only when we have nothing to display. A refresh
   // that fails after the list rendered keeps the list and its actions.
   const showError = createMemo(() => Boolean(loadError()) && !directoryData())

@@ -7,6 +7,7 @@ import { useDialog } from "../ui/dialog"
 import { useSpinosaWorkspace } from "../context/spinosa-workspace"
 import { agentDisplayName } from "../util/agent"
 import { DialogMdViewer } from "../routes/session/dialog-md-viewer"
+import { safeResourceValue } from "../util/resource"
 
 export function DialogAgent() {
   const local = useLocal()
@@ -39,7 +40,7 @@ export function DialogAgent() {
       category: "SDK Agents",
     }))
 
-    const wsAgents = (spinosaAgents() ?? []).map((a) => ({
+    const wsAgents = (safeResourceValue(spinosaAgents) ?? []).map((a) => ({
       value: "file:" + a.path,
       title: a.name.charAt(0).toUpperCase() + a.name.slice(1),
       description: "View agent definition",

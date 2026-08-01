@@ -8,9 +8,25 @@ export function sendOcrWorkerMessage(type: string, payload: Record<string, unkno
   process.stdout.write(`${JSON.stringify({ type, ...payload })}\n`)
 }
 
+/** Hard-exit on cancel signals so parent stop latency stays low. */
+function installHardExitHandlers(): void {
+  const exitNow = (signal: string) => {
+    try {
+      sendOcrWorkerMessage("error", { message: `OCR worker aborted by ${signal}` })
+    } catch {
+      // stdout may already be closed
+    }
+    process.exit(1)
+  }
+  process.once("SIGTERM", () => exitNow("SIGTERM"))
+  process.once("SIGINT", () => exitNow("SIGINT"))
+}
+
 /** Shared OCR worker entry used by `bun run ppu-ocr-worker.ts` and `spinosa internal ocr-worker`. */
 export async function runOcrWorkerMain(input: OcrWorkerInput): Promise<void> {
+  installHardExitHandlers()
   const { files } = input
+  // Models load once here (first job start), then stay warm for the whole batch.
   const result = await runPpuOcrBatch(files, {
     onLog: (msg) => sendOcrWorkerMessage("log", { message: msg }),
     onProgress: (current, total, relPath) => sendOcrWorkerMessage("progress", { current, total, relPath }),

@@ -8,6 +8,29 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Process-local **JobRunner** control plane for Spinosa domain jobs: start → progress → **cancel-by-id** (kills child processes) → done/error. Import and research share the same cancel path; sessions stay on the SDK. GlobalBus job events remain observational; cancel authority is process-local.
+- Import **processor registry** (`direct` / `markitdown` / `ocr`) so wizards run phases through one protocol with shared abort and child registration.
+
+### Fixed
+
+- OCR cancel no longer waits for the full batch: abort kills the detached OCR child (SIGTERM → SIGKILL) and the OCR child hard-exits on SIGTERM/SIGINT.
+- Dead `activeChild` kill path in add-files removed; cancel goes through JobRunner + `registerChild`.
+- Sync bootstrap failures degrade to partial status instead of hard-exiting the TUI by default.
+- Session worker no longer hard-exits on `unhandledRejection` (log only); `uncaughtException` still exits. Import/OCR already isolate failures in parent children.
+- Workspace artifact watcher prefers `fs.watch` and polls less often when watches are active.
+- Additional dialogs read Solid resources via `safeResourceValue` to avoid ENOENT/render aborts.
+
+### Changed
+
+- OCR models still load once per OCR child, only when an OCR job starts (not at TUI boot).
+
+### Follow-up
+
+- MarkItDown remains in-process; a dedicated NDJSON child (same protocol as OCR) is deferred until cancel latency or crash isolation needs it.
+- Full shared `runImportWorkflow` across wizards deferred — both paths already call the processor registry.
+
 ## [1.0.3-beta.11] — 2026-07-31
 
 ### Fixed

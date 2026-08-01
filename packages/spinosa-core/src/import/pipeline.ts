@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, appendFileSync, readFileSync, readdirSync, rmSync } from "node:fs"
 import * as path from "node:path"
-import { spawn } from "node:child_process"
+import { spawn, type ChildProcess } from "node:child_process"
 import { fileURLToPath } from "node:url"
 import { MarkItDown } from "markitdown-ts"
 
@@ -22,11 +22,12 @@ import { spinosaLogInfo, spinosaLogWarn } from "../utils/log"
 import type { FileClass, ImportRoute } from "../extension/types"
 import { injectColdFrontmatter, convertedOutputExists } from "./frontmatter"
 import type { ImportBatchManager } from "./batch"
-import { isSpinosaCancellationError, throwIfSpinosaCancelled } from "./cancellation"
+import { isSpinosaCancellationError, throwIfSpinosaCancelled, SpinosaCancellationError } from "./cancellation"
 import type { PpuOcrFile, PpuOcrBatchResult } from "./ppu-ocr"
 import { ProgressEmitter } from "../progress/progress"
 import { ocrAvailable } from "../tools/detection"
 import { isCompiledBinaryDistribution } from "../distribution/bootstrap"
+import { terminateChild } from "../progress/child-kill"
 
 export interface CopyResult {
   copied: number
@@ -74,7 +75,7 @@ export interface PhaseResult {
 
 // ── Single-pass scan & classify ──────────────────────────────────────────
 
-interface ClassifiedEntry {
+export interface ClassifiedEntry {
   src: string
   rel: string
   dest: string
@@ -458,7 +459,9 @@ export async function processOcr(
   prog?: ProgressEmitter,
   onLog?: (msg: string) => void,
   shouldAbort?: () => boolean,
+  hooks?: { onChild?: (child: ChildProcess) => void },
 ): Promise<PhaseResult> {
+  throwIfSpinosaCancelled(shouldAbort)
   let converted = 0; let skipped = 0; let failed = 0
   const recoverable: { src: string; dest: string }[] = []
   // Monotonic count of files that have reached a terminal state (skip,
@@ -525,6 +528,7 @@ export async function processOcr(
       const result = await runOcrWorker(batch, {
         onLog,
         shouldAbort,
+        onChild: hooks?.onChild,
         onFileStart: (relPath) => {
           // Live label for TUI ProgressEmitter (numerator stays at files completed).
           prog?.file("OCR", processed, total, relPath)
@@ -773,11 +777,14 @@ async function runOcrWorker(
     onFileStart?: (relPath: string) => void
     onFile?: (result: { rel: string; ok: boolean; error?: string }) => void
     shouldAbort?: () => boolean
+    onChild?: (child: ChildProcess) => void
   },
 ): Promise<OcrWorkerRunResult> {
   throwIfSpinosaCancelled(options?.shouldAbort)
   const mode = resolveOcrWorkerMode()
   const workerArgs = JSON.stringify({ files })
+  // Detached so a native segfault/kill does not take down the TUI parent.
+  // Parent still tracks the PID and terminates the process group on cancel.
   const child =
     mode === "binary-cli"
       ? spawn(productBinaryExecutable(), ["internal", "ocr-worker", workerArgs], {
@@ -789,7 +796,8 @@ async function runOcrWorker(
           stdio: ["ignore", "pipe", "pipe"],
           detached: true,
         })
-  child.unref()
+
+  options?.onChild?.(child)
 
   const state = {
     workerConverted: 0,
@@ -814,10 +822,19 @@ async function runOcrWorker(
   })
   child.stderr?.on("data", (chunk: Buffer) => { stderrBuf += chunk.toString() })
 
-  const { code, signal } = await new Promise<{ code: number | null; signal: string | null }>((resolve) => {
-    child.on("close", (c, s) => resolve({ code: c, signal: s }))
-  })
+  const { code, signal, aborted } = await waitForOcrChild(child, options?.shouldAbort)
   if (stdoutCarry.trim()) consumeOcrWorkerNdjsonLine(stdoutCarry, state, options)
+
+  // Only unref after we are done waiting so cancel keeps a live handle.
+  try {
+    child.unref()
+  } catch {
+    // ignore
+  }
+
+  if (aborted) {
+    throw new SpinosaCancellationError("OCR worker cancelled")
+  }
 
   if (stderrBuf.trim()) {
     const errLine = stderrBuf.trim().split("\n").slice(-3).join(" | ")
@@ -854,6 +871,41 @@ async function runOcrWorker(
     crashedRel: crashed ? state.inFlightRel : undefined,
     crashed,
   }
+}
+
+/** Await child close, or terminate immediately when shouldAbort flips. */
+async function waitForOcrChild(
+  child: ChildProcess,
+  shouldAbort?: () => boolean,
+): Promise<{ code: number | null; signal: string | null; aborted: boolean }> {
+  return new Promise((resolve) => {
+    let settled = false
+    const finish = (result: { code: number | null; signal: string | null; aborted: boolean }) => {
+      if (settled) return
+      settled = true
+      clearInterval(poll)
+      resolve(result)
+    }
+
+    child.on("close", (c, s) => finish({ code: c, signal: s, aborted: false }))
+    child.on("error", () => finish({ code: 1, signal: null, aborted: false }))
+
+    const poll = setInterval(() => {
+      if (!shouldAbort?.()) return
+      clearInterval(poll)
+      void terminateChild(child).then(() => {
+        finish({ code: null, signal: "SIGTERM", aborted: true })
+      })
+    }, 75)
+
+    // Immediate check in case abort was already requested.
+    if (shouldAbort?.()) {
+      clearInterval(poll)
+      void terminateChild(child).then(() => {
+        finish({ code: null, signal: "SIGTERM", aborted: true })
+      })
+    }
+  })
 }
 
 

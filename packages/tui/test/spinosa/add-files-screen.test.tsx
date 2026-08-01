@@ -148,6 +148,14 @@ test("scans and imports files from the dedicated add-files screen", async () => 
   mock.module("../../src/ui/dialog", () => ({
     useDialog: () => ({ clear() {}, replace() {} }),
   }))
+  mock.module("../../src/context/sdk", () => ({
+    useSDK: () => ({
+      directory: workspace,
+      publishJobEvent: () => {},
+      event: { emit() {} },
+      client: {},
+    }),
+  }))
   mock.module("../../src/spinosa/onboarding-preview", () => ({
     detectDocumentTools: async () => ({ markitdown: true, ocr: true, pdfjs: true }),
     resolveUserPath: (value: string) => value.trim() || undefined,

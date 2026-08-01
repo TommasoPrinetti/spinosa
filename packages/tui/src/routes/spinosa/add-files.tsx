@@ -1,4 +1,3 @@
-import type { ChildProcess } from "node:child_process"
 import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs"
 import path from "node:path"
 import { spawn } from "node:child_process"
@@ -10,11 +9,12 @@ import { useTheme } from "../../context/theme"
 import { useRoute } from "../../context/route"
 import { useSpinosaWorkspace } from "../../context/spinosa-workspace"
 import { Toast, useToast } from "../../ui/toast"
-import { scanAndClassifySource, processDirectCopy, processMarkitdown, processOcr } from "@spinosa/core/import/pipeline"
+import { scanAndClassifySource } from "@spinosa/core/import/pipeline"
 import { isSpinosaCancellationError } from "@spinosa/core/import/cancellation"
 import { ImportBatchManager } from "@spinosa/core/import/batch"
 import { useSDK } from "../../context/sdk"
-import { createImportJob } from "../../spinosa/job-events"
+import { createImportJob, type ImportJobHandle } from "../../spinosa/job-events"
+import { runImportProcessor } from "@spinosa/core/import/processors"
 import { tuiLog, logStep, logAction, logTool, logGate, logError, setToastError } from "../../spinosa/log"
 import { CenteredColumn } from "../../component/centered-column"
 import { SPINOSA_BASE_MODE, useOpencodeKeymap, useOpencodeModeStack } from "../../keymap"
@@ -201,7 +201,7 @@ export function AddFiles() {
 
   const workflow = createWorkflowGuard()
   const activeWork = createActiveWorkTracker()
-  let activeChild: ChildProcess | undefined
+  let activeJob: ImportJobHandle | undefined
   let sourceInput: TextareaRenderable | undefined
   const sourceInputs = new Map<number, TextareaRenderable>()
   const pathSnapshot = new Map<number, string>()
@@ -363,17 +363,13 @@ export function AddFiles() {
   }
 
   // ── Navigation & lifecycle ────────────────────────────────────────────────
-  const killActiveChild = () => {
-    if (activeChild && !activeChild.killed) activeChild.kill("SIGTERM")
-    activeChild = undefined
-  }
-
   const stopActiveWork = () => {
     setStopping(true)
     if (gateResolve) { gateResolve(); gateResolve = undefined }
     abortProcessing = true
     workflow.bump()
-    killActiveChild()
+    activeJob?.cancel()
+    activeJob = undefined
     setBusy(false)
     setWaitingForGate(false)
   }
@@ -404,7 +400,7 @@ export function AddFiles() {
       }),
       confirm: () => confirmSpinosaBack(dialog, from),
       stop: stopActiveWork,
-      waitForStop: () => activeWork.wait(),
+      waitForStop: () => activeWork.wait(2500),
       navigate: () => navigateBackFrom(from),
     }).finally(() => { backNavigationPending = false; setStopping(false) })
   }
@@ -576,7 +572,6 @@ export function AddFiles() {
     setProcessingFile("")
     abortProcessing = false
     const generation = workflow.bump()
-    const shouldAbort = () => abortProcessing || !workflow.active(generation)
     gateResolve = undefined
     spinOn()
     await delay(200)
@@ -603,6 +598,8 @@ export function AddFiles() {
       publish: sdk.publishJobEvent,
       localEmit: (event) => sdk.event.emit("event", event),
     })
+    activeJob = job
+    const shouldAbort = () => abortProcessing || !workflow.active(generation) || job.shouldAbort()
     job.start()
     const sharedProg = job.prog
     sharedProg.on((e) => {
@@ -638,7 +635,14 @@ export function AddFiles() {
         setProcessingStatus(`Direct copy — ${directCount} files`)
         totalDirect += directCount
         await delay(500)
-        const dr = await processDirectCopy(classified.directFiles, sharedProg, onPhaseLog, undefined, shouldAbort, undefined, (original, renamed) => { totalRenamed++; appendLogLine(`  renamed (name too long): ${original} → ${renamed}`) })
+        const dr = await runImportProcessor("direct", {
+          files: classified.directFiles,
+          logsDir: classified.logsDir,
+          prog: sharedProg,
+          onLog: onPhaseLog,
+          shouldAbort,
+          onRename: (original, renamed) => { totalRenamed++; appendLogLine(`  renamed (name too long): ${original} → ${renamed}`) },
+        })
         if (dr.failed > 0) totalFailed += dr.failed
         if (dr.renamed > 0) totalRenamed += dr.renamed
         if (shouldAbort()) { spinOff(); setBusy(false); return }
@@ -658,7 +662,13 @@ export function AddFiles() {
           setProcessingStatus("MarkItDown conversion...")
           totalMd += mdCount
           await delay(500)
-          const mr = await processMarkitdown(classified.markitdownFiles, classified.logsDir, sharedProg, onPhaseLog, shouldAbort)
+          const mr = await runImportProcessor("markitdown", {
+            files: classified.markitdownFiles,
+            logsDir: classified.logsDir,
+            prog: sharedProg,
+            onLog: onPhaseLog,
+            shouldAbort,
+          })
           if (mr.failed > 0) totalFailed += mr.failed
           if (mr.renamed > 0) totalRenamed += mr.renamed
           if (shouldAbort()) { spinOff(); setBusy(false); return }
@@ -681,7 +691,14 @@ export function AddFiles() {
           setProcessingStatus("OCR...")
           totalOcr += ocrCount
           await delay(500)
-          const or = await processOcr(classified.ocrFiles, classified.logsDir, sharedProg, onPhaseLog, shouldAbort)
+          const or = await runImportProcessor("ocr", {
+            files: classified.ocrFiles,
+            logsDir: classified.logsDir,
+            prog: sharedProg,
+            onLog: onPhaseLog,
+            shouldAbort,
+            onChild: job.registerChild,
+          })
           if (or.failed > 0) totalFailed += or.failed
           if (or.renamed > 0) totalRenamed += or.renamed
           if (shouldAbort()) { spinOff(); setBusy(false); return }
@@ -713,6 +730,7 @@ export function AddFiles() {
       setStep("error")
     } finally {
       if (shouldAbort() && !processingDone()) job.cancel()
+      if (activeJob === job) activeJob = undefined
       spinOff()
       setBusy(false)
     }

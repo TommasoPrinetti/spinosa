@@ -621,16 +621,20 @@ export const {
             name: e instanceof Error ? e.name : undefined,
             stack: e instanceof Error ? e.stack : undefined,
           })
+          setStore("status", "partial")
           if (fatal) {
             exit(e)
-          } else {
-            throw e
           }
+          // Non-fatal: stay in degraded/partial mode so the TUI remains usable.
         })
     }
 
     onMount(() => {
-      void bootstrap()
+      // Non-fatal bootstrap: provider/config failures should degrade, not kill the TUI.
+      void bootstrap({ fatal: false }).catch((e) => {
+        console.error("tui bootstrap degraded", e instanceof Error ? e.message : String(e))
+        setStore("status", "partial")
+      })
     })
 
     const result = {

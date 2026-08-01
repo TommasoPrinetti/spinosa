@@ -10,11 +10,12 @@ import { useSpinosaWorkspace } from "../../context/spinosa-workspace"
 import { Toast } from "../../ui/toast"
 import { createWorkspace, resolveWorkspacePath } from "@spinosa/core/commands/create"
 import { useSDK } from "../../context/sdk"
-import { createImportJob } from "../../spinosa/job-events"
+import { createImportJob, type ImportJobHandle } from "../../spinosa/job-events"
 import { prepareOnboarding, completeOnboarding } from "@spinosa/core/commands/onboard"
 import type { OnboardingContext, PhaseAccumulator, OnboardingResult } from "@spinosa/core/commands/onboard"
-import { scanAndClassifySource, processDirectCopy, processMarkitdown, processOcr, type PhaseResult } from "@spinosa/core/import/pipeline"
+import { scanAndClassifySource, type PhaseResult } from "@spinosa/core/import/pipeline"
 import { isSpinosaCancellationError } from "@spinosa/core/import/cancellation"
+import { runImportProcessor } from "@spinosa/core/import/processors"
 import { addFiles } from "@spinosa/core/commands/add"
 import {
   buildStartupChatPrompt,
@@ -373,6 +374,7 @@ let nameInput: TextareaRenderable | undefined
 
   const workflow = createWorkflowGuard()
   const activeWork = createActiveWorkTracker()
+  let activeJob: ImportJobHandle | undefined
   const pathSnapshot = new Map<number, string>(resumeSourceLocation ? [[0, resumeSourceLocation]] : [])
   const sourceInputs = new Map<number, TextareaRenderable>()
 
@@ -443,6 +445,8 @@ let nameInput: TextareaRenderable | undefined
     if (gateResolve) { gateResolve(); gateResolve = undefined }
     workflow.bump()
     abortProcessing = true
+    activeJob?.cancel()
+    activeJob = undefined
     setBusy(false)
     setWaitingForGate(false)
   }
@@ -491,7 +495,7 @@ let nameInput: TextareaRenderable | undefined
       }),
       confirm: () => confirmSpinosaBack(dialog, from),
       stop: stopActiveWork,
-      waitForStop: () => activeWork.wait(),
+      waitForStop: () => activeWork.wait(2500),
       navigate: () => navigateBackFrom(from),
     }).finally(() => { backNavigationPending = false; setStopping(false) })
   }
@@ -715,7 +719,6 @@ let nameInput: TextareaRenderable | undefined
     setProcessingStatus("Starting...")
     abortProcessing = false
     const generation = workflow.bump()
-    const shouldAbort = () => abortProcessing || !workflow.active(generation)
     gateResolve = undefined
     spinOn()
     await delay(200)
@@ -733,6 +736,8 @@ let nameInput: TextareaRenderable | undefined
       publish: sdk.publishJobEvent,
       localEmit: (event) => sdk.event.emit("event", event),
     })
+    activeJob = job
+    const shouldAbort = () => abortProcessing || !workflow.active(generation) || job.shouldAbort()
     job.start()
     const sharedProg = job.prog
     sharedProg.on((e) => {
@@ -829,9 +834,17 @@ let nameInput: TextareaRenderable | undefined
       setProgCurrent(0)
       setProcessingStatus("Preparing direct copy...")
       await delay(1000)
-      const dr = await processDirectCopy(classified.directFiles, sharedProg, onPhaseLog, undefined, shouldAbort, (attempt, reason) => {
-        setProcessingStatus(`Retrying file (attempt ${attempt}): ${reason}`)
-      }, (original, renamed) => { totalRenamed++; appendLogLine(`  renamed (name too long): ${original} → ${renamed}`) })
+      const dr = await runImportProcessor("direct", {
+        files: classified.directFiles,
+        logsDir: classified.logsDir,
+        prog: sharedProg,
+        onLog: onPhaseLog,
+        shouldAbort,
+        onRetry: (attempt, reason) => {
+          setProcessingStatus(`Retrying file (attempt ${attempt}): ${reason}`)
+        },
+        onRename: (original, renamed) => { totalRenamed++; appendLogLine(`  renamed (name too long): ${original} → ${renamed}`) },
+      })
       if (dr.failed > 0) totalFailed += dr.failed
       if (dr.renamed > 0) totalRenamed += dr.renamed
       if (shouldAbort()) { spinOff(); setBusy(false); return }
@@ -847,7 +860,13 @@ let nameInput: TextareaRenderable | undefined
         setProgCurrent(0)
         setProcessingStatus("Preparing MarkItDown conversion...")
         await delay(1000)
-        mr = await processMarkitdown(classified.markitdownFiles, classified.logsDir, sharedProg, onPhaseLog, shouldAbort)
+        mr = await runImportProcessor("markitdown", {
+          files: classified.markitdownFiles,
+          logsDir: classified.logsDir,
+          prog: sharedProg,
+          onLog: onPhaseLog,
+          shouldAbort,
+        })
         if (mr.failed > 0) totalFailed += mr.failed
         if (mr.renamed > 0) totalRenamed += mr.renamed
         if (shouldAbort()) { spinOff(); setBusy(false); return }
@@ -867,7 +886,14 @@ let nameInput: TextareaRenderable | undefined
         setProgCurrent(0)
         setProcessingStatus("Preparing OCR...")
         await delay(1000)
-        or = await processOcr(classified.ocrFiles, classified.logsDir, sharedProg, onPhaseLog, shouldAbort)
+        or = await runImportProcessor("ocr", {
+          files: classified.ocrFiles,
+          logsDir: classified.logsDir,
+          prog: sharedProg,
+          onLog: onPhaseLog,
+          shouldAbort,
+          onChild: job.registerChild,
+        })
         if (or.failed > 0) totalFailed += or.failed
         if (or.renamed > 0) totalRenamed += or.renamed
         if (shouldAbort()) { spinOff(); setBusy(false); return }
@@ -950,6 +976,7 @@ let nameInput: TextareaRenderable | undefined
       setStep("error")
     } finally {
       if (shouldAbort() && !processingDone()) job.cancel()
+      if (activeJob === job) activeJob = undefined
       spinOff()
       setBusy(false)
     }

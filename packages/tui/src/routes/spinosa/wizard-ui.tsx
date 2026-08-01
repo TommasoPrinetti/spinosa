@@ -56,8 +56,17 @@ export function createActiveWorkTracker() {
       )
       return current
     },
-    async wait() {
-      await active?.then(() => undefined, () => undefined)
+    /** Wait for active work, or resolve after maxMs so navigation is not blocked forever. */
+    async wait(maxMs = 0) {
+      if (!active) return
+      if (maxMs <= 0) {
+        await active.then(() => undefined, () => undefined)
+        return
+      }
+      await Promise.race([
+        active.then(() => undefined, () => undefined),
+        new Promise<void>((resolve) => setTimeout(resolve, maxMs)),
+      ])
     },
   }
 }

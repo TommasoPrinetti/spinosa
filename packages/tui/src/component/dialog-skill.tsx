@@ -5,6 +5,7 @@ import { useDialog } from "../ui/dialog"
 import { useSDK } from "../context/sdk"
 import { useTheme } from "../context/theme"
 import { errorMessage } from "../util/error"
+import { safeResourceValue } from "../util/resource"
 
 export type DialogSkillProps = {
   onSelect: (skill: string) => void
@@ -35,7 +36,7 @@ export function DialogSkill(props: DialogSkillProps) {
 
   const options = createMemo<DialogSelectOption<string>[]>(() => {
     if (showError()) return []
-    const list = skills() ?? []
+    const list = safeResourceValue(skills) ?? []
     const maxWidth = Math.max(0, ...list.map((s) => s.name.length))
     return list.map((skill) => ({
       title: skill.name.padEnd(maxWidth),

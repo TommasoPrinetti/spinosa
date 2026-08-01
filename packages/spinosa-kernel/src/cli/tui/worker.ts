@@ -22,18 +22,31 @@ setInterval(() => {
 }, 2000)
 
 let fatal = false
-const failWorker = (error: unknown) => {
+
+function reportWorkerError(kind: "unhandledRejection" | "uncaughtException", error: unknown): string {
+  const detail = error instanceof Error ? error.stack ?? error.message : String(error)
+  process.stderr.write(`TUI worker ${kind}: ${detail}\n`)
+  bootLog("worker.error", `TUI worker ${kind}`, { error: String(error) })
+  return detail
+}
+
+/**
+ * Soften unhandledRejection: Spinosa long ops (import/OCR) run in the parent
+ * with killable JobRunner children, so a stray rejection must not tear down the
+ * session server. Uncaught exceptions still hard-exit — process integrity may
+ * already be compromised.
+ */
+const onUnhandledRejection = (error: unknown) => {
+  reportWorkerError("unhandledRejection", error)
+}
+
+const onUncaughtException = (error: Error) => {
+  reportWorkerError("uncaughtException", error)
   if (fatal) return
   fatal = true
-  const detail = error instanceof Error ? error.stack ?? error.message : String(error)
-  process.stderr.write(`Fatal TUI worker error: ${detail}\n`)
   process.exitCode = 1
   queueMicrotask(() => process.exit(1))
 }
-
-const onUnhandledRejection = (error: unknown) => failWorker(error)
-
-const onUncaughtException = (error: Error) => failWorker(error)
 
 process.on("unhandledRejection", onUnhandledRejection)
 process.on("uncaughtException", onUncaughtException)

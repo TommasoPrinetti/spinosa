@@ -33,6 +33,7 @@ import { workspaceAsciiBannerText, resolveWorkspaceDisplayName } from "../spinos
 import { upgradeFramework } from "@spinosa/core/commands/upgrade"
 import { type ReleaseChannel } from "@spinosa/core/system/channels"
 import { cleanupStaleInstallDirectories, inspectSpinosaMaintenance } from "@spinosa/core/system/maintenance"
+import { JobRunner } from "@spinosa/core/progress/job-runner"
 import type { SpinosaSetupStatus } from "../spinosa/types"
 import { DialogConfirm } from "../ui/dialog-confirm"
 import { dirname, join } from "node:path"
@@ -191,15 +192,20 @@ export function Home() {
     if (!bundled) return
     setMaintenanceAction("repairing")
     const channel: ReleaseChannel = isPrereleaseFrameworkVersion(bundled) ? "beta" : "stable"
+    const job = JobRunner.register({ kind: "upgrade", title: "Repair dependencies" })
+    toast.show({ variant: "info", message: "Repairing Spinosa runtime…" })
     try {
       const result = await upgradeFramework({ channel, version: bundled, reinstall: true, yes: true, suppressInstallOutput: true })
       if (!result.success) {
+        job.finish("error")
         toast.show({ variant: "error", message: "Dependency repair failed." })
         return
       }
+      job.finish("completed")
       toast.show({ variant: "success", message: "Dependencies repaired. Restart Spinosa to use the repaired runtime." })
       await refetchMaintenance()
     } catch (error) {
+      job.finish("error")
       toast.show({ variant: "error", message: error instanceof Error ? error.message : String(error) })
     } finally {
       setMaintenanceAction("idle")

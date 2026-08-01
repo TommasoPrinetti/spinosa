@@ -1,3 +1,4 @@
+import type { ChildProcess } from "node:child_process"
 import type { GlobalEvent } from "@spinosa/sdk/v2"
 import {
   bridgeJobLog,
@@ -9,6 +10,7 @@ import {
   type JobEventListener,
 } from "@spinosa/core/progress/job-event"
 import { ProgressEmitter } from "@spinosa/core/progress/progress"
+import { JobRunner, type RegisteredJob } from "@spinosa/core/progress/job-runner"
 
 export type PublishGlobalJobEvent = (input: {
   directory?: string
@@ -20,13 +22,22 @@ export type ImportJobHandle = {
   jobId: string
   prog: ProgressEmitter
   onJobEvent: JobEventListener
+  /** Real cancel flag backed by JobRunner (also true after cancel()). */
+  shouldAbort: () => boolean
+  /** Track OCR/other child processes so cancel() kills them. */
+  registerChild: (child: ChildProcess) => void
   wrapLog: (onLog?: (msg: string) => void) => (msg: string) => void
   start: (kind?: string, title?: string) => void
   finish: (status?: "completed" | "error", summary?: string) => void
+  /** Cancel-by-id: aborts work, kills children, publishes job.cancelled. */
   cancel: () => void
+  registered: RegisteredJob
 }
 
-/** Build a ProgressEmitter that dual-publishes to local listeners and job bus events. */
+/**
+ * Build a ProgressEmitter that dual-publishes to local listeners and job bus events,
+ * and registers a real cancelable job on the process-local JobRunner.
+ */
 export function createImportJob(input: {
   kind?: string
   title?: string
@@ -53,15 +64,35 @@ export function createImportJob(input: {
     } as GlobalEvent)
   }
 
+  const registered = JobRunner.register({
+    jobId,
+    kind,
+    title: input.title,
+  })
+
   const prog = new ProgressEmitter({ jobId, onJobEvent })
 
   return {
     jobId,
     prog,
     onJobEvent,
+    shouldAbort: () => registered.shouldAbort(),
+    registerChild: (child) => registered.registerChild(child),
     wrapLog: (onLog) => bridgeJobLog(jobId, onJobEvent, onLog),
     start: (k = kind, title = input.title) => emitJobStarted(onJobEvent, jobId, k, title),
-    finish: (status = "completed", summary) => emitJobFinished(onJobEvent, jobId, status, summary),
-    cancel: () => emitJobCancelled(onJobEvent, jobId),
+    finish: (status = "completed", summary) => {
+      registered.finish(status)
+      emitJobFinished(onJobEvent, jobId, status, summary)
+    },
+    cancel: () => {
+      registered.cancel()
+      emitJobCancelled(onJobEvent, jobId)
+    },
+    registered,
   }
+}
+
+/** Cancel any Spinosa domain job by id (import, research, etc.). */
+export function cancelSpinosaJob(jobId: string): boolean {
+  return JobRunner.cancel(jobId)
 }
