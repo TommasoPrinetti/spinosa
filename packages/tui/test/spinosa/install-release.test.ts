@@ -225,6 +225,52 @@ describe("install and release flow", () => {
     expect(installer).not.toContain("install --frozen-lockfile")
     expect(installer).not.toMatch(/ensure_opentui_links\s*\(/)
     expect(installer).not.toContain('--preload "@opentui/solid/preload"')
+    // Activation gates fail closed (binary-distribution-contract).
+    expect(installer).toContain('die "Template verify failed — refusing to activate staged binary"')
+    expect(installer).toContain('die "Template ensure failed — refusing to activate staged binary"')
+    expect(installer).toContain('die "Doctor reported issues — refusing to activate staged binary"')
+    expect(installer).not.toContain("continuing; doctor will soft-check")
+    expect(installer).not.toContain("non-fatal during template soft-check")
+    expect(installer).not.toContain("non-fatal if templates are still warming")
+  })
+
+  test("patch-local-install refuses binary product installs", async () => {
+    const script = await Bun.file(path.join(repoRoot, "script", "patch-local-install.sh")).text()
+    expect(script).toContain("is_binary_product_install")
+    expect(script).toContain("refusing to patch a binary Spinosa install")
+    expect(script).toContain("distribution:[[:space:]]*binary")
+
+    await using tmp = await tmpdir()
+    const home = path.join(tmp.path, "home")
+    await mkdir(path.join(home, "metadata"), { recursive: true })
+    await mkdir(path.join(home, "bin"), { recursive: true })
+    await Bun.write(
+      path.join(home, "metadata", "config.yaml"),
+      ["spinosa: true", "distribution: binary", "last_installed_version: 1.0.3-beta.11", ""].join("\n"),
+    )
+    // ELF magic so the compiled-binary heuristic also trips if metadata were absent.
+    await Bun.write(path.join(home, "bin", "spinosa"), Buffer.from([0x7f, 0x45, 0x4c, 0x46, 0x00]))
+    await chmod(path.join(home, "bin", "spinosa"), 0o755)
+
+    const refused = Bun.spawnSync({
+      cmd: ["bash", path.join(repoRoot, "script", "patch-local-install.sh")],
+      cwd: repoRoot,
+      env: {
+        ...process.env,
+        SPINOSA_HOME: home,
+        SPINOSA_BIN_DIR: path.join(tmp.path, "bin"),
+        HOME: tmp.path,
+        PATH: process.env.PATH ?? "/usr/bin:/bin",
+      },
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    expect(refused.exitCode).not.toBe(0)
+    expect(refused.stderr.toString() + refused.stdout.toString()).toContain("refusing to patch a binary Spinosa install")
+    // Must not have overwritten the product binary with a shell forwarder.
+    const active = Buffer.from(await Bun.file(path.join(home, "bin", "spinosa")).arrayBuffer())
+    expect(active[0]).toBe(0x7f)
+    expect(active[1]).toBe(0x45)
   })
 
   test("installer clears reclaimable virgin debris while refusing owned homes", async () => {

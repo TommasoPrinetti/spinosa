@@ -5,6 +5,8 @@
  * Design doc: docs/release/binary-distribution-contract.md
  */
 
+import { existsSync, readdirSync } from "node:fs"
+
 export const PRODUCT_BINARY_TARGETS = [
   "darwin-arm64",
   "darwin-x64",
@@ -97,13 +99,67 @@ export function isProductBinaryTarget(value: string): value is ProductBinaryTarg
   return (PRODUCT_BINARY_TARGETS as readonly string[]).includes(value)
 }
 
+/** User-facing refusal shared with install.sh wording. */
+export const MUSL_UNSUPPORTED_MESSAGE =
+  "musl/Alpine Linux is unsupported; Spinosa needs glibc Linux (or macOS). Binary assets are glibc-only."
+
+export type MuslLinuxHints = {
+  /** Override process.platform (use "linux" / "darwin"). */
+  platform?: string
+  /** True when /etc/alpine-release exists. */
+  alpineReleaseExists?: boolean
+  /** True when /lib/ld-musl-* is present. */
+  ldMuslPresent?: boolean
+  /** Output of `ldd --version` (stderr+stdout). */
+  lddVersionText?: string
+  /** Directory to scan for ld-musl-* when auto-detecting (default /lib). */
+  libDir?: string
+}
+
+function hasLdMuslBinary(libDir: string): boolean {
+  try {
+    return readdirSync(libDir).some((name) => name.startsWith("ld-musl-"))
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Detect musl/Alpine Linux from explicit probe hints or live host checks.
+ * Non-linux platforms always return false. Aligns with install.sh `is_musl_linux`.
+ */
+export function isMuslLinux(hints?: MuslLinuxHints): boolean {
+  const platform = (hints?.platform ?? process.platform).toLowerCase()
+  if (platform !== "linux") return false
+
+  const hasExplicit =
+    hints?.alpineReleaseExists !== undefined ||
+    hints?.ldMuslPresent !== undefined ||
+    hints?.lddVersionText !== undefined
+
+  if (hasExplicit) {
+    if (hints?.alpineReleaseExists) return true
+    if (hints?.ldMuslPresent) return true
+    if (hints?.lddVersionText && /musl/i.test(hints.lddVersionText)) return true
+    return false
+  }
+
+  if (existsSync("/etc/alpine-release")) return true
+  if (hasLdMuslBinary(hints?.libDir ?? "/lib")) return true
+  return false
+}
+
 /**
  * Map host uname values to a canonical product target.
  * Rejects Windows / musl / unknown arches.
+ *
+ * Pass `libc: "musl"` to refuse explicitly. On a live musl host, linux targets
+ * are refused unless `libc` is set to `gnu` / `glibc` (cross-resolve escape hatch).
  */
 export function resolveProductBinaryTarget(input: {
   os: string
   arch: string
+  libc?: string
 }): ProductBinaryTarget {
   const osRaw = input.os.trim().toLowerCase()
   const archRaw = input.arch.trim().toLowerCase()
@@ -117,6 +173,17 @@ export function resolveProductBinaryTarget(input: {
   if (archRaw === "arm64" || archRaw === "aarch64") arch = "arm64"
   else if (archRaw === "x64" || archRaw === "x86_64" || archRaw === "amd64") arch = "x64"
   else throw new Error(`Unsupported architecture for binary distribution: ${input.arch}`)
+
+  if (os === "linux") {
+    const libc = input.libc?.trim().toLowerCase()
+    if (libc === "musl") {
+      throw new Error(MUSL_UNSUPPORTED_MESSAGE)
+    }
+    const explicitGnu = libc === "gnu" || libc === "glibc"
+    if (!explicitGnu && isMuslLinux()) {
+      throw new Error(MUSL_UNSUPPORTED_MESSAGE)
+    }
+  }
 
   const target = `${os}-${arch}` as ProductBinaryTarget
   if (!isProductBinaryTarget(target)) {

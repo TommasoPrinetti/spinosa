@@ -28,7 +28,10 @@ Canonical keys use `x64` (never `amd64` in asset names):
 | Linux | `arm64`, `aarch64` | `linux-arm64` |
 | Linux | `x86_64`, `amd64`, `x64` | `linux-x64` |
 
-Unsupported: Windows, musl, baseline non-AVX variants (first cut).
+Unsupported: Windows, musl/Alpine (glibc Linux only), baseline non-AVX variants (first cut).
+
+Installer (`install.sh`) and `resolveProductBinaryTarget` refuse musl when detectable
+(`/etc/alpine-release`, `/lib/ld-musl-*`, or `ldd --version` mentioning musl) before download.
 
 ## Install layout
 
@@ -127,7 +130,8 @@ See `docs/release/stable-promotion-gates.md`.
 
 ## Known cut notes (native packaging)
 
-- ONNX companion libs (`libonnxruntime.1.dylib` / `libonnxruntime.so.1`) are written under `src/generated/onnx-libs/<os>-<arch>/` and imported from on-disk `onnx-native.gen.ts` (same Bun `--compile` pattern as template-blobs). At process start they are staged into `os.tmpdir()` next to Bun’s extracted `.<hash>.node` so `@rpath` / `$ORIGIN` resolve without user `LD_LIBRARY_PATH`.
+- ONNX companion libs (`libonnxruntime.1.dylib` / `libonnxruntime.so.1`) are written under `src/generated/onnx-libs/<os>-<arch>/` and imported from on-disk `onnx-native.gen.ts` (same Bun `--compile` pattern as template-blobs). At process start they are staged under `$SPINOSA_HOME/cache/onnx-runtime` on Linux (tmpdir-first on Darwin for `@rpath` adjacency) and also mirrored into `os.tmpdir()` when that differs. **Linux binary boots re-exec once** with `LD_LIBRARY_PATH` pointing at the stage dir (`SPINOSA_NATIVE_LIBS_READY=1` prevents loops) because glibc ignores in-process `LD_LIBRARY_PATH` mutations — virgin installs must not require a manual export. Darwin does not re-exec (SIP may strip `DYLD_LIBRARY_PATH`; tmpdir `$ORIGIN` adjacency is the load path). **Exception:** `spinosa-linux-x64` does **not** embed or stage ONNX / OCR (`ppu-paddle-ocr`); doctor reports OCR as unsupported and activation must not fail closed solely for that.
+- Canvas skia natives (`skia.<triple>.node`) are written under `src/generated/canvas-libs/<os>-<arch>/` via `canvas-native.gen.ts` and staged at start into `$SPINOSA_HOME/cache/canvas-native` (with onnx-style fallbacks). `NAPI_RS_NATIVE_LIBRARY_PATH` is set before any canvas/OCR import so nested OCR/`ppu-ocv` loads work on Linux Bun `--compile` (optional `@napi-rs/canvas-*` `require()` fails there even when doctor’s direct canvas import succeeds). The Linux re-exec inherits this env.
 - Host `darwin-arm64` strict smoke (`version` / `doctor`) clears any leftover staged lib first, then requires re-stage from the embed.
 - Upstream `onnxruntime-node` (≥1.24) omits `darwin/x64` binaries ([onnxruntime#27961](https://github.com/microsoft/onnxruntime/issues/27961)). The binary build vendors `onnxruntime-node@1.23.2` darwin/x64 fail-closed and pins Bun resolution to the workspace paddle-linked install (ignores polluted home `node_modules`).
 - pdfjs may warn that `@napi-rs/canvas` cannot load from some BunFS chunks while doctor still reports Canvas/PDF available. Non-blocking for CLI smoke; PDF raster follow-up tracked in the beta.10 checklist.

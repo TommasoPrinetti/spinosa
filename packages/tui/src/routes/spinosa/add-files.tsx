@@ -8,14 +8,14 @@ import { createStore } from "solid-js/store"
 import { useTheme } from "../../context/theme"
 import { useRoute } from "../../context/route"
 import { useSpinosaWorkspace } from "../../context/spinosa-workspace"
-import { Toast, useToast } from "../../ui/toast"
+import { useToast } from "../../ui/toast"
 import { scanAndClassifySource } from "@spinosa/core/import/pipeline"
 import { isSpinosaCancellationError } from "@spinosa/core/import/cancellation"
 import { ImportBatchManager } from "@spinosa/core/import/batch"
 import { useSDK } from "../../context/sdk"
 import { createImportJob, type ImportJobHandle } from "../../spinosa/job-events"
-import { runImportProcessor } from "@spinosa/core/import/processors"
-import { tuiLog, logStep, logAction, logTool, logGate, logError, setToastError } from "../../spinosa/log"
+import { runImportWorkflow } from "@spinosa/core/import/import-workflow"
+import { tuiLog, logStep, logAction, logTool, logGate, logError, setToastError, persistImportWizardLogLines } from "../../spinosa/log"
 import { CenteredColumn } from "../../component/centered-column"
 import { SPINOSA_BASE_MODE, useOpencodeKeymap, useOpencodeModeStack } from "../../keymap"
 import { useExit } from "../../context/exit"
@@ -41,11 +41,15 @@ import {
   ImportOptionsSelector,
   nextFocusedSourceIndexForAppend,
   runGuardedBackNavigation,
+  shouldActivateWizardToolAction,
   shouldCancelSpinosaWorkOnCtrlC,
   shouldConfirmSpinosaBack,
+  STOP_SCREEN_DEFAULT_HINT,
+  STOP_SCREEN_MIN_DWELL_MS,
+  STOP_SCREEN_STILL_HINT,
+  STOP_WAIT_SOFT_MS,
   type ImportOption,
   LogScrollbox,
-  LogoSummary,
   ProgressBar,
   stripAnsi,
   WizardActionButton,
@@ -54,12 +58,21 @@ import {
   WizardPanel,
   yieldToEventLoop,
 } from "./wizard-ui"
+import {
+  applyImportProgressStatus,
+  formatImportDetailLogHint,
+  importOutcomeAccentKey,
+  importOutcomeHeading,
+  seedImportQueue,
+  shouldShowImportDetailLogHint,
+  type ImportFileProgressItem,
+} from "../../spinosa/import-progress-ui"
 
 type WizardStep = "path" | "tools" | "scan" | "direct" | "markitdown" | "ocr" | "done" | "error"
 
 type ToolCheckResult = {
   label: string
-  status: "checking" | "available" | "missing"
+  status: "checking" | "available" | "missing" | "unsupported"
   detail?: string
 }
 
@@ -185,19 +198,33 @@ export function AddFiles() {
   const [processingStatus, setProcessingStatus] = createSignal("")
   const [sourceIsCloud, setSourceIsCloud] = createSignal(false)
   const [processingFile, setProcessingFile] = createSignal("")
+  const [progressFiles, setProgressFiles] = createSignal<ImportFileProgressItem[]>([])
   const [failedCount, setFailedCount] = createSignal(0)
   const [importSummary, setImportSummary] = createSignal("")
   const [pathValidities, setPathValidities] = createStore<Record<number, "unchecked" | "valid" | "invalid">>({})
+  const importOutcome = createMemo(() => ({ failedCount: failedCount(), stillMissing: 0 }))
+  const importOutcomeFg = createMemo(() => {
+    const key = importOutcomeAccentKey(importOutcome())
+    if (key === "error") return theme.error
+    if (key === "warning") return theme.warning
+    return theme.success
+  })
 
   const WAVE = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"]
   const waveString = (f: number) => { let r = ""; for (let i = 0; i < 6; i++) { const p = (i + f) % 14, l = p <= 6 ? p : 13 - p; r += WAVE[l] }; return r }
   const wavePulse = (f: number) => { const p = f % 14; return WAVE[p <= 6 ? p : 13 - p] }
   const waveRow = (f: number, width: number) => { let r = ""; for (let i = 0; i < width; i++) { const angle = (i * Math.PI) / 7 + f * Math.PI / 7; const l = Math.max(0, Math.min(7, Math.round(3.5 + 3.5 * Math.sin(angle)))); r += WAVE[l] }; return r }
   const [spinIdx, setSpinIdx] = createSignal(0)
+  const [stopping, setStopping] = createSignal(false)
+  const [stopHint, setStopHint] = createSignal(STOP_SCREEN_DEFAULT_HINT)
+  let forceLeaveResolve: (() => void) | undefined
   let spinTimer: ReturnType<typeof setInterval> | undefined
   const spinOn = () => { if (!spinTimer) spinTimer = setInterval(() => setSpinIdx((i) => (i + 1) % 14), 200) }
-  const spinOff = () => { if (spinTimer) { clearInterval(spinTimer); spinTimer = undefined; setSpinIdx(0) } }
-  const [stopping, setStopping] = createSignal(false)
+  // Don't freeze the stop overlay wave — abort paths call spinOff() while stopping is still shown.
+  const spinOff = () => {
+    if (stopping()) return
+    if (spinTimer) { clearInterval(spinTimer); spinTimer = undefined; setSpinIdx(0) }
+  }
 
   const workflow = createWorkflowGuard()
   const activeWork = createActiveWorkTracker()
@@ -225,7 +252,7 @@ export function AddFiles() {
 
   const toolAllReady = createMemo(() => {
     const checks = toolChecks()
-    return checks.length > 0 && checks.every((t) => t.status === "available")
+    return checks.length > 0 && checks.every((t) => t.status === "available" || t.status === "unsupported")
   })
 
   function formatBytes(bytes: number): string {
@@ -365,6 +392,7 @@ export function AddFiles() {
   // ── Navigation & lifecycle ────────────────────────────────────────────────
   const stopActiveWork = () => {
     setStopping(true)
+    spinOn()
     if (gateResolve) { gateResolve(); gateResolve = undefined }
     abortProcessing = true
     workflow.bump()
@@ -387,28 +415,52 @@ export function AddFiles() {
   }
 
   let backNavigationPending = false
+  const requestForceLeave = () => {
+    if (!forceLeaveResolve) return false
+    const resolve = forceLeaveResolve
+    forceLeaveResolve = undefined
+    resolve()
+    return true
+  }
   const requestBack = (confirmIfActive = true) => {
     if (backNavigationPending) return
     const from = step()
     backNavigationPending = true
+    setStopHint(STOP_SCREEN_DEFAULT_HINT)
+    const cancelPath = shouldConfirmSpinosaBack({
+      step: from,
+      busy: busy(),
+      waitingForGate: waitingForGate(),
+      cancellableSteps: CANCELABLE_STEPS,
+    })
     void runGuardedBackNavigation({
-      shouldConfirm: confirmIfActive && shouldConfirmSpinosaBack({
-        step: from,
-        busy: busy(),
-        waitingForGate: waitingForGate(),
-        cancellableSteps: CANCELABLE_STEPS,
-      }),
+      shouldConfirm: confirmIfActive && cancelPath,
       confirm: () => confirmSpinosaBack(dialog, from),
       stop: stopActiveWork,
-      waitForStop: () => activeWork.wait(2500),
+      waitForStop: () => activeWork.wait(STOP_WAIT_SOFT_MS),
+      waitUntilSettled: () => activeWork.wait(0).then(() => undefined),
+      onStillStopping: () => setStopHint(STOP_SCREEN_STILL_HINT),
+      waitForForceLeave: () => new Promise<void>((resolve) => { forceLeaveResolve = resolve }),
+      // Keep the "Stopping process..." overlay readable even when cancel is instant.
+      minStopDisplayMs: cancelPath ? STOP_SCREEN_MIN_DWELL_MS : 0,
       navigate: () => navigateBackFrom(from),
-    }).finally(() => { backNavigationPending = false; setStopping(false) })
+    }).finally(() => {
+      forceLeaveResolve = undefined
+      backNavigationPending = false
+      setStopping(false)
+      setStopHint(STOP_SCREEN_DEFAULT_HINT)
+      spinOff()
+    })
   }
 
   const handleBackPress = () => requestBack(true)
   const leavePathStep = handleBackPress
 
   const handleInterrupt = () => {
+    if (stopping()) {
+      requestForceLeave()
+      return
+    }
     if (!shouldCancelSpinosaWorkOnCtrlC({
       step: step(),
       busy: busy(),
@@ -446,8 +498,14 @@ export function AddFiles() {
 
     await delay(80)
     const toolStatus = await detectDocumentTools()
+    const ocrStatus = toolStatus.ocr
+      ? "available"
+      : toolStatus.ocrUnsupportedReason
+        ? "unsupported"
+        : "missing"
+    const ocrDetail = toolStatus.ocrUnsupportedReason ?? "scanned PDFs and images"
     const results: ToolCheckResult[] = [
-      { label: "PPU PaddleOCR", status: toolStatus.ocr ? "available" : "missing", detail: "scanned PDFs and images" },
+      { label: "PPU PaddleOCR", status: ocrStatus, detail: ocrDetail },
       { label: "MarkItDown", status: toolStatus.markitdown ? "available" : "missing", detail: "Office docs, EPUB, HTML, text PDFs" },
       { label: "PDF.js", status: toolStatus.pdfjs ? "available" : "missing", detail: "PDF text extraction and page rendering" },
     ]
@@ -460,10 +518,11 @@ export function AddFiles() {
     try { blurSourceInputs() } catch (error) { logError("blurSourceInputs", error) }
     const checks = toolChecks()
     const needsRepair = checks.some((t) => t.status === "missing")
+    const toolsReady = checks.every((t) => t.status === "available" || t.status === "unsupported")
     if (needsRepair) {
       logAction("repair-tools", `${checks.filter(t => t.status === "missing").length} tools missing`)
       void runToolRepair()
-    } else if (checks.every((t) => t.status === "available")) {
+    } else if (toolsReady) {
       logAction("start-scan", "All tools ready")
       startScan().catch((err) => {
         logError("startScan-top", err)
@@ -495,8 +554,14 @@ export function AddFiles() {
     })
     await delay(200)
     const toolStatus = await detectDocumentTools()
+    const ocrStatus = toolStatus.ocr
+      ? "available"
+      : toolStatus.ocrUnsupportedReason
+        ? "unsupported"
+        : "missing"
+    const ocrDetail = toolStatus.ocrUnsupportedReason ?? "scanned PDFs and images"
     const results: ToolCheckResult[] = [
-      { label: "PPU PaddleOCR", status: toolStatus.ocr ? "available" : "missing", detail: "scanned PDFs and images" },
+      { label: "PPU PaddleOCR", status: ocrStatus, detail: ocrDetail },
       { label: "MarkItDown", status: toolStatus.markitdown ? "available" : "missing", detail: "Office docs, EPUB, HTML, text PDFs" },
       { label: "PDF.js", status: toolStatus.pdfjs ? "available" : "missing", detail: "PDF text extraction and page rendering" },
     ]
@@ -606,6 +671,9 @@ export function AddFiles() {
       if (e.total > 0) setProgTotal(e.total)
       if (e.current >= 0) setProgCurrent(e.current)
       if (e.relPath) setProcessingFile(e.relPath)
+      if (e.status && e.relPath) {
+        setProgressFiles((prev) => applyImportProgressStatus(prev, e.relPath, e.status!))
+      }
     })
     const onPhaseLog = job.wrapLog((msg: string) => {
       if (msg.startsWith("  ")) {
@@ -626,86 +694,88 @@ export function AddFiles() {
           continue
         }
 
-        // ── Phase A: Direct copy ────────────────────────────────────────────
-        setStep("direct")
-
-        const directCount = classified.directFiles.length
-        setProgTotal(directCount > 0 ? directCount : 1)
-        setProgCurrent(0)
-        setProcessingStatus(`Direct copy — ${directCount} files`)
-        totalDirect += directCount
-        await delay(500)
-        const dr = await runImportProcessor("direct", {
-          files: classified.directFiles,
-          logsDir: classified.logsDir,
+        // ── Shared import workflow (direct → MarkItDown → OCR) ────────────
+        const phases = await runImportWorkflow(classified, {
           prog: sharedProg,
           onLog: onPhaseLog,
           shouldAbort,
-          onRename: (original, renamed) => { totalRenamed++; appendLogLine(`  renamed (name too long): ${original} → ${renamed}`) },
+          signal: job.registered.signal,
+          onChild: job.registerChild,
+          onRename: (original, renamed) => {
+            totalRenamed++
+            appendLogLine(`  renamed (name too long): ${original} → ${renamed}`)
+          },
+          beforePhase: async (id, count) => {
+            if (id === "direct") {
+              setStep("direct")
+              setProgTotal(count > 0 ? count : 1)
+              setProgCurrent(0)
+              setProgressFiles(seedImportQueue(classified.directFiles.map((f) => f.rel)))
+              setProcessingStatus(`Direct copy — ${count} files`)
+              totalDirect += count
+              await delay(500)
+              return true
+            }
+            if (id === "markitdown") {
+              setBusy(false)
+              await gate("Process text files")
+              setBusy(true)
+              if (shouldAbort()) return false
+              setStep("markitdown")
+              setProgTotal(count || 1)
+              setProgCurrent(0)
+              setProgressFiles(seedImportQueue(classified.markitdownFiles.map((f) => f.rel)))
+              setProcessingStatus("MarkItDown conversion...")
+              totalMd += count
+              await delay(500)
+              return true
+            }
+            setBusy(false)
+            await gate("Process images and PDFs")
+            setBusy(true)
+            if (shouldAbort()) return false
+            setStep("ocr")
+            setProgTotal(count || 1)
+            setProgCurrent(0)
+            setProgressFiles(seedImportQueue(classified.ocrFiles.map((f) => f.rel)))
+            setProcessingStatus("OCR...")
+            totalOcr += count
+            await delay(500)
+            return true
+          },
+          afterPhase: async (id, result) => {
+            if (result.failed > 0) totalFailed += result.failed
+            if (result.renamed > 0) totalRenamed += result.renamed
+            if (id === "direct") {
+              dirConverted += result.converted
+              setProcessingStatus(`Direct copy complete — ${result.converted} files`)
+              await delay(500)
+            }
+            if (id === "markitdown") {
+              mdConverted += result.converted
+              setProcessingStatus(`MarkItDown complete — ${result.converted} files`)
+              await delay(500)
+            }
+            if (id === "ocr") {
+              ocrConverted += result.converted
+              setProcessingStatus(
+                result.failed > 0
+                  ? `OCR complete — ${result.converted} ok, ${result.failed} failed`
+                  : `OCR complete — ${result.converted} files`,
+              )
+              // Dwell so failure-first 100% results are readable before done.
+              await delay(1500)
+            }
+          },
         })
-        if (dr.failed > 0) totalFailed += dr.failed
-        if (dr.renamed > 0) totalRenamed += dr.renamed
-        if (shouldAbort()) { spinOff(); setBusy(false); return }
-        dirConverted += dr.converted
-
-        // ── Phase B: MarkItDown ─────────────────────────────────────────────
-        const mdCount = classified.markitdownFiles.length
-        if (mdCount > 0) {
-          setStep("markitdown")
-          setBusy(false)
-          await gate("Process text files")
-          setBusy(true)
-          if (shouldAbort()) { spinOff(); setBusy(false); return }
-
-          setProgTotal(mdCount || 1)
-          setProgCurrent(0)
-          setProcessingStatus("MarkItDown conversion...")
-          totalMd += mdCount
-          await delay(500)
-          const mr = await runImportProcessor("markitdown", {
-            files: classified.markitdownFiles,
-            logsDir: classified.logsDir,
-            prog: sharedProg,
-            onLog: onPhaseLog,
-            shouldAbort,
-          })
-          if (mr.failed > 0) totalFailed += mr.failed
-          if (mr.renamed > 0) totalRenamed += mr.renamed
-          if (shouldAbort()) { spinOff(); setBusy(false); return }
-          mdConverted += mr.converted
-        } else {
+        if (classified.markitdownFiles.length === 0) {
           appendLogLine("No files require MarkItDown conversion.")
         }
-
-        // ── Phase C: OCR ────────────────────────────────────────────────────
-        const ocrCount = classified.ocrFiles.length
-        if (ocrCount > 0) {
-          setStep("ocr")
-          setBusy(false)
-          await gate("Process images and PDFs")
-          setBusy(true)
-          if (shouldAbort()) { spinOff(); setBusy(false); return }
-
-          setProgTotal(ocrCount || 1)
-          setProgCurrent(0)
-          setProcessingStatus("OCR...")
-          totalOcr += ocrCount
-          await delay(500)
-          const or = await runImportProcessor("ocr", {
-            files: classified.ocrFiles,
-            logsDir: classified.logsDir,
-            prog: sharedProg,
-            onLog: onPhaseLog,
-            shouldAbort,
-            onChild: job.registerChild,
-          })
-          if (or.failed > 0) totalFailed += or.failed
-          if (or.renamed > 0) totalRenamed += or.renamed
-          if (shouldAbort()) { spinOff(); setBusy(false); return }
-          ocrConverted += or.converted
-        } else {
+        if (classified.ocrFiles.length === 0) {
           appendLogLine("No files require OCR.")
         }
+        void phases
+        if (shouldAbort()) { spinOff(); setBusy(false); return }
       }
 
       setFailedCount(totalFailed)
@@ -715,8 +785,15 @@ export function AddFiles() {
         (totalFailed > 0 ? ` · ${totalFailed} failed` : "")
       setImportSummary(summary)
       setProcessingDone(true)
+      // Keep progressFiles + last phase bar counters so the results panel
+      // remains visible on the done step.
       setStep("done")
-      job.finish("completed", summary)
+      if (totalFailed > 0) {
+        persistImportWizardLogLines(logLines(), "add-files-import")
+        job.finish("error", summary)
+      } else {
+        job.finish("completed", summary)
+      }
     } catch (err) {
       if (isSpinosaCancellationError(err) || shouldAbort()) {
         appendLogLine("Spinosa import cancelled.")
@@ -836,6 +913,9 @@ export function AddFiles() {
         consume(); return
       }
       if (event.name === "escape") {
+        if (stopping() && requestForceLeave()) {
+          consume(); return
+        }
         handleBackPress()
         consume(); return
       }
@@ -911,7 +991,12 @@ export function AddFiles() {
         }
       }
 
-      if (step() === "tools" && event.name === "return") {
+      if (shouldActivateWizardToolAction({
+        step: step(),
+        keyName: event.name,
+        busy: busy(),
+        toolChecks: toolChecks(),
+      })) {
         handleToolAction()
         consume(); return
       }
@@ -956,7 +1041,7 @@ export function AddFiles() {
       <box width="100%" height="100%" alignItems="center" justifyContent="center">
         <box flexDirection="column" alignItems="center" gap={1}>
           <text fg={theme.textMuted}>{waveString(spinIdx())}</text>
-          <text fg={theme.textMuted}>Stopping process, exit cleanly, wait</text>
+          <text fg={theme.textMuted}>{stopHint()}</text>
         </box>
       </box>
     }>
@@ -1106,8 +1191,18 @@ export function AddFiles() {
                 <box flexDirection="column" gap={1} paddingTop={1}>
                   <For each={toolChecks()}>
                     {(check) => {
-                      const icon = check.status === "available" ? "●" : check.status === "missing" ? "●" : wavePulse(spinIdx())
-                      const color = check.status === "available" ? theme.success : check.status === "missing" ? theme.error : theme.textMuted
+                      const icon =
+                        check.status === "available" || check.status === "unsupported"
+                          ? "●"
+                          : check.status === "missing"
+                            ? "●"
+                            : wavePulse(spinIdx())
+                      const color =
+                        check.status === "available"
+                          ? theme.success
+                          : check.status === "missing"
+                            ? theme.error
+                            : theme.textMuted
                       return (
                         <box flexDirection="row" gap={1} alignItems="center" paddingLeft={1} paddingRight={1}>
                           <text fg={color} attributes={check.status === "checking" ? undefined : TextAttributes.BOLD}>{icon}</text>
@@ -1156,7 +1251,9 @@ export function AddFiles() {
                     total={progTotal()}
                     status={processingStatus()}
                     fileName={processingFile()}
+                    files={progressFiles()}
                     barWidth={20}
+                    viewportHeight={dimensions().height}
                   />
                 </Show>
               </Show>
@@ -1192,8 +1289,20 @@ export function AddFiles() {
             <WizardPanel theme={theme}>
               <Show when={step() === "done"}>
                 <box gap={1}>
-                  <LogoSummary theme={theme} label="Files imported." />
-                  <text fg={theme.textMuted}>Import finished. Review the summary below.</text>
+                  <text fg={importOutcomeFg()}>{importOutcomeHeading(importOutcome())}</text>
+                  <text fg={theme.textMuted}>Import finished. Review the summary and file list below.</text>
+                  <Show when={progressFiles().length > 0}>
+                    <ProgressBar
+                      theme={theme}
+                      current={progCurrent()}
+                      total={progTotal()}
+                      status={processingStatus()}
+                      fileName={processingFile()}
+                      files={progressFiles()}
+                      barWidth={20}
+                      viewportHeight={dimensions().height}
+                    />
+                  </Show>
                   <Show when={importSummary() !== ""}>
                     <box paddingTop={1} flexDirection="column" gap={0}>
                       <text fg={theme.textMuted}>{importSummary()}</text>
@@ -1201,7 +1310,12 @@ export function AddFiles() {
                   </Show>
                   <Show when={failedCount() > 0}>
                     <box paddingTop={1} flexDirection="column" gap={0}>
-                      <text fg={theme.textMuted}>{failedCount()} file{failedCount() === 1 ? "" : "s"} failed — saved to raw/_failed_files/ for review</text>
+                      <text fg={theme.error}>{failedCount()} file{failedCount() === 1 ? "" : "s"} failed — saved to raw/_failed_files/ for review</text>
+                    </box>
+                  </Show>
+                  <Show when={shouldShowImportDetailLogHint(importOutcome())}>
+                    <box paddingTop={1} flexDirection="column" gap={0}>
+                      <text fg={theme.textMuted}>{formatImportDetailLogHint()}</text>
                     </box>
                   </Show>
                 </box>
@@ -1231,8 +1345,6 @@ export function AddFiles() {
               </Show>
             </WizardActionRow>
           </Show>
-
-          <Toast />
         </box>
         <box flexGrow={1} minHeight={0} />
       </box>

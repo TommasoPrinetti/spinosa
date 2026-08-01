@@ -114,7 +114,8 @@ async function scanByExtension(
           case "audio": totals.audio++; break
           default: totals.unknown++; break
         }
-        if (!ext) continue
+        // Only importable classes appear in extension toggles (matches CLI scanSource).
+        if (!ext || cls === "unknown" || cls === "ignored") continue
         const existing = extMap.get(ext)
         if (existing) { existing.count++; existing.bytes += st.size }
         else { extMap.set(ext, { ext, count: 1, bytes: st.size }) }
@@ -169,7 +170,14 @@ function extToImportOptions(extMap: Map<string, ExtEntry>): OnboardingImportOpti
 function buildPreflightRows(workspacePath: string, toolStatus: ToolStatus): OnboardingPreviewRow[] {
   const rows: OnboardingPreviewRow[] = []
   rows.push({ label: "Workspace", status: "writable", detail: path.basename(workspacePath), tone: "success" })
-  rows.push({ label: "PPU PaddleOCR", status: "available", tone: "success" })
+  const ocrStatus = toolStatus.ocr ? "available" : toolStatus.ocrUnsupportedReason ? "unsupported" : "missing"
+  const ocrTone = toolStatus.ocr ? "success" : toolStatus.ocrUnsupportedReason ? "muted" : "error"
+  rows.push({
+    label: "PPU PaddleOCR",
+    status: ocrStatus,
+    detail: toolStatus.ocrUnsupportedReason,
+    tone: ocrTone,
+  })
   rows.push({ label: "MarkItDown", status: toolStatus.markitdown ? "available" : "missing", tone: toolStatus.markitdown ? "success" : "error" })
   rows.push({ label: "PDF.js", status: toolStatus.pdfjs ? "available" : "missing", tone: toolStatus.pdfjs ? "success" : "error" })
   return rows

@@ -2,7 +2,7 @@ import { Prompt, type PromptRef } from "../component/prompt"
 import { For, createEffect, createMemo, createResource, createSignal, onCleanup, onMount, Show } from "solid-js"
 import { Logo } from "../component/logo"
 import { useSync } from "../context/sync"
-import { Toast, useToast } from "../ui/toast"
+import { useToast } from "../ui/toast"
 import { useArgs } from "../context/args"
 import { useGlobalRoute } from "../context/route"
 import { usePromptRef } from "../context/prompt"
@@ -33,15 +33,27 @@ import { workspaceAsciiBannerText, resolveWorkspaceDisplayName } from "../spinos
 import { upgradeFramework } from "@spinosa/core/commands/upgrade"
 import { type ReleaseChannel } from "@spinosa/core/system/channels"
 import { cleanupStaleInstallDirectories, inspectSpinosaMaintenance } from "@spinosa/core/system/maintenance"
-import { JobRunner } from "@spinosa/core/progress/job-runner"
+import { createImportJob } from "../spinosa/job-events"
 import type { SpinosaSetupStatus } from "../spinosa/types"
 import { DialogConfirm } from "../ui/dialog-confirm"
-import { dirname, join } from "node:path"
+import { join } from "node:path"
 import { statSync } from "node:fs"
 import { useConnected } from "../component/use-connected"
 import { DialogProvider } from "../component/dialog-provider"
-import { inspectWorkspacePresence, isUsableWorkspaceStatus } from "@spinosa/core/workspace/presence"
+import { inspectWorkspacePresence, isUsableWorkspaceStatus, workspacePresenceLabel } from "@spinosa/core/workspace/presence"
+import type { SpinosaWorkspacePresence } from "@spinosa/core/types"
 import type { SpinosaWorkspaceID } from "@spinosa/core/workspace/identity"
+import { SPINOSA_BASE_MODE, useBindings } from "../keymap"
+import { truncatePathTail } from "../spinosa/truncate-path"
+import {
+  RECENT_WORKSPACE_COUNT,
+  formatCompactMaintenanceCue,
+  formatMaintenanceStalePaths,
+  formatRecentLoadError,
+  formatRecentWorkspacesLabel,
+  formatRepairVersionUnknownMessage,
+  recentDisplayCap,
+} from "../spinosa/home-visibility"
 
 const SHELL_PLACEHOLDER = ["ls -la", "git status", "pwd"]
 const defaultPlaceholder = {
@@ -57,7 +69,6 @@ const spinosaPlaceholder = {
   shell: SHELL_PLACEHOLDER,
 }
 const MAINTENANCE_CHECK_DELAY_MS = 500
-const RECENT_WORKSPACE_COUNT = 4
 
 function getLastAccessed(workspacePath: string): number {
   try {
@@ -97,32 +108,58 @@ export function Home() {
     workspaceID?: SpinosaWorkspaceID
     status: SpinosaSetupStatus
     fileCount: number
+    presence?: SpinosaWorkspacePresence
+    available: boolean
   }
   const [recentWorkspaces, setRecentWorkspaces] = createSignal<RecentWorkspace[]>([])
+  const [recentTotal, setRecentTotal] = createSignal(0)
   const [recentLoading, setRecentLoading] = createSignal(true)
+  const [recentLoadError, setRecentLoadError] = createSignal<string | undefined>()
   const [selectedRecent, setSelectedRecent] = createSignal(0)
   const loadRecentWorkspaces = async () => {
     setRecentLoading(true)
+    setRecentLoadError(undefined)
     try {
       const workspaces = await listRegisteredWorkspaces()
       const rows: (RecentWorkspace & { lastAccessed: number })[] = []
       for (const ws of workspaces) {
-        if (!isUsableWorkspaceStatus(ws.presence)) continue
-        const meta = await readWorkspaceMeta(ws.path)
-        if (!meta) continue
+        const meta = await readWorkspaceMeta(ws.path).catch(() => undefined)
+        const available = Boolean(meta) && isUsableWorkspaceStatus(ws.presence)
+        if (available && meta) {
+          rows.push({
+            path: ws.path,
+            name: resolveWorkspaceDisplayName(ws.path, meta.projectName ?? ws.projectName),
+            workspaceID: ws.workspaceID,
+            status: meta.setupStatus || "unknown",
+            fileCount: await countRawMarkdownFiles(join(ws.path, "raw")),
+            lastAccessed: getLastAccessed(ws.path),
+            presence: ws.presence,
+            available: true,
+          })
+          continue
+        }
+        // Index entry whose folder is missing or otherwise unusable — keep visible for recovery.
         rows.push({
           path: ws.path,
           name: resolveWorkspaceDisplayName(ws.path, meta?.projectName ?? ws.projectName),
           workspaceID: ws.workspaceID,
           status: meta?.setupStatus || "unknown",
-          fileCount: await countRawMarkdownFiles(join(ws.path, "raw")),
+          fileCount: 0,
           lastAccessed: getLastAccessed(ws.path),
+          presence: isUsableWorkspaceStatus(ws.presence) ? "non_existent" : (ws.presence ?? "non_existent"),
+          available: false,
         })
       }
-      rows.sort((a, b) => b.lastAccessed - a.lastAccessed)
+      rows.sort((a, b) => {
+        if (a.available !== b.available) return a.available ? -1 : 1
+        return b.lastAccessed - a.lastAccessed
+      })
+      setRecentTotal(rows.length)
       setRecentWorkspaces(rows.slice(0, RECENT_WORKSPACE_COUNT))
-    } catch {
-      // ignore
+    } catch (error) {
+      setRecentTotal(0)
+      setRecentWorkspaces([])
+      setRecentLoadError(formatRecentLoadError(error))
     } finally {
       setRecentLoading(false)
     }
@@ -145,8 +182,23 @@ export function Home() {
     async (started) => (started ? inspectSpinosaMaintenance().catch(() => undefined) : undefined),
   )
   const [maintenanceAction, setMaintenanceAction] = createSignal<"idle" | "cleaning" | "repairing">("idle")
-  const maintenanceCleanupAvailable = createMemo(() => (safeResourceValue(maintenance)?.staleInstallDirectories.length ?? 0) > 0)
+  const maintenanceCleanupAvailable = createMemo(() => {
+    const status = safeResourceValue(maintenance)
+    if (!status) return false
+    return status.staleInstallDirectories.length + status.staleTempDirectories.length > 0
+  })
+  const maintenanceStaleCount = createMemo(() => {
+    const status = safeResourceValue(maintenance)
+    if (!status) return 0
+    return status.staleInstallDirectories.length + status.staleTempDirectories.length
+  })
   const maintenanceRepairRequired = createMemo(() => safeResourceValue(maintenance)?.dependencyRepairRequired === true)
+  const compactMaintenanceCue = createMemo(() =>
+    formatCompactMaintenanceCue({
+      staleCount: maintenanceStaleCount(),
+      repairRequired: maintenanceRepairRequired(),
+    }),
+  )
 
   onMount(() => {
     const timer = setTimeout(() => setMaintenanceChecksStarted(true), MAINTENANCE_CHECK_DELAY_MS)
@@ -157,10 +209,15 @@ export function Home() {
   const toast = useToast()
   const cleanStaleInstallerData = async () => {
     if (maintenanceAction() !== "idle") return
+    const status = safeResourceValue(maintenance)
+    const listed = formatMaintenanceStalePaths(
+      status?.staleInstallDirectories ?? [],
+      status?.staleTempDirectories ?? [],
+    )
     const confirmed = await DialogConfirm.show(
       dialog,
       "Clean up leftover install files",
-      "Remove temporary files left by an interrupted install? Your installed Spinosa versions will stay.",
+      listed.message,
     )
     if (!confirmed) return
 
@@ -181,6 +238,11 @@ export function Home() {
   }
   const repairDependencies = async () => {
     if (maintenanceAction() !== "idle") return
+    const bundled = bundledVersion()
+    if (!bundled) {
+      toast.show({ variant: "error", message: formatRepairVersionUnknownMessage() })
+      return
+    }
     const confirmed = await DialogConfirm.show(
       dialog,
       "Reinstall Spinosa runtime",
@@ -188,24 +250,31 @@ export function Home() {
     )
     if (!confirmed) return
 
-    const bundled = bundledVersion()
-    if (!bundled) return
     setMaintenanceAction("repairing")
     const channel: ReleaseChannel = isPrereleaseFrameworkVersion(bundled) ? "beta" : "stable"
-    const job = JobRunner.register({ kind: "upgrade", title: "Repair dependencies" })
+    const job = createImportJob({ kind: "upgrade", title: "Repair dependencies" })
+    job.start()
     toast.show({ variant: "info", message: "Repairing Spinosa runtime…" })
     try {
       const result = await upgradeFramework({ channel, version: bundled, reinstall: true, yes: true, suppressInstallOutput: true })
       if (!result.success) {
-        job.finish("error")
+        job.finish("error", "Dependency repair failed")
         toast.show({ variant: "error", message: "Dependency repair failed." })
+        return
+      }
+      if (job.shouldAbort()) {
+        toast.show({ variant: "info", message: "Dependency repair cancelled." })
         return
       }
       job.finish("completed")
       toast.show({ variant: "success", message: "Dependencies repaired. Restart Spinosa to use the repaired runtime." })
       await refetchMaintenance()
     } catch (error) {
-      job.finish("error")
+      if (job.shouldAbort()) {
+        toast.show({ variant: "info", message: "Dependency repair cancelled." })
+        return
+      }
+      job.finish("error", error instanceof Error ? error.message : String(error))
       toast.show({ variant: "error", message: error instanceof Error ? error.message : String(error) })
     } finally {
       setMaintenanceAction("idle")
@@ -339,21 +408,19 @@ export function Home() {
     await spinosa.openWorkspace(workspacePath)
   }
 
-  const pickRecentWorkspace = async (workspace: RecentWorkspace) => {
-    if (!providerConnected()) {
-      dialog.replace(() => <DialogProvider />)
-      return
-    }
-    const presence = inspectWorkspacePresence({
-      workspacePath: workspace.path,
-      workspaceID: workspace.workspaceID,
-    })
-    if (!isUsableWorkspaceStatus(presence.status)) {
-      dialog.replace(() => (
+  const openMissingRecentWorkspace = (workspace: RecentWorkspace) => {
+    const escapeRef = { current: () => dialog.clear() }
+    dialog.replace(
+      () => (
         <DialogSpinosaMissingWorkspace
           workspacePath={workspace.path}
           workspaceName={workspace.name}
           workspaceID={workspace.workspaceID}
+          onRegisterEscape={(handler) => {
+            escapeRef.current = () => {
+              handler()
+            }
+          }}
           onBack={() => dialog.clear()}
           onRemoved={async () => {
             dialog.clear()
@@ -361,20 +428,105 @@ export function Home() {
           }}
           onRecovered={async (workspacePath) => {
             dialog.clear()
+            await loadRecentWorkspaces()
             await launchRecentWorkspace(workspacePath)
           }}
         />
-      ))
+      ),
+      undefined,
+      () => escapeRef.current(),
+    )
+  }
+
+  const pickRecentWorkspace = async (workspace: RecentWorkspace) => {
+    if (!providerConnected()) {
+      dialog.replace(() => <DialogProvider />)
+      return
+    }
+    if (!workspace.available) {
+      openMissingRecentWorkspace(workspace)
+      return
+    }
+    const presence = inspectWorkspacePresence({
+      workspacePath: workspace.path,
+      workspaceID: workspace.workspaceID,
+    })
+    if (!isUsableWorkspaceStatus(presence.status)) {
+      openMissingRecentWorkspace(workspace)
       return
     }
     await launchRecentWorkspace(workspace.path)
   }
+
+  const recentListVisible = createMemo(
+    () => providerConnected() && !workspaceReady() && !recentLoading() && recentWorkspaces().length > 0,
+  )
+  const recentVisibleCount = createMemo(() =>
+    Math.min(recentWorkspaces().length, recentDisplayCap(compactLayout())),
+  )
+
+  createEffect(() => {
+    const max = Math.max(0, recentVisibleCount() - 1)
+    if (selectedRecent() > max) setSelectedRecent(max)
+  })
+
+  useBindings(() => ({
+    mode: SPINOSA_BASE_MODE,
+    enabled: () => recentListVisible() && !promptRef.current?.focused && dialog.stack.length === 0,
+    bindings: [
+      {
+        key: "Up",
+        desc: "Previous recent workspace",
+        group: "Home",
+        cmd: () => setSelectedRecent((value) => Math.max(0, value - 1)),
+      },
+      {
+        key: "Down",
+        desc: "Next recent workspace",
+        group: "Home",
+        cmd: () => setSelectedRecent((value) => Math.min(recentVisibleCount() - 1, value + 1)),
+      },
+      {
+        key: "Enter",
+        desc: "Open selected recent workspace",
+        group: "Home",
+        cmd: () => {
+          const workspace = recentWorkspaces().slice(0, recentVisibleCount())[selectedRecent()]
+          if (workspace) void pickRecentWorkspace(workspace)
+        },
+      },
+    ],
+  }))
 
   return (
     <HomeSessionDestinationProvider>
       <CenteredColumn>
         <box flexGrow={1} height="100%" minHeight={0} flexDirection="column" alignItems="center" paddingLeft={2} paddingRight={2}>
           <box flexGrow={1} minHeight={0} />
+          <Show when={compactLayout() && compactMaintenanceCue()}>
+            <box width="100%" maxWidth={promptMaxWidth()} flexShrink={0} flexDirection="row" alignItems="center" gap={1}>
+              <text fg={theme.warning}>{compactMaintenanceCue()}</text>
+              <Show when={maintenanceCleanupAvailable()}>
+                <box
+                  paddingX={1}
+                  backgroundColor={theme.backgroundElement}
+                  onMouseDown={() => void cleanStaleInstallerData()}
+                >
+                  <text fg={theme.primary}>{maintenanceAction() === "cleaning" ? "Cleaning…" : "Clean up"}</text>
+                </box>
+              </Show>
+              <Show when={maintenanceRepairRequired()}>
+                <box
+                  paddingX={1}
+                  backgroundColor={theme.backgroundElement}
+                  onMouseDown={() => void repairDependencies()}
+                >
+                  <text fg={theme.primary}>{maintenanceAction() === "repairing" ? "Reinstalling…" : "Repair"}</text>
+                </box>
+              </Show>
+            </box>
+            <box height={1} />
+          </Show>
           <Show when={!compactLayout()}>
             <box height={4} minHeight={0} flexShrink={1} />
           </Show>
@@ -389,17 +541,29 @@ export function Home() {
               <box height={1} />
             </Show>
             <Show when={maintenanceCleanupAvailable()}>
-              <box flexDirection="row" alignItems="center" gap={1}>
-                <text fg={theme.warning}>
-                  Spinosa found {safeResourceValue(maintenance)?.staleInstallDirectories.length} leftover install file{safeResourceValue(maintenance)?.staleInstallDirectories.length === 1 ? "" : "s"}.
-                </text>
-                <box
-                  paddingX={1}
-                  backgroundColor={theme.backgroundElement}
-                  onMouseDown={() => void cleanStaleInstallerData()}
-                >
-                  <text fg={theme.primary}>{maintenanceAction() === "cleaning" ? "Cleaning…" : "Clean up"}</text>
+              <box flexDirection="column" alignItems="center" gap={0}>
+                <box flexDirection="row" alignItems="center" gap={1}>
+                  <text fg={theme.warning}>
+                    Spinosa found {maintenanceStaleCount()} leftover install/temp path
+                    {maintenanceStaleCount() === 1 ? "" : "s"}.
+                  </text>
+                  <box
+                    paddingX={1}
+                    backgroundColor={theme.backgroundElement}
+                    onMouseDown={() => void cleanStaleInstallerData()}
+                  >
+                    <text fg={theme.primary}>{maintenanceAction() === "cleaning" ? "Cleaning…" : "Clean up"}</text>
+                  </box>
                 </box>
+                <For each={[
+                  ...(safeResourceValue(maintenance)?.staleInstallDirectories ?? []),
+                  ...(safeResourceValue(maintenance)?.staleTempDirectories ?? []),
+                ].slice(0, 3)}>
+                  {(path) => <text fg={theme.textMuted}>{truncatePathTail(path, 64)}</text>}
+                </For>
+                <Show when={maintenanceStaleCount() > 3}>
+                  <text fg={theme.textMuted}>…and {maintenanceStaleCount() - 3} more (listed in Clean up)</text>
+                </Show>
               </box>
               <box height={1} />
             </Show>
@@ -441,14 +605,25 @@ export function Home() {
             <text fg={theme.textMuted}>Loading recent workspaces…</text>
             <box height={1} />
           </Show>
+          <Show when={providerConnected() && !workspaceReady() && !recentLoading() && recentLoadError()}>
+            <text fg={theme.warning} wrapMode="word">{recentLoadError()}</text>
+            <box height={1} />
+          </Show>
           <Show when={providerConnected() && !workspaceReady() && !recentLoading() && recentWorkspaces().length > 0}>
             <box width="100%" maxWidth={promptMaxWidth()} flexDirection="column" flexShrink={0}>
-              <text fg={theme.textMuted}>Recent workspaces</text>
+              <text fg={theme.textMuted}>
+                {formatRecentWorkspacesLabel(recentTotal(), recentDisplayCap(compactLayout()))}
+              </text>
               <box height={1} />
-              <For each={recentWorkspaces().slice(0, compactLayout() ? 1 : RECENT_WORKSPACE_COUNT)}>
+              <For each={recentWorkspaces().slice(0, recentVisibleCount())}>
                 {(ws, i) => {
                   const idx = i()
                   const active = () => selectedRecent() === idx
+                  const lostLabel = () => {
+                    const label = workspacePresenceLabel(ws.presence)
+                    if (label === "NON EXISTENT") return "Not found"
+                    return label ?? "Not found"
+                  }
                   return (
                     <box
                       paddingLeft={2}
@@ -457,18 +632,28 @@ export function Home() {
                       paddingBottom={1}
                       backgroundColor={buttonBackground(theme, active())}
                       border={["left"]}
-                      borderColor={buttonBorder(theme, active(), theme.borderActive)}
-                      flexDirection="row"
-                      gap={1}
+                      borderColor={buttonBorder(theme, active(), ws.available ? theme.borderActive : theme.error)}
+                      flexDirection="column"
+                      gap={0}
                       onMouseOver={() => setSelectedRecent(idx)}
                       onMouseDown={() => { setSelectedRecent(idx); void pickRecentWorkspace(ws) }}
                     >
-                      <text fg={recentStatusColor(ws.status, theme)}>●</text>
-                      <text fg={buttonText(theme, active(), theme.text)}>
-                        <span style={{ bold: active() }}>{ws.name}</span>
-                      </text>
-                      <text fg={buttonText(theme, active(), theme.textMuted)}>{ws.fileCount} files</text>
-                      <text fg={recentStatusColor(ws.status, theme)}>{setupStatusLabel(ws.status)}</text>
+                      <box flexDirection="row" gap={1}>
+                        <text fg={buttonText(theme, active(), ws.available ? recentStatusColor(ws.status, theme) : theme.error)}>
+                          {ws.available ? "●" : "✕"}
+                        </text>
+                        <text fg={buttonText(theme, active(), ws.available ? theme.text : theme.error)}>
+                          <span style={{ bold: active() }}>{ws.name}</span>
+                        </text>
+                        <Show when={ws.available}>
+                          <text fg={buttonText(theme, active(), theme.textMuted)}>{ws.fileCount} files</text>
+                          <text fg={buttonText(theme, active(), recentStatusColor(ws.status, theme))}>{setupStatusLabel(ws.status)}</text>
+                        </Show>
+                        <Show when={!ws.available}>
+                          <text fg={buttonText(theme, active(), theme.error)}>{lostLabel()}</text>
+                        </Show>
+                      </box>
+                      <text fg={buttonText(theme, active(), theme.textMuted)}>{truncatePathTail(ws.path, 56)}</text>
                     </box>
                   )
                 }}
@@ -478,7 +663,7 @@ export function Home() {
           </Show>
 
           <box width="100%" maxWidth={promptMaxWidth()} zIndex={1000} paddingTop={1} flexShrink={0}>
-            <SpinosaPromptChips />
+            <SpinosaPromptChips suppressEnter={recentListVisible()} />
             <Show when={providerConnected() && workspaceReady()}>
               <box>
                 <pluginRuntime.Slot name="home_prompt" mode="replace" ref={bind}>
@@ -498,7 +683,6 @@ export function Home() {
           <box width="100%" maxWidth={promptMaxWidth()}>
             <HomeFooter />
           </box>
-          <Toast />
         </box>
       </CenteredColumn>
     </HomeSessionDestinationProvider>

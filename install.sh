@@ -5,7 +5,7 @@
 PINNED_VERSION="1.0.3-beta.11"
 PINNED_TAG="beta"
 DEFAULT_DOWNLOAD_TIMEOUT_SECONDS="600"
-DEFAULT_VERIFY_TIMEOUT_SECONDS="45"
+DEFAULT_VERIFY_TIMEOUT_SECONDS="180"
 WAVE_WIDTH=6
 
 if [ -z "${BASH_VERSION-}" ]; then
@@ -425,8 +425,43 @@ map_platform() {
   printf '%s-%s\n' "$os" "$arch"
 }
 
+# Pure probe classifier (testable). Args: alpine_release(0|1) ld_musl(0|1) ldd_version_text
+classify_musl_linux() {
+  local alpine_release="${1:-0}"
+  local ld_musl="${2:-0}"
+  local ldd_text="${3:-}"
+  [ "$alpine_release" = "1" ] && return 0
+  [ "$ld_musl" = "1" ] && return 0
+  printf '%s\n' "$ldd_text" | grep -qi musl && return 0
+  return 1
+}
+
+# Detect musl/Alpine Linux before download. Darwin and glibc Linux return false.
+is_musl_linux() {
+  local os_raw alpine=0 ld_musl=0 ldd_text=""
+  os_raw="$(uname -s 2>/dev/null | tr '[:upper:]' '[:lower:]')"
+  [ "$os_raw" = "linux" ] || return 1
+
+  [ -f /etc/alpine-release ] && alpine=1
+  # Dynamic linker path used by musl (e.g. /lib/ld-musl-x86_64.so.1).
+  if compgen -G '/lib/ld-musl-*' > /dev/null 2>&1; then
+    ld_musl=1
+  fi
+  if command -v ldd >/dev/null 2>&1; then
+    ldd_text="$(ldd --version 2>&1 || true)"
+  fi
+  classify_musl_linux "$alpine" "$ld_musl" "$ldd_text"
+}
+
+refuse_musl_linux() {
+  if is_musl_linux; then
+    die "musl/Alpine Linux is unsupported; Spinosa needs glibc Linux (or macOS). Binary assets are glibc-only."
+  fi
+}
+
 detect_platform() {
   local mapped
+  refuse_musl_linux
   mapped="$(map_platform "$(uname -s)" "$(uname -m)")" \
     || die "Unsupported platform: $(uname -s) $(uname -m)"
   PLATFORM="$mapped"
@@ -1322,7 +1357,7 @@ migrate_workspace_launchers() {
 
 run_staged_binary_checks() {
   local binary="$1"
-  local out ver soft_fail=0
+  local out ver
   local version_ok=0
 
   [ -x "$binary" ] || die "Staged binary is not executable: ${binary}"
@@ -1350,27 +1385,23 @@ run_staged_binary_checks() {
     TEMPLATE_PACK_ID="$pack"
   fi
 
+  # Activation gates (binary-distribution-contract): template ensure/verify + doctor
+  # must pass before the staged binary is activated. Fail closed — never soft-continue.
   if "$binary" internal template ensure --json >/dev/null 2>&1; then
     ok "Template ensure succeeded"
     if "$binary" internal template verify --json >/dev/null 2>&1; then
       ok "Template verify succeeded"
     else
-      warn "Template verify failed (continuing; doctor will soft-check)"
-      soft_fail=1
+      die "Template verify failed — refusing to activate staged binary"
     fi
   else
-    note "Template commands not available in this binary — relying on version + doctor"
+    die "Template ensure failed — refusing to activate staged binary"
   fi
 
   if ! "$binary" doctor >/dev/null 2>&1; then
-    if [ "$soft_fail" -eq 1 ]; then
-      warn "Doctor reported issues (non-fatal during template soft-check)"
-    else
-      warn "Doctor reported issues (non-fatal if templates are still warming)"
-    fi
-  else
-    ok "Doctor passed"
+    die "Doctor reported issues — refusing to activate staged binary"
   fi
+  ok "Doctor passed"
 }
 
 restore_binary_backup_if_needed() {

@@ -48,12 +48,20 @@ export interface OnboardingOptions {
   shouldAbort?: () => boolean
 }
 
+export interface OnboardingVerifyStats {
+  missing: number
+  recovered: number
+  stillMissing: number
+}
+
 export interface OnboardingResult {
   success: boolean
   scanCounts?: ScanCounts & ScanBytes
   toolStatus?: ToolStatus
   cli?: string
   handoffResult?: OnboardingHandoffResult
+  /** Present after verification when import delivery was checked. */
+  verify?: OnboardingVerifyStats
   blockedPhase?: OnboardingPhase
   blockerReason?: string
 }
@@ -213,6 +221,11 @@ export async function completeOnboarding(
     toolStatus: ctx.toolStatus,
     cli,
     handoffResult,
+    verify: {
+      missing: verifyResult.missing,
+      recovered: verifyResult.recovered,
+      stillMissing: verifyResult.stillMissing,
+    },
   }
 }
 
@@ -231,7 +244,7 @@ export async function runOnboarding(
   const result = await copySource(ctx.sourcePath, ctx.rawDir, {
     batchManager: ctx.batches,
     markitdownChoice: ctx.toolStatus.markitdown,
-    ocrChoice: true,
+    ocrChoice: ctx.toolStatus.ocr,
     verifyAfter: false,
     shouldAbort: options.shouldAbort,
     onProgress: onCopyProgress,

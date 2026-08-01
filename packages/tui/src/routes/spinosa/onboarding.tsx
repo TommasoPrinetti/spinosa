@@ -7,15 +7,14 @@ import { createStore } from "solid-js/store"
 import { useTheme } from "../../context/theme"
 import { useRoute } from "../../context/route"
 import { useSpinosaWorkspace } from "../../context/spinosa-workspace"
-import { Toast } from "../../ui/toast"
 import { createWorkspace, resolveWorkspacePath } from "@spinosa/core/commands/create"
 import { useSDK } from "../../context/sdk"
 import { createImportJob, type ImportJobHandle } from "../../spinosa/job-events"
 import { prepareOnboarding, completeOnboarding } from "@spinosa/core/commands/onboard"
-import type { OnboardingContext, PhaseAccumulator, OnboardingResult } from "@spinosa/core/commands/onboard"
-import { scanAndClassifySource, type PhaseResult } from "@spinosa/core/import/pipeline"
+import type { OnboardingContext } from "@spinosa/core/commands/onboard"
+import { scanAndClassifySource } from "@spinosa/core/import/pipeline"
 import { isSpinosaCancellationError } from "@spinosa/core/import/cancellation"
-import { runImportProcessor } from "@spinosa/core/import/processors"
+import { runImportWorkflow } from "@spinosa/core/import/import-workflow"
 import { addFiles } from "@spinosa/core/commands/add"
 import {
   buildStartupChatPrompt,
@@ -26,7 +25,7 @@ import {
 } from "@spinosa/core/commands/startup"
 import { resolveFrameworkRoot } from "@spinosa/core/framework/discovery"
 import { spawn } from "node:child_process"
-import { tuiLog, logStep, logAction, logPhase, logTool, logResult, logError, logGate } from "../../spinosa/log"
+import { tuiLog, logStep, logAction, logPhase, logTool, logResult, logError, logGate, persistImportWizardLogLines } from "../../spinosa/log"
 import { useExit } from "../../context/exit"
 import { useDialog } from "../../ui/dialog"
 import type { CliRunResult } from "../../spinosa/types"
@@ -55,8 +54,13 @@ import {
   ImportOptionsSelector,
   nextFocusedSourceIndexForAppend,
   runGuardedBackNavigation,
+  shouldActivateWizardToolAction,
   shouldCancelSpinosaWorkOnCtrlC,
   shouldConfirmSpinosaBack,
+  STOP_SCREEN_DEFAULT_HINT,
+  STOP_SCREEN_MIN_DWELL_MS,
+  STOP_SCREEN_STILL_HINT,
+  STOP_WAIT_SOFT_MS,
   type ImportOption,
   LogScrollbox,
   LogoSummary,
@@ -69,12 +73,21 @@ import {
   wizardScrollboxMaxHeight,
   yieldToEventLoop,
 } from "./wizard-ui"
+import {
+  applyImportProgressStatus,
+  formatImportDetailLogHint,
+  importOutcomeAccentKey,
+  importOutcomeHeading,
+  seedImportQueue,
+  shouldShowImportDetailLogHint,
+  type ImportFileProgressItem,
+} from "../../spinosa/import-progress-ui"
 
 type WizardStep = "path" | "name" | "tools" | "scan" | "imports" | "setup" | "direct" | "markitdown" | "ocr" | "verification" | "provider" | "startup" | "done" | "error"
 
 type ToolCheckResult = {
   label: string
-  status: "checking" | "available" | "missing"
+  status: "checking" | "available" | "missing" | "unsupported"
   detail?: string
 }
 
@@ -249,7 +262,7 @@ export function Onboarding() {
   })
   const toolAllReady = createMemo(() => {
     const checks = toolChecks()
-    return checks.length > 0 && checks.every((t) => t.status === "available")
+    return checks.length > 0 && checks.every((t) => t.status === "available" || t.status === "unsupported")
   })
   const [hoveredButton, setHoveredButton] = createSignal<string | null>(null)
   const [scanProgress, setScanProgress] = createSignal(0)
@@ -258,8 +271,20 @@ export function Onboarding() {
   const [progCurrent, setProgCurrent] = createSignal(0)
   const [progTotal, setProgTotal] = createSignal(1)
   const [failedCount, setFailedCount] = createSignal(0)
+  const [stillMissingCount, setStillMissingCount] = createSignal(0)
   const [processingFile, setProcessingFile] = createSignal("")
+  const [progressFiles, setProgressFiles] = createSignal<ImportFileProgressItem[]>([])
   const [scanDone, setScanDone] = createSignal(false)
+  const importOutcome = createMemo(() => ({
+    failedCount: failedCount(),
+    stillMissing: stillMissingCount(),
+  }))
+  const importOutcomeFg = createMemo(() => {
+    const key = importOutcomeAccentKey(importOutcome())
+    if (key === "error") return theme.error
+    if (key === "warning") return theme.warning
+    return theme.success
+  })
   const [scanningFile, setScanningFile] = createSignal("")
   const [scanCount, setScanCount] = createSignal(0)
   function formatBytes(b: number): string {
@@ -269,6 +294,7 @@ export function Onboarding() {
     return `${b} B`
   }
   const [processingStatus, setProcessingStatus] = createSignal("")
+  const [verifyStatus, setVerifyStatus] = createSignal("")
   const [sourceIsCloud, setSourceIsCloud] = createSignal(Boolean(resumeSourcePath && isCloudStoragePath(resumeSourcePath)))
   const [importSummary, setImportSummary] = createSignal("")
   const [workspaceName, setWorkspaceName] = createSignal(resumeWorkspaceName ?? "")
@@ -281,10 +307,16 @@ export function Onboarding() {
   const wavePulse = (f: number) => { const p = f % 14; return WAVE[p <= 6 ? p : 13 - p] }
   const waveRow = (f: number, width: number) => { let r = ""; for (let i = 0; i < width; i++) { const angle = (i * Math.PI) / 7 + f * Math.PI / 7; const l = Math.max(0, Math.min(7, Math.round(3.5 + 3.5 * Math.sin(angle)))); r += WAVE[l] }; return r }
   const [spinIdx, setSpinIdx] = createSignal(0)
+  const [stopping, setStopping] = createSignal(false)
+  const [stopHint, setStopHint] = createSignal(STOP_SCREEN_DEFAULT_HINT)
+  let forceLeaveResolve: (() => void) | undefined
   let spinTimer: ReturnType<typeof setInterval> | undefined
   const spinOn = () => { if (!spinTimer) spinTimer = setInterval(() => setSpinIdx((i) => (i + 1) % 14), 200) }
-  const spinOff = () => { if (spinTimer) { clearInterval(spinTimer); spinTimer = undefined; setSpinIdx(0) } }
-  const [stopping, setStopping] = createSignal(false)
+  // Don't freeze the stop overlay wave — abort paths call spinOff() while stopping is still shown.
+  const spinOff = () => {
+    if (stopping()) return
+    if (spinTimer) { clearInterval(spinTimer); spinTimer = undefined; setSpinIdx(0) }
+  }
   const [gateLabel, setGateLabel] = createSignal("")
   const [gateAction, setGateAction] = createSignal<() => void>(() => {})
   const [waitingForGate, setWaitingForGate] = createSignal(false)
@@ -442,6 +474,7 @@ let nameInput: TextareaRenderable | undefined
 
   const stopActiveWork = () => {
     setStopping(true)
+    spinOn()
     if (gateResolve) { gateResolve(); gateResolve = undefined }
     workflow.bump()
     abortProcessing = true
@@ -482,28 +515,52 @@ let nameInput: TextareaRenderable | undefined
   }
 
   let backNavigationPending = false
+  const requestForceLeave = () => {
+    if (!forceLeaveResolve) return false
+    const resolve = forceLeaveResolve
+    forceLeaveResolve = undefined
+    resolve()
+    return true
+  }
   const requestBack = (confirmIfActive = true) => {
     if (backNavigationPending) return
     const from = step()
     backNavigationPending = true
+    setStopHint(STOP_SCREEN_DEFAULT_HINT)
+    const cancelPath = shouldConfirmSpinosaBack({
+      step: from,
+      busy: busy(),
+      waitingForGate: waitingForGate(),
+      cancellableSteps: CANCELABLE_STEPS as unknown as string[],
+    })
     void runGuardedBackNavigation({
-      shouldConfirm: confirmIfActive && shouldConfirmSpinosaBack({
-        step: from,
-        busy: busy(),
-        waitingForGate: waitingForGate(),
-        cancellableSteps: CANCELABLE_STEPS as unknown as string[],
-      }),
+      shouldConfirm: confirmIfActive && cancelPath,
       confirm: () => confirmSpinosaBack(dialog, from),
       stop: stopActiveWork,
-      waitForStop: () => activeWork.wait(2500),
+      waitForStop: () => activeWork.wait(STOP_WAIT_SOFT_MS),
+      waitUntilSettled: () => activeWork.wait(0).then(() => undefined),
+      onStillStopping: () => setStopHint(STOP_SCREEN_STILL_HINT),
+      waitForForceLeave: () => new Promise<void>((resolve) => { forceLeaveResolve = resolve }),
+      // Keep the "Stopping process..." overlay readable even when cancel is instant.
+      minStopDisplayMs: cancelPath ? STOP_SCREEN_MIN_DWELL_MS : 0,
       navigate: () => navigateBackFrom(from),
-    }).finally(() => { backNavigationPending = false; setStopping(false) })
+    }).finally(() => {
+      forceLeaveResolve = undefined
+      backNavigationPending = false
+      setStopping(false)
+      setStopHint(STOP_SCREEN_DEFAULT_HINT)
+      spinOff()
+    })
   }
 
   const handleBackPress = () => requestBack(true)
   const leavePathStep = handleBackPress
 
   const handleInterrupt = () => {
+    if (stopping()) {
+      requestForceLeave()
+      return
+    }
     if (!shouldCancelSpinosaWorkOnCtrlC({
       step: step(),
       busy: busy(),
@@ -519,7 +576,7 @@ let nameInput: TextareaRenderable | undefined
   }
 
   const renderToolSummaryLine = (check: ToolCheckResult): string => {
-    const icon = check.status === "available" ? "✓" : check.status === "missing" ? "✗" : "▁"
+    const icon = check.status === "available" ? "✓" : check.status === "missing" ? "✗" : check.status === "unsupported" ? "–" : "▁"
     const detail = check.detail ? ` | ${check.detail}` : ""
     return `${icon} ${check.label} — ${check.status}${detail}`
   }
@@ -543,8 +600,14 @@ let nameInput: TextareaRenderable | undefined
 
     await delay(80)
     const toolStatus = await detectDocumentTools()
+    const ocrStatus = toolStatus.ocr
+      ? "available"
+      : toolStatus.ocrUnsupportedReason
+        ? "unsupported"
+        : "missing"
+    const ocrDetail = toolStatus.ocrUnsupportedReason ?? "scanned PDFs and images"
     const results: ToolCheckResult[] = [
-      { label: "PPU PaddleOCR", status: toolStatus.ocr ? "available" : "missing", detail: "scanned PDFs and images" },
+      { label: "PPU PaddleOCR", status: ocrStatus, detail: ocrDetail },
       { label: "MarkItDown", status: toolStatus.markitdown ? "available" : "missing", detail: "Office docs, EPUB, HTML, text PDFs" },
       { label: "PDF.js", status: toolStatus.pdfjs ? "available" : "missing", detail: "PDF text extraction and page rendering" },
     ]
@@ -574,8 +637,14 @@ let nameInput: TextareaRenderable | undefined
     // Re-check after repair
     await delay(200)
     const toolStatus = await detectDocumentTools()
+    const ocrStatus = toolStatus.ocr
+      ? "available"
+      : toolStatus.ocrUnsupportedReason
+        ? "unsupported"
+        : "missing"
+    const ocrDetail = toolStatus.ocrUnsupportedReason ?? "scanned PDFs and images"
     const results = [
-      { label: "PPU PaddleOCR", status: toolStatus.ocr ? "available" : "missing", detail: "scanned PDFs and images" },
+      { label: "PPU PaddleOCR", status: ocrStatus, detail: ocrDetail },
       { label: "MarkItDown", status: toolStatus.markitdown ? "available" : "missing", detail: "Office docs, EPUB, HTML, text PDFs" },
       { label: "PDF.js", status: toolStatus.pdfjs ? "available" : "missing", detail: "PDF text extraction and page rendering" },
     ] as ToolCheckResult[]
@@ -588,13 +657,14 @@ let nameInput: TextareaRenderable | undefined
     if (busy()) return
     const checks = toolChecks()
     const needsRepair = checks.some((t) => t.status === "missing")
+    const toolsReady = checks.every((t) => t.status === "available" || t.status === "unsupported")
     if (needsRepair) {
       logAction("repair-tools", `${checks.filter(t => t.status === "missing").length} tools missing`)
       void runToolRepair().catch((err) => {
         logError("runToolRepair", err)
         appendLogLine(`Tool repair failed: ${err instanceof Error ? err.message : String(err)}`)
       })
-    } else if (checks.every((t) => t.status === "available")) {
+    } else if (toolsReady) {
       logAction("start-scan", "All tools ready")
       void startScan()
     }
@@ -746,6 +816,9 @@ let nameInput: TextareaRenderable | undefined
       if (e.total > 0) setProgTotal(e.total)
       if (e.current >= 0) setProgCurrent(e.current)
       if (e.relPath) setProcessingFile(e.relPath)
+      if (e.status && e.relPath) {
+        setProgressFiles((prev) => applyImportProgressStatus(prev, e.relPath, e.status!))
+      }
     })
     const onPhaseLog = job.wrapLog((msg: string) => {
       if (msg.startsWith("  ")) {
@@ -782,6 +855,7 @@ let nameInput: TextareaRenderable | undefined
         if (setupSteps.some((s) => msg.startsWith(s))) {
           setupDone = Math.min(setupSteps.length, setupDone + 1)
           setProgCurrent(setupDone)
+          sharedProg.file("setup", setupDone, setupSteps.length, msg)
         }
       }
       await yieldToEventLoop()
@@ -821,95 +895,105 @@ let nameInput: TextareaRenderable | undefined
       setProcessingStatus("Preparing import plan...")
       const classified = await scanAndClassifySource(ctx.sourcePath, ctx.rawDir, ctx.batches, undefined, shouldAbort)
       if (!classified) { setStep("error"); return }
-      let mr: PhaseResult = { converted: 0, skipped: 0, failed: 0, renamed: 0, recoverable: [] }
-      let or: PhaseResult = { converted: 0, skipped: 0, failed: 0, renamed: 0, recoverable: [] }
       const totalMd = classified.markitdownFiles.length
       const totalOcr = classified.ocrFiles.length
-      // Phase B1: Direct copy
-      setStep("direct")
       const totalDirect = classified.directFiles.length
       appendLogLine(`[diag] direct=${totalDirect} markitdown=${classified.markitdownFiles.length} ocr=${classified.ocrFiles.length}`)
-      // Seed the denominator; the progress listener also drives it from emitter events.
-      setProgTotal(totalDirect > 0 ? totalDirect : 1)
-      setProgCurrent(0)
-      setProcessingStatus("Preparing direct copy...")
-      await delay(1000)
-      const dr = await runImportProcessor("direct", {
-        files: classified.directFiles,
-        logsDir: classified.logsDir,
+
+      const phases = await runImportWorkflow(classified, {
         prog: sharedProg,
         onLog: onPhaseLog,
         shouldAbort,
+        signal: job.registered.signal,
+        onChild: job.registerChild,
         onRetry: (attempt, reason) => {
           setProcessingStatus(`Retrying file (attempt ${attempt}): ${reason}`)
         },
-        onRename: (original, renamed) => { totalRenamed++; appendLogLine(`  renamed (name too long): ${original} → ${renamed}`) },
+        onRename: (original, renamed) => {
+          totalRenamed++
+          appendLogLine(`  renamed (name too long): ${original} → ${renamed}`)
+        },
+        beforePhase: async (id, count) => {
+          if (id === "direct") {
+            setStep("direct")
+            setProgTotal(count > 0 ? count : 1)
+            setProgCurrent(0)
+            setProgressFiles(seedImportQueue(classified.directFiles.map((f) => f.rel)))
+            setProcessingStatus("Preparing direct copy...")
+            await delay(1000)
+            return true
+          }
+          if (id === "markitdown") {
+            setBusy(false)
+            await gate("Process text files")
+            if (shouldAbort()) return false
+            setBusy(true)
+            setStep("markitdown")
+            setProgTotal(count)
+            setProgCurrent(0)
+            setProgressFiles(seedImportQueue(classified.markitdownFiles.map((f) => f.rel)))
+            setProcessingStatus("Preparing MarkItDown conversion...")
+            await delay(1000)
+            return true
+          }
+          setBusy(false)
+          await gate("Process images and PDFs")
+          if (shouldAbort()) return false
+          setBusy(true)
+          setStep("ocr")
+          setProgTotal(count)
+          setProgCurrent(0)
+          setProgressFiles(seedImportQueue(classified.ocrFiles.map((f) => f.rel)))
+          setProcessingStatus("Preparing OCR...")
+          await delay(1000)
+          return true
+        },
+        afterPhase: async (id, result) => {
+          if (result.failed > 0) totalFailed += result.failed
+          if (result.renamed > 0) totalRenamed += result.renamed
+          if (id === "direct") {
+            setProcessingStatus(`Direct copy complete — ${totalDirect} files`)
+            await delay(1000)
+          }
+          if (id === "markitdown") {
+            setProcessingStatus(`MarkItDown complete — ${totalMd} files`)
+            await delay(1000)
+          }
+          if (id === "ocr") {
+            setProcessingStatus(
+              result.failed > 0
+                ? `OCR complete — ${result.converted} ok, ${result.failed} failed`
+                : `OCR complete — ${totalOcr} files`,
+            )
+            // Dwell so failure-first 100% results are readable before verify.
+            await delay(1500)
+          }
+        },
       })
-      if (dr.failed > 0) totalFailed += dr.failed
-      if (dr.renamed > 0) totalRenamed += dr.renamed
-      if (shouldAbort()) { spinOff(); setBusy(false); return }
-      setProcessingStatus(`Direct copy complete — ${totalDirect} files`)
-      await delay(1000)
-      if (classified.markitdownFiles.length > 0) {
-        setBusy(false)
-        await gate("Process text files")
-        if (shouldAbort()) { spinOff(); setBusy(false); return }
-        setBusy(true)
-        setStep("markitdown")
-        setProgTotal(totalMd)
-        setProgCurrent(0)
-        setProcessingStatus("Preparing MarkItDown conversion...")
-        await delay(1000)
-        mr = await runImportProcessor("markitdown", {
-          files: classified.markitdownFiles,
-          logsDir: classified.logsDir,
-          prog: sharedProg,
-          onLog: onPhaseLog,
-          shouldAbort,
-        })
-        if (mr.failed > 0) totalFailed += mr.failed
-        if (mr.renamed > 0) totalRenamed += mr.renamed
-        if (shouldAbort()) { spinOff(); setBusy(false); return }
-        setProcessingStatus(`MarkItDown complete — ${totalMd} files`)
-        await delay(1000)
-      } else {
+      if (classified.markitdownFiles.length === 0) {
         appendLogLine("MarkItDown: 0 files to convert — skipping")
       }
-
-      if (classified.ocrFiles.length > 0) {
-        setBusy(false)
-        await gate("Process images and PDFs")
-        if (shouldAbort()) { spinOff(); setBusy(false); return }
-        setBusy(true)
-        setStep("ocr")
-        setProgTotal(totalOcr)
-        setProgCurrent(0)
-        setProcessingStatus("Preparing OCR...")
-        await delay(1000)
-        or = await runImportProcessor("ocr", {
-          files: classified.ocrFiles,
-          logsDir: classified.logsDir,
-          prog: sharedProg,
-          onLog: onPhaseLog,
-          shouldAbort,
-          onChild: job.registerChild,
-        })
-        if (or.failed > 0) totalFailed += or.failed
-        if (or.renamed > 0) totalRenamed += or.renamed
-        if (shouldAbort()) { spinOff(); setBusy(false); return }
-      } else {
+      if (classified.ocrFiles.length === 0) {
         appendLogLine("OCR: 0 files to convert — skipping")
       }
-      // Phase C: Finalize (verification)
+      if (shouldAbort()) { spinOff(); setBusy(false); return }
+
+      const dr = phases.direct
+      const mr = phases.markitdown
+      const or = phases.ocr
+
+      // Phase C: Finalize (verification). Keep last-phase progressFiles, bar
+      // counters, and phase status so the results panel stays accurate during verify.
+      setProcessingFile("")
+      setVerifyStatus("Verifying import...")
       setStep("verification")
-      setProcessingStatus("Verifying import...")
       const result = await completeOnboarding(ctx, { direct: dr, markitdown: mr, ocr: or }, {
         workspacePath: ctx.workspacePath,
         frameworkRoot,
         sourcePath: ctx.sourcePath,
         projectTitle: ctx.projectTitle,
         onPhase: (_phase, msg) => {
-          setProcessingStatus(msg)
+          setVerifyStatus(msg)
           appendLogLine(msg)
         },
         shouldAbort,
@@ -929,6 +1013,8 @@ let nameInput: TextareaRenderable | undefined
             extensions,
             onProgress: (msg) => appendLogLine(msg),
             shouldAbort,
+            signal: job.registered.signal,
+            onChild: job.registerChild,
           })
           // Fold the extra-source results into the summary totals so a
           // multi-source import is reported accurately.
@@ -948,15 +1034,25 @@ let nameInput: TextareaRenderable | undefined
         or.converted += extraOcr
         totalFailed += extraFailed
 
+        const stillMissing = result.verify?.stillMissing ?? 0
+        const recovered = result.verify?.recovered ?? 0
         setFailedCount(totalFailed)
+        setStillMissingCount(stillMissing)
         const summary =
           `${dr.converted}/${totalDirect + extraDirect} copied · ${mr.converted}/${totalMd + extraMdTotal} markitdown · ${or.converted}/${totalOcr + extraOcrTotal} ocr` +
           (totalRenamed > 0 ? ` · ${totalRenamed} renamed` : "") +
-          (totalFailed > 0 ? ` · ${totalFailed} failed → _failed_files/` : "")
+          (totalFailed > 0 ? ` · ${totalFailed} failed → _failed_files/` : "") +
+          (recovered > 0 ? ` · ${recovered} recovered` : "") +
+          (stillMissing > 0 ? ` · ${stillMissing} still missing` : "")
         setImportSummary(summary)
         setProcessingDone(true)
         setProcessingStatus("All done")
-        job.finish("completed", summary)
+        if (totalFailed > 0 || stillMissing > 0) {
+          persistImportWizardLogLines(logLines(), "onboarding-import")
+          job.finish("error", summary)
+        } else {
+          job.finish("completed", summary)
+        }
         setGateLabel("Go to the workspace")
         setGateAction(() => () => { setWaitingForGate(false); void finishProvider("spinosa") })
         setWaitingForGate(true)
@@ -1127,6 +1223,9 @@ let nameInput: TextareaRenderable | undefined
         consume(); return
       }
       if (event.name === "escape") {
+        if (stopping() && requestForceLeave()) {
+          consume(); return
+        }
         handleBackPress()
         consume(); return
       }
@@ -1216,6 +1315,16 @@ let nameInput: TextareaRenderable | undefined
         }
       }
 
+      if (shouldActivateWizardToolAction({
+        step: step(),
+        keyName: event.name,
+        busy: busy(),
+        toolChecks: toolChecks(),
+      })) {
+        handleToolAction()
+        consume(); return
+      }
+
       if (step() === "provider") {
         if (event.name === "up" || event.name === "k") {
           setSelectedCli((value) => Math.max(0, value - 1))
@@ -1272,7 +1381,7 @@ let nameInput: TextareaRenderable | undefined
       <box width="100%" height="100%" alignItems="center" justifyContent="center">
         <box flexDirection="column" alignItems="center" gap={1}>
           <text fg={theme.textMuted}>{waveString(spinIdx())}</text>
-          <text fg={theme.textMuted}>Stopping process, exit cleanly, wait</text>
+          <text fg={theme.textMuted}>{stopHint()}</text>
         </box>
       </box>
     }>
@@ -1467,8 +1576,18 @@ let nameInput: TextareaRenderable | undefined
                 <box flexDirection="column" gap={1} paddingTop={1}>
                   <For each={toolChecks()}>
                     {(check) => {
-                      const icon = check.status === "available" ? "●" : check.status === "missing" ? "●" : wavePulse(spinIdx())
-                      const color = check.status === "available" ? theme.success : check.status === "missing" ? theme.error : theme.textMuted
+                      const icon =
+                        check.status === "available" || check.status === "unsupported"
+                          ? "●"
+                          : check.status === "missing"
+                            ? "●"
+                            : wavePulse(spinIdx())
+                      const color =
+                        check.status === "available"
+                          ? theme.success
+                          : check.status === "missing"
+                            ? theme.error
+                            : theme.textMuted
                       return (
                         <box flexDirection="row" gap={1} alignItems="center" paddingLeft={1} paddingRight={1}>
                           <text fg={color} attributes={check.status === "checking" ? undefined : TextAttributes.BOLD}>{icon}</text>
@@ -1509,7 +1628,7 @@ let nameInput: TextareaRenderable | undefined
                   <text fg={theme.textMuted}>↑↓ move · space toggle · a toggle all · enter continue</text>
                 </Show>
               </Show>
-              <Show when={step() === "setup" || step() === "direct" || step() === "markitdown" || step() === "ocr" || step() === "verification"}>
+              <Show when={step() === "setup" || step() === "direct" || step() === "markitdown" || step() === "ocr"}>
                 <Show when={!processingDone()}>
                   <ProgressBar
                     theme={theme}
@@ -1517,11 +1636,30 @@ let nameInput: TextareaRenderable | undefined
                     total={progTotal()}
                     status={processingStatus()}
                     fileName={processingFile()}
+                    files={progressFiles()}
                     barWidth={20}
+                    viewportHeight={dimensions().height}
                   />
                 </Show>
+              </Show>
+              <Show when={step() === "verification"}>
+                <Show when={progressFiles().length > 0}>
+                  <ProgressBar
+                    theme={theme}
+                    current={progCurrent()}
+                    total={progTotal()}
+                    status={processingStatus()}
+                    fileName={processingFile()}
+                    files={progressFiles()}
+                    barWidth={20}
+                    viewportHeight={dimensions().height}
+                  />
+                </Show>
+                <Show when={!processingDone()}>
+                  <text fg={theme.textMuted}>{verifyStatus() || "Verifying import..."}</text>
+                </Show>
                 <Show when={processingDone()}>
-                  <text fg={theme.success}>● Import complete</text>
+                  <text fg={importOutcomeFg()}>{importOutcomeHeading(importOutcome())}</text>
                   <Show when={importSummary() !== ""}>
                     <box paddingTop={1} flexDirection="column" gap={0}>
                       <text fg={theme.textMuted}>{importSummary()}</text>
@@ -1529,7 +1667,17 @@ let nameInput: TextareaRenderable | undefined
                   </Show>
                   <Show when={failedCount() > 0}>
                     <box paddingTop={1} flexDirection="column" gap={0}>
-                      <text fg={theme.textMuted}>{failedCount()} file{failedCount() === 1 ? "" : "s"} failed — saved to raw/_failed_files/ for review</text>
+                      <text fg={theme.error}>{failedCount()} file{failedCount() === 1 ? "" : "s"} failed — saved to raw/_failed_files/ for review</text>
+                    </box>
+                  </Show>
+                  <Show when={stillMissingCount() > 0}>
+                    <box paddingTop={1} flexDirection="column" gap={0}>
+                      <text fg={theme.warning}>{stillMissingCount()} file{stillMissingCount() === 1 ? "" : "s"} still missing after verify/recover</text>
+                    </box>
+                  </Show>
+                  <Show when={shouldShowImportDetailLogHint(importOutcome())}>
+                    <box paddingTop={1} flexDirection="column" gap={0}>
+                      <text fg={theme.textMuted}>{formatImportDetailLogHint()}</text>
                     </box>
                   </Show>
                 </Show>
@@ -1656,8 +1804,6 @@ let nameInput: TextareaRenderable | undefined
               </Show>
             </WizardActionRow>
           </Show>
-
-          <Toast />
         </box>
         <box flexGrow={1} minHeight={0} />
       </box>

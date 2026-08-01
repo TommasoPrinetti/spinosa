@@ -4,6 +4,7 @@ import { JobRunner } from "../src/progress/job-runner"
 import { terminateChild } from "../src/progress/child-kill"
 import { listImportProcessors, runImportProcessor } from "../src/import/processors"
 import { SpinosaCancellationError } from "../src/import/cancellation"
+import { waitForOcrChild } from "../src/import/pipeline"
 
 afterEach(() => {
   JobRunner.reset()
@@ -51,6 +52,35 @@ describe("terminateChild", () => {
       detached: true,
     })
     await terminateChild(child, 500)
+    expect(child.exitCode !== null || child.signalCode !== null).toBe(true)
+  })
+})
+
+describe("waitForOcrChild cancel race", () => {
+  test("close after abort is already true finishes as aborted (not crash)", async () => {
+    const child = spawn(process.execPath, ["-e", "setTimeout(() => {}, 5000)"], {
+      stdio: "ignore",
+      detached: true,
+    })
+    let abort = false
+    const wait = waitForOcrChild(child, () => abort)
+    // Simulate cancel race: flag abort then kill so close wins before poll terminate path.
+    abort = true
+    child.kill("SIGTERM")
+    const result = await wait
+    expect(result.aborted).toBe(true)
+  })
+
+  test("AbortSignal abort terminates child and finishes as aborted", async () => {
+    const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
+      stdio: "ignore",
+      detached: true,
+    })
+    const ac = new AbortController()
+    const wait = waitForOcrChild(child, undefined, ac.signal)
+    ac.abort()
+    const result = await wait
+    expect(result.aborted).toBe(true)
     expect(child.exitCode !== null || child.signalCode !== null).toBe(true)
   })
 })

@@ -15,6 +15,8 @@ import {
   productBinaryAssetName,
   PRODUCT_BINARY_TARGETS,
   expectedImmutableReleaseAssets,
+  isMuslLinux,
+  MUSL_UNSUPPORTED_MESSAGE,
 } from "../src/distribution/contract"
 import {
   BINARY_WORKSPACE_LAUNCHER,
@@ -37,6 +39,41 @@ describe("distribution contract", () => {
 
   test("rejects unsupported platforms", () => {
     expect(() => resolveProductBinaryTarget({ os: "Windows_NT", arch: "x64" })).toThrow(/Unsupported OS/)
+  })
+
+  test("rejects explicit musl libc", () => {
+    expect(() => resolveProductBinaryTarget({ os: "Linux", arch: "x64", libc: "musl" })).toThrow(
+      MUSL_UNSUPPORTED_MESSAGE,
+    )
+    expect(() => resolveProductBinaryTarget({ os: "linux", arch: "arm64", libc: "musl" })).toThrow(/musl/)
+  })
+
+  test("isMuslLinux probe hints match install.sh classifier", () => {
+    expect(isMuslLinux({ platform: "darwin", alpineReleaseExists: true })).toBe(false)
+    expect(isMuslLinux({ platform: "linux", alpineReleaseExists: true })).toBe(true)
+    expect(isMuslLinux({ platform: "linux", ldMuslPresent: true })).toBe(true)
+    expect(
+      isMuslLinux({
+        platform: "linux",
+        alpineReleaseExists: false,
+        ldMuslPresent: false,
+        lddVersionText: "musl libc (x86_64)\nVersion 1.2.4",
+      }),
+    ).toBe(true)
+    expect(
+      isMuslLinux({
+        platform: "linux",
+        alpineReleaseExists: false,
+        ldMuslPresent: false,
+        lddVersionText: "ldd (GNU libc) 2.39",
+      }),
+    ).toBe(false)
+  })
+
+  test("explicit gnu libc bypasses host musl auto-detect", () => {
+    // Cross-resolve escape hatch: callers mapping linux assets from any host.
+    expect(resolveProductBinaryTarget({ os: "Linux", arch: "x64", libc: "gnu" })).toBe("linux-x64")
+    expect(resolveProductBinaryTarget({ os: "Linux", arch: "arm64", libc: "glibc" })).toBe("linux-arm64")
   })
 })
 

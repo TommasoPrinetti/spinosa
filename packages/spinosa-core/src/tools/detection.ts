@@ -1,3 +1,5 @@
+import { isOcrPlatformSupported } from "./ocr-support"
+
 let _pdfjsAvailable: boolean | undefined
 
 export function pdfjsAvailable(): boolean {
@@ -48,6 +50,10 @@ let _ocrAvailable: boolean | undefined
 
 export function ocrAvailable(): boolean {
   if (_ocrAvailable !== undefined) return _ocrAvailable
+  if (!isOcrPlatformSupported()) {
+    _ocrAvailable = false
+    return _ocrAvailable
+  }
   try {
     require.resolve("ppu-paddle-ocr")
     _ocrAvailable = true

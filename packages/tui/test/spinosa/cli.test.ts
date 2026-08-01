@@ -226,14 +226,33 @@ describe("Spinosa CLI", () => {
       expect(await runSpinosaCli(["startup-autoclean"], result.io)).toBe(0)
       expect(existsSync(stale)).toBe(false)
       expect(existsSync(release)).toBe(true)
-      expect(result.output.join("\n")).toContain("Removed stale installer data")
+      expect(result.output.join("\n")).toContain("Removed stale installer/temp data")
     } finally {
       if (originalHome === undefined) delete process.env.SPINOSA_HOME
       else process.env.SPINOSA_HOME = originalHome
     }
   })
 
-  test("startup-autoclean does not modify files while an install lock exists", async () => {
+  test("startup-autoclean does not modify files while a staging install lock exists", async () => {
+    await using tmp = await tmpdir()
+    const originalHome = process.env.SPINOSA_HOME
+    const versions = path.join(tmp.path, "versions")
+    const stale = path.join(versions, ".0.9.0.backup.123")
+    await mkdir(stale, { recursive: true })
+    await mkdir(path.join(tmp.path, ".staging", ".install.lock"), { recursive: true })
+    process.env.SPINOSA_HOME = tmp.path
+    try {
+      const result = capture()
+      expect(await runSpinosaCli(["startup-autoclean"], result.io)).toBe(1)
+      expect(existsSync(stale)).toBe(true)
+      expect(result.errors[0]).toContain("install is in progress")
+    } finally {
+      if (originalHome === undefined) delete process.env.SPINOSA_HOME
+      else process.env.SPINOSA_HOME = originalHome
+    }
+  })
+
+  test("startup-autoclean does not modify files while a legacy versions install lock exists", async () => {
     await using tmp = await tmpdir()
     const originalHome = process.env.SPINOSA_HOME
     const versions = path.join(tmp.path, "versions")

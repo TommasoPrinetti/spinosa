@@ -3,9 +3,9 @@ import { emitResult } from "../io"
 import { cleanupStaleInstallDirectories, inspectSpinosaMaintenance } from "@spinosa/core/system/maintenance"
 
 /**
- * Removes only abandoned installer work directories. It intentionally never
- * removes completed release directories: registered workspaces may still be
- * linked to an older release and require its dependencies.
+ * Removes abandoned installer work directories and known Spinosa OS temp leftovers.
+ * Never removes completed release directories under versions/ (workspaces may still
+ * link to older releases).
  */
 export async function runStartupAutoclean(input: {
   io: SpinosaCliIo
@@ -17,27 +17,44 @@ export async function runStartupAutoclean(input: {
     return 1
   }
 
+  const candidates = [...status.staleInstallDirectories, ...status.staleTempDirectories]
   if (input.dryRun) {
-    for (const candidate of status.staleInstallDirectories) input.io.out(`Would remove ${candidate}`)
-  } else {
-    const result = await cleanupStaleInstallDirectories()
-    for (const candidate of result.removedDirectories) input.io.out(`Removed stale installer data: ${candidate}`)
+    for (const candidate of candidates) input.io.out(`Would remove ${candidate}`)
+    emitResult(
+      input.io,
+      "startup-autoclean",
+      {
+        dryRun: true,
+        removed: [],
+        candidates,
+        nodeModulesDirectories: status.staleNodeModulesDirectories,
+        dormantVersions: status.dormantVersionDirectories.length,
+      },
+      candidates.length === 0
+        ? "Startup autoclean: nothing stale found"
+        : `Startup autoclean: ${candidates.length} stale path${candidates.length === 1 ? "" : "s"} found`,
+    )
+    return 0
+  }
+
+  const result = await cleanupStaleInstallDirectories()
+  for (const removed of result.removedDirectories) {
+    input.io.out(`Removed stale installer/temp data: ${removed}`)
   }
 
   emitResult(
     input.io,
     "startup-autoclean",
     {
-      dryRun: input.dryRun,
-      removed: input.dryRun ? [] : status.staleInstallDirectories,
-      candidates: status.staleInstallDirectories,
+      dryRun: false,
+      removed: result.removedDirectories,
+      candidates,
       nodeModulesDirectories: status.staleNodeModulesDirectories,
+      dormantVersions: status.dormantVersionDirectories.length,
     },
-    status.staleInstallDirectories.length === 0
+    result.removedDirectories.length === 0
       ? "Startup autoclean: nothing stale found"
-      : input.dryRun
-        ? `Startup autoclean: ${status.staleInstallDirectories.length} stale installer director${status.staleInstallDirectories.length === 1 ? "y" : "ies"} found`
-        : `Startup autoclean: removed ${status.staleInstallDirectories.length} stale installer director${status.staleInstallDirectories.length === 1 ? "y" : "ies"}`,
+      : `Startup autoclean: removed ${result.removedDirectories.length} stale path${result.removedDirectories.length === 1 ? "" : "s"}`,
   )
   return 0
 }

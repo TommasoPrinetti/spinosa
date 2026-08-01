@@ -47,13 +47,17 @@ describe("job progress bus bridge", () => {
       finishedRels: [] as string[],
       inFlightRel: undefined as string | undefined,
     }
+    // Mirror processOcr: progress/page events are label-only (numerator = completed).
+    let processed = 0
+    const total = 1
     const opts = {
-      onFileStart: (rel: string) => prog.file("OCR", 0, 1, rel),
+      onFileStart: (rel: string) => prog.file("OCR", processed, total, rel, "processing"),
       onPageProgress: (_c: number, _t: number, rel: string, page: string) =>
-        prog.file("OCR", 0, 1, page ? `${rel} (${page})` : rel),
-      onProgress: (c: number, _t: number, rel: string) => prog.file("OCR", c, 1, rel),
+        prog.file("OCR", processed, total, page ? `${rel} (${page})` : rel, "processing"),
+      onProgress: (_c: number, _t: number, rel: string) =>
+        prog.file("OCR", processed, total, rel, "processing"),
       onFile: (fr: { rel: string; ok: boolean }) => {
-        if (fr.ok) prog.file("OCR", 1, 1, fr.rel)
+        prog.file("OCR", ++processed, total, fr.rel, fr.ok ? "done" : "failed")
       },
     }
 
@@ -72,6 +76,11 @@ describe("job progress bus bridge", () => {
     expect(events[0]?.type).toBe("job.started")
     expect(events.some((e) => e.type === "job.progress" && e.properties.relPath === "scan.pdf")).toBe(true)
     expect(events.some((e) => e.type === "job.progress" && e.properties.relPath === "scan.pdf (1/2)")).toBe(true)
+    // After file done, a late worker progress event must not bump past completed count
+    // or overwrite the terminal status with processing.
+    const progressEvents = events.filter((e) => e.type === "job.progress")
+    expect(progressEvents.every((e) => e.type === "job.progress" && e.properties.current <= 1)).toBe(true)
+    expect(processed).toBe(1)
     expect(events.at(-1)).toMatchObject({
       type: "job.finished",
       properties: { jobId, status: "completed", summary: "1 file" },

@@ -1,10 +1,8 @@
 import { createMemo, createResource, createSignal, For, onCleanup, onMount, Show } from "solid-js"
-import { TextAttributes } from "@opentui/core"
 import { useTerminalDimensions } from "@opentui/solid"
 import { dirname, join } from "node:path"
 import { statSync } from "node:fs"
 import { useDialog } from "../ui/dialog"
-import { DialogConfirm } from "../ui/dialog-confirm"
 import { useTheme } from "../context/theme"
 import { useRoute } from "../context/route"
 import { useOpencodeKeymap } from "../keymap"
@@ -12,7 +10,6 @@ import {
   listRegisteredWorkspaces,
   readBundledFrameworkVersion,
   readWorkspaceMeta,
-  unregisterWorkspace,
   workspaceNeedsFrameworkUpdate,
 } from "../spinosa/service"
 import { setupStatusLabel } from "../spinosa/status-labels"
@@ -20,12 +17,14 @@ import { truncatePathTail } from "../spinosa/truncate-path"
 import { useSpinosaWorkspace } from "../context/spinosa-workspace"
 import { getWorkspaceLaunchDecision } from "../spinosa/workspace-launch"
 import { resolveWorkspaceDisplayName } from "../spinosa/workspace-name"
+import { isStaleWorkspacePresence, stalePresenceDisplay } from "../spinosa/manage-stale"
 import { DialogSpinosaStartupChoice } from "./dialog-spinosa-startup-choice"
 import { DialogSpinosaMissingWorkspace } from "./dialog-spinosa-missing-workspace"
+import { DialogSpinosaManageStale } from "./dialog-spinosa-manage-stale"
 import { buttonBackground, buttonBorder, buttonText } from "../util/button"
 import type { SpinosaSetupStatus } from "../spinosa/types"
 import type { SpinosaWorkspacePresence } from "@spinosa/core/types"
-import { isUsableWorkspaceStatus, workspacePresenceLabel } from "@spinosa/core/workspace/presence"
+import { isUsableWorkspaceStatus } from "@spinosa/core/workspace/presence"
 import type { SpinosaWorkspaceID } from "@spinosa/core/workspace/identity"
 
 type SortColumn = "name" | "folder" | "status" | "version" | "accessed"
@@ -93,8 +92,6 @@ export function DialogSpinosaWorkspacePicker(props: { onClose?: () => void } = {
   const [sortColumn, setSortColumn] = createSignal<SortColumn>("name")
   const [sortDir, setSortDir] = createSignal<SortDir>("asc")
   const [selected, setSelected] = createSignal(0)
-  const [missingWorkspace, setMissingWorkspace] = createSignal<SelectWorkspaceRow>()
-  const [deletingStale, setDeletingStale] = createSignal(false)
 
   const toggleSort = (column: SortColumn) => {
     if (sortColumn() === column) {
@@ -155,13 +152,14 @@ export function DialogSpinosaWorkspacePicker(props: { onClose?: () => void } = {
   })
 
   const navCount = createMemo(() => sorted().length + 1) // rows + New workspace
-  const staleCount = createMemo(() => sorted().filter(w => w.presence && w.presence !== "present" && w.presence !== "legacy").length)
+  const staleCount = createMemo(() => sorted().filter((w) => isStaleWorkspacePresence(w.presence)).length)
   const close = () => {
     dialog.clear()
     props.onClose?.()
   }
 
   const reopenPicker = () => {
+    void refetchWorkspaces()
     dialog.replace(
       () => <DialogSpinosaWorkspacePicker onClose={props.onClose} />,
       undefined,
@@ -190,44 +188,62 @@ export function DialogSpinosaWorkspacePicker(props: { onClose?: () => void } = {
     await spinosa.openWorkspace(path)
   }
 
+  function openMissingWorkspace(row: SelectWorkspaceRow) {
+    const escapeRef = { current: () => reopenPicker() }
+    dialog.replace(
+      () => (
+        <DialogSpinosaMissingWorkspace
+          workspacePath={row.path}
+          workspaceName={row.projectName || row.name}
+          workspaceID={row.workspaceID}
+          onRegisterEscape={(handler) => {
+            escapeRef.current = () => {
+              handler()
+            }
+          }}
+          onBack={reopenPicker}
+          onRemoved={async () => {
+            reopenPicker()
+          }}
+          onRecovered={(workspacePath) => openWorkspace(workspacePath)}
+        />
+      ),
+      undefined,
+      () => escapeRef.current(),
+    )
+  }
+
+  function openManageStale() {
+    if (workspaces.loading || staleCount() === 0) return
+    const escapeRef = { current: () => reopenPicker() }
+    dialog.replace(
+      () => (
+        <DialogSpinosaManageStale
+          onRegisterEscape={(handler) => {
+            escapeRef.current = () => {
+              handler()
+            }
+          }}
+          onBack={reopenPicker}
+        />
+      ),
+      undefined,
+      () => escapeRef.current(),
+    )
+  }
+
   async function chooseWorkspace(row: SelectWorkspaceRow) {
     if (!row.available) {
-      setMissingWorkspace(row)
+      openMissingWorkspace(row)
       return
     }
     await openWorkspace(row.path)
-  }
-
-  async function deleteStaleHandler() {
-    if (deletingStale() || workspaces.loading) return
-    const stale = sorted().filter(w => w.presence && w.presence !== "present" && w.presence !== "legacy")
-    if (stale.length === 0) {
-      await DialogConfirm.show(dialog, "No stale workspaces", `All ${sorted().length} workspace(s) are valid.`, { confirmLabel: "Ok", defaultChoice: "confirm" })
-      return
-    }
-    const confirmed = await DialogConfirm.show(dialog, "Delete stale workspaces?", `${stale.length} workspace(s) will be removed from the index. No workspace files will be deleted.`, { confirmLabel: "Delete", defaultChoice: "cancel" })
-    if (!confirmed) return
-    setDeletingStale(true)
-    let removed = 0
-    let failed = 0
-    for (const w of stale) {
-      try {
-        await unregisterWorkspace(w.path)
-        removed++
-      } catch { failed++ }
-    }
-    setDeletingStale(false)
-    if (failed > 0) {
-      await DialogConfirm.show(dialog, "Cleanup complete", `${removed} workspace(s) removed, ${failed} failed.`, { confirmLabel: "Ok", defaultChoice: "confirm" })
-    }
-    reopenPicker()
   }
 
   onMount(() => {
     dialog.setSize("xlarge")
 
     const off = keymap.intercept("key", ({ event, consume }) => {
-      if (missingWorkspace()) return
       if (event.name === "up" || event.name === "k") {
         setSelected((v) => Math.max(0, v - 1))
         consume(); return
@@ -253,29 +269,7 @@ export function DialogSpinosaWorkspacePicker(props: { onClose?: () => void } = {
   })
 
   return (
-    <>
-      <Show when={missingWorkspace()}>
-        {(row) => (
-          <DialogSpinosaMissingWorkspace
-            workspacePath={row().path}
-            workspaceName={row().projectName || row().name}
-            workspaceID={row().workspaceID}
-            onBack={() => {
-              setMissingWorkspace(undefined)
-              dialog.setSize("xlarge")
-            }}
-            onRemoved={async () => {
-              const refreshed = await refetchWorkspaces()
-              setSelected((current) => Math.min(current, refreshed?.length ?? 0))
-              setMissingWorkspace(undefined)
-              dialog.setSize("xlarge")
-            }}
-            onRecovered={(workspacePath) => openWorkspace(workspacePath)}
-          />
-        )}
-      </Show>
-      <Show when={!missingWorkspace()}>
-        <box flexDirection="column" paddingLeft={1} paddingRight={1} paddingBottom={1}>
+    <box flexDirection="column" paddingLeft={1} paddingRight={1} paddingBottom={1}>
       {/* ── back button ── */}
       <box flexDirection="row" alignItems="center" justifyContent="space-between">
         <box flexDirection="row" alignItems="center" gap={1}>
@@ -297,10 +291,10 @@ export function DialogSpinosaWorkspacePicker(props: { onClose?: () => void } = {
           paddingRight={2}
           paddingTop={1}
           paddingBottom={1}
-          onMouseDown={deletingStale() || workspaces.loading || staleCount() === 0 ? undefined : deleteStaleHandler}
+          onMouseDown={workspaces.loading || staleCount() === 0 ? undefined : openManageStale}
         >
-          <text fg={deletingStale() ? theme.textMuted : staleCount() > 0 ? theme.error : theme.textMuted}>
-            {deletingStale() ? "Deleting…" : staleCount() > 0 ? `Delete ${staleCount()} stale` : "No stale"}
+          <text fg={staleCount() > 0 ? theme.warning : theme.textMuted}>
+            {staleCount() > 0 ? `Manage ${staleCount()} stale` : "No stale"}
           </text>
         </box>
       </box>
@@ -322,7 +316,7 @@ export function DialogSpinosaWorkspacePicker(props: { onClose?: () => void } = {
 
       {/* ── table ── */}
       <Show when={sorted().length > 0}>
-        <box flexDirection="column" maxHeight={18}>
+        <box flexDirection="column">
           {/* header row */}
           <box
             flexDirection="row"
@@ -365,56 +359,62 @@ export function DialogSpinosaWorkspacePicker(props: { onClose?: () => void } = {
           </box>
 
           {/* data rows */}
-          <For each={sorted()}>
-            {(row, i) => {
-              const active = () => selected() === i()
-              return (
-                <box
-                  paddingLeft={1}
-                  paddingRight={1}
-                  backgroundColor={active() ? theme.backgroundElement : i() % 2 === 0 ? theme.backgroundPanel : "transparent"}
-                  border={["left"]}
-                  borderColor={active() ? theme.borderActive : theme.border}
-                  flexDirection="row"
-                  gap={1}
-                  onMouseOver={() => setSelected(i())}
-                  onMouseDown={() => { setSelected(i()); void chooseWorkspace(row) }}
-                >
-                  <box width={nameWidth()}>
-                    <text fg={row.available ? theme.text : theme.error} overflow="hidden" wrapMode="none">
-                      <span style={{ bold: active() }}>{active() ? "› " : "  "}{row.available ? "" : "✕ "}{row.name}</span>
-                    </text>
-                  </box>
-                  <box width={folderWidth()}>
-                    <text fg={theme.textMuted} overflow="hidden" wrapMode="none">
-                      {truncatePathTail(row.parentFolder, Math.max(8, folderWidth() - 2))}
-                    </text>
-                  </box>
-                  <box width={statusWidth()} flexShrink={0}>
-                    <text fg={row.available ? theme.textMuted : theme.error} overflow="hidden" wrapMode="none">
-                      {row.presence && row.presence !== "present" && row.presence !== "legacy"
-                        ? `✕ ${workspacePresenceLabel(row.presence) === "NON EXISTENT" ? "NOT FOUND" : workspacePresenceLabel(row.presence)}`
-                        : row.presence === "legacy" ? "Legacy" : setupStatusLabel(row.status)}
-                    </text>
-                  </box>
-                  <Show when={showVersion()}>
-                    <box width={9} flexShrink={0}>
-                      <text fg={theme.textMuted} overflow="hidden" wrapMode="none">
-                        v{row.version}{row.needsUpdate ? " ⚠" : ""}
+          <scrollbox
+            stickyScroll={false}
+            stickyStart="top"
+            height={Math.min(16, Math.max(4, sorted().length))}
+          >
+            <For each={sorted()}>
+              {(row, i) => {
+                const active = () => selected() === i()
+                return (
+                  <box
+                    paddingLeft={1}
+                    paddingRight={1}
+                    backgroundColor={active() ? theme.backgroundElement : i() % 2 === 0 ? theme.backgroundPanel : "transparent"}
+                    border={["left"]}
+                    borderColor={active() ? theme.borderActive : theme.border}
+                    flexDirection="row"
+                    gap={1}
+                    onMouseOver={() => setSelected(i())}
+                    onMouseDown={() => { setSelected(i()); void chooseWorkspace(row) }}
+                  >
+                    <box width={nameWidth()}>
+                      <text fg={row.available ? theme.text : theme.error} overflow="hidden" wrapMode="none">
+                        <span style={{ bold: active() }}>{active() ? "› " : "  "}{row.available ? "" : "✕ "}{row.name}</span>
                       </text>
                     </box>
-                  </Show>
-                  <Show when={showAccessed()}>
-                    <box width={17} flexShrink={0}>
+                    <box width={folderWidth()}>
                       <text fg={theme.textMuted} overflow="hidden" wrapMode="none">
-                        {relativeTime(row.lastAccessed)}
+                        {truncatePathTail(row.parentFolder, Math.max(8, folderWidth() - 2))}
                       </text>
                     </box>
-                  </Show>
-                </box>
-              )
-            }}
-          </For>
+                    <box width={statusWidth()} flexShrink={0}>
+                      <text fg={row.available ? theme.textMuted : theme.error} overflow="hidden" wrapMode="none">
+                        {isStaleWorkspacePresence(row.presence)
+                          ? `✕ ${stalePresenceDisplay(row.presence)}`
+                          : row.presence === "legacy" ? "Legacy" : setupStatusLabel(row.status)}
+                      </text>
+                    </box>
+                    <Show when={showVersion()}>
+                      <box width={9} flexShrink={0}>
+                        <text fg={theme.textMuted} overflow="hidden" wrapMode="none">
+                          v{row.version}{row.needsUpdate ? " ⚠" : ""}
+                        </text>
+                      </box>
+                    </Show>
+                    <Show when={showAccessed()}>
+                      <box width={17} flexShrink={0}>
+                        <text fg={theme.textMuted} overflow="hidden" wrapMode="none">
+                          {relativeTime(row.lastAccessed)}
+                        </text>
+                      </box>
+                    </Show>
+                  </box>
+                )
+              }}
+            </For>
+          </scrollbox>
         </box>
       </Show>
 
@@ -448,8 +448,6 @@ export function DialogSpinosaWorkspacePicker(props: { onClose?: () => void } = {
           Import source folders into a new workspace
         </text>
       </box>
-        </box>
-      </Show>
-    </>
+    </box>
   )
 }

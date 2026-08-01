@@ -24,6 +24,13 @@ import { useFrecency } from "../../prompt/frecency"
 import { useBindings, useCommandSlashes, useOpencodeModeStack } from "../../keymap"
 import { displayCharAt, mentionTriggerIndex } from "../../prompt/display"
 import type { FileSystemEntry } from "@spinosa/sdk/v2"
+import { errorMessage } from "../../util/error"
+
+/** Empty @-mention list copy: distinguish search failure from no matches. */
+export function formatAutocompleteEmptyMessage(searchError?: string): string {
+  const detail = searchError?.trim()
+  return detail ? `Couldn’t search files: ${detail}` : "No matching items"
+}
 
 function removeLineRange(input: string) {
   const hashIndex = input.lastIndexOf("#")
@@ -314,11 +321,19 @@ export function Autocomplete(props: {
     insertPart(filename, part)
   }
 
+  const [fileSearchError, setFileSearchError] = createSignal<string | undefined>()
+
   const [files] = createResource(
     () => ({ query: search(), location: location() }),
     async (input) => {
-      if (!store.visible || store.visible === "/") return []
-      if (referenceMatch()) return []
+      if (!store.visible || store.visible === "/") {
+        setFileSearchError(undefined)
+        return []
+      }
+      if (referenceMatch()) {
+        setFileSearchError(undefined)
+        return []
+      }
       const { lineRange, baseQuery } = extractLineRange(input.query ?? "")
 
       // Get files from SDK — never reject into createResource (Solid rethrows on read).
@@ -332,10 +347,18 @@ export function Autocomplete(props: {
             workspace: input.location?.workspaceID ?? project.workspace.current(),
           },
         })
-      } catch {
+      } catch (error) {
+        setFileSearchError(errorMessage(error))
         return []
       }
 
+      const findError = "error" in result ? result.error : undefined
+      if (findError) {
+        setFileSearchError(errorMessage(findError))
+        return []
+      }
+
+      setFileSearchError(undefined)
       const options: AutocompleteOption[] = []
 
       // Add file options. Trust the order returned by fff (frecency, fuzzy
@@ -749,7 +772,9 @@ export function Autocomplete(props: {
           each={options()}
           fallback={
             <box paddingLeft={1} paddingRight={1}>
-              <text fg={theme.textMuted}>No matching items</text>
+              <text fg={fileSearchError() ? theme.error : theme.textMuted}>
+                {formatAutocompleteEmptyMessage(fileSearchError())}
+              </text>
             </box>
           }
         >

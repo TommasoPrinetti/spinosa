@@ -48,7 +48,7 @@ export function SessionsView(props: CanvasViewProps) {
                     {group.title.slice(0, 40)}
                   </span>
                 </text>
-                <text fg={theme.textMuted}>
+                <text fg={buttonText(theme, hovered() === gIdx(), theme.textMuted)}>
                   {" "}({group.calls.length} calls{errors > 0 ? `, ${errors} errors` : ""})
                 </text>
               </box>

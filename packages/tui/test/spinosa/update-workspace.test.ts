@@ -216,7 +216,13 @@ describe("workspace update flow", () => {
     await Bun.write(path.join(templateRoot, ".spinosa", "workspace-files.tsv"), "path\trole\tupdate_policy\n")
 
     expect(await updateWorkspace({ workspacePath: workspace, frameworkRoot, lockTimeoutMs: 0 })).toEqual({
-      success: false, added: 0, updated: 0, removed: 0, skipped: 0, changes: false,
+      success: false,
+      added: 0,
+      updated: 0,
+      removed: 0,
+      skipped: 0,
+      changes: false,
+      error: "Another update is already in progress for this workspace",
     })
   })
 
@@ -290,6 +296,7 @@ describe("workspace update flow", () => {
     await Bun.write(path.join(workspace, ".spinosa", "workspace"), "framework_version: 2.0.0\n")
 
     expect((await updateWorkspace({ workspacePath: workspace, frameworkRoot })).success).toBe(false)
+    expect((await updateWorkspace({ workspacePath: workspace, frameworkRoot })).error).toContain("older than this workspace")
     expect(await Bun.file(path.join(workspace, "AGENTS.md")).text()).toBe("current\n")
   })
 

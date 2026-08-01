@@ -8,11 +8,15 @@ import { createSolidTransformPlugin } from "@opentui/solid/bun-plugin"
 import type { BunPlugin } from "bun"
 import {
   assertNapiCanvasPlatformInstalled,
+  materializeCanvasNativeEmbed,
   materializeOnnxNativeEmbed,
   napiCanvasForceModule,
   napiCanvasPlatformPackage,
+  isOcrEmbeddedTarget,
   resolveOnnxRuntimeNodeRoot,
+  restoreCanvasNativeStub,
   restoreOnnxNativeStub,
+  ONNX_NATIVE_STUB_MODULE,
 } from "./onnx-native.ts"
 
 const __filename = fileURLToPath(import.meta.url)
@@ -189,24 +193,45 @@ export async function buildSpinosaBinaries(options: BuildSpinosaBinariesOptions)
     // Fail closed: write onnx embed to disk only (template-blobs pattern).
     // A Bun.build `files` virtual module cannot resolve sibling `with { type: "file" }`
     // imports, so companion .so/.dylib never embed when injected only via `files`.
-    const onnxEmbed = await materializeOnnxNativeEmbed({
-      cwd,
-      target: { os: item.os, arch: item.arch },
-      fromDir: coreFrom,
-    })
-    console.log(
-      `embedding onnxruntime natives for ${item.os}-${item.arch}: ${onnxEmbed.libs
-        .map((l) => `${l.name} (${fs.statSync(path.join(onnxEmbed.libsDir, l.name)).size} bytes)`)
-        .join(", ")}`,
-    )
+    // linux-x64 ships without OCR/onnx (product gate) — keep the empty stub.
+    const embedOcr = isOcrEmbeddedTarget({ os: item.os, arch: item.arch })
+    let onnxEmbed: Awaited<ReturnType<typeof materializeOnnxNativeEmbed>> | null = null
+    if (embedOcr) {
+      onnxEmbed = await materializeOnnxNativeEmbed({
+        cwd,
+        target: { os: item.os, arch: item.arch },
+        fromDir: coreFrom,
+      })
+      console.log(
+        `embedding onnxruntime natives for ${item.os}-${item.arch}: ${onnxEmbed.libs
+          .map((l) => `${l.name} (${fs.statSync(path.join(onnxEmbed!.libsDir, l.name)).size} bytes)`)
+          .join(", ")}`,
+      )
+    } else {
+      fs.writeFileSync(path.join(cwd, "src/generated/onnx-native.gen.ts"), ONNX_NATIVE_STUB_MODULE)
+      console.log(`skipping onnxruntime embed for ${item.os}-${item.arch} (OCR unsupported on this product binary)`)
+    }
 
     const canvasTarget = { os: item.os, arch: item.arch, abi: item.abi }
     const canvasPkg = napiCanvasPlatformPackage(canvasTarget)
     assertNapiCanvasPlatformInstalled(canvasTarget, coreFrom)
+    // Embed skia.<triple>.node on disk (template-blobs / onnx pattern). Nested
+    // OCR chunks cannot require() optional @napi-rs/canvas-* on Linux compile;
+    // index.ts stages this file and sets NAPI_RS_NATIVE_LIBRARY_PATH first.
+    const canvasEmbed = materializeCanvasNativeEmbed({
+      cwd,
+      target: canvasTarget,
+      fromDir: coreFrom,
+    })
+    console.log(
+      `embedding canvas native for ${item.os}-${item.arch}: ${canvasEmbed.name} (${fs.statSync(path.join(canvasEmbed.libsDir, canvasEmbed.name)).size} bytes)`,
+    )
     // Package-only force module stays on the virtual files map (writing it to disk
     // breaks Bun resolution of optional @napi-rs/canvas-* platform packages).
-    files["src/generated/napi-canvas-force.gen.ts"] = napiCanvasForceModule(canvasPkg)
-    console.log(`embedding ${canvasPkg} for ${item.os}-${item.arch}`)
+    files["src/generated/napi-canvas-force.gen.ts"] = napiCanvasForceModule(canvasPkg, {
+      includeOcr: embedOcr,
+    })
+    console.log(`embedding ${canvasPkg} for ${item.os}-${item.arch}${embedOcr ? " (+ OCR)" : " (no OCR)"}`)
 
     const result = await Bun.build({
       conditions: ["bun", "node"],
@@ -265,22 +290,45 @@ export async function buildSpinosaBinaries(options: BuildSpinosaBinariesOptions)
     // Bun renames `with { type: "file" }` assets (hashed filenames), so path
     // strings are not a reliable marker — fingerprint the lib contents instead.
     const binBytes = fs.readFileSync(outfile)
-    for (const lib of onnxEmbed.libs) {
-      const libPath = path.join(onnxEmbed.libsDir, lib.name)
+    if (onnxEmbed) {
+      for (const lib of onnxEmbed.libs) {
+        const libPath = path.join(onnxEmbed.libsDir, lib.name)
+        const libData = fs.readFileSync(libPath)
+        if (libData.byteLength < 1024) {
+          throw new Error(`onnx lib too small to fingerprint: ${libPath}`)
+        }
+        if (binBytes.byteLength < libData.byteLength) {
+          throw new Error(
+            `binary ${outfile} (${binBytes.byteLength} bytes) smaller than onnx lib ${lib.name} (${libData.byteLength} bytes)`,
+          )
+        }
+        const probeAt = Math.min(4096, libData.byteLength - 64)
+        const probe = libData.subarray(probeAt, probeAt + 64)
+        if (!binBytes.includes(probe)) {
+          throw new Error(
+            `binary ${outfile} missing embedded bytes for ${lib.name} (${item.os}-${item.arch}) — companion lib not packaged`,
+          )
+        }
+      }
+    }
+
+    // Same fingerprint gate for canvas skia .node (OCR load path on Linux).
+    {
+      const libPath = path.join(canvasEmbed.libsDir, canvasEmbed.name)
       const libData = fs.readFileSync(libPath)
       if (libData.byteLength < 1024) {
-        throw new Error(`onnx lib too small to fingerprint: ${libPath}`)
+        throw new Error(`canvas native too small to fingerprint: ${libPath}`)
       }
       if (binBytes.byteLength < libData.byteLength) {
         throw new Error(
-          `binary ${outfile} (${binBytes.byteLength} bytes) smaller than onnx lib ${lib.name} (${libData.byteLength} bytes)`,
+          `binary ${outfile} (${binBytes.byteLength} bytes) smaller than canvas native ${canvasEmbed.name} (${libData.byteLength} bytes)`,
         )
       }
       const probeAt = Math.min(4096, libData.byteLength - 64)
       const probe = libData.subarray(probeAt, probeAt + 64)
       if (!binBytes.includes(probe)) {
         throw new Error(
-          `binary ${outfile} missing embedded bytes for ${lib.name} (${item.os}-${item.arch}) — companion lib not packaged`,
+          `binary ${outfile} missing embedded bytes for ${canvasEmbed.name} (${item.os}-${item.arch}) — canvas native not packaged`,
         )
       }
     }
@@ -347,6 +395,7 @@ export async function buildSpinosaBinaries(options: BuildSpinosaBinariesOptions)
   }
   } finally {
     restoreOnnxNativeStub(cwd)
+    restoreCanvasNativeStub(cwd)
   }
 
   return { binaries, assets }

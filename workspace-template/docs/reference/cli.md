@@ -188,7 +188,7 @@ During `spinosa new` and source intake, each file is classified and routed to th
 | Category | File types | What happens |
 |---|---|---|
 | **Markdown-convertible** | txt, rtf, wiki files, yaml, toml, css, js, py, rb, sh, log, tex, bib, org, adoc, rst | Renamed to `.md` (no conversion needed) |
-| **MarkItDown / structured fallback** | docx, pptx, xlsx, xls, epub, html, msg, zip, csv, json, xml, wav, mp3, m4a, text-based PDF, plus extensions from `SPINOSA_MARKITDOWN_EXTRA_EXTENSIONS` | Converted to `.md`; csv/json/xml use a built-in fallback if MarkItDown is unavailable. Page-marked Markdown output is split into `raw/<source>/page-001.md` files. |
+| **MarkItDown / structured fallback** | docx, xlsx, xls, epub, html, msg, zip, csv, json, xml, wav, mp3, m4a, text-based PDF | Converted to `.md`; csv/json/xml use a built-in fallback if MarkItDown is unavailable. Page-marked Markdown output is split into `raw/<source>/page-001.md` files. PowerPoint (`.pptx`) is unsupported by markitdown-ts and is reported as unsupported. |
 | **OCR** | scanned PDF, jpg, png, gif, webp, heic, tif, bmp, svg | OCR-processed to `.md`; multi-page PDFs are split into one Markdown file per page under a raw subfolder. |
 | **Native** | md | Copied unchanged |
 | **Skipped by default** | mp4, mov, avi, mkv (video), aac, flac, ogg, opus, aiff, and other audio/video not selected for import | Reported in onboarding summary unless explicitly selected |

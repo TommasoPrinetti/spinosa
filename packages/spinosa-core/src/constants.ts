@@ -12,8 +12,10 @@ export const NATIVE_EXTENSIONS = ["md"]
 
 export const BINARY_COPYABLE_EXTENSIONS: string[] = [] // intentionally empty for now — extension point
 
+// PowerPoint (.pptx) is intentionally omitted: markitdown-ts does not implement
+// a PowerPoint converter and rejects with "The .pptx are not supported."
 export const MARKITDOWN_EXTENSIONS = [
-  "docx", "pptx", "xlsx", "xls", "epub",
+  "docx", "xlsx", "xls", "epub",
   "html", "htm", "msg", "zip", "json", "csv", "xml",
 ]
 

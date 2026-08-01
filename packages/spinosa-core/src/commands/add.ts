@@ -8,6 +8,7 @@ import {
   renameSync,
 } from "node:fs"
 import * as path from "node:path"
+import type { ChildProcess } from "node:child_process"
 import { safeCopy, writeTextAtomic } from "../utils/fs"
 import {
   findSourceFiles,
@@ -35,6 +36,10 @@ export interface AddFilesOptions {
   overwrite?: boolean
   onProgress?: (message: string) => void
   shouldAbort?: () => boolean
+  /** AbortSignal for immediate MarkItDown/OCR child cancel. */
+  signal?: AbortSignal
+  /** Register MarkItDown/OCR worker children so cancel can kill them. */
+  onChild?: (child: ChildProcess) => void
 }
 
 export interface AddFilesResult {
@@ -52,7 +57,7 @@ export interface AddFilesResult {
 }
 
 export async function addFiles(options: AddFilesOptions): Promise<AddFilesResult> {
-  const { workspacePath, sourcePath, sourceIsDir, subfolder, extensions, overwrite, onProgress, shouldAbort } = options
+  const { workspacePath, sourcePath, sourceIsDir, subfolder, extensions, overwrite, onProgress, shouldAbort, signal, onChild } = options
   throwIfSpinosaCancelled(shouldAbort)
   const rawDir = path.join(workspacePath, "raw")
   spinosaLogInfo("add", `sourcePath=${sourcePath} workspacePath=${workspacePath} sourceIsDir=${sourceIsDir}`)
@@ -62,7 +67,7 @@ export async function addFiles(options: AddFilesOptions): Promise<AddFilesResult
   }
 
   if (sourceIsDir) {
-    return addFilesFromDir(sourcePath, rawDir, subfolder, extensions, overwrite, onProgress, shouldAbort)
+    return addFilesFromDir(sourcePath, rawDir, subfolder, extensions, overwrite, onProgress, shouldAbort, signal, onChild)
   }
   return addSingleFile(sourcePath, rawDir, overwrite, onProgress, shouldAbort)
 }
@@ -75,6 +80,8 @@ async function addFilesFromDir(
   overwrite?: boolean,
   onProgress?: (msg: string) => void,
   shouldAbort?: () => boolean,
+  signal?: AbortSignal,
+  onChild?: (child: ChildProcess) => void,
 ): Promise<AddFilesResult> {
   const importBatches = new ImportBatchManager()
   await scanSource(sourcePath, importBatches)
@@ -85,15 +92,20 @@ async function addFilesFromDir(
 
   onProgress?.("Scanning source directory...")
 
+  const { detectDocumentTools } = await import("../scan/scanner")
+  const toolStatus = await detectDocumentTools()
+
   const { copySource } = await import("../import/pipeline")
   const result = await copySource(sourcePath, rawDir, {
     batchManager: importBatches,
     markitdownChoice: true,
-    ocrChoice: true,
+    ocrChoice: toolStatus.ocr,
     overwrite,
     subfolder,
     verifyAfter: false,
     shouldAbort,
+    signal,
+    onChild,
     onPhaseChange: (phase) => {
       switch (phase) {
         case "direct":

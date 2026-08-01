@@ -26,6 +26,7 @@ import { isSpinosaCancellationError, throwIfSpinosaCancelled, SpinosaCancellatio
 import type { PpuOcrFile, PpuOcrBatchResult } from "./ppu-ocr"
 import { ProgressEmitter } from "../progress/progress"
 import { ocrAvailable } from "../tools/detection"
+import { ocrUnsupportedReason } from "../tools/ocr-support"
 import { isCompiledBinaryDistribution } from "../distribution/bootstrap"
 import { terminateChild } from "../progress/child-kill"
 
@@ -61,6 +62,10 @@ interface CopyOptions {
   onClassified?: (classified: { directFiles: ClassifiedEntry[]; markitdownFiles: ClassifiedEntry[]; ocrFiles: ClassifiedEntry[]; logsDir: string }) => void
   onPhaseChange?: (phase: string, message: string) => void
   shouldAbort?: () => boolean
+  /** AbortSignal for immediate child cancel (preferred over shouldAbort polling). */
+  signal?: AbortSignal
+  /** Register MarkItDown/OCR worker children so CLI cancel can kill them. */
+  onChild?: (child: ChildProcess) => void
 }
 
 
@@ -177,18 +182,21 @@ export async function processDirectCopy(
   let completed = 0
   const total = files.length
 
-  // Stable per-file sequence number so the progress numerator never exceeds
-  // the total during parallel + retry rounds (it tracks the logical file,
-  // not the per-attempt copy).
-  const seqOf = new Map<ClassifiedEntry, number>()
-  files.forEach((f, i) => seqOf.set(f, i))
-
-  const tryCopy = async (entry: ClassifiedEntry, attempt: number, current: number): Promise<"copied" | "skipped" | "failed"> => {
-    const { src, rel, dest } = entry
-    return copyDirectRawFile(src, dest, rel, prog, onLog, current, total, overwrite, shouldAbort, (a, r) => onRetry?.(attempt || a, r), (o, rn) => { renamed++; onRename?.(o, rn) })
+  /** Emit progress then yield so the TUI can paint mid-batch (OCR-style). */
+  const emitProgress = async (relPath: string, current: number, status: "processing" | "done" | "failed") => {
+    prog?.file("direct-progress", current, total, relPath, status)
+    await yieldToEL()
   }
 
-  const handleResult = (entry: ClassifiedEntry, result: "copied" | "skipped" | "failed", bucket: ClassifiedEntry[]) => {
+  const tryCopy = async (entry: ClassifiedEntry, attempt: number): Promise<"copied" | "skipped" | "failed"> => {
+    // File-start: show which file is in flight before the copy finishes.
+    // Numerator stays at completed so the bar never jumps ahead of real work.
+    await emitProgress(entry.rel, completed, "processing")
+    const { src, rel, dest } = entry
+    return copyDirectRawFile(src, dest, rel, onLog, overwrite, shouldAbort, (a, r) => onRetry?.(attempt || a, r), (o, rn) => { renamed++; onRename?.(o, rn) })
+  }
+
+  const handleResult = async (entry: ClassifiedEntry, result: "copied" | "skipped" | "failed", bucket: ClassifiedEntry[]) => {
     if (result === "failed") {
       // A failed copy is not counted yet — it is still retrying. It only
       // counts as processed once it either succeeds or exhausts retries.
@@ -199,7 +207,7 @@ export async function processDirectCopy(
     // Count a file as processed only when it reaches a terminal success, so
     // the numerator reflects the amount of work done (and the % can reach
     // 100% once every file has been resolved one way or another).
-    prog?.file("direct-progress", completed, total, entry.rel)
+    await emitProgress(entry.rel, completed, "done")
     if (result === "copied") {
       converted++
       if (entry.dest.endsWith(".md")) injectColdFrontmatter(entry.dest)
@@ -210,10 +218,10 @@ export async function processDirectCopy(
   // First pass: bounded-concurrency parallel fast attempts.
   const retryBucket: ClassifiedEntry[] = []
   const runChunk = async (chunk: ClassifiedEntry[]) => {
-    await Promise.all(chunk.map(async (entry, idx) => {
+    await Promise.all(chunk.map(async (entry) => {
       throwIfSpinosaCancelled(shouldAbort)
-      const result = await tryCopy(entry, 0, (seqOf.get(entry) ?? idx) + 1)
-      handleResult(entry, result, retryBucket)
+      const result = await tryCopy(entry, 0)
+      await handleResult(entry, result, retryBucket)
     }))
   }
 
@@ -228,10 +236,10 @@ export async function processDirectCopy(
     await new Promise((r) => setTimeout(r, DIRECT_COPY_RETRY_DELAY_MS))
     const pending = retryBucket.splice(0, retryBucket.length)
     const stillFailing: ClassifiedEntry[] = []
-    await Promise.all(pending.map(async (entry, idx) => {
+    await Promise.all(pending.map(async (entry) => {
       throwIfSpinosaCancelled(shouldAbort)
-      const result = await tryCopy(entry, attempt, (seqOf.get(entry) ?? idx) + 1)
-      handleResult(entry, result, stillFailing)
+      const result = await tryCopy(entry, attempt)
+      await handleResult(entry, result, stillFailing)
     }))
     retryBucket.push(...stillFailing)
   }
@@ -241,18 +249,30 @@ export async function processDirectCopy(
   // 100% (worked = successes + final failures), not stuck below it.
   for (const entry of retryBucket) {
     completed++
-    prog?.file("direct-progress", completed, total, entry.rel)
+    await emitProgress(entry.rel, completed, "failed")
   }
   failed = retryBucket.length
   return { converted, skipped, failed, renamed, recoverable }
 }
 
-export async function processMarkitdown(
+export type MarkitdownHooks = {
+  onChild?: (child: ChildProcess) => void
+  /** AbortSignal for immediate child cancel (preferred over shouldAbort polling). */
+  signal?: AbortSignal
+  /** Nested OCR: false inside MD worker so cancel kills the whole group. Default true. */
+  ocrDetached?: boolean
+  /** Force in-process (worker entry / tests). Default: spawn NDJSON child like OCR. */
+  inProcess?: boolean
+}
+
+/** In-process MarkItDown phase (used by the NDJSON child worker). */
+export async function processMarkitdownInProcess(
   files: ClassifiedEntry[],
   logsDir: string,
   prog?: ProgressEmitter,
   onLog?: (msg: string) => void,
   shouldAbort?: () => boolean,
+  hooks?: MarkitdownHooks,
 ): Promise<PhaseResult> {
   let converted = 0; let skipped = 0; let failed = 0
   const recoverable: { src: string; dest: string }[] = []
@@ -269,15 +289,27 @@ export async function processMarkitdown(
 
   skipped += preSkipped.length
   const total = preSkipped.length + toProcess.length
-  for (const [i, ps] of preSkipped.entries()) {
+
+  /** OCR-style: announce file, then advance numerator on terminal state; yield so TUI paints. */
+  const emitStart = async (relPath: string) => {
+    prog?.file("MarkItDown", processed, total, relPath, "processing")
+    await yieldToEL()
+  }
+  const emitDone = async (relPath: string, status: "done" | "failed" = "done") => {
+    prog?.file("MarkItDown", ++processed, total, relPath, status)
+    await yieldToEL()
+  }
+
+  for (const ps of preSkipped) {
     throwIfSpinosaCancelled(shouldAbort)
+    await emitStart(ps.rel)
     onLog?.(`  ${ps.rel} → already converted, skipped`)
     appendNdjson(path.join(logsDir, "markitdown-processed.ndjson"), {
       ts: isoNow(), status: "skip", source: ps.rel,
       output: markitdownOutputRelPath(ps.rel),
       engine: "markitdown", pages: "", duration_s: 0,
     })
-    prog?.file("MarkItDown", ++processed, total, ps.rel)
+    await emitDone(ps.rel)
   }
 
   const nonPdfFiles: ClassifiedEntry[] = []
@@ -287,6 +319,7 @@ export async function processMarkitdown(
   for (const f of toProcess) {
     throwIfSpinosaCancelled(shouldAbort)
     if (fileExt(f.src) !== "pdf") { nonPdfFiles.push(f); continue }
+    await emitStart(f.rel)
     onLog?.(`  ${f.rel} → pdf-js ...`)
     const startTime = Date.now()
     try {
@@ -300,8 +333,7 @@ export async function processMarkitdown(
         engine: "pdf-js", pages: "",
         duration_s: (Date.now() - startTime) / 1000,
       })
-      prog?.file("MarkItDown", ++processed, total, f.rel)
-      await yieldToEL()
+      await emitDone(f.rel)
     } catch (err) {
       if (isSpinosaCancellationError(err)) throw err
       pdfRemaining.push(f)
@@ -309,19 +341,19 @@ export async function processMarkitdown(
   }
 
   const remainingMd = [...nonPdfFiles, ...pdfRemaining]
-  const preCount = preSkipped.length + (toProcess.length - remainingMd.length)
 
   const mdLog = path.join(logsDir, "markitdown-processed.ndjson")
   if (remainingMd.length > 0) {
     const converter = new MarkItDown()
     // Formats markitdown-ts doesn't handle — convert inline
     const INLINE_FORMATS = new Set(["json", "csv", "xml"])
-    for (const [i, f] of remainingMd.entries()) {
+    for (const f of remainingMd) {
       throwIfSpinosaCancelled(shouldAbort)
       const ext = fileExt(f.src).toLowerCase()
 
       // Inline conversion for formats markitdown-ts doesn't support
       if (INLINE_FORMATS.has(ext)) {
+        await emitStart(f.rel)
         onLog?.(`  ${f.rel} → ${ext} ...`)
         const startTime = Date.now()
         try {
@@ -331,7 +363,7 @@ export async function processMarkitdown(
           writeTextAtomicSafe(f.dest, `# ${path.basename(f.rel)}\n\n\`\`\`${ext}\n${raw}\n\`\`\`\n`)
           injectColdFrontmatter(f.dest)
           converted++
-          prog?.file("MarkItDown", ++processed, total, f.rel)
+          await emitDone(f.rel)
           recoverable.push({ src: f.src, dest: f.dest })
           appendNdjson(mdLog, {
             ts: isoNow(), status: "ok", source: f.rel,
@@ -343,7 +375,7 @@ export async function processMarkitdown(
           if (isSpinosaCancellationError(err)) throw err
           const errMsg = err instanceof Error ? err.message : String(err)
           failed++
-          prog?.file("MarkItDown", ++processed, total, f.rel)
+          await emitDone(f.rel, "failed")
           appendNdjson(mdLog, {
             ts: isoNow(), status: "fail", source: f.rel,
             output: markitdownOutputRelPath(f.rel),
@@ -356,6 +388,7 @@ export async function processMarkitdown(
         continue
       }
 
+      await emitStart(f.rel)
       onLog?.(`  ${f.rel} → markitdown-ts ...`)
       const startTime = Date.now()
       try {
@@ -367,7 +400,7 @@ export async function processMarkitdown(
         writeTextAtomicSafe(f.dest, text)
         injectColdFrontmatter(f.dest)
         converted++
-        prog?.file("MarkItDown", ++processed, total, f.rel)
+        await emitDone(f.rel)
         recoverable.push({ src: f.src, dest: f.dest })
         appendNdjson(mdLog, {
           ts: isoNow(), status: "ok", source: f.rel,
@@ -381,10 +414,12 @@ export async function processMarkitdown(
         onLog?.(`MarkItDown failed: ${f.rel} — ${errMsg}`)
         if (fileExt(f.src) === "pdf") {
           pdfOcrFallback.push(f)
-          prog?.file("MarkItDown", ++processed, total, `${f.rel} → OCR fallback`)
+          // Status only — numerator advances once when OCR fallback finishes.
+          prog?.file("MarkItDown", processed, total, `${f.rel} → OCR fallback`, "processing")
+          await yieldToEL()
         } else {
           failed++
-          prog?.file("MarkItDown", ++processed, total, f.rel)
+          await emitDone(f.rel, "failed")
           appendNdjson(mdLog, {
             ts: isoNow(), status: "fail", source: f.rel,
             output: markitdownOutputRelPath(f.rel),
@@ -402,17 +437,24 @@ export async function processMarkitdown(
     onLog?.(`Falling back to OCR for ${pdfOcrFallback.length} PDF(s) that failed text extraction...`)
     for (const f of pdfOcrFallback) {
       throwIfSpinosaCancelled(shouldAbort)
+      await emitStart(f.rel)
       const startTime = Date.now()
       let ok = false
       try {
-        const result = await runOcrWorker([{ src: f.src, rel: f.rel, dest: f.dest }], { onLog, shouldAbort })
+        const result = await runOcrWorker([{ src: f.src, rel: f.rel, dest: f.dest }], {
+          onLog,
+          shouldAbort,
+          signal: hooks?.signal,
+          onChild: hooks?.onChild,
+          detached: hooks?.ocrDetached ?? true,
+        })
         ok = result.converted > 0 && convertedOutputExists(f.dest)
         if (ok) {
           converted++
           recoverable.push({ src: f.src, dest: f.dest })
           onLog?.(`  ${f.rel} → OCR fallback succeeded`)
         } else {
-          skipped++
+          failed++
           const errDetail = result.errors?.[0] ?? "OCR produced no convertible output"
           onLog?.(`  ${f.rel} → OCR fallback returned no content — ${errDetail}`)
           appendNdjson(mdLog, {
@@ -422,13 +464,13 @@ export async function processMarkitdown(
             error: errDetail,
             mode: resolveOcrWorkerMode(),
           })
-          prog?.file("MarkItDown", ++processed, total, f.rel)
+          await emitDone(f.rel, "failed")
           continue
         }
       } catch (err) {
         if (isSpinosaCancellationError(err)) throw err
         const errMsg = err instanceof Error ? err.message : String(err)
-        skipped++
+        failed++
         onLog?.(`  ${f.rel} → OCR fallback failed: ${errMsg}`)
         appendNdjson(mdLog, {
           ts: isoNow(), status: "fail",
@@ -437,7 +479,7 @@ export async function processMarkitdown(
           error: errMsg,
           mode: resolveOcrWorkerMode(),
         })
-        prog?.file("MarkItDown", ++processed, total, f.rel)
+        await emitDone(f.rel, "failed")
         continue
       }
       appendNdjson(mdLog, {
@@ -446,11 +488,33 @@ export async function processMarkitdown(
         engine: "ppu-paddle-ocr", pages: "", duration_s: (Date.now() - startTime) / 1000,
         mode: resolveOcrWorkerMode(),
       })
-      prog?.file("MarkItDown", ++processed, total, f.rel)
+      await emitDone(f.rel)
     }
   }
 
   return { converted, skipped, failed, renamed: 0, recoverable }
+}
+
+/**
+ * MarkItDown phase — same protocol as OCR: NDJSON child by default (cancel kills child).
+ * Pass `hooks.inProcess: true` from the worker entry (or tests) to run inline.
+ */
+export async function processMarkitdown(
+  files: ClassifiedEntry[],
+  logsDir: string,
+  prog?: ProgressEmitter,
+  onLog?: (msg: string) => void,
+  shouldAbort?: () => boolean,
+  hooks?: MarkitdownHooks,
+): Promise<PhaseResult> {
+  if (hooks?.inProcess || process.env.SPINOSA_IMPORT_IN_PROCESS === "1") {
+    return processMarkitdownInProcess(files, logsDir, prog, onLog, shouldAbort, {
+      ...hooks,
+      inProcess: true,
+      ocrDetached: hooks?.ocrDetached ?? false,
+    })
+  }
+  return runMarkitdownViaChild(files, logsDir, prog, onLog, shouldAbort, hooks)
 }
 
 export async function processOcr(
@@ -459,7 +523,7 @@ export async function processOcr(
   prog?: ProgressEmitter,
   onLog?: (msg: string) => void,
   shouldAbort?: () => boolean,
-  hooks?: { onChild?: (child: ChildProcess) => void },
+  hooks?: { onChild?: (child: ChildProcess) => void; signal?: AbortSignal },
 ): Promise<PhaseResult> {
   throwIfSpinosaCancelled(shouldAbort)
   let converted = 0; let skipped = 0; let failed = 0
@@ -485,7 +549,7 @@ export async function processOcr(
       output: ocrOutputRelPath(ps.rel),
       engine: "ppu-paddle-ocr", pages: "", duration_s: 0,
     })
-    prog?.file("OCR", ++processed, total, ps.rel)
+    prog?.file("OCR", ++processed, total, ps.rel, "done")
   }
 
   const { validateOcrImageInput } = await import("./ppu-ocr")
@@ -507,7 +571,7 @@ export async function processOcr(
       duration_s: 0,
       error: `invalid OCR image input: ${validationError}`,
     })
-    prog?.file("OCR", processed, total, file.rel)
+    prog?.file("OCR", processed, total, file.rel, "failed")
   }
   if (toProcess.length > 0) {
     const ocrLog = path.join(logsDir, "ocr-processed.ndjson")
@@ -528,16 +592,19 @@ export async function processOcr(
       const result = await runOcrWorker(batch, {
         onLog,
         shouldAbort,
+        signal: hooks?.signal,
         onChild: hooks?.onChild,
         onFileStart: (relPath) => {
           // Live label for TUI ProgressEmitter (numerator stays at files completed).
-          prog?.file("OCR", processed, total, relPath)
+          prog?.file("OCR", processed, total, relPath, "processing")
         },
         onPageProgress: (_current, _totalFiles, relPath, page) => {
-          prog?.file("OCR", processed, total, page ? `${relPath} (${page})` : relPath)
+          prog?.file("OCR", processed, total, page ? `${relPath} (${page})` : relPath, "processing")
         },
-        onProgress: (current, _totalFiles, relPath) => {
-          prog?.file("OCR", processed + current, total, relPath)
+        onProgress: (_current, _totalFiles, relPath) => {
+          // Worker "progress" is label-only: never add worker current onto processed
+          // (onFile already advanced the numerator and emitted done/failed).
+          prog?.file("OCR", processed, total, relPath, "processing")
         },
         onFile: (fr) => {
           const entry = remaining.find((f) => f.rel === fr.rel)
@@ -557,7 +624,7 @@ export async function processOcr(
             converted++
             recoverable.push({ src: entry.src, dest: entry.dest })
           } else {
-            skipped++
+            failed++
             spinosaLogWarn("ocr", `${fr.rel}: ${error}`)
             onLog?.(`  ${fr.rel} → OCR failed: ${error}`)
           }
@@ -572,7 +639,7 @@ export async function processOcr(
             ...(error ? { error } : {}),
             mode,
           })
-          prog?.file("OCR", ++processed, total, fr.rel)
+          prog?.file("OCR", ++processed, total, fr.rel, ok ? "done" : "failed")
         },
       })
 
@@ -580,7 +647,7 @@ export async function processOcr(
       if (result.crashed && crashedRel && !finished.has(crashedRel)) {
         const error = result.errors?.[0] ?? `OCR worker crashed while processing ${crashedRel}`
         finished.set(crashedRel, { ok: false, error, duration_s: (Date.now() - batchStart) / 1000 })
-        skipped++
+        failed++
         spinosaLogWarn("ocr", `${crashedRel}: ${error}`)
         onLog?.(`  ${crashedRel} → OCR failed: ${error}`)
         appendNdjson(ocrLog, {
@@ -595,13 +662,13 @@ export async function processOcr(
           mode,
           crashed: true,
         })
-        prog?.file("OCR", ++processed, total, crashedRel)
+        prog?.file("OCR", ++processed, total, crashedRel, "error")
       } else if (result.crashed && !crashedRel && remaining.length > 0 && finished.size === 0) {
         // Worker died before any file-start (e.g. model init segfault).
         const head = remaining[0]!
         const error = result.errors?.[0] ?? "OCR worker crashed before processing any file"
         finished.set(head.rel, { ok: false, error, duration_s: (Date.now() - batchStart) / 1000 })
-        skipped++
+        failed++
         spinosaLogWarn("ocr", `${head.rel}: ${error}`)
         onLog?.(`  ${head.rel} → OCR failed: ${error}`)
         appendNdjson(ocrLog, {
@@ -616,7 +683,7 @@ export async function processOcr(
           mode,
           crashed: true,
         })
-        prog?.file("OCR", ++processed, total, head.rel)
+        prog?.file("OCR", ++processed, total, head.rel, "error")
       }
 
       // Advance past finished (+ crashed) files; respawn for the rest (new model load).
@@ -625,7 +692,7 @@ export async function processOcr(
         // Clean completion: anything not reported is a protocol gap — mark failed once.
         for (const f of remaining) {
           const error = "OCR worker finished without reporting this file"
-          skipped++
+          failed++
           appendNdjson(ocrLog, {
             ts: isoNow(),
             status: "fail",
@@ -637,7 +704,7 @@ export async function processOcr(
             error,
             mode,
           })
-          prog?.file("OCR", ++processed, total, f.rel)
+          prog?.file("OCR", ++processed, total, f.rel, "failed")
         }
         remaining = []
       } else if (remaining.length > 0) {
@@ -645,7 +712,7 @@ export async function processOcr(
         spinosaLogWarn("ocr", `respawning worker for ${remaining.length} remaining file(s)`)
       }
     }
-    prog?.file("OCR", processed, total, "")
+    prog?.file("OCR", processed, total, "", "done")
   }
 
   return { converted, skipped, failed, renamed: 0, recoverable }
@@ -777,24 +844,28 @@ async function runOcrWorker(
     onFileStart?: (relPath: string) => void
     onFile?: (result: { rel: string; ok: boolean; error?: string }) => void
     shouldAbort?: () => boolean
+    signal?: AbortSignal
     onChild?: (child: ChildProcess) => void
+    /** Default true — isolate segfaults. Nested MD→OCR uses false so cancel kills the group. */
+    detached?: boolean
   },
 ): Promise<OcrWorkerRunResult> {
   throwIfSpinosaCancelled(options?.shouldAbort)
   const mode = resolveOcrWorkerMode()
   const workerArgs = JSON.stringify({ files })
+  const detached = options?.detached ?? true
   // Detached so a native segfault/kill does not take down the TUI parent.
   // Parent still tracks the PID and terminates the process group on cancel.
   const child =
     mode === "binary-cli"
       ? spawn(productBinaryExecutable(), ["internal", "ocr-worker", workerArgs], {
           stdio: ["ignore", "pipe", "pipe"],
-          detached: true,
+          detached,
           env: process.env,
         })
       : spawn(bunExecutableForWorker(), ["run", workerScriptPath(), workerArgs], {
           stdio: ["ignore", "pipe", "pipe"],
-          detached: true,
+          detached,
         })
 
   options?.onChild?.(child)
@@ -822,7 +893,7 @@ async function runOcrWorker(
   })
   child.stderr?.on("data", (chunk: Buffer) => { stderrBuf += chunk.toString() })
 
-  const { code, signal, aborted } = await waitForOcrChild(child, options?.shouldAbort)
+  const { code, signal, aborted } = await waitForOcrChild(child, options?.shouldAbort, options?.signal)
   if (stdoutCarry.trim()) consumeOcrWorkerNdjsonLine(stdoutCarry, state, options)
 
   // Only unref after we are done waiting so cancel keeps a live handle.
@@ -873,38 +944,226 @@ async function runOcrWorker(
   }
 }
 
-/** Await child close, or terminate immediately when shouldAbort flips. */
-async function waitForOcrChild(
+function markitdownWorkerScriptPath(): string {
+  return fileURLToPath(new URL("markitdown-worker.ts", import.meta.url))
+}
+
+export function resolveMarkitdownWorkerMode(workerScript = markitdownWorkerScriptPath()): OcrWorkerMode {
+  return resolveOcrWorkerMode(workerScript)
+}
+
+type MarkitdownWorkerState = {
+  converted: number
+  skipped: number
+  failed: number
+  renamed: number
+  recoverable: { src: string; dest: string }[]
+  errors: string[]
+}
+
+export function consumeMarkitdownWorkerNdjsonLine(
+  line: string,
+  state: MarkitdownWorkerState,
+  options?: {
+    onLog?: (msg: string) => void
+    onProgress?: (current: number, total: number, relPath: string, status?: string) => void
+  },
+): void {
+  const trimmed = line.trim()
+  if (!trimmed) return
+  try {
+    const msg = JSON.parse(trimmed) as Record<string, unknown>
+    switch (msg.type) {
+      case "progress":
+        options?.onProgress?.(
+          Number(msg.current),
+          Number(msg.total),
+          String(msg.relPath ?? ""),
+          typeof msg.status === "string" ? msg.status : undefined,
+        )
+        break
+      case "log":
+        options?.onLog?.(String(msg.message ?? ""))
+        break
+      case "done":
+        state.converted = Number(msg.converted ?? 0)
+        state.skipped = Number(msg.skipped ?? 0)
+        state.failed = Number(msg.failed ?? 0)
+        state.renamed = Number(msg.renamed ?? 0)
+        if (Array.isArray(msg.recoverable)) {
+          state.recoverable = (msg.recoverable as Array<{ src?: unknown; dest?: unknown }>)
+            .filter((r) => typeof r?.src === "string" && typeof r?.dest === "string")
+            .map((r) => ({ src: String(r.src), dest: String(r.dest) }))
+        }
+        if (Array.isArray(msg.errors)) {
+          for (const e of msg.errors) state.errors.push(String(e))
+        }
+        break
+      case "error":
+        state.errors.push(String(msg.message ?? "worker error"))
+        options?.onLog?.(`MarkItDown worker: ${msg.message}`)
+        break
+    }
+  } catch {
+    options?.onLog?.(`MarkItDown worker: ${trimmed}`)
+  }
+}
+
+async function runMarkitdownViaChild(
+  files: ClassifiedEntry[],
+  logsDir: string,
+  prog?: ProgressEmitter,
+  onLog?: (msg: string) => void,
+  shouldAbort?: () => boolean,
+  hooks?: MarkitdownHooks,
+): Promise<PhaseResult> {
+  throwIfSpinosaCancelled(shouldAbort)
+  const mode = resolveMarkitdownWorkerMode()
+  const workerArgs = JSON.stringify({ files, logsDir })
+  const child =
+    mode === "binary-cli"
+      ? spawn(productBinaryExecutable(), ["internal", "markitdown-worker", workerArgs], {
+          stdio: ["ignore", "pipe", "pipe"],
+          detached: true,
+          env: process.env,
+        })
+      : spawn(bunExecutableForWorker(), ["run", markitdownWorkerScriptPath(), workerArgs], {
+          stdio: ["ignore", "pipe", "pipe"],
+          detached: true,
+        })
+
+  hooks?.onChild?.(child)
+
+  const state: MarkitdownWorkerState = {
+    converted: 0,
+    skipped: 0,
+    failed: 0,
+    renamed: 0,
+    recoverable: [],
+    errors: [],
+  }
+
+  let stdoutCarry = ""
+  let stderrBuf = ""
+  const onProgress = (current: number, total: number, relPath: string, status?: string) => {
+    const st =
+      status === "queued" || status === "processing" || status === "done" || status === "failed" || status === "error"
+        ? status
+        : undefined
+    prog?.file("MarkItDown", current, total, relPath, st)
+  }
+  child.stdout?.on("data", (chunk: Buffer) => {
+    stdoutCarry += chunk.toString()
+    let nl: number
+    while ((nl = stdoutCarry.indexOf("\n")) >= 0) {
+      const line = stdoutCarry.slice(0, nl)
+      stdoutCarry = stdoutCarry.slice(nl + 1)
+      consumeMarkitdownWorkerNdjsonLine(line, state, { onLog, onProgress })
+    }
+  })
+  child.stderr?.on("data", (chunk: Buffer) => {
+    stderrBuf += chunk.toString()
+  })
+
+  const { code, signal, aborted } = await waitForOcrChild(child, shouldAbort, hooks?.signal)
+  if (stdoutCarry.trim()) consumeMarkitdownWorkerNdjsonLine(stdoutCarry, state, { onLog, onProgress })
+
+  try {
+    child.unref()
+  } catch {
+    // ignore
+  }
+
+  if (aborted) {
+    throw new SpinosaCancellationError("MarkItDown worker cancelled")
+  }
+
+  if (stderrBuf.trim()) {
+    const errLine = stderrBuf.trim().split("\n").slice(-3).join(" | ")
+    state.errors.push(errLine)
+    onLog?.(`MarkItDown worker stderr: ${errLine}`)
+  }
+
+  if (signal) {
+    const msg = `MarkItDown worker terminated by signal ${signal}`
+    state.errors.push(msg)
+    onLog?.(msg)
+  } else if (code !== 0 && code !== null) {
+    const msg = `MarkItDown worker exited with code ${code}`
+    state.errors.push(msg)
+    onLog?.(msg)
+  }
+
+  for (const err of state.errors) onLog?.(err)
+
+  return {
+    converted: state.converted,
+    skipped: state.skipped,
+    failed: state.failed,
+    renamed: state.renamed,
+    recoverable: state.recoverable,
+  }
+}
+
+/**
+ * Await child close, or terminate immediately when shouldAbort / AbortSignal flips.
+ * If cancel already requested when `close` fires, finish as aborted (don't treat kill as crash).
+ */
+export async function waitForOcrChild(
   child: ChildProcess,
   shouldAbort?: () => boolean,
+  signal?: AbortSignal,
 ): Promise<{ code: number | null; signal: string | null; aborted: boolean }> {
   return new Promise((resolve) => {
     let settled = false
+    let terminating = false
+    const abortRequested = () => Boolean(shouldAbort?.() || signal?.aborted)
+
     const finish = (result: { code: number | null; signal: string | null; aborted: boolean }) => {
       if (settled) return
       settled = true
       clearInterval(poll)
+      if (signal) {
+        try {
+          signal.removeEventListener("abort", onAbortEvent)
+        } catch {
+          // ignore
+        }
+      }
       resolve(result)
     }
 
-    child.on("close", (c, s) => finish({ code: c, signal: s, aborted: false }))
-    child.on("error", () => finish({ code: 1, signal: null, aborted: false }))
-
-    const poll = setInterval(() => {
-      if (!shouldAbort?.()) return
-      clearInterval(poll)
-      void terminateChild(child).then(() => {
-        finish({ code: null, signal: "SIGTERM", aborted: true })
-      })
-    }, 75)
-
-    // Immediate check in case abort was already requested.
-    if (shouldAbort?.()) {
+    const requestTerminate = () => {
+      if (settled || terminating) return
+      terminating = true
       clearInterval(poll)
       void terminateChild(child).then(() => {
         finish({ code: null, signal: "SIGTERM", aborted: true })
       })
     }
+
+    const onAbortEvent = () => requestTerminate()
+
+    child.on("close", (c, s) => {
+      // Cancel kill often races the abort poll: treat as aborted if cancel already requested.
+      finish({ code: c, signal: s, aborted: abortRequested() || terminating })
+    })
+    child.on("error", () => {
+      finish({ code: 1, signal: null, aborted: abortRequested() || terminating })
+    })
+
+    const poll = setInterval(() => {
+      if (!abortRequested()) return
+      requestTerminate()
+    }, 75)
+
+    if (signal) {
+      if (signal.aborted) requestTerminate()
+      else signal.addEventListener("abort", onAbortEvent, { once: true })
+    }
+
+    // Immediate check in case abort was already requested via shouldAbort.
+    if (abortRequested()) requestTerminate()
   })
 }
 
@@ -1010,28 +1269,22 @@ async function copyDirectRawFile(
   srcFile: string,
   destFile: string,
   relPath: string,
-  prog?: ProgressEmitter,
   onLog?: (msg: string) => void,
-  current?: number,
-  total?: number,
   overwrite?: boolean,
   shouldAbort?: () => boolean,
   onRetry?: (attempt: number, reason: string) => void,
   onRename?: (original: string, renamed: string) => void,
 ): Promise<CopyDirectResult> {
-  const c = current ?? 0
-  const t = total ?? 0
   onLog?.(`  ${relPath}`)
 
   if (existsSync(destFile)) {
     if (!overwrite) {
-      prog?.file("direct-skipped", c, t, relPath)
       onLog?.(`  ${relPath} → skipped`)
       return "skipped"
     }
   }
 
-  // Yield before copy so the "starting" progress event renders
+  // Yield before copy so cancel/abort and UI listeners can run between files.
   await yieldToEL()
   throwIfSpinosaCancelled(shouldAbort)
 
@@ -1045,7 +1298,6 @@ async function copyDirectRawFile(
       onRename?.(original, renamed)
     },
   })) {
-    prog?.file("direct-copied", c, t, relPath)
     onLog?.(`  ${relPath} → copied`)
     return "copied"
   }
@@ -1149,7 +1401,7 @@ export async function verifyAndRecoverImport(
             onLog?.(`    PPU OCR engine failed: ${ocrError} — leaving file missing (no binary-as-md fallback)`)
           }
         } else {
-          ocrError = "OCR engine unavailable"
+          ocrError = ocrUnsupportedReason() ?? "OCR engine unavailable"
         }
         if (ppuConverted > 0 && convertedOutputExists(destFile)) {
           injectColdFrontmatter(destFile)
@@ -1221,13 +1473,19 @@ export async function copySource(
 
   if (runPhase("markitdown") && classified.markitdownFiles.length > 0 && options?.markitdownChoice) {
     options?.onPhaseChange?.("markitdown", `Converting ${classified.markitdownFiles.length} files with MarkItDown...`)
-      const mr = await processMarkitdown(classified.markitdownFiles, classified.logsDir, prog, options?.onLog, options?.shouldAbort)
+      const mr = await processMarkitdown(classified.markitdownFiles, classified.logsDir, prog, options?.onLog, options?.shouldAbort, {
+        onChild: options?.onChild,
+        signal: options?.signal,
+      })
     res.mdConverted += mr.converted; res.mdSkipped += mr.skipped; res.mdFailed += mr.failed
   }
 
   if (runPhase("ocr") && classified.ocrFiles.length > 0 && options?.ocrChoice) {
     options?.onPhaseChange?.("ocr", `Processing ${classified.ocrFiles.length} OCR files...`)
-      const or = await processOcr(classified.ocrFiles, classified.logsDir, prog, options?.onLog, options?.shouldAbort)
+      const or = await processOcr(classified.ocrFiles, classified.logsDir, prog, options?.onLog, options?.shouldAbort, {
+        onChild: options?.onChild,
+        signal: options?.signal,
+      })
     res.ocrConverted += or.converted; res.ocrSkipped += or.skipped; res.ocrFailed += or.failed
   }
 
@@ -1252,7 +1510,7 @@ export async function copySource(
       if (!convertedOutputExists(f.dest)) {
         const dest = path.join(destDir, "_failed_files", f.rel)
         mkdirSync(path.dirname(dest), { recursive: true })
-        try { safeCopyAsync(f.src, dest) } catch { /* best-effort */ }
+        try { await safeCopyAsync(f.src, dest) } catch { /* best-effort */ }
         res.failedFileCount++
         res.failedFilePaths.push(f.rel)
       }

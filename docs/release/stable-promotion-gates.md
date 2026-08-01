@@ -35,3 +35,5 @@ Complete at least one beta soak after the first binary beta before cutting stabl
 - [ ] Sign-off file completed (`docs/release-signoff-template.md`)
 
 Do not run `release:stable:*` until every item is checked.
+
+Linux glibc virgin rows: practical Lima steps in [lima-linux-soak.md](lima-linux-soak.md) (`script/lima-linux-soak.sh`).

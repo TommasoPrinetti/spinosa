@@ -10,9 +10,52 @@ import {
   deferPress,
   nextFocusedSourceIndexForAppend,
   runGuardedBackNavigation,
+  shouldActivateWizardToolAction,
   shouldCancelSpinosaWorkOnCtrlC,
   shouldConfirmSpinosaBack,
 } from "../../src/routes/spinosa/wizard-ui"
+
+test("Enter activates Scan source folders when tools are ready", () => {
+  const ready = [
+    { status: "available" },
+    { status: "available" },
+    { status: "available" },
+  ]
+  expect(shouldActivateWizardToolAction({
+    step: "tools",
+    keyName: "return",
+    busy: false,
+    toolChecks: ready,
+  })).toBe(true)
+
+  expect(shouldActivateWizardToolAction({
+    step: "tools",
+    keyName: "return",
+    busy: false,
+    toolChecks: [{ status: "checking" }, { status: "available" }],
+  })).toBe(false)
+
+  expect(shouldActivateWizardToolAction({
+    step: "tools",
+    keyName: "space",
+    busy: false,
+    toolChecks: ready,
+  })).toBe(false)
+
+  expect(shouldActivateWizardToolAction({
+    step: "scan",
+    keyName: "return",
+    busy: false,
+    toolChecks: ready,
+  })).toBe(false)
+
+  expect(shouldActivateWizardToolAction({
+    step: "tools",
+    keyName: "return",
+    busy: true,
+    toolChecks: ready,
+  })).toBe(false)
+})
 
 test("deferPress runs action after the current tick", async () => {
   let ran = false
@@ -74,7 +117,7 @@ test("guarded Back stays on cancel and waits for work before navigating", async 
     shouldConfirm: true,
     confirm: async () => false,
     stop: () => stayedEvents.push("stop"),
-    waitForStop: async () => { stayedEvents.push("wait") },
+    waitForStop: async () => { stayedEvents.push("wait"); return "settled" },
     navigate: () => stayedEvents.push("navigate"),
   })).toBe("stayed")
   expect(stayedEvents).toEqual([])
@@ -87,7 +130,7 @@ test("guarded Back stays on cancel and waits for work before navigating", async 
     shouldConfirm: true,
     confirm: async () => { events.push("confirm"); return true },
     stop: () => events.push("stop"),
-    waitForStop: async () => { events.push("wait"); await tracker.wait() },
+    waitForStop: async () => { events.push("wait"); return tracker.wait() },
     navigate: () => events.push("navigate"),
   })
 
@@ -96,6 +139,86 @@ test("guarded Back stays on cancel and waits for work before navigating", async 
   settle()
   expect(await navigation).toBe("navigated")
   expect(events).toEqual(["confirm", "stop", "wait", "navigate"])
+})
+
+test("guarded Back does not navigate on soft-stop timeout until settled or force-leave", async () => {
+  const events: string[] = []
+  let settle!: () => void
+  const tracker = createActiveWorkTracker()
+  void tracker.run(() => new Promise<void>((resolve) => { settle = resolve }))
+
+  let forceLeave!: () => void
+  const forceLeavePromise = new Promise<void>((resolve) => { forceLeave = resolve })
+
+  const navigation = runGuardedBackNavigation({
+    shouldConfirm: false,
+    confirm: async () => true,
+    stop: () => events.push("stop"),
+    waitForStop: async () => {
+      events.push("soft-wait")
+      return tracker.wait(20)
+    },
+    waitUntilSettled: async () => {
+      events.push("hard-wait")
+      await tracker.wait(0)
+    },
+    onStillStopping: () => events.push("still-stopping"),
+    waitForForceLeave: () => forceLeavePromise.then(() => { events.push("force-leave") }),
+    minStopDisplayMs: 0,
+    navigate: () => events.push("navigate"),
+  })
+
+  await new Promise((resolve) => setTimeout(resolve, 40))
+  expect(events).toContain("soft-wait")
+  expect(events).toContain("still-stopping")
+  expect(events).toContain("hard-wait")
+  expect(events).not.toContain("navigate")
+
+  forceLeave()
+  expect(await navigation).toBe("navigated")
+  expect(events).toContain("force-leave")
+  expect(events).toContain("navigate")
+  settle()
+})
+
+test("active work wait reports timeout vs settled", async () => {
+  const tracker = createActiveWorkTracker()
+  expect(await tracker.wait(10)).toBe("idle")
+
+  let settle!: () => void
+  void tracker.run(() => new Promise<void>((resolve) => { settle = resolve }))
+  expect(await tracker.wait(15)).toBe("timeout")
+  settle()
+  await Promise.resolve()
+  expect(await tracker.wait(0)).toBe("idle")
+})
+
+test("guarded Back holds the stopping screen for a minimum dwell after cancel", async () => {
+  const events: string[] = []
+  const started = Date.now()
+  expect(await runGuardedBackNavigation({
+    shouldConfirm: false,
+    confirm: async () => true,
+    stop: () => events.push("stop"),
+    waitForStop: async () => { events.push("wait"); return "settled" },
+    minStopDisplayMs: 80,
+    navigate: () => events.push("navigate"),
+  })).toBe("navigated")
+  expect(events).toEqual(["stop", "wait", "navigate"])
+  expect(Date.now() - started).toBeGreaterThanOrEqual(70)
+})
+
+test("ordinary Back does not add a stop-screen dwell", async () => {
+  const started = Date.now()
+  expect(await runGuardedBackNavigation({
+    shouldConfirm: false,
+    confirm: async () => true,
+    stop: () => {},
+    waitForStop: async () => "settled",
+    minStopDisplayMs: 0,
+    navigate: () => {},
+  })).toBe("navigated")
+  expect(Date.now() - started).toBeLessThan(50)
 })
 
 test("scans and imports files from the dedicated add-files screen", async () => {
@@ -217,7 +340,8 @@ test("scans and imports files from the dedicated add-files screen", async () => 
     await new Promise((resolve) => setTimeout(resolve, 1_200))
     await app.renderOnce()
     const doneFrame = app.captureCharFrame()
-    expect(doneFrame).toContain("Files imported.")
+    expect(doneFrame).toContain("● Import complete")
+    expect(doneFrame).toContain("notes.md")
     expect(existsSync(path.join(workspace, "raw", "notes.md"))).toBe(true)
   } finally {
     app.renderer.destroy()

@@ -4,6 +4,7 @@ import { useTheme } from "../context/theme"
 import { useTerminalDimensions } from "@opentui/solid"
 import { SplitBorder } from "./border"
 import { TextAttributes } from "@opentui/core"
+
 export type ToastOptions = {
   title?: string
   message: string
@@ -12,22 +13,41 @@ export type ToastOptions = {
 }
 type ToastInput = Omit<ToastOptions, "duration"> & { duration?: number }
 
+/** Viewport-relative toast placement (terminal cols/rows), not content-column layout. */
+export function toastOverlayStyle(terminal: { width: number; height: number }) {
+  const margin = 2
+  return {
+    position: "absolute" as const,
+    zIndex: 4000,
+    top: margin,
+    right: margin,
+    maxWidth: Math.min(60, Math.max(20, terminal.width - margin * 2)),
+  }
+}
+
+/**
+ * Toast host. Must be mounted under a full-terminal parent (e.g. App root box
+ * sized to useTerminalDimensions) so absolute top/right anchor to the viewport,
+ * not a centered content column or sidebar.
+ */
 export function Toast() {
   const toast = useToast()
   const { theme } = useTheme()
   const dimensions = useTerminalDimensions()
+  const style = () => toastOverlayStyle(dimensions())
 
   return (
     <Show when={toast.currentToast}>
       {(current) => (
         <box
-          position="absolute"
-          zIndex={4000}
-          justifyContent="center"
+          position={style().position}
+          zIndex={style().zIndex}
+          justifyContent="flex-start"
           alignItems="flex-start"
-          top={2}
-          right={2}
-          maxWidth={Math.min(60, dimensions().width - 6)}
+          flexDirection="column"
+          top={style().top}
+          right={style().right}
+          maxWidth={style().maxWidth}
           paddingLeft={2}
           paddingRight={2}
           paddingTop={1}

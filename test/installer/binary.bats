@@ -51,6 +51,36 @@ setup() {
   [ "$status" -ne 0 ]
 }
 
+@test "classify_musl_linux detects alpine release marker" {
+  run classify_musl_linux 1 0 ""
+  [ "$status" -eq 0 ]
+}
+
+@test "classify_musl_linux detects ld-musl dynamic linker" {
+  run classify_musl_linux 0 1 ""
+  [ "$status" -eq 0 ]
+}
+
+@test "classify_musl_linux detects musl in ldd --version text" {
+  run classify_musl_linux 0 0 $'musl libc (x86_64)\nVersion 1.2.4'
+  [ "$status" -eq 0 ]
+}
+
+@test "classify_musl_linux accepts glibc ldd text" {
+  run classify_musl_linux 0 0 $'ldd (GNU libc) 2.39\nCopyright (C) 2024 Free Software Foundation, Inc.'
+  [ "$status" -ne 0 ]
+}
+
+@test "is_musl_linux is false on non-linux hosts" {
+  # Bats typically run on Darwin/glibc CI; refuse_musl must not trip here.
+  if [ "$(uname -s | tr '[:upper:]' '[:lower:]')" != "linux" ]; then
+    run is_musl_linux
+    [ "$status" -ne 0 ]
+  else
+    skip "live linux host — probe result depends on libc"
+  fi
+}
+
 @test "lookup_asset_checksum returns exact hash" {
   local sums="$BATS_TEST_TMPDIR/checksums.txt"
   cat >"$sums" <<EOF
@@ -263,11 +293,95 @@ EOF
   [[ "$output" == *"No Spinosa binary installation found"* ]]
 }
 
-@test "ensure_spinosa_home prompts repair for owned broken binary install with --yes" {
-  YES=1
-  REINSTALL=0
-  mkdir -p "$SPINOSA_METADATA_DIR"
-  printf 'spinosa: true\nlast_installed_version: "1.0.2"\n' >"$SPINOSA_METADATA_DIR/config.yaml"
-  ensure_spinosa_home
-  [ "$REINSTALL" -eq 1 ]
+@test "run_staged_binary_checks fails closed when template verify fails" {
+  VERSION="1.0.3-beta.9"
+  local fake="$BATS_TEST_TMPDIR/fake-spinosa"
+  cat >"$fake" <<'EOF'
+#!/bin/sh
+if [ "$1" = "version" ]; then
+  printf '{"version":"1.0.3-beta.9","templatePackId":"abc"}\n'
+  exit 0
+fi
+if [ "$1" = "internal" ] && [ "$2" = "template" ] && [ "$3" = "ensure" ]; then
+  exit 0
+fi
+if [ "$1" = "internal" ] && [ "$2" = "template" ] && [ "$3" = "verify" ]; then
+  exit 1
+fi
+if [ "$1" = "doctor" ]; then
+  exit 0
+fi
+exit 0
+EOF
+  chmod +x "$fake"
+  run run_staged_binary_checks "$fake"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"Template verify failed"* ]]
+}
+
+@test "run_staged_binary_checks fails closed when template ensure fails" {
+  VERSION="1.0.3-beta.9"
+  local fake="$BATS_TEST_TMPDIR/fake-spinosa-ensure"
+  cat >"$fake" <<'EOF'
+#!/bin/sh
+if [ "$1" = "version" ]; then
+  printf '{"version":"1.0.3-beta.9"}\n'
+  exit 0
+fi
+if [ "$1" = "internal" ] && [ "$2" = "template" ] && [ "$3" = "ensure" ]; then
+  exit 1
+fi
+exit 0
+EOF
+  chmod +x "$fake"
+  run run_staged_binary_checks "$fake"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"Template ensure failed"* ]]
+}
+
+@test "run_staged_binary_checks fails closed when doctor fails" {
+  VERSION="1.0.3-beta.9"
+  local fake="$BATS_TEST_TMPDIR/fake-spinosa-doctor"
+  cat >"$fake" <<'EOF'
+#!/bin/sh
+if [ "$1" = "version" ]; then
+  printf '{"version":"1.0.3-beta.9"}\n'
+  exit 0
+fi
+if [ "$1" = "internal" ] && [ "$2" = "template" ]; then
+  exit 0
+fi
+if [ "$1" = "doctor" ]; then
+  exit 1
+fi
+exit 0
+EOF
+  chmod +x "$fake"
+  run run_staged_binary_checks "$fake"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"Doctor reported issues"* ]]
+}
+
+@test "run_staged_binary_checks passes when version templates and doctor succeed" {
+  VERSION="1.0.3-beta.9"
+  local fake="$BATS_TEST_TMPDIR/fake-spinosa-ok"
+  cat >"$fake" <<'EOF'
+#!/bin/sh
+if [ "$1" = "version" ]; then
+  printf '{"version":"1.0.3-beta.9","templatePackId":"pack1"}\n'
+  exit 0
+fi
+if [ "$1" = "internal" ] && [ "$2" = "template" ]; then
+  exit 0
+fi
+if [ "$1" = "doctor" ]; then
+  exit 0
+fi
+exit 0
+EOF
+  chmod +x "$fake"
+  run run_staged_binary_checks "$fake"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Doctor passed"* ]]
+  [[ "$output" == *"Template verify succeeded"* ]]
 }

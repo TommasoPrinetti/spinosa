@@ -1,3 +1,4 @@
+import type { ChildProcess } from "node:child_process"
 import type { ProgressEmitter } from "../progress/progress"
 import {
   processDirectCopy,
@@ -15,11 +16,13 @@ export type ImportProcessorContext = {
   prog?: ProgressEmitter
   onLog?: (msg: string) => void
   shouldAbort?: () => boolean
-  /** Register OCR (or other) child processes for cancel-by-id. */
-  onChild?: (child: import("node:child_process").ChildProcess) => void
+  /** AbortSignal for immediate child cancel (preferred over shouldAbort polling). */
+  signal?: AbortSignal
+  /** Register OCR/MarkItDown (or other) child processes for cancel-by-id. */
+  onChild?: (child: ChildProcess) => void
   onRetry?: (attempt: number, reason: string) => void
   onRename?: (original: string, renamed: string) => void
-  copyFn?: (src: string, dest: string) => Promise<void>
+  overwrite?: boolean
 }
 
 export type ImportProcessor = {
@@ -40,13 +43,25 @@ export const importProcessors: Record<ImportProcessorId, ImportProcessor> = {
     label: "Direct copy",
     phase: "direct-progress",
     run: async (ctx) =>
-      processDirectCopy(ctx.files, ctx.prog, ctx.onLog, ctx.copyFn, ctx.shouldAbort, ctx.onRetry, ctx.onRename),
+      processDirectCopy(
+        ctx.files,
+        ctx.prog,
+        ctx.onLog,
+        ctx.overwrite,
+        ctx.shouldAbort,
+        ctx.onRetry,
+        ctx.onRename,
+      ),
   },
   markitdown: {
     id: "markitdown",
     label: "MarkItDown",
     phase: "MarkItDown",
-    run: async (ctx) => processMarkitdown(ctx.files, ctx.logsDir, ctx.prog, ctx.onLog, ctx.shouldAbort),
+    run: async (ctx) =>
+      processMarkitdown(ctx.files, ctx.logsDir, ctx.prog, ctx.onLog, ctx.shouldAbort, {
+        onChild: ctx.onChild,
+        signal: ctx.signal,
+      }),
   },
   ocr: {
     id: "ocr",
@@ -55,6 +70,7 @@ export const importProcessors: Record<ImportProcessorId, ImportProcessor> = {
     run: async (ctx) =>
       processOcr(ctx.files, ctx.logsDir, ctx.prog, ctx.onLog, ctx.shouldAbort, {
         onChild: ctx.onChild,
+        signal: ctx.signal,
       }),
   },
 }

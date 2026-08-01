@@ -31,7 +31,8 @@ function argValue(flag: string): string | undefined {
 
 if (process.argv.includes("--help") || process.argv.includes("-h")) {
   console.log(`Usage:
-  bun script/build-release-binaries.ts --out-dir <dir> --version <ver> --channel <stable|beta>`)
+  bun script/build-release-binaries.ts --out-dir <dir> --version <ver> --channel <stable|beta>
+  [--host-only] [--only linux-x64[,darwin-arm64,...]] [--skip-embed-web-ui] [--skip-install]`)
   process.exit(0)
 }
 
@@ -49,6 +50,10 @@ const outDir = path.resolve(
 const hostOnly = process.argv.includes("--host-only")
 const skipEmbedWebUi = process.argv.includes("--skip-embed-web-ui")
 const skipInstall = process.argv.includes("--skip-install")
+const onlyRaw = argValue("--only")
+const onlyTargets = onlyRaw
+  ? onlyRaw.split(",").map((s) => s.trim()).filter(Boolean)
+  : null
 
 if (channel !== "stable" && channel !== "beta") {
   console.error(`--channel must be stable|beta (got ${channel})`)
@@ -74,8 +79,18 @@ const templatePackId = argValue("--template-pack-id") ?? packMeta.packId
 const wanted = new Set(
   hostOnly
     ? ([`${process.platform}-${process.arch}`] as string[])
-    : (PRODUCT_BINARY_TARGETS as readonly string[]),
+    : onlyTargets
+      ? onlyTargets
+      : (PRODUCT_BINARY_TARGETS as readonly string[]),
 )
+
+if (onlyTargets) {
+  for (const t of onlyTargets) {
+    if (!(PRODUCT_BINARY_TARGETS as readonly string[]).includes(t as ProductBinaryTarget)) {
+      throw new Error(`--only unknown target: ${t} (want one of ${PRODUCT_BINARY_TARGETS.join(", ")})`)
+    }
+  }
+}
 
 const targets: BinaryTarget[] = PRODUCT_BINARY_TARGETS.filter((t) => wanted.has(t)).map((t) => {
   const [os, arch] = t.split("-") as ["darwin" | "linux", "arm64" | "x64"]
@@ -119,8 +134,9 @@ for (const [name, file] of Object.entries(assets)) {
 }
 
 for (const target of PRODUCT_BINARY_TARGETS) {
+  if (!wanted.has(target)) continue
   const name = `spinosa-${target}`
-  if (!hostOnly && !existsSync(path.join(outDir, name))) {
+  if (!existsSync(path.join(outDir, name))) {
     throw new Error(`missing product binary ${name}`)
   }
 }

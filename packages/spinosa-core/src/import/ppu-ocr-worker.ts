@@ -1,3 +1,4 @@
+import { ocrUnsupportedReason } from "../tools/ocr-support"
 import { runPpuOcrBatch, type PpuOcrFile } from "./ppu-ocr"
 
 export interface OcrWorkerInput {
@@ -25,6 +26,11 @@ function installHardExitHandlers(): void {
 /** Shared OCR worker entry used by `bun run ppu-ocr-worker.ts` and `spinosa internal ocr-worker`. */
 export async function runOcrWorkerMain(input: OcrWorkerInput): Promise<void> {
   installHardExitHandlers()
+  const unsupported = ocrUnsupportedReason()
+  if (unsupported) {
+    sendOcrWorkerMessage("error", { message: unsupported })
+    throw new Error(unsupported)
+  }
   const { files } = input
   // Models load once here (first job start), then stay warm for the whole batch.
   const result = await runPpuOcrBatch(files, {

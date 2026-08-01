@@ -54,15 +54,15 @@ export function TimelineView(props: CanvasViewProps & { workdir?: string }) {
               onMouseOut={() => setHovered(-1)}
               onMouseDown={() => openDetail(call)}
             >
-              <text fg={theme.border} width={4}>{conn}</text>
-              <text fg={dotColor} width={2}>{dotIcon}</text>
+              <text fg={buttonText(theme, hov(), theme.border)} width={4}>{conn}</text>
+              <text fg={buttonText(theme, hov(), dotColor)} width={2}>{dotIcon}</text>
               <text fg={buttonText(theme, hov(), typeColor)} width={14} attributes={hov() ? TextAttributes.UNDERLINE : TextAttributes.NONE}>
                 <span style={{ bold: hov() }}>{call.tool}</span>
               </text>
               <text fg={buttonText(theme, hov(), theme.textMuted)} overflow="hidden" wrapMode="none" flexGrow={1} attributes={hov() ? TextAttributes.UNDERLINE : TextAttributes.NONE}>
                 {inputSummary(call.tool, call.input)}
               </text>
-              <text fg={dotColor} width={9} attributes={hov() ? TextAttributes.UNDERLINE : TextAttributes.NONE}>
+              <text fg={buttonText(theme, hov(), dotColor)} width={9} attributes={hov() ? TextAttributes.UNDERLINE : TextAttributes.NONE}>
                 {"█".repeat(barLen) + "░".repeat(8 - barLen)}
               </text>
             </box>

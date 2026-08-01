@@ -46,6 +46,8 @@ export interface UpdateResult {
   skipped: number
   changes: boolean
   presence?: import("../types").SpinosaWorkspacePresence
+  /** Human-readable failure reason when success is false. */
+  error?: string
 }
 
 interface ManifestEntry {
@@ -188,13 +190,29 @@ async function updateWorkspaceUnlocked(options: UpdateOptions): Promise<UpdateRe
 
   const sourceTemplateRoot = resolveTemplateRootFromFrameworkRoot(frameworkRoot)
   if (!sourceTemplateRoot) {
-    return { success: false, added: 0, updated: 0, removed: 0, skipped: 0, changes: false }
+    return {
+      success: false,
+      added: 0,
+      updated: 0,
+      removed: 0,
+      skipped: 0,
+      changes: false,
+      error: "Couldn’t find the workspace template for this install",
+    }
   }
   const fwManifestPath = path.join(sourceTemplateRoot, ".spinosa", "workspace-files.tsv")
   const wsManifestPath = path.join(workspacePath, ".spinosa", "manifest.tsv")
 
   if (!existsSync(fwManifestPath)) {
-    return { success: false, added: 0, updated: 0, removed: 0, skipped: 0, changes: false }
+    return {
+      success: false,
+      added: 0,
+      updated: 0,
+      removed: 0,
+      skipped: 0,
+      changes: false,
+      error: "Workspace template manifest is missing",
+    }
   }
 
   const fwEntries = readFrameworkFilesTsv(fwManifestPath)
@@ -220,7 +238,15 @@ async function updateWorkspaceUnlocked(options: UpdateOptions): Promise<UpdateRe
   ) {
     const cmp = compareFrameworkVersions(installedVersion, workspaceVersion)
     if (cmp !== undefined && cmp < 0) {
-      return { success: false, added: 0, updated: 0, removed: 0, skipped: 0, changes: false }
+      return {
+        success: false,
+        added: 0,
+        updated: 0,
+        removed: 0,
+        skipped: 0,
+        changes: false,
+        error: `Installed framework (${installedVersion}) is older than this workspace (${workspaceVersion})`,
+      }
     }
   }
 
@@ -424,6 +450,7 @@ async function updateWorkspaceUnlocked(options: UpdateOptions): Promise<UpdateRe
     removed,
     skipped,
     changes: added > 0 || updated > 0 || removed > 0,
+    error: hadFailures ? "Some framework files could not be updated; earlier changes were rolled back" : undefined,
   }
 }
 
@@ -526,7 +553,15 @@ export async function updateWorkspace(options: UpdateOptions): Promise<UpdateRes
           continue
         }
         if (Date.now() >= deadline) {
-          return { success: false, added: 0, updated: 0, removed: 0, skipped: 0, changes: false }
+          return {
+            success: false,
+            added: 0,
+            updated: 0,
+            removed: 0,
+            skipped: 0,
+            changes: false,
+            error: "Another update is already in progress for this workspace",
+          }
         }
         await Bun.sleep(100)
         continue

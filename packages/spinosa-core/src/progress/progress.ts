@@ -1,10 +1,13 @@
-import type { JobEventListener } from "./job-event"
+import type { JobEventListener, FileProgressStatus } from "./job-event"
+
+export type { FileProgressStatus }
 
 export interface ProgressEvent {
   phase: string
   current: number
   total: number
   relPath: string
+  status?: FileProgressStatus
 }
 
 export type ProgressListener = (e: ProgressEvent) => void
@@ -29,8 +32,14 @@ export class ProgressEmitter {
     for (const cb of this.listeners) cb(e)
   }
 
-  file(phase: string, current: number, total: number, relPath: string): void {
-    this.emit({ phase, current, total, relPath })
+  file(
+    phase: string,
+    current: number,
+    total: number,
+    relPath: string,
+    status?: FileProgressStatus,
+  ): void {
+    this.emit({ phase, current, total, relPath, ...(status ? { status } : {}) })
     const { jobId, onJobEvent } = this.options ?? {}
     if (jobId && onJobEvent) {
       onJobEvent({
@@ -41,6 +50,7 @@ export class ProgressEmitter {
           current,
           total,
           relPath: relPath || undefined,
+          ...(status ? { status } : {}),
         },
       })
     }

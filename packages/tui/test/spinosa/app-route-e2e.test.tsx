@@ -201,7 +201,8 @@ async function waitForTextToDisappear(setup: TestRenderer, text: string) {
 async function waitForWorkspacePickerReady(setup: TestRenderer, workspaceName?: string) {
   await waitForText(setup, "Choose a workspace")
   await waitForTextToDisappear(setup, "Loading saved workspaces…")
-  if (workspaceName) await waitForText(setup, workspaceName)
+  if (workspaceName) return await waitForText(setup, workspaceName)
+  return setup.captureCharFrame()
 }
 
 test("Spinosa app route E2E boots and navigates key workspace flows", async () => {
@@ -312,10 +313,9 @@ test("Spinosa app route E2E boots and navigates key workspace flows", async () =
     const filteredFrame = await renderRouteFrame("global", {
       home: filteredHome,
       act: async (setup) => {
-        recentFrame = await waitForText(setup, "Recent workspaces")
-        await waitForTextToDisappear(setup, "Loading saved workspaces…")
+        recentFrame = await waitForAllText(setup, ["Recent workspaces", "visible-demo", "stale-demo"])
         setup.mockInput.pressKey("w")
-        pickerFrame = await waitForText(setup, "visible-demo")
+        pickerFrame = await waitForWorkspacePickerReady(setup, "stale-demo")
         const pickerLines = pickerFrame.split("\n")
         const staleY = pickerLines.findIndex((line) => line.includes("stale-demo"))
         const staleX = pickerLines[staleY]!.indexOf("stale-demo") + 1
@@ -334,11 +334,13 @@ test("Spinosa app route E2E boots and navigates key workspace flows", async () =
         await setup.mockMouse.moveTo(confirmX, confirmY)
         await setup.mockMouse.click(confirmX, confirmY)
         refreshedPickerFrame = await waitForTextToDisappear(setup, "stale-demo")
+        await waitForWorkspacePickerReady(setup, "visible-demo")
       },
     })
 
     expect(recentFrame).toContain("visible-demo")
-    expect(recentFrame).not.toContain("stale-demo")
+    expect(recentFrame).toContain("stale-demo")
+    expect(recentFrame).toContain("Not found")
     expect(pickerFrame).toContain("✕ stale-demo")
     expect(pickerFrame).toContain("✕ NOT FOUND")
     expect(missingDialogFrame).toContain("stale-demo")
@@ -457,9 +459,10 @@ test("a present incomplete Recent workspace resumes at Step 2 and bottom Back re
 
     expect(frame).toContain("Recent workspaces")
     expect(frame).toContain("New workspace")
-    expect(frame).toContain("Choose a workspace")
+    expect(frame).toContain("Pick a workspace")
     expect(frame).not.toContain("Switch workspace")
     expect(frame).not.toContain("Workspace not found")
+    expect(frame).not.toContain("Show all")
   } finally {
     rmSync(root, { recursive: true, force: true })
   }

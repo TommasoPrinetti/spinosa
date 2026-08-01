@@ -11,7 +11,7 @@ interface StartupAutocleanArgs {
 export const StartupAutocleanCommand = {
   command: "startup-autoclean",
   aliases: ["autoclean"],
-  describe: "Clean stale installer directories",
+  describe: "Clean stale installer directories and Spinosa temp leftovers",
   builder: (yargs: Argv) =>
     yargs.option("dry-run", { describe: "Show what would be removed", type: "boolean", default: false }),
   handler: async (args: StartupAutocleanArgs) => {
@@ -23,27 +23,44 @@ export const StartupAutocleanCommand = {
       return
     }
 
+    const candidates = [...status.staleInstallDirectories, ...status.staleTempDirectories]
     if (args["dry-run"]) {
-      for (const candidate of status.staleInstallDirectories) log(fmt, `Would remove ${candidate}`)
-    } else {
-      const result = await cleanupStaleInstallDirectories()
-      for (const candidate of result.removedDirectories) log(fmt, `Removed stale installer data: ${candidate}`)
+      for (const candidate of candidates) log(fmt, `Would remove ${candidate}`)
+      emitResult(
+        fmt,
+        "startup-autoclean",
+        {
+          dryRun: true,
+          removed: [],
+          candidates,
+          nodeModulesDirectories: status.staleNodeModulesDirectories,
+          dormantVersions: status.dormantVersionDirectories.length,
+        },
+        candidates.length === 0
+          ? "Startup autoclean: nothing stale found"
+          : `Startup autoclean: ${candidates.length} stale path${candidates.length === 1 ? "" : "s"} found`,
+      )
+      return
+    }
+
+    const result = await cleanupStaleInstallDirectories()
+    for (const removed of result.removedDirectories) {
+      log(fmt, `Removed stale installer/temp data: ${removed}`)
     }
 
     emitResult(
       fmt,
       "startup-autoclean",
       {
-        dryRun: Boolean(args["dry-run"]),
-        removed: args["dry-run"] ? [] : status.staleInstallDirectories,
-        candidates: status.staleInstallDirectories,
+        dryRun: false,
+        removed: result.removedDirectories,
+        candidates,
         nodeModulesDirectories: status.staleNodeModulesDirectories,
+        dormantVersions: status.dormantVersionDirectories.length,
       },
-      status.staleInstallDirectories.length === 0
+      result.removedDirectories.length === 0
         ? "Startup autoclean: nothing stale found"
-        : args["dry-run"]
-          ? `Startup autoclean: ${status.staleInstallDirectories.length} stale installer director${status.staleInstallDirectories.length === 1 ? "y" : "ies"} found`
-          : `Startup autoclean: removed ${status.staleInstallDirectories.length} stale installer director${status.staleInstallDirectories.length === 1 ? "y" : "ies"}`,
+        : `Startup autoclean: removed ${result.removedDirectories.length} stale path${result.removedDirectories.length === 1 ? "" : "s"}`,
     )
   },
 } satisfies CommandModule<object, StartupAutocleanArgs>

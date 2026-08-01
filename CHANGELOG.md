@@ -8,28 +8,79 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.0.3-beta.12] — 2026-08-01
+
 ### Added
 
+- Home Recent list shows total count when more workspaces exist than the compact/normal cap (overflow opens via **Pick a workspace**); load failures show an inline error instead of a silent empty list; recent rows include a muted truncated path under the name.
+- Workspace picker **Manage N stale** opens a per-row stale manager (× / ⌕ / → glyphs for delete / scan / path) instead of bulk-delete-only; Scan/Path reuse the lost-workspace recovery dialog, Esc nests back through recover → manage → picker, and bulk “delete all” remains a secondary two-step action (failed paths are named).
+- Lost-workspace recovery UX: home Recent list surfaces missing index entries; the recovery dialog offers **remove from index**, **provide new path**, or a **privacy-first local scan** (shows roots first, cancelable, marker/ID match only; ambiguous hits let you pick a path).
 - Process-local **JobRunner** control plane for Spinosa domain jobs: start → progress → **cancel-by-id** (kills child processes) → done/error. Import and research share the same cancel path; sessions stay on the SDK. GlobalBus job events remain observational; cancel authority is process-local.
 - Import **processor registry** (`direct` / `markitdown` / `ocr`) so wizards run phases through one protocol with shared abort and child registration.
+- MarkItDown NDJSON child (`spinosa internal markitdown-worker`) with the same cancel-kill protocol as OCR; nested OCR fallback shares the child process group.
+- Shared `runImportWorkflow` drives onboarding and add-files import phases through one registry path.
+- Research and home “Repair dependencies” use `createImportJob` lifecycle events (`started` / `finished` / cancel-by-id).
+
+### Changed
+
+- Home global actions: open-workspace chip reads **Pick a workspace** (was “Choose a workspace”); Recent no longer shows a **Show all** overflow control beside the list.
 
 ### Fixed
 
+- Handoff clipboard on Linux prefers `wl-copy` when `WAYLAND_DISPLAY` is set (then `xclip` / `xsel`), matching TUI clipboard selection; Darwin still uses `pbcopy`.
+- Linux Bun `--compile`: embed + stage `@napi-rs/canvas` skia `.node` and set `NAPI_RS_NATIVE_LIBRARY_PATH` before OCR/canvas loads. Nested `ppu-ocv` chunks could not `require()` optional `@napi-rs/canvas-linux-*` (doctor Canvas OK, OCR missing); Darwin unchanged.
+- ONNX companion libs: on Linux, stage under `$SPINOSA_HOME/cache/onnx-runtime` when writable+executable (then XDG `spinosa/`), else `os.tmpdir()`; on Darwin, prefer `os.tmpdir()` first for `@rpath` adjacency. The stage directory is always prepended to `LD_LIBRARY_PATH` / `DYLD_LIBRARY_PATH` so off-tmpdir staging still loads (helps Linux `noexec` tmp).
+- Installer and binary target resolver refuse musl/Alpine early (need glibc Linux or macOS) before download.
+- Lost-workspace recovery on Linux also searches `/run/media` (alongside `/mnt` and `/media`).
+- Onboarding **Scan source folders** activates on Enter (same as click), matching add-files and the gate-button Enter pattern.
+- `.pptx` is no longer listed as MarkItDown-supported: markitdown-ts rejects PowerPoint, so classification / scan toggles / docs treat it as unsupported.
+- Manage stale dialog keeps fixed Name / Path / Status / Actions columns (no smashed one-liners), uses compact × ⌕ → action glyphs with hover on one line (Actions no longer wraps), and a fixed-height scrollbox so the window no longer resizes with row count.
+- Research jobs publish onto the GlobalBus / in-process event emitter (same path as import) for cancel/observability; framed research no longer toasts route · goal · run id or shows a session footer job strip.
+- `@` file autocomplete distinguishes search failures from empty results (`Couldn’t search files: …` instead of a false “No matching items”).
+- Workspace update and session-create failures show the real error in the toast (and update also opens a small alert); update phase labels are no longer truncated to 22 characters.
+- `openWorkspace` soft-fails (missing/invalid presence, unreadable metadata) toast the path + reason and offer **Recover** / **Choose another** instead of silently reopening the picker; identity mismatch still logs and proceeds. Home maintenance lists stale install/temp paths (confirm dialog + preview), keeps a one-line cue in compact layout, and explains when runtime repair can’t run because the bundled version is unknown.
+- TUI toasts anchor to the terminal top-right (viewport size), not the centered content column.
+- Cancel / “Stop and go back” no longer navigates away when the soft abort wait times out while import work is still running; the stop overlay stays up (“Still stopping… Esc to leave anyway”) until the job settles or the user force-leaves.
+- Import progress phase complete / recap waits for pending file statuses to settle (`queued`/`processing`) instead of flipping to the 100% recap on `current >= total` alone; counter-only fallback no longer invents `failed: 0`.
+- Import wizards finish the job as `error` (not `completed`) when any files failed (`completed|error` only).
+- Add-files MarkItDown/OCR gates run before advancing the step chrome (matches onboarding), so the next phase label does not overlay the previous phase’s 100% recap.
+- Onboarding verify/done keeps the last-phase ProgressBar file list visible (no longer clears `progressFiles`); shows summary + `_failed_files/` cue; uses warning/error accents when `failedCount` / `stillMissing` > 0 instead of always painting success green. Failure/gap done chrome points at `~/.spinosa/logs/` instead of dumping the full wizard log (diag / MarkItDown / PPU steps); verbose lines are still flushed to `tui.ndjson`.
+- OCR `afterPhase` dwells before verify/done so failure-first 100% results are readable; add-files done step keeps the results ProgressBar.
+- Mid-phase failed file list uses the same scrollbox as the complete results list (no `slice(0,6)` + “… +N more”).
+- OCR import progress no longer double-counts: worker progress updates the live filename only; the bar numerator advances on completed files (`done`/`failed`), never reverts a terminal status to `processing`.
+- OCR conversion failures (runtime, crash, MD→OCR fallback) count as **failed**, not skipped. Skipped remains only for already-converted / pre-skip cases.
+- Cancel during OCR/MarkItDown no longer races child `close` into a crash path: if abort was already requested, the wait finishes as cancelled and MarkItDown throws `SpinosaCancellationError` instead of returning a partial success.
+- Installer activation gates fail closed: staged template ensure/verify and doctor must pass before activating a binary (no soft-continue).
+- `script/patch-local-install.sh` refuses binary-distribution installs so it cannot overwrite `~/.spinosa/bin/spinosa` with a source forwarder.
+- Startup maintenance probes `.staging/.install.lock` (with legacy `versions/.install.lock` fallback) so autoclean does not race an active binary install.
+- Doctor no longer always reports MarkItDown available in binary mode; OCR is not claimed available from a staged onnxruntime library alone.
+- Startup autoclean JSON/`removed` reporting uses actual `removedDirectories`, not candidate-only counts.
+- TUI hover/keyboard integrity: import “All supported files” row and shared confirm/alert buttons keep readable contrast via `buttonText`/`buttonBackground`; home Recent workspaces respond to ↑↓/Enter; Esc on confirm settles as cancel.
+- Copy and MarkItDown import progress now emit per-file start/done events (with event-loop yields) so the TUI bar steps file-by-file like OCR, instead of jumping to 100% after a lag.
+- Cancel / “Stop and go back” keeps the **Stopping process, exit cleanly, wait** overlay visible for ~3s even when cancel is instantaneous, so the transition remains readable.
 - OCR cancel no longer waits for the full batch: abort kills the detached OCR child (SIGTERM → SIGKILL) and the OCR child hard-exits on SIGTERM/SIGINT.
 - Dead `activeChild` kill path in add-files removed; cancel goes through JobRunner + `registerChild`.
 - Sync bootstrap failures degrade to partial status instead of hard-exiting the TUI by default.
 - Session worker no longer hard-exits on `unhandledRejection` (log only); `uncaughtException` still exits. Import/OCR already isolate failures in parent children.
 - Workspace artifact watcher prefers `fs.watch` and polls less often when watches are active.
 - Additional dialogs read Solid resources via `safeResourceValue` to avoid ENOENT/render aborts.
+- Processor registry `overwrite` flag correctly wired into direct copy (was miswired as unused `copyFn`).
+- Startup maintenance also removes stale OS temp leftovers (`spinosa-launch-*`, `spinosa-upgrade-*`, `spinosa-install.*`, failed `.extracting-*` template stages) older than 1h; dormant `~/.spinosa/versions/*` trees are reported but never auto-deleted.
+- CLI handoff launch scripts clean the whole temp directory on exit (not just the script/prompt files).
+- Import progress events may carry optional per-file `status` (`queued` / `processing` / `done` / `failed` / `error`); the wizard progress panel shows short filenames, a live 4-file queue with status accents, and a red failed list. When a phase hits 100%, the panel hides the live “› filename” line and shows a one-line recap (`N copied/converted/processed · M failed`) plus a scrollable green/red results list (failures first, all files, ~12-row max height) instead of the queue or hard “… +N more” truncation.
 
 ### Changed
 
+- **linux-x64 product binary ships without OCR**: `spinosa-linux-x64` does not stage/load onnxruntime or force-import `ppu-paddle-ocr` at boot. Doctor reports OCR as **unsupported** (does not fail closed / block installer activation). Import wizards skip OCR; MarkItDown / PDF / direct still work. Darwin and linux-arm64 keep OCR as today.
+- Import verify/done (and add-files done) with failures no longer dumps the full wizard LogScrollbox; shows a one-line `Details saved in ~/.spinosa/logs/` pointer instead (verbose lines flushed to `tui.ndjson`). Mid-verify keeps a compact status line only.
 - OCR models still load once per OCR child, only when an OCR job starts (not at TUI boot).
+- MarkItDown conversion runs out-of-process by default (same isolation model as OCR).
 
-### Follow-up
+### Added
 
-- MarkItDown remains in-process; a dedicated NDJSON child (same protocol as OCR) is deferred until cancel latency or crash isolation needs it.
-- Full shared `runImportWorkflow` across wizards deferred — both paths already call the processor registry.
+- MarkItDown now runs in an NDJSON child (`spinosa internal markitdown-worker` / `markitdown-worker.ts`) with the same cancel-kill protocol as OCR; nested OCR fallback shares the child process group.
+- Shared `runImportWorkflow` drives onboarding and add-files import phases through one registry path.
+- Research and home “Repair dependencies” use `createImportJob` lifecycle events (`started` / `finished` / cancel-by-id).
 
 ## [1.0.3-beta.11] — 2026-07-31
 

@@ -2,6 +2,7 @@ import { TextAttributes } from "@opentui/core"
 import { useTheme } from "../context/theme"
 import { useDialog, type DialogContext } from "./dialog"
 import { useBindings } from "../keymap"
+import { buttonBackground, buttonText } from "../util/button"
 
 export type DialogAlertProps = {
   title: string
@@ -43,13 +44,13 @@ export function DialogAlert(props: DialogAlertProps) {
         <box
           paddingLeft={3}
           paddingRight={3}
-          backgroundColor={theme.primary}
+          backgroundColor={buttonBackground(theme, true)}
           onMouseUp={() => {
             props.onConfirm?.()
             dialog.clear()
           }}
         >
-          <text fg={theme.selectedListItemText}>ok</text>
+          <text fg={buttonText(theme, true)}>ok</text>
         </box>
       </box>
     </box>

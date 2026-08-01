@@ -1,6 +1,5 @@
 import path from "node:path"
 import { existsSync } from "node:fs"
-import { tmpdir } from "node:os"
 import type { Argv, CommandModule } from "yargs"
 import {
   readWorkspaceMeta,
@@ -18,6 +17,7 @@ import {
   readCompiledDistribution,
   readInstalledBinaryVersion,
 } from "@spinosa/core/distribution/bootstrap"
+import { isOcrPlatformSupported, ocrUnsupportedReason } from "@spinosa/core/tools/ocr-support"
 import { getFormat, log, emitResult, errorOut, type OutputFormat } from "../output"
 
 interface DoctorArgs {
@@ -36,34 +36,38 @@ async function probePdfEngine(): Promise<boolean> {
   }
 }
 
-function stagedOnnxRuntimeLibPresent(): boolean {
-  const name =
-    process.platform === "darwin"
-      ? "libonnxruntime.1.dylib"
-      : process.platform === "linux"
-        ? "libonnxruntime.so.1"
-        : process.platform === "win32"
-          ? "onnxruntime.dll"
-          : ""
-  return Boolean(name) && existsSync(path.join(tmpdir(), name))
-}
-
-async function probeOcrEngine(): Promise<boolean> {
+async function probeOcrEngine(): Promise<{ ok: boolean; unsupported?: boolean; error?: string }> {
+  const unsupported = ocrUnsupportedReason()
+  if (unsupported) {
+    return { ok: false, unsupported: true, error: unsupported }
+  }
   try {
     await import("ppu-paddle-ocr")
-    return true
-  } catch {
-    // Import can still fail under Bun --compile even when companion libs were
-    // staged at process start; treat staged onnxruntime natives as OCR-ready.
-    return isCompiledBinaryDistribution() && stagedOnnxRuntimeLibPresent()
+    return { ok: true }
+  } catch (err) {
+    // Do not claim OCR available from a staged onnxruntime dylib/so alone —
+    // that is not evidence the paddle module loads. Prefer honest "missing".
+    const causes: string[] = []
+    let cur: unknown = err
+    for (let i = 0; i < 8 && cur; i++) {
+      if (cur instanceof Error) {
+        causes.push(`${cur.name}: ${cur.message}`)
+        cur = (cur as Error & { cause?: unknown }).cause
+      } else {
+        causes.push(String(cur))
+        break
+      }
+    }
+    return { ok: false, error: causes.join(" <- ") }
   }
 }
 
 async function probeMarkitdown(): Promise<boolean> {
   // Do not `import("markitdown-ts")` from doctor: its optional dynamic deps
   // (youtube-transcript, unzipper) can resolve via polluted global node_modules
-  // and fail the compile. It is a hard dependency of the import/add path.
-  if (isCompiledBinaryDistribution()) return true
+  // and fail the compile. Resolve-only is enough evidence the package is
+  // embedded/present; never claim available without that evidence (binary mode
+  // previously always returned true).
   try {
     require.resolve("markitdown-ts")
     return true
@@ -117,9 +121,17 @@ export const DoctorCommand = {
       ])
       log(fmt, `Document converter: ${markitdown ? "available" : "missing"}`)
       log(fmt, `PDF engine: ${pdf ? "available" : "missing"}`)
-      log(fmt, `OCR engine: ${ocr ? "available" : "missing"}`)
+      if (ocr.unsupported) {
+        log(fmt, `OCR engine: unsupported`)
+        if (ocr.error) log(fmt, `OCR: ${ocr.error}`)
+      } else {
+        log(fmt, `OCR engine: ${ocr.ok ? "available" : "missing"}`)
+        if (!ocr.ok && ocr.error) log(fmt, `OCR probe error: ${ocr.error}`)
+      }
       log(fmt, `Canvas: ${canvas ? "available" : "missing"}`)
-      if (!pdf || !ocr || !markitdown) healthy = false
+      // OCR unsupported on linux-x64 is expected — do not fail closed / block activation.
+      if (!pdf || !markitdown) healthy = false
+      if (isOcrPlatformSupported() && !ocr.ok) healthy = false
     } else {
       const frameworkRoot = resolveFrameworkRoot()
       healthy = Boolean(frameworkRoot)

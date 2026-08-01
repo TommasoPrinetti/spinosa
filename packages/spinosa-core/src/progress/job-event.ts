@@ -1,5 +1,8 @@
 /** Plain job-event payloads for import/OCR progress (mirrors @spinosa/schema JobEvent). */
 
+/** Per-file lifecycle carried on progress events (optional; older emitters omit it). */
+export type FileProgressStatus = "queued" | "processing" | "done" | "failed" | "error"
+
 export type JobEvent =
   | {
       type: "job.started"
@@ -13,6 +16,7 @@ export type JobEvent =
         current: number
         total: number
         relPath?: string
+        status?: FileProgressStatus
       }
     }
   | {

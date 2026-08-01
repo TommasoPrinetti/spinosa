@@ -5,6 +5,7 @@ import { createStore } from "solid-js/store"
 import { For } from "solid-js"
 import { Locale } from "../util/locale"
 import { useBindings } from "../keymap"
+import { buttonBackground, buttonText } from "../util/button"
 
 export type DialogConfirmProps = {
   title: string
@@ -67,7 +68,10 @@ export function DialogConfirm(props: DialogConfirmProps) {
         <text attributes={TextAttributes.BOLD} fg={theme.text}>
           {props.title}
         </text>
-        <text fg={theme.textMuted} onMouseUp={() => dialog.clear()}>
+        <text fg={theme.textMuted} onMouseUp={() => {
+          props.onCancel?.()
+          dialog.clear()
+        }}>
           esc
         </text>
       </box>
@@ -76,23 +80,26 @@ export function DialogConfirm(props: DialogConfirmProps) {
       </box>
       <box flexDirection="row" justifyContent="flex-end" paddingBottom={1} gap={2}>
         <For each={["cancel", "confirm"] as const}>
-          {(key) => (
-            <box
-              paddingLeft={1}
-              paddingRight={1}
-              backgroundColor={key === store.active ? theme.primary : undefined}
-              onMouseOver={() => setStore("active", key)}
-              onMouseUp={() => {
-                if (key === "confirm") props.onConfirm?.()
-                if (key === "cancel") props.onCancel?.()
-                dialog.clear()
-              }}
-            >
-              <text fg={key === store.active ? theme.selectedListItemText : theme.textMuted}>
-                {Locale.titlecase(key === "cancel" ? (props.label ?? key) : (props.confirmLabel ?? key))}
-              </text>
-            </box>
-          )}
+          {(key) => {
+            const active = () => key === store.active
+            return (
+              <box
+                paddingLeft={1}
+                paddingRight={1}
+                backgroundColor={buttonBackground(theme, active())}
+                onMouseOver={() => setStore("active", key)}
+                onMouseUp={() => {
+                  if (key === "confirm") props.onConfirm?.()
+                  if (key === "cancel") props.onCancel?.()
+                  dialog.clear()
+                }}
+              >
+                <text fg={buttonText(theme, active())}>
+                  {Locale.titlecase(key === "cancel" ? (props.label ?? key) : (props.confirmLabel ?? key))}
+                </text>
+              </box>
+            )
+          }}
         </For>
       </box>
     </box>
@@ -109,19 +116,29 @@ DialogConfirm.show = (
     ? { cancelLabel: labelOrOptions }
     : labelOrOptions
   return new Promise<DialogConfirmResult>((resolve) => {
+    let settled = false
+    const settle = (value: DialogConfirmResult) => {
+      if (settled) return
+      settled = true
+      resolve(value)
+    }
     dialog.replace(
       () => (
         <DialogConfirm
           title={title}
           message={message}
-          onConfirm={() => resolve(true)}
-          onCancel={() => resolve(false)}
+          onConfirm={() => settle(true)}
+          onCancel={() => settle(false)}
           label={options?.cancelLabel}
           confirmLabel={options?.confirmLabel}
           defaultChoice={options?.defaultChoice}
         />
       ),
-      () => resolve(undefined),
+      () => settle(undefined),
+      () => {
+        settle(false)
+        dialog.dismiss()
+      },
     )
   })
 }

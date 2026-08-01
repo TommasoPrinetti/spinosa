@@ -129,3 +129,16 @@ export function logError(context: string, err: unknown) {
   logEntry("error", "error", { context, err: msg, ...(stack ? { stack } : {}), msg: `${context}: ${msg}` })
   _toastError?.(err)
 }
+
+/**
+ * Persist wizard in-memory log lines to `~/.spinosa/logs/tui.ndjson` so the
+ * verify/done “Details saved in …” hint is accurate when the UI no longer dumps them.
+ */
+export function persistImportWizardLogLines(lines: string[], context = "import-wizard") {
+  for (const line of lines) {
+    const msg = line.trimEnd()
+    if (!msg) continue
+    logEntry("info", "tui", { context, msg })
+  }
+}
+

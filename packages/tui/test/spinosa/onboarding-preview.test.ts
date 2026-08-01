@@ -55,6 +55,22 @@ describe("onboarding preview", () => {
     ])
   })
 
+  test("pptx is unsupported — not in import toggles, counted as unknown", async () => {
+    await using tmp = await tmpdir()
+    const corpus = path.join(tmp.path, "decks")
+    await mkdir(corpus, { recursive: true })
+    await Bun.write(path.join(corpus, "notes.md"), "# Notes")
+    await Bun.write(path.join(corpus, "slides.pptx"), "fake-pptx")
+
+    const preview = await buildImportScanPreview(corpus)
+
+    expect(preview.importOptions.map((o) => o.ext)).toEqual(["md"])
+    expect(preview.importOptions.some((o) => o.ext === "pptx")).toBe(false)
+    expect(preview.scanRows.some((row) =>
+      row.label === "Unknown files" && row.status.includes("unsupported"),
+    )).toBe(true)
+  })
+
   test("ignores symlink loops while scanning previews", async () => {
     await using tmp = await tmpdir()
     const corpus = path.join(tmp.path, "looped")

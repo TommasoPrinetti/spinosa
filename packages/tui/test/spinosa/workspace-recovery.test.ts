@@ -6,8 +6,12 @@ import { createWorkspaceID } from "@spinosa/core/workspace/identity"
 import { loadRegistry, registerWorkspace, setWorkspacePresence } from "@spinosa/core/workspace/registry"
 import {
   findWorkspaceMatchesByIDAsync,
+  preferredWorkspaceRecoveryRoots,
+  platformWorkspaceRecoveryRoots,
   recoverWorkspaceAtPath,
   scanAndRecoverWorkspace,
+  shouldSkipWorkspaceRecoveryDirectory,
+  workspaceRecoveryScanPlan,
 } from "@spinosa/core/workspace/recovery"
 
 function createWorkspace(workspacePath: string, workspaceID = createWorkspaceID()) {
@@ -103,5 +107,55 @@ describe("workspace recovery", () => {
       if (originalHome === undefined) delete process.env.SPINOSA_HOME
       else process.env.SPINOSA_HOME = originalHome
     }
+  })
+
+  test("scan plan prefers common user folders and documents privacy scope", () => {
+    const home = "/Users/example"
+    const preferred = preferredWorkspaceRecoveryRoots(home)
+    expect(preferred).toContain(path.join(home, "Documents"))
+    expect(preferred).toContain(path.join(home, "Desktop"))
+    expect(shouldSkipWorkspaceRecoveryDirectory("Library")).toBe(true)
+    expect(shouldSkipWorkspaceRecoveryDirectory("node_modules")).toBe(true)
+    expect(shouldSkipWorkspaceRecoveryDirectory(".ssh")).toBe(true)
+    expect(shouldSkipWorkspaceRecoveryDirectory("Projects")).toBe(false)
+
+    const plan = workspaceRecoveryScanPlan(path.join(home, "old", "workspace"), [home])
+    expect(plan.maxDepth).toBe(8)
+    expect(plan.skippedDirectoryNames).toContain("Library")
+    expect(plan.notes.some((note) => note.includes("Local only"))).toBe(true)
+    expect(plan.notes.some((note) => note.includes("workspace ID"))).toBe(true)
+  })
+
+  test("platform recovery roots keep Darwin Volumes and add Linux /run/media", () => {
+    expect(platformWorkspaceRecoveryRoots("darwin")).toEqual(["/Volumes"])
+    expect(platformWorkspaceRecoveryRoots("linux")).toEqual(["/mnt", "/media", "/run/media"])
+    expect(platformWorkspaceRecoveryRoots("win32")).toEqual([])
+  })
+
+  test("scan skips bulky and sensitive directory names while walking", async () => {
+    await using tmp = await tmpdir()
+    const workspaceID = createWorkspaceID()
+    const hidden = path.join(tmp.path, "Library", "workspace")
+    const visible = path.join(tmp.path, "Projects", "workspace")
+    createWorkspace(hidden, workspaceID)
+    createWorkspace(visible, workspaceID)
+
+    expect(await findWorkspaceMatchesByIDAsync({
+      workspaceID,
+      roots: [tmp.path],
+    })).toEqual([visible])
+  })
+
+  test("scan respects abort signals", async () => {
+    await using tmp = await tmpdir()
+    const workspaceID = createWorkspaceID()
+    mkdirSync(path.join(tmp.path, "a", "b", "c"), { recursive: true })
+    const controller = new AbortController()
+    controller.abort()
+    await expect(findWorkspaceMatchesByIDAsync({
+      workspaceID,
+      roots: [tmp.path],
+      signal: controller.signal,
+    })).rejects.toThrow(/canceled/i)
   })
 })

@@ -23,6 +23,10 @@ export const Progress = Event.define({
     current: Schema.Number,
     total: Schema.Number,
     relPath: optional(Schema.String),
+    /** Optional per-file lifecycle for TUI accents (backward compatible). */
+    status: optional(
+      Schema.Literals(["queued", "processing", "done", "failed", "error"] as const),
+    ),
   },
 })
 

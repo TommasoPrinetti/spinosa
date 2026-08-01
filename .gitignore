@@ -33,9 +33,11 @@ framework/bin/.build/
 /packages/spinosa-kernel/src/generated/template-blobs/
 /packages/spinosa-kernel/src/generated/template-files/
 /packages/spinosa-kernel/src/generated/template-pack-meta.json
-# template-pack.gen.ts / onnx-native.gen.ts keep tracked stubs; builds overwrite on disk then restore stubs
+# template-pack.gen.ts / onnx-native.gen.ts / canvas-native.gen.ts keep tracked stubs; builds overwrite on disk then restore stubs
 # onnx companion libs for Bun --compile (template-blobs pattern; also mirrored under .build/onnx-native/)
 /packages/spinosa-kernel/src/generated/onnx-libs/
+# canvas skia .node for Bun --compile (NAPI_RS_NATIVE_LIBRARY_PATH staging)
+/packages/spinosa-kernel/src/generated/canvas-libs/
 
 # Local checkout launcher symlink (use `bun run spinosa` / `bun run dev`)
 /spinosa

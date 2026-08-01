@@ -1,0 +1,130 @@
+import { describe, expect, test } from "bun:test"
+import {
+  applyImportProgressStatus,
+  countImportProgress,
+  displaySpinosaLogsDir,
+  formatImportDetailLogHint,
+  formatImportPhaseRecap,
+  formatImportPhaseRecapFromCounters,
+  importOutcomeAccentKey,
+  importOutcomeHeading,
+  importPhaseVerb,
+  isImportPhaseComplete,
+  resolveSpinosaLogsDir,
+  seedImportQueue,
+  selectImportFailedItems,
+  selectImportQueueWindow,
+  selectImportResultsWindow,
+  shortImportFileName,
+  shouldShowImportDetailLogHint,
+  statusGlyph,
+} from "../../src/spinosa/import-progress-ui"
+import { importResultsListMaxHeight } from "../../src/routes/spinosa/wizard-ui"
+
+describe("import progress UI helpers", () => {
+  test("shortImportFileName keeps basename and ellipsizes long names", () => {
+    expect(shortImportFileName("spinosa-markitdown-test/vivatech_subset.xlsx")).toBe("vivatech_subset.xlsx")
+    const long = "a".repeat(50) + ".xlsx"
+    const short = shortImportFileName(`dir/${long}`, 20)
+    expect(short.length).toBe(20)
+    expect(short.includes("…")).toBe(true)
+  })
+
+  test("queue window prefers processing then queued", () => {
+    const items = seedImportQueue(["a.md", "b.md", "c.md", "d.md", "e.md"])
+    const mid = applyImportProgressStatus(items, "b.md", "processing")
+    const window = selectImportQueueWindow(mid, 4)
+    expect(window.map((i) => i.rel)).toEqual(["b.md", "a.md", "c.md", "d.md"])
+    expect(window[0]?.status).toBe("processing")
+  })
+
+  test("failed list and glyphs", () => {
+    let items = seedImportQueue(["ok.md", "bad.md"])
+    items = applyImportProgressStatus(items, "ok.md", "done")
+    items = applyImportProgressStatus(items, "bad.md", "failed")
+    expect(selectImportFailedItems(items).map((i) => i.rel)).toEqual(["bad.md"])
+    expect(statusGlyph("failed")).toBe("✗")
+    expect(statusGlyph("processing")).toBe("›")
+  })
+
+  test("phase complete requires pending===0 when file list is present", () => {
+    expect(isImportPhaseComplete(0, 0)).toBe(false)
+    expect(isImportPhaseComplete(5, 10)).toBe(false)
+    expect(isImportPhaseComplete(10, 10)).toBe(true)
+    expect(isImportPhaseComplete(11, 10)).toBe(true)
+
+    let items = seedImportQueue(["a.md", "b.md"])
+    items = applyImportProgressStatus(items, "a.md", "done")
+    // current>=total but one file still queued → not complete
+    expect(isImportPhaseComplete(2, 2, items)).toBe(false)
+    items = applyImportProgressStatus(items, "b.md", "processing")
+    expect(isImportPhaseComplete(2, 2, items)).toBe(false)
+    items = applyImportProgressStatus(items, "b.md", "done")
+    expect(isImportPhaseComplete(1, 2, items)).toBe(true)
+  })
+
+  test("recap counts and phase-aware wording", () => {
+    let items = seedImportQueue(["a.md", "b.md", "c.md"])
+    items = applyImportProgressStatus(items, "a.md", "done")
+    items = applyImportProgressStatus(items, "b.md", "failed")
+    items = applyImportProgressStatus(items, "c.md", "done")
+    expect(countImportProgress(items)).toEqual({ succeeded: 2, failed: 1, pending: 0 })
+    expect(importPhaseVerb("MarkItDown conversion...")).toBe("converted")
+    expect(importPhaseVerb("OCR...")).toBe("processed")
+    expect(importPhaseVerb("Copying files...")).toBe("copied")
+    expect(importPhaseVerb("")).toBe("succeeded")
+    expect(formatImportPhaseRecap(countImportProgress(items), "MarkItDown conversion...")).toBe(
+      "2 converted · 1 failed",
+    )
+  })
+
+  test("recap includes pending and counter-only fallback avoids inventing failed:0", () => {
+    let items = seedImportQueue(["a.md", "b.md", "c.md"])
+    items = applyImportProgressStatus(items, "a.md", "done")
+    expect(formatImportPhaseRecap(countImportProgress(items), "OCR...")).toBe(
+      "1 processed · 0 failed · 2 pending",
+    )
+    expect(formatImportPhaseRecapFromCounters(7, "MarkItDown conversion...")).toBe("7 converted")
+    expect(formatImportPhaseRecapFromCounters(7, "MarkItDown conversion...")).not.toContain("failed")
+  })
+
+  test("complete results list puts failures first and keeps every file", () => {
+    let items = seedImportQueue(["a.md", "b.md", "c.md", "d.md", "e.md"])
+    items = applyImportProgressStatus(items, "a.md", "done")
+    items = applyImportProgressStatus(items, "b.md", "failed")
+    items = applyImportProgressStatus(items, "c.md", "done")
+    items = applyImportProgressStatus(items, "d.md", "error")
+    items = applyImportProgressStatus(items, "e.md", "done")
+    const ordered = selectImportResultsWindow(items)
+    expect(ordered.map((i) => i.rel)).toEqual(["b.md", "d.md", "a.md", "c.md", "e.md"])
+    expect(ordered.map((i) => i.status)).toEqual(["failed", "error", "done", "done", "done"])
+  })
+
+  test("import outcome accent is never success when failed or stillMissing", () => {
+    expect(importOutcomeAccentKey({})).toBe("success")
+    expect(importOutcomeAccentKey({ failedCount: 0, stillMissing: 0 })).toBe("success")
+    expect(importOutcomeAccentKey({ failedCount: 1 })).toBe("error")
+    expect(importOutcomeAccentKey({ stillMissing: 2 })).toBe("warning")
+    expect(importOutcomeAccentKey({ failedCount: 1, stillMissing: 3 })).toBe("error")
+    expect(importOutcomeHeading({ failedCount: 0, stillMissing: 0 })).toBe("● Import complete")
+    expect(importOutcomeHeading({ stillMissing: 1 })).toBe("● Import finished with gaps")
+    expect(importOutcomeHeading({ failedCount: 2 })).toBe("● Import finished with failures")
+  })
+
+  test("failure detail hint points at ~/.spinosa/logs without dumping the log body", () => {
+    expect(shouldShowImportDetailLogHint({})).toBe(false)
+    expect(shouldShowImportDetailLogHint({ failedCount: 0, stillMissing: 0 })).toBe(false)
+    expect(shouldShowImportDetailLogHint({ failedCount: 1 })).toBe(true)
+    expect(shouldShowImportDetailLogHint({ stillMissing: 2 })).toBe(true)
+    expect(formatImportDetailLogHint("~/.spinosa/logs")).toBe("Details saved in ~/.spinosa/logs/")
+    expect(formatImportDetailLogHint()).toBe(`Details saved in ${displaySpinosaLogsDir()}/`)
+    expect(displaySpinosaLogsDir(resolveSpinosaLogsDir())).toMatch(/\/logs$/)
+    expect(resolveSpinosaLogsDir().replace(/\\/g, "/")).toMatch(/\/logs$/)
+  })
+
+  test("results ScrollBox max height is generous but capped (~12 rows)", () => {
+    expect(importResultsListMaxHeight(20)).toBe(8)
+    expect(importResultsListMaxHeight(40)).toBe(12)
+    expect(importResultsListMaxHeight(8)).toBe(6)
+  })
+})

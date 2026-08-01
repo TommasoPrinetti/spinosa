@@ -47,6 +47,7 @@ import { DialogHelp } from "./ui/dialog-help"
 import { DialogAgent } from "./component/dialog-agent"
 import { DialogSessionList } from "./component/dialog-session-list"
 import { DialogWorkspaceList } from "./component/dialog-workspace-list"
+import { DialogSpinosaMissingWorkspace } from "./component/dialog-spinosa-missing-workspace"
 import { DialogConsoleOrg } from "./component/dialog-console-org"
 import { ThemeProvider, useTheme } from "./context/theme"
 import { Home } from "./routes/home"
@@ -56,7 +57,9 @@ import { SpinosaWorkspaceProvider, useSpinosaWorkspace } from "./context/spinosa
 import { PromptHistoryProvider } from "./component/prompt/history"
 import { FrecencyProvider } from "./component/prompt/frecency"
 import { PromptStashProvider } from "./component/prompt/stash"
-import { ToastProvider, useToast } from "./ui/toast"
+import { Toast, ToastProvider, useToast } from "./ui/toast"
+import { DialogConfirm } from "./ui/dialog-confirm"
+import { formatOpenWorkspaceFailureMessage } from "./spinosa/home-visibility"
 import { isDefaultTitle } from "./util/session"
 import { setToastError, tuiLog } from "./spinosa/log"
 import { KVProvider, useKV } from "./context/kv"
@@ -657,6 +660,55 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     }
   })
 
+  // Soft-fail openWorkspace: toast already fired; offer Recover / Choose another.
+  createEffect(() => {
+    if (!spinosa.openFailure) return
+    const failure = spinosa.consumeOpenFailure()
+    if (!failure) return
+    void (async () => {
+      const message = formatOpenWorkspaceFailureMessage(failure)
+      const recover = failure.recoverable
+        ? await DialogConfirm.show(dialog, "Can’t open workspace", message, {
+            confirmLabel: "Recover",
+            cancelLabel: "Choose another",
+            defaultChoice: "confirm",
+          })
+        : await DialogConfirm.show(dialog, "Can’t open workspace", message, {
+            confirmLabel: "Choose another",
+            cancelLabel: "Cancel",
+            defaultChoice: "confirm",
+          })
+      if (failure.recoverable && recover) {
+        dialog.replace(() => (
+          <DialogSpinosaMissingWorkspace
+            workspacePath={failure.path}
+            workspaceName={failure.name}
+            workspaceID={failure.workspaceID}
+            onBack={() => {
+              dialog.clear()
+              spinosa.showPicker()
+            }}
+            onRemoved={async () => {
+              dialog.clear()
+            }}
+            onRecovered={async (workspacePath) => {
+              dialog.clear()
+              await spinosa.openWorkspace(workspacePath)
+            }}
+          />
+        ))
+        return
+      }
+      if (recover === false && failure.recoverable) {
+        spinosa.showPicker()
+        return
+      }
+      if (!failure.recoverable && recover) {
+        spinosa.showPicker()
+      }
+    })()
+  })
+
   const currentWorktreeWorkspace = createMemo(() => {
     const workspaceID = project.workspace.current()
     if (!workspaceID) return
@@ -1195,6 +1247,8 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
           onComplete={() => setStartupLoadingComplete(true)}
         />
       </Show>
+      {/* Viewport-relative host: parent is full terminal width×height, not content column */}
+      <Toast />
     </box>
   )
 }

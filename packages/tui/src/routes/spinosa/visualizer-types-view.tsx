@@ -49,26 +49,25 @@ export function TypesView(props: CanvasViewProps) {
           const bar = "█".repeat(full) + (partial > 0 ? PARTIAL[partial] : "")
           const avgDur = s.durations.length > 0 ? Math.round(s.durations.reduce((a, b) => a + b, 0) / s.durations.length) : 0
           const durText = avgDur > 0 ? `${avgDur >= 1000 ? (avgDur / 1000).toFixed(1) + "s" : avgDur + "ms"}` : ""
-          const pct = s.total > 0 ? Math.round((s.total / totalCalls()) * 100) : 0
           const typeColor = toolCalloutColor(tool, theme as any)
-          const hov = hovered() === idx()
+          const hov = () => hovered() === idx()
 
           return (
             <box
               flexDirection="row" gap={1} paddingLeft={1} paddingRight={1}
-              backgroundColor={buttonBackground(theme, hov)}
+              backgroundColor={buttonBackground(theme, hov())}
               onMouseOver={() => setHovered(idx())}
               onMouseOut={() => setHovered(-1)}
             >
-              <text fg={buttonText(theme, hov, typeColor)} width={12}>
-                <span style={{ bold: hov }}>{tool.slice(0, 12)}</span>
+              <text fg={buttonText(theme, hov(), typeColor)} width={12}>
+                <span style={{ bold: hov() }}>{tool.slice(0, 12)}</span>
               </text>
-              <text fg={typeColor} width={barWidth}>{bar.padEnd(barWidth)}</text>
-              <text fg={buttonText(theme, hov, theme.text)} width={4}>{String(s.total).padStart(2)}</text>
-              <text fg={s.error > 0 ? theme.error : theme.textMuted} width={4}>
+              <text fg={buttonText(theme, hov(), typeColor)} width={barWidth}>{bar.padEnd(barWidth)}</text>
+              <text fg={buttonText(theme, hov(), theme.text)} width={4}>{String(s.total).padStart(2)}</text>
+              <text fg={buttonText(theme, hov(), s.error > 0 ? theme.error : theme.textMuted)} width={4}>
                 {s.error > 0 ? `✕${s.error}` : ""}
               </text>
-              <text fg={theme.textMuted} width={8}>{durText}</text>
+              <text fg={buttonText(theme, hov(), theme.textMuted)} width={8}>{durText}</text>
             </box>
           )
         }}

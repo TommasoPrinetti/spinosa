@@ -9,7 +9,6 @@ import {
   SPINOSA_ACTIVE_WORKSPACE_KV,
   SPINOSA_ACTIVE_WORKSPACE_ID_KV,
   SPINOSA_GENERIC_MODE_KV,
-  SPINOSA_LAST_GOAL_KV,
   SPINOSA_LAST_SESSION_KV,
 } from "../spinosa/entry"
 import { isSpinosaWorkspace, readWorkspaceMeta } from "../spinosa/service"
@@ -19,6 +18,14 @@ import { inspectRegisteredWorkspacePresence, isUsableWorkspacePresence } from "@
 import { runSpinosaBootHealth, SPINOSA_BOOT_OPERATIONS, type SpinosaBootOperation } from "@spinosa/core/system/boot"
 import type { RouteNavigateInput } from "./route"
 import { KV } from "../constants/kv-keys"
+import { useToast } from "../ui/toast"
+import {
+  buildOpenWorkspaceSoftFail,
+  humanizeWorkspacePresence,
+  type OpenWorkspaceSoftFail,
+} from "../spinosa/home-visibility"
+import { resolveWorkspaceDisplayName } from "../spinosa/workspace-name"
+import { truncatePathTail } from "../spinosa/truncate-path"
 
 export const { use: useSpinosaWorkspace, provider: SpinosaWorkspaceProvider } = createSimpleContext({
   name: "SpinosaWorkspace",
@@ -27,14 +34,25 @@ export const { use: useSpinosaWorkspace, provider: SpinosaWorkspaceProvider } = 
     const route = useRoute()
     const paths = useTuiPaths()
     const startup = useTuiStartup()
+    const toast = useToast()
     const cwdWorkspace = isSpinosaWorkspace(paths.cwd) ? paths.cwd : undefined
     const [activePath, setActivePath] = createSignal<string | undefined>()
     const [genericMode, setGenericMode] = createSignal(false)
     const [pickerRequested, setPickerRequested] = createSignal(false)
     const [pickerReturnSessionId, setPickerReturnSessionId] = createSignal<string | undefined>()
     const [pendingPrompt, setPendingPrompt] = createSignal<{ workspacePath: string; prompt: PromptInfo } | undefined>()
+    const [openFailure, setOpenFailure] = createSignal<OpenWorkspaceSoftFail | undefined>()
     const [bootOperations, setBootOperations] = createSignal<SpinosaBootOperation[]>(SPINOSA_BOOT_OPERATIONS.map((operation) => ({ ...operation })))
     let attemptedInitialWorkspaceHydration = false
+
+    const reportOpenFailure = (failure: OpenWorkspaceSoftFail) => {
+      setOpenFailure(failure)
+      toast.show({
+        variant: "warning",
+        message: `${truncatePathTail(failure.path, 48)} — ${failure.reason}`,
+        duration: 5000,
+      })
+    }
 
     const [bootHealth] = createResource(async () => runSpinosaBootHealth({
       minimumOperationDurationMs: startup.skipInitialLoading ? 0 : 1_000,
@@ -53,7 +71,16 @@ export const { use: useSpinosaWorkspace, provider: SpinosaWorkspaceProvider } = 
         if (presence.status === "identity_mismatch") {
           tuiLog(`openWorkspace: identity_mismatch at ${workspacePath}, proceeding with marker ID`)
         } else {
-          showPicker()
+          const reason = `Workspace ${humanizeWorkspacePresence(presence.status)}`
+          reportOpenFailure(
+            buildOpenWorkspaceSoftFail({
+              path: workspacePath,
+              name: resolveWorkspaceDisplayName(workspacePath),
+              workspaceID: presence.indexedWorkspaceID,
+              presence: presence.status,
+              reason,
+            }),
+          )
           return
         }
       }
@@ -84,7 +111,15 @@ export const { use: useSpinosaWorkspace, provider: SpinosaWorkspaceProvider } = 
       if (activePath() !== workspacePath) return
       if (!loaded) {
         rollbackActiveWorkspace()
-        if (route.data.type !== "workspace" && route.data.type !== "visualizer") showPicker()
+        reportOpenFailure(
+          buildOpenWorkspaceSoftFail({
+            path: workspacePath,
+            name: resolveWorkspaceDisplayName(workspacePath),
+            workspaceID: presence?.indexedWorkspaceID,
+            presence: presence?.status ?? "invalid",
+            reason: "Workspace metadata missing or unreadable",
+          }),
+        )
         return
       }
       kv.set(SPINOSA_ACTIVE_WORKSPACE_ID_KV, loaded.workspaceID)
@@ -157,11 +192,6 @@ export const { use: useSpinosaWorkspace, provider: SpinosaWorkspaceProvider } = 
       }
     }
 
-    const setLastRoute = (sessionId: string, goalPath: string) => {
-      kv.set(SPINOSA_LAST_SESSION_KV, sessionId)
-      kv.set(SPINOSA_LAST_GOAL_KV, goalPath)
-    }
-
     return {
       get activePath() {
         return activePath()
@@ -187,6 +217,9 @@ export const { use: useSpinosaWorkspace, provider: SpinosaWorkspaceProvider } = 
       get pickerRequested() {
         return pickerRequested()
       },
+      get openFailure(): OpenWorkspaceSoftFail | undefined {
+        return openFailure()
+      },
       get pendingPrompt(): PromptInfo | undefined {
         const pending = pendingPrompt()
         return pending !== undefined && pending.workspacePath === activePath() ? pending.prompt : undefined
@@ -197,13 +230,20 @@ export const { use: useSpinosaWorkspace, provider: SpinosaWorkspaceProvider } = 
       clearPickerRequest() {
         setPickerRequested(false)
       },
+      clearOpenFailure() {
+        setOpenFailure(undefined)
+      },
+      consumeOpenFailure(): OpenWorkspaceSoftFail | undefined {
+        const failure = openFailure()
+        setOpenFailure(undefined)
+        return failure
+      },
       restorePickerRoute() {
         const sessionID = pickerReturnSessionId()
         setPickerReturnSessionId(undefined)
         route.navigate(sessionID ? { type: "workspace", sessionID } : { type: "global" })
       },
       refresh,
-      setLastRoute,
       queuePrompt(prompt: PromptInfo, targetWorkspacePath?: string) {
         const workspacePath = targetWorkspacePath ?? activePath()
         if (workspacePath) setPendingPrompt({ workspacePath, prompt })

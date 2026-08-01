@@ -5,6 +5,7 @@ import { fileExt } from "../constants"
 import { resolveUserPath } from "../utils/path"
 import type { ImportBatchManager } from "../import/batch"
 import { ocrAvailable, pdfjsAvailable } from "../tools/detection"
+import { ocrUnsupportedReason } from "../tools/ocr-support"
 
 export interface ScanCounts {
   markdown: number
@@ -34,6 +35,8 @@ export interface ToolStatus {
   markitdown: boolean
   ocr: boolean
   pdfjs: boolean
+  /** Present when OCR is gated off for this platform (not a failed probe). */
+  ocrUnsupportedReason?: string
 }
 
 export interface OnboardingPreviewRow {
@@ -113,10 +116,12 @@ export async function scanSource(
 }
 
 export async function detectDocumentTools(): Promise<ToolStatus> {
+  const unsupported = ocrUnsupportedReason()
   return {
     markitdown: checkModuleAvailable("markitdown-ts"),
     ocr: ocrAvailable(),
     pdfjs: pdfjsAvailable(),
+    ...(unsupported ? { ocrUnsupportedReason: unsupported } : {}),
   }
 }
 

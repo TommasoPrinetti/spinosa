@@ -45,4 +45,24 @@ describe("Spinosa logging", () => {
       else process.env.SPINOSA_HOME = originalHome
     }
   })
+
+  test("persistImportWizardLogLines writes wizard detail into tui.ndjson", async () => {
+    await using tmp = await tmpdir()
+    const originalHome = process.env.SPINOSA_HOME
+    process.env.SPINOSA_HOME = path.join(tmp.path, "spinosa-home")
+    try {
+      const { persistImportWizardLogLines } = await import("../../src/spinosa/log")
+      persistImportWizardLogLines(
+        ["[diag] direct=1 markitdown=0 ocr=1", "PPU PaddleOCR: Processing 1 files", ""],
+        "import-wizard-test",
+      )
+      const tuiText = await Bun.file(path.join(process.env.SPINOSA_HOME, "logs", "tui.ndjson")).text()
+      expect(tuiText).toContain("import-wizard-test")
+      expect(tuiText).toContain("[diag] direct=1 markitdown=0 ocr=1")
+      expect(tuiText).toContain("PPU PaddleOCR: Processing 1 files")
+    } finally {
+      if (originalHome === undefined) delete process.env.SPINOSA_HOME
+      else process.env.SPINOSA_HOME = originalHome
+    }
+  })
 })

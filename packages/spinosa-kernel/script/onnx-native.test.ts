@@ -7,11 +7,16 @@ import {
   assertNapiCanvasPlatformInstalled,
   assertOnnxNativeModuleSource,
   ensureOnnxPlatformBindings,
+  materializeCanvasNativeEmbed,
   materializeOnnxNativeEmbed,
+  napiCanvasForceModule,
   napiCanvasPlatformPackage,
+  isOcrEmbeddedTarget,
   onnxSharedLibNames,
+  resolveCanvasSkiaNode,
   resolveOnnxRuntimeNodeRoot,
   resolveOnnxSharedLibs,
+  restoreCanvasNativeStub,
   restoreOnnxNativeStub,
   type OnnxNativeTarget,
 } from "./onnx-native.ts"
@@ -73,16 +78,43 @@ describe("onnx-native packaging", () => {
       const canvasPkg = napiCanvasPlatformPackage(target)
       expect(canvasPkg.startsWith("@napi-rs/canvas-")).toBe(true)
       expect(assertNapiCanvasPlatformInstalled(target, coreDir)).toContain("canvas")
+      const skia = resolveCanvasSkiaNode(target, coreDir)
+      expect(skia.name.endsWith(".node")).toBe(true)
+      expect(fs.statSync(skia.absolutePath).size).toBeGreaterThan(1024)
+
+      const canvasEmbed = materializeCanvasNativeEmbed({
+        cwd: kernelDir,
+        target,
+        fromDir: coreDir,
+      })
+      expect(canvasEmbed.moduleSource).toContain('with { type: "file" }')
+      expect(canvasEmbed.moduleSource).toContain(skia.name)
+      expect(fs.existsSync(path.join(canvasEmbed.libsDir, canvasEmbed.name))).toBe(true)
+
+      const force = napiCanvasForceModule(canvasPkg)
+      expect(force.indexOf(canvasPkg)).toBeLessThan(force.indexOf('import "@napi-rs/canvas"'))
+      expect(force).toContain('import "ppu-paddle-ocr"')
+      const forceNoOcr = napiCanvasForceModule(canvasPkg, { includeOcr: false })
+      expect(forceNoOcr).not.toContain("ppu-paddle-ocr")
+      expect(forceNoOcr).toContain('import "@napi-rs/canvas"')
+      expect(isOcrEmbeddedTarget({ os: "linux", arch: "x64" })).toBe(false)
+      expect(isOcrEmbeddedTarget({ os: "linux", arch: "arm64" })).toBe(true)
+      expect(isOcrEmbeddedTarget({ os: "darwin", arch: "x64" })).toBe(true)
     } finally {
       restoreOnnxNativeStub(kernelDir)
+      restoreCanvasNativeStub(kernelDir)
     }
   })
 
   test(
-    "materializes onnx natives for all four product binary targets",
+    "materializes onnx natives for OCR-supported product binary targets",
     async () => {
       try {
         for (const target of PRODUCT_TARGETS) {
+          if (!isOcrEmbeddedTarget(target)) {
+            expect(isOcrEmbeddedTarget(target)).toBe(false)
+            continue
+          }
           const embedded = await materializeOnnxNativeEmbed({
             cwd: kernelDir,
             target,
@@ -97,6 +129,7 @@ describe("onnx-native packaging", () => {
         }
       } finally {
         restoreOnnxNativeStub(kernelDir)
+        restoreCanvasNativeStub(kernelDir)
       }
     },
     { timeout: 180_000 },

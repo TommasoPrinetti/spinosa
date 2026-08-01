@@ -113,6 +113,8 @@ bun script/build-release-binaries.ts --out-dir dist/vLOCAL --version "$(jq -r .v
 bun script/build-release-binaries.ts --out-dir dist/v$(jq -r .version package.json) --version "$(jq -r .version package.json)" --channel beta
 ```
 
+Linux VM soak (Lima): [docs/release/lima-linux-soak.md](docs/release/lima-linux-soak.md).
+
 ---
 
 ## Version sync

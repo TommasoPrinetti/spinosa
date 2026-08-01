@@ -17,6 +17,8 @@ import { buttonBackground, buttonBorder, buttonText } from "../../util/button"
 import { useConnected } from "../../component/use-connected"
 import { useDialog } from "../../ui/dialog"
 import { DialogProvider } from "../../component/dialog-provider"
+import { DialogAlert } from "../../ui/dialog-alert"
+import { errorMessage } from "../../util/error"
 
 type ActionRowItem = {
   key: string
@@ -24,7 +26,7 @@ type ActionRowItem = {
   onPress: () => void
 }
 
-export function SpinosaPromptChips() {
+export function SpinosaPromptChips(props: { suppressEnter?: boolean }) {
   const { theme } = useTheme()
   const toast = useToast()
   const { navigate } = useRoute()
@@ -55,15 +57,31 @@ export function SpinosaPromptChips() {
       message: "Updating workspace…",
       duration: 30000,
     })
-    const result = await updateWorkspace({
-      workspacePath,
-      frameworkRoot: resolveFrameworkRoot() ?? "",
-      onPhase: (_phase, detail) => {
-        const line = detail.trim()
-        if (!line) return
-        setUpdateLabel(line.replace(/^[#>\s]+/, "").slice(0, 22))
-      },
-    })
+    let result: Awaited<ReturnType<typeof updateWorkspace>>
+    try {
+      result = await updateWorkspace({
+        workspacePath,
+        frameworkRoot: resolveFrameworkRoot() ?? "",
+        onPhase: (_phase, detail) => {
+          const line = detail.trim()
+          if (!line) return
+          // Keep the full phase detail on the chip (was truncated to 22 chars).
+          setUpdateLabel(line.replace(/^[#>\s]+/, ""))
+        },
+      })
+    } catch (error) {
+      setBusyAction(undefined)
+      setUpdateLabel("Updating workspace…")
+      const message = errorMessage(error)
+      toast.show({
+        title: "Couldn’t update this workspace",
+        variant: "error",
+        message,
+        duration: 10000,
+      })
+      void DialogAlert.show(dialog, "Couldn’t update this workspace", message)
+      return
+    }
     if (result.success) {
       const version = bundledVersion() ?? (await readBundledFrameworkVersion())
       if (version) {
@@ -85,12 +103,16 @@ export function SpinosaPromptChips() {
     setBusyAction(undefined)
     setUpdateLabel("Updating workspace…")
 
+    const message =
+      result.error?.trim() ||
+      "Nothing was changed. The update failed without a detailed reason."
     toast.show({
       title: "Couldn’t update this workspace",
       variant: "error",
-      message: "Nothing was changed. Check the error details and try again.",
+      message,
       duration: 10000,
     })
+    void DialogAlert.show(dialog, "Couldn’t update this workspace", message)
   }
 
   const primaryActions = createMemo<ActionRowItem[]>(() =>
@@ -140,7 +162,7 @@ export function SpinosaPromptChips() {
           },
           {
             key: "select-workspace",
-            label: "Choose a workspace",
+            label: "Pick a workspace",
             onPress: () => spinosa.showPicker(),
           },
         ] as const),
@@ -205,7 +227,9 @@ export function SpinosaPromptChips() {
     bindings: [
       { key: "Left", desc: "Previous action", group: "Home", cmd: () => moveSelection(-1) },
       { key: "Right", desc: "Next action", group: "Home", cmd: () => moveSelection(1) },
-      { key: "Enter", desc: "Run selected action", group: "Home", cmd: () => runSelectedAction() },
+      ...(!props.suppressEnter
+        ? [{ key: "Enter", desc: "Run selected action", group: "Home", cmd: () => runSelectedAction() }]
+        : []),
       ...(!connected()
         ? [{ key: "p", desc: "Select provider", group: "Home", cmd: () => dialog.replace(() => <DialogProvider />) }]
         : [

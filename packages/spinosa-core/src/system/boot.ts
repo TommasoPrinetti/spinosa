@@ -60,8 +60,10 @@ export async function runSpinosaBootHealth(input: {
     cleanup = {
       installInProgress: false,
       staleInstallDirectories: [],
+      staleTempDirectories: [],
       staleNodeModulesDirectories: 0,
       dependencyRepairRequired: false,
+      dormantVersionDirectories: [],
       removedDirectories: [],
     }
     progress("maintenance", "error", detail)
@@ -74,8 +76,8 @@ export async function runSpinosaBootHealth(input: {
       cleanup.installInProgress
         ? "Install in progress; cleanup deferred"
         : cleanup.removedDirectories.length > 0
-          ? `Removed ${cleanup.removedDirectories.length} stale installer director${cleanup.removedDirectories.length === 1 ? "y" : "ies"}`
-          : "No stale installer files found",
+          ? `Removed ${cleanup.removedDirectories.length} stale temp/install path${cleanup.removedDirectories.length === 1 ? "" : "s"}`
+          : "No stale installer or temp files found",
     )
   }
 

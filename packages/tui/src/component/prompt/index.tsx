@@ -1068,8 +1068,10 @@ export function Prompt(props: PromptProps) {
         console.log("Creating a session failed:", res.error)
 
         toast.show({
-          message: "Couldn’t start a session. Open the console for details.",
+          title: "Couldn’t start a session",
+          message: errorMessage(res.error),
           variant: "error",
+          duration: 10000,
         })
 
         return true
@@ -1095,9 +1097,6 @@ export function Prompt(props: PromptProps) {
         const prepared = await prepareSpinosaSubmit(sessionDirectory, inputText)
         preparedSpinosa = prepared
         outboundText = prepared.text
-        if (prepared.framed && prepared.goalPath && prepared.sessionId) {
-          spinosa.setLastRoute(prepared.sessionId, prepared.goalPath)
-        }
       } catch (error) {
         console.log("Spinosa submit preparation failed:", error)
         toast.show({
@@ -1192,6 +1191,8 @@ export function Prompt(props: PromptProps) {
               providerID: selectedModel.providerID,
               modelID: selectedModel.modelID,
             },
+            publish: sdk.publishJobEvent,
+            localEmit: (event) => sdk.event.emit("event", event),
           }),
         )
         .catch((error) => {

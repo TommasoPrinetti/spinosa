@@ -62,7 +62,7 @@ import { SubagentFooter } from "./subagent-footer.tsx"
 import { filetype } from "../../util/filetype"
 import parsers from "../../parsers-config"
 import { errorMessage } from "../../util/error"
-import { Toast, useToast } from "../../ui/toast"
+import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv.tsx"
 import stripAnsi from "strip-ansi"
 import { usePromptRef } from "../../context/prompt"
@@ -1540,7 +1540,6 @@ const resolveExportPath = (filename: string): string => {
                 <SessionFooter sessionID={route.sessionID} />
               </box>
               </Show>
-              <Toast />
             </box>
           </box>
         </box>

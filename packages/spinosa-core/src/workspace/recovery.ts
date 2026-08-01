@@ -7,7 +7,25 @@ import { readWorkspaceID, type SpinosaWorkspaceID } from "./identity"
 import { registerWorkspace, validateWorkspace } from "./registry"
 
 const DEFAULT_SCAN_DEPTH = 8
-const SKIPPED_SCAN_DIRECTORIES = new Set(["node_modules", ".git", ".cache", ".Trash"])
+
+/** Directory basenames skipped while walking (privacy + noise). Dot-directories are also skipped. */
+export const WORKSPACE_RECOVERY_SKIPPED_DIRECTORIES = [
+  "node_modules",
+  ".git",
+  ".cache",
+  ".Trash",
+  "Trash",
+  "Library",
+  "AppData",
+  "Application Data",
+  "Applications",
+  "Movies",
+  "Music",
+  "Pictures",
+  "Caches",
+] as const
+
+const SKIPPED_SCAN_DIRECTORIES = new Set<string>(WORKSPACE_RECOVERY_SKIPPED_DIRECTORIES)
 
 export type WorkspaceScanProgress = {
   visited: number
@@ -18,6 +36,13 @@ export type WorkspaceScanResult =
   | { status: "found"; path: string }
   | { status: "not_found" }
   | { status: "ambiguous"; matches: string[] }
+
+export type WorkspaceRecoveryScanPlan = {
+  roots: string[]
+  maxDepth: number
+  skippedDirectoryNames: string[]
+  notes: string[]
+}
 
 function expandHome(value: string): string {
   const trimmed = value.trim()
@@ -33,11 +58,51 @@ function configuredRoots(roots: string[]): string[] {
     .filter((root) => root !== path.parse(root).root && existsSync(root)))]
 }
 
+/** Common user folders preferred over a blind full-home walk. */
+export function preferredWorkspaceRecoveryRoots(home = homedir()): string[] {
+  return ["Documents", "Desktop", "Downloads", "Projects", "Developer"]
+    .map((name) => path.join(home, name))
+}
+
+/**
+ * Platform mount roots considered for lost-workspace recovery (before existsSync filter).
+ * Darwin: /Volumes. Linux: /mnt, /media, /run/media (udisks removable mounts).
+ */
+export function platformWorkspaceRecoveryRoots(platform = process.platform): string[] {
+  if (platform === "darwin") return ["/Volumes"]
+  if (platform === "linux") return ["/mnt", "/media", "/run/media"]
+  return []
+}
+
 export function defaultWorkspaceRecoveryRoots(indexedPath: string): string[] {
-  const roots = [path.dirname(indexedPath), homedir(), process.cwd()]
-  if (process.platform === "darwin") roots.push("/Volumes")
-  if (process.platform === "linux") roots.push("/mnt", "/media")
+  const home = homedir()
+  const roots = [
+    path.dirname(indexedPath),
+    ...preferredWorkspaceRecoveryRoots(home),
+    process.cwd(),
+  ]
+  // Include home last so common folders are searched first; walk dedupes via seen set.
+  roots.push(home)
+  roots.push(...platformWorkspaceRecoveryRoots())
   return configuredRoots(roots)
+}
+
+export function workspaceRecoveryScanPlan(indexedPath: string, roots?: string[]): WorkspaceRecoveryScanPlan {
+  return {
+    roots: roots ? configuredRoots(roots) : defaultWorkspaceRecoveryRoots(indexedPath),
+    maxDepth: DEFAULT_SCAN_DEPTH,
+    skippedDirectoryNames: [...WORKSPACE_RECOVERY_SKIPPED_DIRECTORIES],
+    notes: [
+      "Local only — nothing is uploaded.",
+      "Looks for .spinosa workspace markers matching this workspace ID (not file contents).",
+      "Skips dot-directories and bulky/sensitive folders (node_modules, Library, AppData, …).",
+      "Add extra roots with SPINOSA_WORKSPACE_SEARCH_ROOTS (path-delimited).",
+    ],
+  }
+}
+
+export function shouldSkipWorkspaceRecoveryDirectory(name: string): boolean {
+  return name.startsWith(".") || SKIPPED_SCAN_DIRECTORIES.has(name)
 }
 
 export async function findWorkspaceMatchesByIDAsync(input: {
@@ -72,7 +137,7 @@ export async function findWorkspaceMatchesByIDAsync(input: {
       return
     }
     for (const entry of entries) {
-      if (!entry.isDirectory() || entry.name.startsWith(".") || SKIPPED_SCAN_DIRECTORIES.has(entry.name)) continue
+      if (!entry.isDirectory() || shouldSkipWorkspaceRecoveryDirectory(entry.name)) continue
       await walk(path.join(dir, entry.name), depth + 1)
     }
   }

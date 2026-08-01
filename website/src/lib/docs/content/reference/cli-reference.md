@@ -119,7 +119,7 @@ During `spinosa create` and `spinosa add`, files are classified automatically:
 | Category | File types | What happens |
 |----------|-----------|-------------|
 | Text-based | txt, rtf, yaml, toml, css, js, py, md, etc. | Renamed to `.md` |
-| MarkItDown | docx, pptx, xlsx, epub, html, text PDF | Converted to markdown |
+| MarkItDown | docx, xlsx, epub, html, text PDF | Converted to markdown (PowerPoint / `.pptx` not supported by markitdown-ts) |
 | OCR | scanned PDF, jpg, png, webp, heic | OCR-processed to markdown |
 | Native | csv, json, xml | Copied unchanged |
 | Skipped | video, audio | Left at source |

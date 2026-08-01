@@ -1,11 +1,9 @@
 import { ResearchRunService } from "@spinosa/core"
 import { SpinosaKernelHarness } from "@spinosa/harness"
 import { cancelRun, FileResearchRunRepository, type RouteClass } from "@spinosa/runtime"
-import { JobRunner } from "@spinosa/core/progress/job-runner"
-import { createJobId } from "@spinosa/core/progress/job-event"
-import { cancelSpinosaJob } from "./job-events"
+import { createImportJob, cancelSpinosaJob, type ImportJobHandle } from "./job-events"
 
-type ActiveResearchRun = { runID: string; workspacePath: string; jobId: string }
+type ActiveResearchRun = { runID: string; workspacePath: string; job: ImportJobHandle }
 
 const activeResearchRuns = new Map<string, ActiveResearchRun>()
 
@@ -35,6 +33,10 @@ export async function executeSpinosaSubmit(input: {
   sessionID: string
   prepared: PreparedSubmit
   model: { providerID: string; modelID: string }
+  /** Host GlobalBus publish so session chrome can observe research jobs. */
+  publish?: Parameters<typeof createImportJob>[0]["publish"]
+  /** In-process TUI emitter for immediate strip updates. */
+  localEmit?: Parameters<typeof createImportJob>[0]["localEmit"]
 }): Promise<void> {
   const harness = new SpinosaKernelHarness(input.client as ConstructorParameters<typeof SpinosaKernelHarness>[0])
   const prepared = {
@@ -49,20 +51,26 @@ export async function executeSpinosaSubmit(input: {
     if (activeResearchRuns.has(input.sessionID)) {
       await cancelSpinosaSubmit({ client: input.client, sessionID: input.sessionID })
     }
-    const jobId = createJobId("research")
-    const registered = JobRunner.register({
-      jobId,
+    const job = createImportJob({
       kind: "research",
-      title: "Research run",
+      title: `Research · ${prepared.route}`,
+      directory: prepared.workspacePath,
+      publish: input.publish,
+      localEmit: input.localEmit,
     })
-    const active = { runID: prepared.runID, workspacePath: prepared.workspacePath, jobId }
+    const active = { runID: prepared.runID, workspacePath: prepared.workspacePath, job }
     activeResearchRuns.set(input.sessionID, active)
+    job.start()
     try {
       await new ResearchRunService(undefined, harness).execute({ sessionID: input.sessionID, prepared, model: input.model })
-      if (!registered.shouldAbort()) registered.finish("completed")
+      if (!job.shouldAbort()) {
+        job.finish(
+          "completed",
+          prepared.goalPath ? `goal ${prepared.goalPath}` : undefined,
+        )
+      }
     } catch (err) {
-      // No-op if cancel() already marked the job cancelled.
-      registered.finish("error")
+      if (!job.shouldAbort()) job.finish("error", err instanceof Error ? err.message : String(err))
       throw err
     } finally {
       if (activeResearchRuns.get(input.sessionID) === active) activeResearchRuns.delete(input.sessionID)
@@ -80,8 +88,8 @@ export async function cancelSpinosaSubmit(input: { client: unknown; sessionID: s
   const active = activeResearchRuns.get(input.sessionID)
   if (!active) return false
 
-  // Same control plane as import: cancel-by-id kills registered children + aborts.
-  cancelSpinosaJob(active.jobId)
+  // Same control plane as import: cancel-by-id + job.cancelled event.
+  active.job.cancel()
 
   const repository = new FileResearchRunRepository()
   const run = await repository.load(active.workspacePath, active.runID)

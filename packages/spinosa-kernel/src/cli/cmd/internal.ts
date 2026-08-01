@@ -100,9 +100,70 @@ export const InternalCommand = {
             )
             process.exit(1)
           }
+          const { ocrUnsupportedReason } = await import("@spinosa/core/tools/ocr-support")
+          const unsupported = ocrUnsupportedReason()
+          if (unsupported) {
+            process.stdout.write(`${JSON.stringify({ type: "error", message: unsupported })}\n`)
+            process.exit(1)
+          }
           const { runOcrWorkerMain } = await import("@spinosa/core/import/ppu-ocr-worker")
           try {
             await runOcrWorkerMain({ files: input.files as never })
+            process.exit(0)
+          } catch (err) {
+            process.stdout.write(
+              `${JSON.stringify({
+                type: "error",
+                message: err instanceof Error ? err.message : String(err),
+              })}\n`,
+            )
+            process.exit(1)
+          }
+        },
+      })
+      .command({
+        command: "markitdown-worker [payload]",
+        describe: false,
+        builder: (y: Argv) =>
+          y.positional("payload", {
+            type: "string",
+            describe: "JSON payload { files: [{ src, rel, dest }], logsDir }",
+          }),
+        handler: async (args: { payload?: string }) => {
+          const raw = typeof args.payload === "string" ? args.payload : ""
+          if (!raw) {
+            process.stdout.write(
+              `${JSON.stringify({ type: "error", message: "missing markitdown-worker payload" })}\n`,
+            )
+            process.exit(1)
+          }
+          let input: { files?: unknown; logsDir?: unknown }
+          try {
+            input = JSON.parse(raw) as { files?: unknown; logsDir?: unknown }
+          } catch (err) {
+            process.stdout.write(
+              `${JSON.stringify({
+                type: "error",
+                message: `invalid markitdown-worker JSON: ${err instanceof Error ? err.message : String(err)}`,
+              })}\n`,
+            )
+            process.exit(1)
+          }
+          if (!Array.isArray(input.files) || typeof input.logsDir !== "string") {
+            process.stdout.write(
+              `${JSON.stringify({
+                type: "error",
+                message: "markitdown-worker payload must include files[] and logsDir",
+              })}\n`,
+            )
+            process.exit(1)
+          }
+          const { runMarkitdownWorkerMain } = await import("@spinosa/core/import/markitdown-worker")
+          try {
+            await runMarkitdownWorkerMain({
+              files: input.files as never,
+              logsDir: input.logsDir,
+            })
             process.exit(0)
           } catch (err) {
             process.stdout.write(

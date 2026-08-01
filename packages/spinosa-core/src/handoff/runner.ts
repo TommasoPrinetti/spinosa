@@ -1,6 +1,7 @@
 import { spawn, spawnSync } from "node:child_process"
 import { chmodSync, mkdtempSync, renameSync, writeFileSync } from "node:fs"
-import { platform } from "node:os"
+import { platform, tmpdir } from "node:os"
+import path from "node:path"
 
 function existsOnPath(bin: string): boolean {
   const result = spawnSync("which", [bin], { stdio: "ignore" })
@@ -30,23 +31,28 @@ export function detectLlmClis(): string[] {
   return results
 }
 
+/**
+ * Native clipboard argv for handoff (sync spawn). Aligns Linux preference with
+ * TUI `copyCommand`: wl-copy when WAYLAND_DISPLAY, then xclip, then xsel.
+ * Darwin keeps pbcopy (TUI uses osascript for richer paste support).
+ */
+export function handoffCopyCommand(
+  os: NodeJS.Platform,
+  wayland: boolean,
+  has: (name: string) => boolean,
+): string[] | undefined {
+  if (os === "darwin" && has("pbcopy")) return ["pbcopy"]
+  if (os === "linux" && wayland && has("wl-copy")) return ["wl-copy"]
+  if (os === "linux" && has("xclip")) return ["xclip", "-selection", "clipboard"]
+  if (os === "linux" && has("xsel")) return ["xsel", "--clipboard", "--input"]
+  return undefined
+}
+
 export function copyToClipboard(text: string): boolean {
-  const os = platform()
-  if (os === "darwin") {
-    const result = spawnSync("pbcopy", { input: text, encoding: "utf-8" })
-    return result.status === 0
-  }
-  const xclip = spawnSync("which", ["xclip"], { stdio: "ignore" })
-  if (xclip.status === 0) {
-    const result = spawnSync("xclip", ["-selection", "clipboard"], { input: text, encoding: "utf-8" })
-    return result.status === 0
-  }
-  const xsel = spawnSync("which", ["xsel"], { stdio: "ignore" })
-  if (xsel.status === 0) {
-    const result = spawnSync("xsel", ["--clipboard", "--input"], { input: text, encoding: "utf-8" })
-    return result.status === 0
-  }
-  return false
+  const cmd = handoffCopyCommand(platform(), Boolean(process.env.WAYLAND_DISPLAY), existsOnPath)
+  if (!cmd) return false
+  const result = spawnSync(cmd[0], cmd.slice(1), { input: text, encoding: "utf-8" })
+  return result.status === 0
 }
 
 function detachProcess(command: string, args: string[]): void {
@@ -84,11 +90,11 @@ function writeLaunchScript(scriptPath: string, scriptBody: string): void {
 }
 
 function createTempDir(): string {
-  return mkdtempSync("/tmp/spinosa-launch-XXXXXX")
+  return mkdtempSync(path.join(tmpdir(), "spinosa-launch-"))
 }
 
 function prepareTempPrompt(dir: string, prompt: string): string {
-  const promptPath = `${dir}/prompt.txt`
+  const promptPath = path.join(dir, "prompt.txt")
   writeFileSync(promptPath, prompt, "utf-8")
   return promptPath
 }
@@ -99,10 +105,12 @@ function promptLaunchScript(
   cliCommand: string,
   dir: string,
 ): string {
-  const scriptPath = `${dir}/launch.sh`
+  const scriptPath = path.join(dir, "launch.sh")
   const escapedPrompt = promptPath.replace(/'/g, "'\\''")
   const escapedRoot = root.replace(/'/g, "'\\''")
-  const body = `#!/bin/bash\n_prompt='${escapedPrompt}'\ntrap 'rm -f "$0" "$_prompt"' EXIT\ncd '${escapedRoot}' && ${cliCommand}\n`
+  const escapedDir = dir.replace(/'/g, "'\\''")
+  // Remove the whole launch dir (script + prompt), not just the two files.
+  const body = `#!/bin/bash\n_prompt='${escapedPrompt}'\n_dir='${escapedDir}'\ntrap 'rm -rf "$_dir"' EXIT\ncd '${escapedRoot}' && ${cliCommand}\n`
   writeLaunchScript(scriptPath, body)
   return scriptPath
 }

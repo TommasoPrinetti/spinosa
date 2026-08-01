@@ -312,6 +312,24 @@ export function napiCanvasPlatformPackage(target: OnnxNativeTarget & { abi?: "mu
   throw new Error(`unsupported canvas platform ${target.os}-${target.arch}`)
 }
 
+/** Prefer the highest semver store entry (avoid stale 0.1.x winning over 1.0.2). */
+function pickNewestStoreEntry(names: string[], leaf: string): string | undefined {
+  const matched = names.filter((name) => name.startsWith(leaf + "@") || name === leaf)
+  if (matched.length === 0) return undefined
+  matched.sort((a, b) => {
+    const va = a.includes("@") ? a.slice(a.lastIndexOf("@") + 1) : "0.0.0"
+    const vb = b.includes("@") ? b.slice(b.lastIndexOf("@") + 1) : "0.0.0"
+    const pa = va.split(".").map((n) => Number.parseInt(n, 10) || 0)
+    const pb = vb.split(".").map((n) => Number.parseInt(n, 10) || 0)
+    for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+      const d = (pb[i] ?? 0) - (pa[i] ?? 0)
+      if (d !== 0) return d
+    }
+    return 0
+  })
+  return matched[0]
+}
+
 /** Fail closed if the platform canvas native package is not installed for this target. */
 export function assertNapiCanvasPlatformInstalled(target: OnnxNativeTarget & { abi?: "musl" }, fromDir: string): string {
   const pkg = napiCanvasPlatformPackage(target)
@@ -333,22 +351,119 @@ export function assertNapiCanvasPlatformInstalled(target: OnnxNativeTarget & { a
   const leaf = pkg.replace("/", "+")
   for (const store of storeRoots) {
     if (!fs.existsSync(store)) continue
-    for (const name of fs.readdirSync(store)) {
-      if (!name.startsWith(leaf + "@") && name !== leaf) continue
-      const root = path.join(store, name, "node_modules", ...pkg.split("/"))
-      if (fs.existsSync(path.join(root, "package.json"))) return fs.realpathSync(root)
-    }
+    const newest = pickNewestStoreEntry(fs.readdirSync(store), leaf)
+    if (!newest) continue
+    const root = path.join(store, newest, "node_modules", ...pkg.split("/"))
+    if (fs.existsSync(path.join(root, "package.json"))) return fs.realpathSync(root)
   }
   throw new Error(
     `missing ${pkg} for ${target.os}-${target.arch}. Install with: bun install --os=* --cpu=* @napi-rs/canvas`,
   )
 }
 
-export function napiCanvasForceModule(pkg: string): string {
-  return `// @generated — force-embed canvas + OCR packages into Bun --compile graph
-import "@napi-rs/canvas"
+/** Absolute path to the platform package's skia.<triple>.node binding. */
+export function resolveCanvasSkiaNode(target: OnnxNativeTarget & { abi?: "musl" }, fromDir: string): {
+  pkg: string
+  packageRoot: string
+  name: string
+  absolutePath: string
+} {
+  const pkg = napiCanvasPlatformPackage(target)
+  const packageRoot = assertNapiCanvasPlatformInstalled(target, fromDir)
+  const meta = JSON.parse(fs.readFileSync(path.join(packageRoot, "package.json"), "utf-8")) as {
+    main?: string
+  }
+  const name = meta.main
+  if (!name || !name.endsWith(".node")) {
+    throw new Error(`${pkg} package.json main is not a .node binding: ${name ?? "(missing)"}`)
+  }
+  const absolutePath = path.join(packageRoot, name)
+  if (!fs.existsSync(absolutePath) || fs.statSync(absolutePath).size < 1024) {
+    throw new Error(`${pkg} skia binding missing or too small: ${absolutePath}`)
+  }
+  return { pkg, packageRoot, name, absolutePath }
+}
+
+export const CANVAS_NATIVE_STUB_MODULE = `// @generated stub — binary builds overwrite via materializeCanvasNativeEmbed
+export const CANVAS_NATIVE_BINDING: { name: string; file: string } | null = null
+`
+
+/** Restore the tracked stub so platform-specific gen output is not left dirty. */
+export function restoreCanvasNativeStub(cwd: string): void {
+  fs.writeFileSync(path.join(cwd, "src/generated/canvas-native.gen.ts"), CANVAS_NATIVE_STUB_MODULE)
+  fs.rmSync(path.join(cwd, "src/generated/canvas-libs"), { recursive: true, force: true })
+}
+
+/**
+ * Stage skia.<triple>.node under src/generated/canvas-libs/<os>-<arch>/ and write
+ * canvas-native.gen.ts. Bun --compile cannot reliably `require()` optional
+ * `@napi-rs/canvas-*` packages from nested OCR/ppu-ocv chunks on Linux; we embed
+ * the .node and set NAPI_RS_NATIVE_LIBRARY_PATH at process start instead.
+ */
+export function materializeCanvasNativeEmbed(options: {
+  cwd: string
+  target: OnnxNativeTarget & { abi?: "musl" }
+  fromDir: string
+}): { moduleSource: string; libsDir: string; name: string; absolutePath: string; genPath: string; pkg: string } {
+  const resolved = resolveCanvasSkiaNode(options.target, options.fromDir)
+  const platformKey = [
+    options.target.os,
+    options.target.arch,
+    options.target.abi,
+  ]
+    .filter(Boolean)
+    .join("-")
+  const libsDir = path.join(options.cwd, "src/generated/canvas-libs", platformKey)
+  fs.rmSync(libsDir, { recursive: true, force: true })
+  fs.mkdirSync(libsDir, { recursive: true })
+  const dest = path.join(libsDir, resolved.name)
+  fs.copyFileSync(resolved.absolutePath, dest)
+  if (fs.statSync(dest).size < 1024) {
+    throw new Error(`canvas embed copy too small: ${dest}`)
+  }
+  const spec = `./canvas-libs/${platformKey}/${resolved.name}`
+  const moduleSource = [
+    `// @generated by script/onnx-native.ts — do not edit`,
+    `import file_0 from ${JSON.stringify(spec)} with { type: "file" };`,
+    ``,
+    `export const CANVAS_NATIVE_BINDING = { name: ${JSON.stringify(resolved.name)}, file: file_0 } as const`,
+    ``,
+  ].join("\n")
+  if (!moduleSource.includes('with { type: "file" }') || !moduleSource.includes(resolved.name)) {
+    throw new Error(`canvas-native embed module incomplete for ${platformKey}`)
+  }
+  const genPath = path.join(options.cwd, "src/generated/canvas-native.gen.ts")
+  fs.writeFileSync(genPath, moduleSource)
+  return {
+    moduleSource,
+    libsDir,
+    name: resolved.name,
+    absolutePath: resolved.absolutePath,
+    genPath,
+    pkg: resolved.pkg,
+  }
+}
+
+/**
+ * Force-embed canvas (+ optionally OCR) into the Bun --compile graph.
+ * Platform skia .node is embedded separately via canvas-native.gen.ts and staged
+ * to NAPI_RS_NATIVE_LIBRARY_PATH before this module runs (see index.ts).
+ * Import platform package first so optional-dep require paths stay in the graph
+ * for hosts where resolution works (Darwin); Linux relies on the env path.
+ *
+ * linux-x64 omits `ppu-paddle-ocr` — OCR/onnx are unsupported on that product binary.
+ */
+export function napiCanvasForceModule(pkg: string, options: { includeOcr?: boolean } = {}): string {
+  const includeOcr = options.includeOcr !== false
+  const ocrLine = includeOcr ? `\nimport "ppu-paddle-ocr"` : ""
+  return `// @generated — force-embed canvas${includeOcr ? " + OCR" : ""} packages into Bun --compile graph
 import ${JSON.stringify(pkg)}
-import "ppu-paddle-ocr"
+import "@napi-rs/canvas"${ocrLine}
 export {}
 `
+}
+
+/** Product targets that embed and load OCR/onnx natives. */
+export function isOcrEmbeddedTarget(target: Pick<OnnxNativeTarget, "os" | "arch">): boolean {
+  return !(target.os === "linux" && target.arch === "x64")
 }

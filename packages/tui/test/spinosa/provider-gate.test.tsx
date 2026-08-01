@@ -35,12 +35,12 @@ test("global home actions require a connected provider", async () => {
     await app.renderOnce()
     expect(app.captureCharFrame()).toContain("Select provider")
     expect(app.captureCharFrame()).not.toContain("New workspace")
-    expect(app.captureCharFrame()).not.toContain("Choose a workspace")
+    expect(app.captureCharFrame()).not.toContain("Pick a workspace")
 
     setConnected(true)
     await app.flush()
     expect(app.captureCharFrame()).toContain("New workspace")
-    expect(app.captureCharFrame()).toContain("Choose a workspace")
+    expect(app.captureCharFrame()).toContain("Pick a workspace")
   } finally {
     app.renderer.destroy()
   }

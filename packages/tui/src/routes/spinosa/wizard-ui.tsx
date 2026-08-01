@@ -7,6 +7,23 @@ import { Locale } from "../../util/locale"
 import type { ImportScanPreview, NewWorkspacePreview } from "../../spinosa/onboarding-preview"
 import type { DialogContext } from "../../ui/dialog"
 import { DialogConfirm } from "../../ui/dialog-confirm"
+import type { FileProgressStatus } from "@spinosa/core/progress/progress"
+import {
+  countImportProgress,
+  formatImportPhaseRecap,
+  formatImportPhaseRecapFromCounters,
+  isImportPhaseComplete,
+  selectImportFailedItems,
+  selectImportQueueWindow,
+  selectImportResultsWindow,
+  shortImportFileName,
+  statusAccentKey,
+  statusGlyph,
+  type ImportFileProgressItem,
+} from "../../spinosa/import-progress-ui"
+
+/** Soft wait after cancel before treating stop as incomplete. */
+export type StopWaitOutcome = "idle" | "settled" | "timeout"
 
 export type ImportOption = {
   ext: string
@@ -56,17 +73,23 @@ export function createActiveWorkTracker() {
       )
       return current
     },
-    /** Wait for active work, or resolve after maxMs so navigation is not blocked forever. */
-    async wait(maxMs = 0) {
-      if (!active) return
+    /**
+     * Wait for active work to settle.
+     * With maxMs > 0: return "timeout" if still running (do not treat as success).
+     * With maxMs <= 0: wait until settled (or "idle" if nothing active).
+     */
+    async wait(maxMs = 0): Promise<StopWaitOutcome> {
+      if (!active) return "idle"
+      const current = active
       if (maxMs <= 0) {
-        await active.then(() => undefined, () => undefined)
-        return
+        await current.then(() => undefined, () => undefined)
+        return "settled"
       }
-      await Promise.race([
-        active.then(() => undefined, () => undefined),
-        new Promise<void>((resolve) => setTimeout(resolve, maxMs)),
+      const settled = await Promise.race([
+        current.then(() => true as const, () => true as const),
+        new Promise<false>((resolve) => setTimeout(() => resolve(false), maxMs)),
       ])
+      return settled ? "settled" : "timeout"
     },
   }
 }
@@ -98,16 +121,54 @@ export async function confirmSpinosaBack(dialog: DialogContext, step: string) {
   )) === true
 }
 
+/** Default time the "Stopping process..." overlay stays visible after cancel. */
+export const STOP_SCREEN_MIN_DWELL_MS = 3000
+
+/** Soft abort wait before showing "still stopping" / force-leave. */
+export const STOP_WAIT_SOFT_MS = 2500
+
+export const STOP_SCREEN_DEFAULT_HINT = "Stopping process, exit cleanly, wait"
+export const STOP_SCREEN_STILL_HINT = "Still stopping… Esc to leave anyway"
+
 export async function runGuardedBackNavigation(input: {
   shouldConfirm: boolean
   confirm: () => Promise<boolean>
   stop: () => void
-  waitForStop: () => Promise<void>
+  /** Soft-wait for cancel settlement. Return "timeout" if work is still running. */
+  waitForStop: () => Promise<StopWaitOutcome | void>
   navigate: () => void
+  /**
+   * Minimum time to keep the stopping overlay visible after stop().
+   * Cancel is often instantaneous; a short dwell lets the user read the screen.
+   * Pass 0 for ordinary (non-cancel) back navigation.
+   */
+  minStopDisplayMs?: number
+  /** Update stop overlay when soft wait timed out (work still running). */
+  onStillStopping?: () => void
+  /** Wait until active work fully settles (no timeout). Used after soft timeout. */
+  waitUntilSettled?: () => Promise<void>
+  /** Resolves when user force-leaves (Esc / Ctrl-C) during still-stopping. */
+  waitForForceLeave?: () => Promise<void>
 }): Promise<"stayed" | "navigated"> {
   if (input.shouldConfirm && !(await input.confirm())) return "stayed"
+  const started = Date.now()
   input.stop()
-  await input.waitForStop()
+  const outcome = (await input.waitForStop()) ?? "settled"
+  const minMs = input.minStopDisplayMs ?? 0
+  if (minMs > 0) {
+    const remaining = minMs - (Date.now() - started)
+    if (remaining > 0) await delay(remaining)
+  }
+  // Never navigate away as success while cancel is still incomplete.
+  if (outcome === "timeout") {
+    input.onStillStopping?.()
+    const settle = input.waitUntilSettled?.() ?? Promise.resolve()
+    if (input.waitForForceLeave) {
+      await Promise.race([settle, input.waitForForceLeave()])
+    } else {
+      await settle
+    }
+  }
   input.navigate()
   return "navigated"
 }
@@ -123,6 +184,19 @@ export function shouldCancelSpinosaWorkOnCtrlC(props: {
   cancellableSteps: readonly string[]
 }) {
   return props.busy || props.cancellableSteps.includes(props.step) || (props.waitingForGate && props.cancellableSteps.includes(props.step))
+}
+
+/** True when tools-step Enter should fire the Scan / repair action (matches button visibility). */
+export function shouldActivateWizardToolAction(props: {
+  step: string
+  keyName: string
+  busy: boolean
+  toolChecks: ReadonlyArray<{ status: string }>
+}) {
+  if (props.step !== "tools" || props.keyName !== "return" || props.busy) return false
+  if (props.toolChecks.length === 0) return false
+  if (props.toolChecks.some((t) => t.status === "checking")) return false
+  return true
 }
 
 export function yieldToEventLoop() {
@@ -263,12 +337,16 @@ export function ToggleLine(props: {
   label: string
   count: number
 }) {
+  // Must use buttonText when selected: parent rows paint buttonBackground(active),
+  // so theme.text / textMuted on that bg reads as same-on-same.
   return (
-    <text fg={props.selected ? props.theme.text : props.theme.textMuted} wrapMode="none">
-      <span style={{ fg: props.enabled ? props.theme.text : props.theme.textMuted }}>{props.enabled ? "●" : "○"}</span>
-      <span style={{ fg: props.selected ? props.theme.text : props.theme.textMuted }}> {props.label}</span>
-      <span style={{ fg: props.theme.textMuted }}> | </span>
-      <span style={{ fg: props.theme.borderActive }}>
+    <text fg={buttonText(props.theme, props.selected, props.theme.textMuted)} wrapMode="none">
+      <span style={{ fg: buttonText(props.theme, props.selected, props.enabled ? props.theme.text : props.theme.textMuted) }}>
+        {props.enabled ? "●" : "○"}
+      </span>
+      <span style={{ fg: buttonText(props.theme, props.selected, props.theme.text) }}> {props.label}</span>
+      <span style={{ fg: buttonText(props.theme, props.selected, props.theme.textMuted) }}> | </span>
+      <span style={{ fg: buttonText(props.theme, props.selected, props.theme.borderActive) }}>
         {props.count} file{props.count === 1 ? "" : "s"}
       </span>
     </text>
@@ -288,6 +366,11 @@ export function wizardScrollboxMaxHeight(
 
 export function scanOptionListMaxHeight(viewportHeight: number): number {
   return wizardScrollboxMaxHeight(viewportHeight)
+}
+
+/** Complete-state import results: ~10–12 rows, adaptive within viewport. */
+export function importResultsListMaxHeight(viewportHeight: number): number {
+  return wizardScrollboxMaxHeight(viewportHeight, { min: 6, ratio: 0.4, max: 12 })
 }
 
 function scrollSelectedImportOptionIntoView(scroll: ScrollBoxRenderable | undefined, selectedIndex: number) {
@@ -411,13 +494,48 @@ export function ProgressBar(props: {
   total: number
   status: string
   fileName: string
+  /** Optional live file queue with protocol statuses for accents. */
+  files?: ImportFileProgressItem[]
   barWidth?: number
+  /** Used to size the complete-state results ScrollBox. */
+  viewportHeight?: number
 }) {
   const total = createMemo(() => (props.total > 0 ? props.total : 1))
   const pct = createMemo(() => Math.min(props.current / total(), 1))
   const blocks = () => props.barWidth ?? 20
   const filled = () => Math.round(pct() * blocks())
   const bar = () => "█".repeat(filled()) + "░".repeat(blocks() - filled())
+  const complete = createMemo(() => isImportPhaseComplete(props.current, props.total, props.files))
+  const queue = createMemo(() => (complete() ? [] : selectImportQueueWindow(props.files ?? [], 4)))
+  const failed = createMemo(() => (complete() ? [] : selectImportFailedItems(props.files ?? [])))
+  const results = createMemo(() => (complete() ? selectImportResultsWindow(props.files ?? []) : []))
+  const resultsMaxHeight = createMemo(() => importResultsListMaxHeight(props.viewportHeight ?? 24))
+  const recap = createMemo(() => {
+    if (!complete()) return ""
+    const files = props.files ?? []
+    if (files.length === 0) {
+      // Bar counters alone cannot assert failed/pending — avoid inventing failed: 0.
+      return formatImportPhaseRecapFromCounters(props.current, props.status)
+    }
+    return formatImportPhaseRecap(countImportProgress(files), props.status)
+  })
+  const accent = (status: FileProgressStatus) => {
+    const key = statusAccentKey(status)
+    if (key === "primary") return props.theme.primary
+    if (key === "success") return props.theme.success
+    if (key === "error") return props.theme.error
+    if (key === "warning") return props.theme.warning
+    return props.theme.textMuted
+  }
+  const currentLabel = createMemo(() => {
+    if (complete()) return ""
+    if (props.files && props.files.length > 0) {
+      const active = props.files.find((f) => f.status === "processing")
+      if (active) return shortImportFileName(active.rel)
+    }
+    return props.fileName ? shortImportFileName(props.fileName) : ""
+  })
+
   return (
     <box flexDirection="column" gap={1} paddingTop={1}>
       <box flexDirection="row" gap={0} alignItems="center">
@@ -428,11 +546,54 @@ export function ProgressBar(props: {
           {" "}{props.current} of {total()}
         </text>
       </box>
-      <Show when={props.status !== ""}>
+      <Show when={recap() !== ""}>
+        <text fg={props.theme.textMuted} wrapMode="none" overflow="hidden">
+          {recap()}
+        </text>
+      </Show>
+      <Show when={currentLabel() !== ""}>
+        <text fg={props.theme.primary} wrapMode="none" overflow="hidden">
+          {statusGlyph("processing")} {currentLabel()}
+        </text>
+      </Show>
+      <Show when={!complete() && props.status !== "" && !(props.files && props.files.length > 0)}>
         <text fg={props.theme.textMuted} wrapMode="none" overflow="hidden">{Locale.truncate(props.status, 80)}</text>
       </Show>
-      <Show when={props.fileName !== ""}>
-        <text fg={props.theme.textMuted} attributes={TextAttributes.DIM} wrapMode="none" overflow="hidden">{Locale.truncate(props.fileName, 80)}</text>
+      <Show when={queue().length > 0}>
+        <box flexDirection="column" gap={0}>
+          <For each={queue()}>
+            {(item) => (
+              <text fg={accent(item.status)} wrapMode="none" overflow="hidden">
+                {statusGlyph(item.status)} {shortImportFileName(item.rel)}
+              </text>
+            )}
+          </For>
+        </box>
+      </Show>
+      <Show when={results().length > 0}>
+        <scrollbox maxHeight={resultsMaxHeight()}>
+          <For each={results()}>
+            {(item) => (
+              <text fg={accent(item.status)} wrapMode="none" overflow="hidden">
+                {statusGlyph(item.status)} {shortImportFileName(item.rel)}
+              </text>
+            )}
+          </For>
+        </scrollbox>
+      </Show>
+      <Show when={failed().length > 0}>
+        <box flexDirection="column" gap={0} paddingTop={1}>
+          <text fg={props.theme.error}>Failed ({failed().length})</text>
+          <scrollbox maxHeight={resultsMaxHeight()}>
+            <For each={failed()}>
+              {(item) => (
+                <text fg={props.theme.error} wrapMode="none" overflow="hidden">
+                  {statusGlyph(item.status)} {shortImportFileName(item.rel)}
+                </text>
+              )}
+            </For>
+          </scrollbox>
+        </box>
       </Show>
     </box>
   )
