@@ -47,6 +47,7 @@ import {
   partsToV2Prompt,
   resolvePromptDelivery,
   useV2SessionPrompt,
+  shouldNavigateBeforePrepare,
 } from "../../util/session-prompt-v2"
 import { createColors, createFrames } from "../../ui/spinner"
 import { useDialog } from "../../ui/dialog"
@@ -1109,28 +1110,16 @@ export function Prompt(props: PromptProps) {
       }),
     )
 
-    let outboundText = inputText
-    let preparedSpinosa: Awaited<ReturnType<typeof prepareSpinosaSubmit>> | undefined
-    if (sessionDirectory) {
-      try {
-        const prepared = await prepareSpinosaSubmit(sessionDirectory, inputText)
-        preparedSpinosa = prepared
-        outboundText = prepared.text
-      } catch (error) {
-        console.log("Spinosa submit preparation failed:", error)
-        toast.show({
-          title: "Couldn’t prepare your request",
-          message: error instanceof Error ? error.message : "Couldn’t save the task context",
-          variant: "error",
-        })
-      }
-    }
-
-    // Filter out text parts (pasted content) since they're now expanded inline
+    // Snapshot prompt state before any clear / navigate. New-session Enter must
+    // leave Home as soon as session.create returns — prepareSpinosaSubmit and
+    // first-token / V2 admission must not gate the conversation route.
     const nonTextParts = store.prompt.parts.filter((part) => part.type !== "text")
-
-    // Capture mode before it gets reset
     const currentMode = store.mode
+    const promptSnapshot = {
+      input: store.prompt.input,
+      parts: store.prompt.parts.slice(),
+      mode: currentMode,
+    }
     const editorSelection = editorContext()
     const editorParts =
       editorSelection && editor.labelState() === "pending"
@@ -1149,7 +1138,47 @@ export function Prompt(props: PromptProps) {
           ]
         : []
 
-    if (store.mode === "shell") {
+    const clearPromptUi = () => {
+      history.append(promptSnapshot)
+      input.extmarks.clear()
+      setStore("prompt", {
+        input: "",
+        parts: [],
+      })
+      setStore("extmarkToPartIndex", new Map())
+      props.onSubmit?.()
+      input.clear()
+    }
+
+    const isNewSession = shouldNavigateBeforePrepare(Boolean(props.sessionID))
+    if (isNewSession) {
+      if (!sessionID) return false
+      clearPromptUi()
+      if (editorParts.length > 0) editor.preserveSelectionFromNewSession()
+      route.navigate({
+        type: "workspace",
+        sessionID,
+      })
+    }
+
+    let outboundText = inputText
+    let preparedSpinosa: Awaited<ReturnType<typeof prepareSpinosaSubmit>> | undefined
+    if (sessionDirectory) {
+      try {
+        const prepared = await prepareSpinosaSubmit(sessionDirectory, inputText)
+        preparedSpinosa = prepared
+        outboundText = prepared.text
+      } catch (error) {
+        console.log("Spinosa submit preparation failed:", error)
+        toast.show({
+          title: "Couldn’t prepare your request",
+          message: error instanceof Error ? error.message : "Couldn’t save the task context",
+          variant: "error",
+        })
+      }
+    }
+
+    if (currentMode === "shell") {
       move.startSubmit()
       void sdk.client.session.shell({
         sessionID,
@@ -1237,20 +1266,21 @@ export function Prompt(props: PromptProps) {
       const submit = useV2SessionPrompt()
         ? (async () => {
             // Prefer V2 durable admission + steer/queue delivery as the live path.
-            // Model/agent switches are best-effort so a missing V2 session row
-            // still allows prompt admission after V1 create. Mid-run switches
-            // reject busy (caught here) so turn barriers stay frozen.
-            await sdk.client.v2.session
-              .switchModel({
-                sessionID,
-                model: {
-                  providerID: selectedModel.providerID,
-                  id: selectedModel.modelID,
-                  ...(variant ? { variant } : {}),
-                },
-              })
-              .catch(() => undefined)
-            await sdk.client.v2.session.switchAgent({ sessionID, agent: agent.name }).catch(() => undefined)
+            // Model/agent switches are idle-only: mid-run structural ops reject
+            // busy, and awaiting them adds latency before steer/queue admission.
+            if (!busy) {
+              await sdk.client.v2.session
+                .switchModel({
+                  sessionID,
+                  model: {
+                    providerID: selectedModel.providerID,
+                    id: selectedModel.modelID,
+                    ...(variant ? { variant } : {}),
+                  },
+                })
+                .catch(() => undefined)
+              await sdk.client.v2.session.switchAgent({ sessionID, agent: agent.name }).catch(() => undefined)
+            }
             await sdk.client.v2.session.prompt(
               {
                 sessionID,
@@ -1280,29 +1310,8 @@ export function Prompt(props: PromptProps) {
       })
       if (editorParts.length > 0) editor.markSelectionSent()
     }
-    history.append({
-      ...store.prompt,
-      mode: currentMode,
-    })
-    input.extmarks.clear()
-    setStore("prompt", {
-      input: "",
-      parts: [],
-    })
-    setStore("extmarkToPartIndex", new Map())
-    props.onSubmit?.()
 
-    // temporary hack to make sure the message is sent
-    if (!props.sessionID) {
-      if (editorParts.length > 0) editor.preserveSelectionFromNewSession()
-      setTimeout(() => {
-        route.navigate({
-          type: "workspace",
-          sessionID,
-        })
-      }, 50)
-    }
-    input.clear()
+    if (!isNewSession) clearPromptUi()
     if (finishMoveProgress) move.finishSubmit()
     return true
   }

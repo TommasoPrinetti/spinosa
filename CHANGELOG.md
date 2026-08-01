@@ -16,6 +16,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Mid-run V2 prompt (`delivery: steer|queue`) and ESC busy/idle status failed with `InstanceRef not provided` because `SessionExecutionStatusBridge` called instance-scoped `SessionStatus.set` from V2 `/api/session` fibers that lack InstanceRef. Bridge now loads the session directory and binds InstanceRef/WorkspaceRef before publishing busy/idle so steer admission and double-ESC interrupt work again.
+- Home Enter → conversation no longer waits on `prepareSpinosaSubmit` or a post-submit timer: navigate as soon as `session.create` returns, then prepare/admit the prompt in the background.
 - Connect-a-provider dialog was empty (only “Other / Custom provider”) because V2 `SessionExecutionStatusBridge` used the wrong LayerNode tag, crashing app bootstrap with `Cannot replace @spinosa/v2/SessionExecutionStatus across tags`. Bridge now uses `makeGlobalNode` so serve/TUI start and the provider catalog loads again.
 - Workspace template / agent protocol: startup indexing never dispatches `spinosa-overseer` or `agent-interception`; overseer refuses while `setup_status: cli_started` and prefers in-workspace coverage analysis (soft-fail without external sessions). Aligned extraction naming to `extraction_{batch_id}.md`, startup serendipity to `NN_startup-serendipity-*.md`, map writing to mapper `map_write`, startup-mode AGENTS/CLAUDE overrides (no question tool, no 120s mapper timeout, host-default model), classification Q0, add-files prompt (no full startup re-run), and removed `systematic-bugfinder` from end-user workspace template packaging.
 

@@ -60,3 +60,12 @@ export function useV2SessionPrompt(): boolean {
   const normalized = entry.toLowerCase()
   return normalized === "1" || normalized === "true"
 }
+
+/**
+ * New-session Enter (Home → conversation) must navigate as soon as
+ * `session.create` returns. Spinosa prepare / V2 admission / first token stay
+ * async after the route change.
+ */
+export function shouldNavigateBeforePrepare(hasExistingSessionID: boolean): boolean {
+  return !hasExistingSessionID
+}
