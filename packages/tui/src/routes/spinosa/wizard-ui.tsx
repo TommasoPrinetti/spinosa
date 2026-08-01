@@ -16,6 +16,7 @@ import {
   selectImportFailedItems,
   selectImportQueueWindow,
   selectImportResultsWindow,
+  selectImportSucceededItems,
   shortImportFileName,
   statusAccentKey,
   statusGlyph,
@@ -508,6 +509,7 @@ export function ProgressBar(props: {
   const complete = createMemo(() => isImportPhaseComplete(props.current, props.total, props.files))
   const queue = createMemo(() => (complete() ? [] : selectImportQueueWindow(props.files ?? [], 4)))
   const failed = createMemo(() => (complete() ? [] : selectImportFailedItems(props.files ?? [])))
+  const succeeded = createMemo(() => (complete() ? [] : selectImportSucceededItems(props.files ?? [])))
   const results = createMemo(() => (complete() ? selectImportResultsWindow(props.files ?? []) : []))
   const resultsMaxHeight = createMemo(() => importResultsListMaxHeight(props.viewportHeight ?? 24))
   const recap = createMemo(() => {
@@ -569,6 +571,17 @@ export function ProgressBar(props: {
             )}
           </For>
         </box>
+      </Show>
+      <Show when={succeeded().length > 0}>
+        <scrollbox maxHeight={resultsMaxHeight()}>
+          <For each={succeeded()}>
+            {(item) => (
+              <text fg={accent(item.status)} wrapMode="none" overflow="hidden">
+                {statusGlyph(item.status)} {shortImportFileName(item.rel)}
+              </text>
+            )}
+          </For>
+        </scrollbox>
       </Show>
       <Show when={results().length > 0}>
         <scrollbox maxHeight={resultsMaxHeight()}>

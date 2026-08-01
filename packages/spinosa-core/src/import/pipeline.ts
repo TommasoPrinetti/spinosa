@@ -599,12 +599,13 @@ export async function processOcr(
           prog?.file("OCR", processed, total, relPath, "processing")
         },
         onPageProgress: (_current, _totalFiles, relPath, page) => {
-          prog?.file("OCR", processed, total, page ? `${relPath} (${page})` : relPath, "processing")
+          // Label-only: omit status so late page ticks cannot revert done → processing.
+          prog?.file("OCR", processed, total, page ? `${relPath} (${page})` : relPath)
         },
         onProgress: (_current, _totalFiles, relPath) => {
           // Worker "progress" is label-only: never add worker current onto processed
           // (onFile already advanced the numerator and emitted done/failed).
-          prog?.file("OCR", processed, total, relPath, "processing")
+          prog?.file("OCR", processed, total, relPath)
         },
         onFile: (fr) => {
           const entry = remaining.find((f) => f.rel === fr.rel)

@@ -97,6 +97,14 @@ export function selectImportFailedItems(items: ImportFileProgressItem[]): Import
   return items.filter((i) => i.status === "failed" || i.status === "error")
 }
 
+export function selectImportSucceededItems(items: ImportFileProgressItem[]): ImportFileProgressItem[] {
+  return items.filter((i) => i.status === "done")
+}
+
+export function isTerminalImportFileStatus(status: FileProgressStatus): boolean {
+  return status === "done" || status === "failed" || status === "error"
+}
+
 export type ImportProgressCounts = {
   succeeded: number
   failed: number
@@ -175,8 +183,13 @@ export function applyImportProgressStatus(
   const key = relPath.replace(/\s+\(.*\)$/, "")
   const idx = items.findIndex((i) => i.rel === key || i.rel === relPath || key.endsWith(i.rel) || i.rel.endsWith(key))
   if (idx >= 0) {
+    const prev = items[idx]!
+    // OCR worker progress ticks can arrive after onFile; never downgrade terminal rows.
+    if (isTerminalImportFileStatus(prev.status) && !isTerminalImportFileStatus(status)) {
+      return items
+    }
     const next = items.slice()
-    next[idx] = { ...next[idx]!, status }
+    next[idx] = { ...prev, status }
     return next
   }
   return [...items, { rel: key, status }]

@@ -53,9 +53,9 @@ describe("job progress bus bridge", () => {
     const opts = {
       onFileStart: (rel: string) => prog.file("OCR", processed, total, rel, "processing"),
       onPageProgress: (_c: number, _t: number, rel: string, page: string) =>
-        prog.file("OCR", processed, total, page ? `${rel} (${page})` : rel, "processing"),
+        prog.file("OCR", processed, total, page ? `${rel} (${page})` : rel),
       onProgress: (_c: number, _t: number, rel: string) =>
-        prog.file("OCR", processed, total, rel, "processing"),
+        prog.file("OCR", processed, total, rel),
       onFile: (fr: { rel: string; ok: boolean }) => {
         prog.file("OCR", ++processed, total, fr.rel, fr.ok ? "done" : "failed")
       },
@@ -80,6 +80,9 @@ describe("job progress bus bridge", () => {
     // or overwrite the terminal status with processing.
     const progressEvents = events.filter((e) => e.type === "job.progress")
     expect(progressEvents.every((e) => e.type === "job.progress" && e.properties.current <= 1)).toBe(true)
+    const fileProgress = progressEvents.filter((e) => e.properties.relPath === "scan.pdf")
+    expect(fileProgress.some((e) => e.properties.status === "done")).toBe(true)
+    expect(fileProgress.at(-1)?.properties.status).not.toBe("processing")
     expect(processed).toBe(1)
     expect(events.at(-1)).toMatchObject({
       type: "job.finished",

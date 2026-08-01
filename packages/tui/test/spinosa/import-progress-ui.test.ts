@@ -10,11 +10,13 @@ import {
   importOutcomeHeading,
   importPhaseVerb,
   isImportPhaseComplete,
+  isTerminalImportFileStatus,
   resolveSpinosaLogsDir,
   seedImportQueue,
   selectImportFailedItems,
   selectImportQueueWindow,
   selectImportResultsWindow,
+  selectImportSucceededItems,
   shortImportFileName,
   shouldShowImportDetailLogHint,
   statusGlyph,
@@ -45,6 +47,24 @@ describe("import progress UI helpers", () => {
     expect(selectImportFailedItems(items).map((i) => i.rel)).toEqual(["bad.md"])
     expect(statusGlyph("failed")).toBe("✗")
     expect(statusGlyph("processing")).toBe("›")
+  })
+
+  test("terminal file status is not downgraded by late processing ticks", () => {
+    let items = seedImportQueue(["scan.pdf"])
+    items = applyImportProgressStatus(items, "scan.pdf", "processing")
+    items = applyImportProgressStatus(items, "scan.pdf", "done")
+    items = applyImportProgressStatus(items, "scan.pdf", "processing")
+    expect(items[0]?.status).toBe("done")
+    expect(isTerminalImportFileStatus("done")).toBe(true)
+    expect(isTerminalImportFileStatus("processing")).toBe(false)
+  })
+
+  test("succeeded list tracks done files during an in-flight phase", () => {
+    let items = seedImportQueue(["a.jpg", "b.jpg", "c.jpg"])
+    items = applyImportProgressStatus(items, "a.jpg", "done")
+    items = applyImportProgressStatus(items, "b.jpg", "processing")
+    expect(selectImportSucceededItems(items).map((i) => i.rel)).toEqual(["a.jpg"])
+    expect(isImportPhaseComplete(1, 3, items)).toBe(false)
   })
 
   test("phase complete requires pending===0 when file list is present", () => {

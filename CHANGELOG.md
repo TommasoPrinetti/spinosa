@@ -20,6 +20,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- OCR import progress in onboarding/add-files shows completed files in green (✓) during the phase: worker `progress` ticks are label-only (no `processing` status), terminal `done` rows are not downgraded, and the live results scrollbox lists succeeded files before the phase hits 100%.
 - Startup indexing (`/startup`, queued setup brief after onboarding / startup-choice) always selects the **Orchestrator-Editor** (`build`) agent. A sticky last-used specialist (e.g. `spinosa-overseer` after Tab cycle, or a specialist wrongly registered as primary when `mode: subagent` was missing) no longer hijacks the first indexing prompt. TUI default agent resolution now prefers `build` over `agents[0]`; kernel `defaultAgent` does the same when `default_agent` is unset. `.opencode/agents/spinosa-writer.md` marks `mode: subagent` so Writer is not cycleable as a primary agent.
 - Preflight **Y** on a stale template pack now force-refreshes managed protocol probes (e.g. `.agents/references/classification.md`, overseer agent/skill) and re-checks freshness afterward — previously `replace_if_unmodified` silently skipped nested files with no checksum baseline and still printed success while the pack stayed stale.
 - **New workspace** no longer resumes another workspace’s unfinished onboarding: route navigation now replaces store state wholesale (Solid `setStore` was shallow-merging and leaving `workspacePath` / source metadata from a prior Resume → Home path).
