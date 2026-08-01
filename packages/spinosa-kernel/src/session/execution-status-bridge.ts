@@ -1,4 +1,4 @@
-import { LayerNode } from "@spinosa/kernel-core/effect/layer-node"
+import { makeGlobalNode } from "@spinosa/kernel-core/effect/app-node"
 import { SessionExecutionStatus } from "@spinosa/kernel-core/session/execution-status"
 import { SessionSchema } from "@spinosa/kernel-core/session/schema"
 import { Effect, Layer } from "effect"
@@ -8,6 +8,9 @@ import { SessionID } from "./schema"
 /**
  * Publishes V2 SessionExecution busy/idle onto the existing session.status
  * wire contract so TUI ESC/spinner UX stays intact when V2 is the live path.
+ *
+ * Must use makeGlobalNode (same tag as SessionExecutionStatus.node) so
+ * AppNodeBuilder replacements do not throw "Cannot replace … across tags".
  */
 const layer = Layer.effect(
   SessionExecutionStatus.Service,
@@ -21,7 +24,7 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = LayerNode.make({
+export const node = makeGlobalNode({
   service: SessionExecutionStatus.Service,
   layer,
   deps: [SessionStatus.node],

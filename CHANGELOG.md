@@ -16,6 +16,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Connect-a-provider dialog was empty (only “Other / Custom provider”) because V2 `SessionExecutionStatusBridge` used the wrong LayerNode tag, crashing app bootstrap with `Cannot replace @spinosa/v2/SessionExecutionStatus across tags`. Bridge now uses `makeGlobalNode` so serve/TUI start and the provider catalog loads again.
 - Workspace template / agent protocol: startup indexing never dispatches `spinosa-overseer` or `agent-interception`; overseer refuses while `setup_status: cli_started` and prefers in-workspace coverage analysis (soft-fail without external sessions). Aligned extraction naming to `extraction_{batch_id}.md`, startup serendipity to `NN_startup-serendipity-*.md`, map writing to mapper `map_write`, startup-mode AGENTS/CLAUDE overrides (no question tool, no 120s mapper timeout, host-default model), classification Q0, add-files prompt (no full startup re-run), and removed `systematic-bugfinder` from end-user workspace template packaging.
 
 ## [1.0.3-beta.12] — 2026-08-01
