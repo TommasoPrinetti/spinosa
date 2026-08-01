@@ -327,6 +327,15 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
     removeLocalQueued(queued)
     return true
   })
+  const offSteerQueued = input.footer.onQueuedSteer((messageID) => {
+    const queued = state.queued.find((item) => item.messageID === messageID)
+    if (!queued) return false
+    state.queue = state.queue.filter((prompt) => prompt !== queued.prompt)
+    state.queue.unshift(queued.prompt)
+    state.ctrl?.abort()
+    syncQueue()
+    return true
+  })
 
   try {
     if (state.closed) {
@@ -343,6 +352,7 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
     offPrompt()
     offClose()
     offRemoveQueued()
+    offSteerQueued()
     close()
     await draining?.catch(() => {})
   }

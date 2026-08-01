@@ -99,6 +99,10 @@ export const {
       part: {
         [messageID: string]: Part[]
       }
+      /** Unpromoted V2 admissions: queue shows Steer; cleared on promote. */
+      prompt_delivery: {
+        [messageID: string]: "steer" | "queue"
+      }
       lsp: LspStatus[]
       mcp: {
         [key: string]: McpStatus
@@ -133,6 +137,7 @@ export const {
       todo: {},
       message: {},
       part: {},
+      prompt_delivery: {},
       lsp: [],
       mcp: {},
       mcp_resource: {},
@@ -376,6 +381,7 @@ export const {
 
         // V2 session.next.* → V1 message/part store so the shipped conversation
         // UI keeps rendering when prompts run through SessionV2.
+        case "session.next.prompt.admitted":
         case "session.next.prompted": {
           const sessionID = event.properties.sessionID as string
           const messageID = event.properties.messageID as string
@@ -385,6 +391,10 @@ export const {
               : Date.parse(String(event.properties.timestamp ?? "")) || Date.now()
           const text =
             typeof event.properties.prompt?.text === "string" ? event.properties.prompt.text : ""
+          const delivery =
+            event.properties.delivery === "queue" || event.properties.delivery === "steer"
+              ? event.properties.delivery
+              : undefined
           const info = {
             id: messageID,
             sessionID,
@@ -415,7 +425,26 @@ export const {
             type: "text" as const,
             text,
           }
-          setStore("part", messageID, [part])
+          if (!store.part[messageID]) setStore("part", messageID, [part])
+          if (event.type === "session.next.prompt.admitted" && delivery) {
+            setStore("prompt_delivery", messageID, delivery)
+          } else if (event.type === "session.next.prompted") {
+            setStore(
+              "prompt_delivery",
+              produce((draft) => {
+                delete draft[messageID]
+              }),
+            )
+          }
+          break
+        }
+
+        case "session.next.prompt.delivery.changed": {
+          const messageID = event.properties.messageID as string
+          const delivery = event.properties.delivery
+          if (delivery === "queue" || delivery === "steer") {
+            setStore("prompt_delivery", messageID, delivery)
+          }
           break
         }
 

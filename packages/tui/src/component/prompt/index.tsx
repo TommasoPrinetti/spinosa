@@ -391,14 +391,14 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
-        title: "Queue prompt",
+        title: "Steer prompt",
         name: "prompt.submit_queue",
         category: "Prompt",
-        // Intentional queue (Pi preferQueue): mid-run Enter steers; this path queues.
+        // Mid-run Enter queues; this path steers immediately (break the flow).
         enabled: status().type !== "idle",
         run: async () => {
           if (!input.focused) return
-          const handled = await submit({ preferQueue: true })
+          const handled = await submit({ preferSteer: true })
           if (!handled) return
           dialog.clear()
         },
@@ -1001,7 +1001,7 @@ export function Prompt(props: PromptProps) {
   })
 
   let submitting = false
-  async function submit(options?: { preferQueue?: boolean }) {
+  async function submit(options?: { preferQueue?: boolean; preferSteer?: boolean }) {
     // Prevent overlapping invocations (e.g. a double-pressed Enter, or the
     // input's native onSubmit racing another dispatch). Without this guard,
     // a second call slips past the empty-input check before the first call
@@ -1017,7 +1017,7 @@ export function Prompt(props: PromptProps) {
     }
   }
 
-  async function submitInner(options?: { preferQueue?: boolean }) {
+  async function submitInner(options?: { preferQueue?: boolean; preferSteer?: boolean }) {
     workspace.clearNotice()
 
     // IME: double-defer may fire before onContentChange flushes the last
@@ -1262,7 +1262,11 @@ export function Prompt(props: PromptProps) {
         ...nonTextParts,
       ]
       const busy = status().type !== "idle"
-      const delivery = resolvePromptDelivery({ busy, preferQueue: options?.preferQueue === true })
+      const delivery = resolvePromptDelivery({
+        busy,
+        preferQueue: options?.preferQueue === true,
+        preferSteer: options?.preferSteer === true,
+      })
       const submit = useV2SessionPrompt()
         ? (async () => {
             // Prefer V2 durable admission + steer/queue delivery as the live path.

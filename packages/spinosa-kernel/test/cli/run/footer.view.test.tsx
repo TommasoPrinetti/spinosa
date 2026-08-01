@@ -215,6 +215,7 @@ async function renderFooter(
           onLayout={() => {}}
           onStatus={() => {}}
           onQueuedRemove={async () => true}
+          onQueuedSteer={async () => true}
         />
       </OpencodeKeymapProvider>
     )
@@ -968,6 +969,7 @@ test("direct footer shows editable prompts and additional queued work while runn
           onLayout={() => {}}
           onStatus={() => {}}
           onQueuedRemove={async () => true}
+          onQueuedSteer={async () => true}
         />
       </OpencodeKeymapProvider>
     )

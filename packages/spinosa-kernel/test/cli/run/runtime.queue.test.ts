@@ -5,6 +5,7 @@ import type { FooterApi, FooterEvent, RunPrompt, StreamCommit } from "@/cli/cmd/
 function footer() {
   const prompts = new Set<(input: RunPrompt) => void>()
   const queuedRemoves = new Set<(messageID: string) => void>()
+  const queuedSteers = new Set<(messageID: string) => void>()
   const closes = new Set<() => void>()
   const events: FooterEvent[] = []
   const commits: StreamCommit[] = []
@@ -24,6 +25,12 @@ function footer() {
       queuedRemoves.add(fn)
       return () => {
         queuedRemoves.delete(fn)
+      }
+    },
+    onQueuedSteer(fn) {
+      queuedSteers.add(fn)
+      return () => {
+        queuedSteers.delete(fn)
       }
     },
     onClose(fn) {
@@ -75,6 +82,9 @@ function footer() {
     },
     removeQueued(messageID: string) {
       for (const fn of [...queuedRemoves]) fn(messageID)
+    },
+    steerQueued(messageID: string) {
+      for (const fn of [...queuedSteers]) fn(messageID)
     },
   }
 }
@@ -392,6 +402,46 @@ describe("run runtime queue", () => {
     wake?.()
     await task
     expect(turns).toEqual(["active", "queued one", "queued three"])
+  })
+
+  test("steering a queued prompt aborts the active turn and runs it next", async () => {
+    const ui = footer()
+    const turns: string[] = []
+
+    const task = runPromptQueue({
+      footer: ui.api,
+      run: async (input, signal) => {
+        turns.push(input.text)
+        if (input.text === "active") {
+          await new Promise<void>((resolve) => {
+            if (signal.aborted) {
+              resolve()
+              return
+            }
+            signal.addEventListener("abort", () => resolve(), { once: true })
+          })
+          return
+        }
+        if (input.text === "steer me") {
+          ui.api.close()
+        }
+      },
+    })
+
+    ui.submit("active")
+    ui.submit("queued later")
+    ui.submit("steer me")
+    await Promise.resolve()
+    await Promise.resolve()
+
+    const event = ui.events.findLast((item) => item.type === "queued.prompts")
+    if (event?.type === "queued.prompts") {
+      const target = event.prompts.find((item) => item.prompt.text === "steer me")
+      if (target) ui.steerQueued(target.messageID)
+    }
+
+    await task
+    expect(turns).toEqual(["active", "steer me"])
   })
 
   test("drains a prompt queued during an in-flight turn", async () => {

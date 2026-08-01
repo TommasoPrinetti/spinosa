@@ -95,6 +95,7 @@ function footer(): FooterApi {
     },
     onPrompt: () => () => {},
     onQueuedRemove: () => () => {},
+    onQueuedSteer: () => () => {},
     onClose(fn) {
       if (closed) {
         fn()

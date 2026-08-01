@@ -109,6 +109,7 @@ type RunFooterViewProps = {
   onStatus: (text: string) => void
   onSubagentSelect?: (sessionID: string | undefined) => void
   onQueuedRemove: (messageID: string) => Promise<boolean>
+  onQueuedSteer: (messageID: string) => Promise<boolean>
 }
 
 export { TEXTAREA_MIN_ROWS, TEXTAREA_MAX_ROWS } from "./footer.prompt"
@@ -692,6 +693,10 @@ export function RunFooterView(props: RunFooterViewProps) {
                             prompts={queuedPrompts}
                             onClose={closePanel}
                             onDelete={(item) => void props.onQueuedRemove(item.messageID)}
+                            onSteer={async (item) => {
+                              if (!(await props.onQueuedSteer(item.messageID))) return
+                              closePanel()
+                            }}
                             onEdit={async (item) => {
                               if (!(await props.onQueuedRemove(item.messageID))) return
                               closePanel()

@@ -49,7 +49,21 @@ export const admit = Effect.fn("SessionInput.admit")(function* (
   },
 ) {
   const existing = yield* find(db, input.id)
-  if (existing !== undefined) return existing
+  if (existing !== undefined) {
+    // Same id + prompt may upgrade unpromoted queue → steer (Steer from queue).
+    if (
+      existing.promotedSeq === undefined &&
+      existing.delivery === "queue" &&
+      input.delivery === "steer" &&
+      matchesPrompt(existing, input)
+    ) {
+      return yield* steerQueued(db, events, {
+        id: input.id,
+        sessionID: input.sessionID,
+      })
+    }
+    return existing
+  }
   const timestamp = yield* DateTime.now
   return yield* events
     .publish(SessionEvent.PromptAdmitted, {
@@ -78,6 +92,75 @@ export const admit = Effect.fn("SessionInput.admit")(function* (
         find(db, input.id).pipe(Effect.flatMap((stored) => (stored ? Effect.succeed(stored) : Effect.die(defect)))),
       ),
     )
+})
+
+/** Upgrade an unpromoted queued admission to steer so the runner breaks for it next. */
+export const steerQueued = Effect.fn("SessionInput.steerQueued")(function* (
+  db: DatabaseService,
+  events: EventV2.Interface,
+  input: {
+    readonly id: SessionMessage.ID
+    readonly sessionID: SessionSchema.ID
+  },
+) {
+  const existing = yield* find(db, input.id)
+  if (existing === undefined) return yield* Effect.die(new LifecycleConflict({ id: input.id }))
+  if (existing.sessionID !== input.sessionID) return yield* Effect.die(new LifecycleConflict({ id: input.id }))
+  if (existing.promotedSeq !== undefined) return yield* Effect.die(new LifecycleConflict({ id: input.id }))
+  if (existing.delivery === "steer") return existing
+  if (existing.delivery !== "queue") return yield* Effect.die(new LifecycleConflict({ id: input.id }))
+
+  const timestamp = yield* DateTime.now
+  return yield* events
+    .publish(SessionEvent.PromptDeliveryChanged, {
+      messageID: input.id,
+      sessionID: input.sessionID,
+      timestamp,
+      from: "queue",
+      delivery: "steer",
+    })
+    .pipe(
+      Effect.flatMap(() => find(db, input.id)),
+      Effect.flatMap((stored) =>
+        stored && stored.delivery === "steer" ? Effect.succeed(stored) : Effect.die(new LifecycleConflict({ id: input.id })),
+      ),
+      Effect.catchDefect((defect) =>
+        find(db, input.id).pipe(
+          Effect.flatMap((stored) =>
+            stored?.delivery === "steer" ? Effect.succeed(stored) : Effect.die(defect),
+          ),
+        ),
+      ),
+    )
+})
+
+export const projectDeliveryChanged = Effect.fn("SessionInput.projectDeliveryChanged")(function* (
+  db: DatabaseService,
+  input: {
+    readonly id: SessionMessage.ID
+    readonly sessionID: SessionSchema.ID
+    readonly from: Delivery
+    readonly delivery: Delivery
+  },
+) {
+  const updated = yield* db
+    .update(SessionInputTable)
+    .set({ delivery: input.delivery })
+    .where(
+      and(
+        eq(SessionInputTable.id, input.id),
+        eq(SessionInputTable.session_id, input.sessionID),
+        isNull(SessionInputTable.promoted_seq),
+        eq(SessionInputTable.delivery, input.from),
+      ),
+    )
+    .returning()
+    .get()
+    .pipe(Effect.orDie)
+  if (updated) return
+  const stored = yield* find(db, input.id)
+  if (stored && stored.delivery === input.delivery && stored.promotedSeq === undefined) return
+  return yield* Effect.die(new LifecycleConflict({ id: input.id }))
 })
 
 export const projectAdmitted = Effect.fn("SessionInput.projectAdmitted")(function* (

@@ -1781,6 +1781,9 @@ function UserMessage(props: {
 }) {
   const ctx = use()
   const local = useLocal()
+  const sync = useSync()
+  const sdk = useSDK()
+  const toast = useToast()
   const text = createMemo(() => {
     const texts = props.parts
       .map((x) => {
@@ -1795,12 +1798,41 @@ function UserMessage(props: {
   const files = createMemo(() => props.parts.flatMap((x) => (x.type === "file" ? [x] : [])))
   const { theme } = useTheme()
   const [hover, setHover] = createSignal(false)
+  const [steerHover, setSteerHover] = createSignal(false)
+  const [steering, setSteering] = createSignal(false)
   const queued = createMemo(() => props.pending && props.message.id > props.pending)
+  const delivery = createMemo(() => sync.data.prompt_delivery[props.message.id])
+  const canSteer = createMemo(() => delivery() === "queue" && Boolean(text()))
   const color = createMemo(() => local.agent.color(props.message.agent))
   const queuedFg = createMemo(() => selectedForeground(theme, color()))
-  const metadataVisible = createMemo(() => queued() || ctx.showTimestamps())
+  const metadataVisible = createMemo(() => queued() || canSteer() || ctx.showTimestamps())
 
   const compaction = createMemo(() => props.parts.find((x) => x.type === "compaction"))
+
+  const steerQueued = () => {
+    if (!canSteer() || steering()) return
+    const body = text()
+    if (!body) return
+    setSteering(true)
+    void sdk.client.v2.session
+      .prompt(
+        {
+          sessionID: props.message.sessionID,
+          id: props.message.id,
+          prompt: { text: body },
+          delivery: "steer",
+        },
+        { throwOnError: true },
+      )
+      .catch((error) => {
+        toast.show({
+          title: "Couldn’t steer",
+          message: errorMessage(error),
+          variant: "error",
+        })
+      })
+      .finally(() => setSteering(false))
+  }
 
   return (
     <>
@@ -1852,7 +1884,7 @@ function UserMessage(props: {
                 </box>
               </Show>
               <Show
-                when={queued()}
+                when={queued() || canSteer()}
                 fallback={
                   <Show when={ctx.showTimestamps()}>
                     <text fg={theme.textMuted}>
@@ -1863,9 +1895,28 @@ function UserMessage(props: {
                   </Show>
                 }
               >
-                <text fg={theme.textMuted}>
-                  <span style={{ bg: color(), fg: queuedFg(), bold: true }}> QUEUED </span>
-                </text>
+                <box flexDirection="row" gap={1} paddingTop={files().length ? 0 : 1}>
+                  <text fg={theme.textMuted}>
+                    <span style={{ bg: color(), fg: queuedFg(), bold: true }}> QUEUED </span>
+                  </text>
+                  <Show when={canSteer()}>
+                    <box
+                      onMouseOver={() => setSteerHover(true)}
+                      onMouseOut={() => setSteerHover(false)}
+                      onMouseUp={(e: { stopPropagation?: () => void }) => {
+                        e.stopPropagation?.()
+                        steerQueued()
+                      }}
+                      backgroundColor={buttonBackground(theme, steerHover())}
+                      paddingLeft={1}
+                      paddingRight={1}
+                    >
+                      <text fg={buttonText(theme, steerHover(), theme.primary)}>
+                        {steering() ? "Steering…" : "Steer"}
+                      </text>
+                    </box>
+                  </Show>
+                </box>
               </Show>
             </box>
           </box>

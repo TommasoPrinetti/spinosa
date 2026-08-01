@@ -98,6 +98,19 @@ export const PromptAdmitted = Event.define({
 })
 export type PromptAdmitted = typeof PromptAdmitted.Type
 
+/** Promote an unpromoted queued admission to steer (break current flow). */
+export const PromptDeliveryChanged = Event.define({
+  type: "session.next.prompt.delivery.changed",
+  ...options,
+  schema: {
+    ...Base,
+    messageID: SessionMessage.ID,
+    from: Delivery,
+    delivery: Delivery,
+  },
+})
+export type PromptDeliveryChanged = typeof PromptDeliveryChanged.Type
+
 export const ContextUpdated = Event.define({
   type: "session.next.context.updated",
   ...options,
@@ -453,6 +466,7 @@ export const DurableDefinitions = Event.inventory(
   Moved,
   Prompted,
   PromptAdmitted,
+  PromptDeliveryChanged,
   ContextUpdated,
   Synthetic,
   Shell.Started,
@@ -484,6 +498,7 @@ export const Definitions = Event.inventory(
   Moved,
   Prompted,
   PromptAdmitted,
+  PromptDeliveryChanged,
   ContextUpdated,
   Synthetic,
   Shell.Started,

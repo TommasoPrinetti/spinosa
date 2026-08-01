@@ -169,6 +169,7 @@ export class RunFooter implements FooterApi {
   private destroyed = false
   private prompts = new Set<(input: RunPrompt) => void>()
   private queuedRemoves = new Set<(messageID: string) => boolean | Promise<boolean>>()
+  private queuedSteers = new Set<(messageID: string) => boolean | Promise<boolean>>()
   private closes = new Set<() => void>()
   // Microtask-coalesced commit queue. Flushed on next microtask or on close/destroy.
   private queue: StreamCommit[] = []
@@ -342,6 +343,7 @@ export class RunFooter implements FooterApi {
               onStatus: footer.setStatus,
               onSubagentSelect: options.onSubagentSelect,
               onQueuedRemove: footer.handleQueuedRemove,
+              onQueuedSteer: footer.handleQueuedSteer,
             })
           },
         }),
@@ -372,6 +374,13 @@ export class RunFooter implements FooterApi {
     this.queuedRemoves.add(fn)
     return () => {
       this.queuedRemoves.delete(fn)
+    }
+  }
+
+  public onQueuedSteer(fn: (messageID: string) => boolean | Promise<boolean>): () => void {
+    this.queuedSteers.add(fn)
+    return () => {
+      this.queuedSteers.delete(fn)
     }
   }
 
@@ -678,6 +687,11 @@ export class RunFooter implements FooterApi {
 
   private handleQueuedRemove = async (messageID: string): Promise<boolean> => {
     const fn = [...this.queuedRemoves][0]
+    return fn ? await fn(messageID) : false
+  }
+
+  private handleQueuedSteer = async (messageID: string): Promise<boolean> => {
+    const fn = [...this.queuedSteers][0]
     return fn ? await fn(messageID) : false
   }
 
@@ -1101,6 +1115,7 @@ export class RunFooter implements FooterApi {
     this.themeRefreshTimeouts.length = 0
     this.prompts.clear()
     this.queuedRemoves.clear()
+    this.queuedSteers.clear()
     this.closes.clear()
     this.scrollback.destroy()
     for (const theme of [...this.themes]) this.destroyTheme(theme)

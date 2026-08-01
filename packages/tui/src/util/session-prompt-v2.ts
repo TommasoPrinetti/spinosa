@@ -49,6 +49,7 @@ export function resolvePromptDelivery(input: {
   busy: boolean
   requested?: "steer" | "queue"
   preferQueue?: boolean
+  preferSteer?: boolean
 }): "steer" | "queue" {
   return Loop.resolveDelivery(input)
 }

@@ -339,6 +339,35 @@ describe("SessionV2.prompt", () => {
     }),
   )
 
+  it.effect("upgrades an unpromoted queued admission to steer", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const prompt = Prompt.make({ text: "Change direction" })
+
+      const queued = yield* session.prompt({
+        id: messageID,
+        sessionID,
+        prompt,
+        delivery: "queue",
+        resume: false,
+      })
+      expect(queued.delivery).toBe("queue")
+
+      const steered = yield* session.prompt({
+        id: messageID,
+        sessionID,
+        prompt,
+        delivery: "steer",
+        resume: false,
+      })
+      expect(steered.delivery).toBe("steer")
+      const stored = yield* admitted(messageID)
+      expect(stored?.delivery).toBe("steer")
+      expect(stored?.promotedSeq).toBeUndefined()
+    }),
+  )
+
   it.effect("returns one recorded message to concurrent exact retries", () =>
     Effect.gen(function* () {
       yield* setup

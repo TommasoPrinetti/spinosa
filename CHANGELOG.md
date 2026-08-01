@@ -10,9 +10,13 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- Harness loop-control: turn snapshots + save points, `prepareNextTurn` / `shouldStopAfterTurn` / `beforeToolCall` hooks in the V2 runner, phase→`idle|busy|retry` mapping, optional tool `terminate`, busy rejection for structural ops (model/agent switch, compact), and mid-run `delivery: steer|queue` on the live V2 prompt path (TUI default-on via `SPINOSA_SESSION_V2_PROMPT`, set `0` to force V1; intentional queue via `prompt.submit_queue` / `<leader>return`).
+- Harness loop-control: turn snapshots + save points, `prepareNextTurn` / `shouldStopAfterTurn` / `beforeToolCall` hooks in the V2 runner, phase→`idle|busy|retry` mapping, optional tool `terminate`, busy rejection for structural ops (model/agent switch, compact), and mid-run `delivery: steer|queue` on the live V2 prompt path (TUI default-on via `SPINOSA_SESSION_V2_PROMPT`, set `0` to force V1).
 - V2 SessionExecution publishes busy/idle onto existing `session.status`; V1 `session.abort` also interrupts V2 execution so ESC/double-ESC keeps working.
 - TUI projects `session.next.*` and `permission.v2.*` into the shipped conversation/permission UX.
+
+### Changed
+
+- Mid-run prompts now **queue by default** (Enter while busy). Queued user messages show a **Steer** control to promote that admission immediately; `<leader>return` / `prompt.submit_queue` also steers the draft. Mini-TUI queued-prompt menu: Return steers (abort active + run next).
 
 ### Fixed
 

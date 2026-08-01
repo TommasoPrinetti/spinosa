@@ -675,6 +675,7 @@ export function RunQueuedPromptSelectBody(props: {
   onClose: () => void
   onEdit: (prompt: FooterQueuedPrompt) => void | Promise<void>
   onDelete: (prompt: FooterQueuedPrompt) => void | Promise<void>
+  onSteer: (prompt: FooterQueuedPrompt) => void | Promise<void>
   onRows?: (rows: number) => void
 }) {
   let field: InputRenderable | undefined
@@ -683,7 +684,7 @@ export function RunQueuedPromptSelectBody(props: {
     props.prompts().map((prompt) => ({
       category: "",
       display: prompt.prompt.text.replaceAll("\n", " "),
-      footer: "queued · ctrl+e edit · ctrl+d remove",
+      footer: "queued · return steer · ctrl+e edit · ctrl+d remove",
       keywords: prompt.prompt.text,
       prompt,
     })),
@@ -727,7 +728,7 @@ export function RunQueuedPromptSelectBody(props: {
       setQuery,
       select: () => {
         const item = selected()
-        if (item) props.onEdit(item.prompt)
+        if (item) void props.onSteer(item.prompt)
       },
       close: props.onClose,
     })

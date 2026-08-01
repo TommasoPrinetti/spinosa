@@ -21,11 +21,12 @@ describe("session-prompt-v2", () => {
     })
   })
 
-  test("defaults mid-run delivery to steer", () => {
-    expect(resolvePromptDelivery({ busy: true })).toBe("steer")
+  test("defaults mid-run delivery to queue", () => {
+    expect(resolvePromptDelivery({ busy: true })).toBe("queue")
+    expect(resolvePromptDelivery({ busy: true, preferSteer: true })).toBe("steer")
     expect(resolvePromptDelivery({ busy: true, preferQueue: true })).toBe("queue")
     expect(resolvePromptDelivery({ busy: false, preferQueue: true })).toBe("steer")
-    expect(resolvePromptDelivery({ busy: true, requested: "queue" })).toBe("queue")
+    expect(resolvePromptDelivery({ busy: true, requested: "steer" })).toBe("steer")
   })
 
   test("navigates to conversation before Spinosa prepare on new sessions only", () => {

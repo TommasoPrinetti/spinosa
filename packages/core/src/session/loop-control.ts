@@ -155,15 +155,21 @@ export function isToolTerminate(value: unknown): value is ToolTerminate {
   return typeof value === "object" && value !== null && (value as ToolTerminate).terminate === true
 }
 
-/** Prefer steer for mid-run user input (Pi default); queue only when explicitly requested. */
+/**
+ * Mid-run prompts default to queue (wait for the full run). Idle admits as
+ * steer. Prefer `preferSteer` / `requested: "steer"` to break the flow now.
+ */
 export function resolveDelivery(input: {
   readonly busy: boolean
   readonly requested?: SessionInput.Delivery
   readonly preferQueue?: boolean
+  readonly preferSteer?: boolean
 }): SessionInput.Delivery {
   if (input.requested) return input.requested
   if (!input.busy) return "steer"
-  return input.preferQueue ? "queue" : "steer"
+  if (input.preferSteer) return "steer"
+  if (input.preferQueue) return "queue"
+  return "queue"
 }
 
 // --- Turn-loop hooks (Pi agent-loop style; kept sync for unit tests) ---

@@ -150,7 +150,7 @@ export const Definitions = {
   display_thinking: keybind("none", "Toggle thinking blocks visibility"),
 
   prompt_submit: keybind("none", "Submit prompt"),
-  prompt_submit_queue: keybind("<leader>return", "Queue prompt for after the current turn"),
+  prompt_submit_queue: keybind("<leader>return", "Steer prompt into the current run"),
   prompt_editor_context_clear: keybind("none", "Clear editor context"),
   prompt_skills: keybind("none", "Open skill selector"),
   prompt_stash: keybind("none", "Stash prompt"),

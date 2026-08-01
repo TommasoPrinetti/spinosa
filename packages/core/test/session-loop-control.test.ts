@@ -126,10 +126,12 @@ describe("SessionLoopControl", () => {
     }), wouldCompact: true }).action).toBe("compact")
   })
 
-  test("resolveDelivery defaults to steer mid-run (Pi), queue only when requested", () => {
+  test("resolveDelivery defaults mid-run to queue; steer only when requested", () => {
     expect(resolveDelivery({ busy: false })).toBe("steer")
-    expect(resolveDelivery({ busy: true })).toBe("steer")
+    expect(resolveDelivery({ busy: true })).toBe("queue")
+    expect(resolveDelivery({ busy: true, preferSteer: true })).toBe("steer")
     expect(resolveDelivery({ busy: true, preferQueue: true })).toBe("queue")
+    expect(resolveDelivery({ busy: true, requested: "steer" })).toBe("steer")
     expect(resolveDelivery({ busy: true, requested: "queue" })).toBe("queue")
     expect(resolveDelivery({ busy: false, requested: "queue" })).toBe("queue")
   })
