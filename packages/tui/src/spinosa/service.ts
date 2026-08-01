@@ -155,7 +155,7 @@ export async function inspectWorkspaceTemplatePack(input: {
   })
 }
 
-/** True when framework version or protocol probe files need a template refresh. */
+/** True when framework version or protocol probe files need Update workspace. */
 export async function workspaceNeedsTemplatePackRefresh(input: {
   workspacePath: string
   workspaceVersion?: string

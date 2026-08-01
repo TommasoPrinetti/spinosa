@@ -133,7 +133,7 @@ export const { use: useSpinosaWorkspace, provider: SpinosaWorkspaceProvider } = 
             }))
       route.navigate(nextRoute)
 
-      // Non-blocking: surface stale protocol/template packs (version can match while files lag).
+      // Non-blocking: point at Update workspace when protocol/template packs lag (version can match).
       void inspectWorkspaceTemplatePack({
         workspacePath,
         workspaceVersion: loaded.frameworkVersion,
@@ -143,10 +143,7 @@ export const { use: useSpinosaWorkspace, provider: SpinosaWorkspaceProvider } = 
           toast.show({
             variant: "warning",
             title: "Workspace template pack is stale",
-            message:
-              freshness.protocolBehind && !freshness.versionBehind
-                ? "Protocol files differ from the current pack — refresh recommended (Home → Refresh stale template pack)."
-                : "Refresh recommended (Home → Update workspace files).",
+            message: "Home → Update workspace files, then re-run spinosa to catch up.",
             duration: 8000,
           })
         })

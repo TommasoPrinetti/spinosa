@@ -15,6 +15,8 @@ test("global home actions require a connected provider", async () => {
   mock.module("../../src/ui/dialog", () => ({ useDialog: () => ({ replace() {} }) }))
   mock.module("../../src/ui/toast", () => ({ useToast: () => ({ show() {} }) }))
   mock.module("../../src/context/route", () => ({ useRoute: () => ({ navigate() {} }) }))
+  mock.module("../../src/context/exit", () => ({ useExit: () => () => {} }))
+  mock.module("../../src/context/epilogue", () => ({ useEpilogue: () => () => {} }))
   mock.module("../../src/context/spinosa-workspace", () => ({
     useSpinosaWorkspace: () => ({ activePath: undefined, genericMode: false, meta: undefined, showPicker() {} }),
   }))

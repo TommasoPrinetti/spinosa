@@ -160,11 +160,11 @@ export function inspectTemplatePackFreshness(input: {
   let message = "Workspace template pack is current"
   if (stale) {
     if (versionBehind && protocolBehind) {
-      message = "Workspace template pack is stale — framework version and protocol files are behind; refresh recommended"
+      message = "Workspace template pack is stale — framework version and protocol files are behind; run Update workspace"
     } else if (versionBehind) {
-      message = "Workspace template pack is stale — framework version is behind; refresh recommended"
+      message = "Workspace template pack is stale — framework version is behind; run Update workspace"
     } else {
-      message = "Workspace template pack is stale — protocol files differ from the current pack; refresh recommended"
+      message = "Workspace template pack is stale — protocol files differ from the current pack; run Update workspace"
     }
   }
 

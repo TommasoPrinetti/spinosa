@@ -3,6 +3,8 @@ import { useTheme } from "../../context/theme"
 import { useToast } from "../../ui/toast"
 import { useRoute } from "../../context/route"
 import { useSpinosaWorkspace } from "../../context/spinosa-workspace"
+import { useExit } from "../../context/exit"
+import { useEpilogue } from "../../context/epilogue"
 
 import { updateWorkspace } from "@spinosa/core/commands/update"
 import { resolveFrameworkRoot } from "@spinosa/core/framework/discovery"
@@ -33,6 +35,8 @@ export function SpinosaPromptChips(props: { suppressEnter?: boolean }) {
   const toast = useToast()
   const { navigate } = useRoute()
   const spinosa = useSpinosaWorkspace()
+  const exit = useExit()
+  const setEpilogue = useEpilogue()
   const promptRef = usePromptRef()
   const connected = useConnected()
   const dialog = useDialog()
@@ -65,8 +69,6 @@ export function SpinosaPromptChips(props: { suppressEnter?: boolean }) {
   const updateChipLabel = createMemo(() => {
     if (busyAction() === "completed") return "Updated workspace!"
     if (busyAction() === "update") return updateLabel()
-    const freshness = packFreshness()
-    if (freshness?.protocolBehind && !freshness.versionBehind) return "Refresh stale template pack"
     return "Update workspace files"
   })
 
@@ -114,6 +116,17 @@ export function SpinosaPromptChips(props: { suppressEnter?: boolean }) {
     spinosa.refresh()
 
     if (result.success) {
+      // Protocol/agents are not hot-reloaded — exit so the user restarts Spinosa.
+      if (result.changes) {
+        setEpilogue(
+          [
+            "Workspace template pack updated.",
+            "Re-run spinosa (or bun run dev) to catch up — protocol and agents are not hot-reloaded.",
+          ].join("\n"),
+        )
+        exit()
+        return
+      }
       setBusyAction("completed")
       setUpdateLabel("Updated workspace!")
       setTimeout(() => {
