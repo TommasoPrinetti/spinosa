@@ -57,7 +57,9 @@ import { DialogForkFromTimeline } from "./dialog-fork-from-timeline"
 import { DialogMdViewer } from "./dialog-md-viewer"
 import { extractMdPaths } from "./extract-md-paths"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
+import { DialogQueuedPrompts } from "../../component/dialog-queued-prompts"
 import { SessionFooter } from "./footer"
+import { useV2SessionPrompt } from "../../util/session-prompt-v2"
 import { SubagentFooter } from "./subagent-footer.tsx"
 import { filetype } from "../../util/filetype"
 import parsers from "../../parsers-config"
@@ -153,6 +155,7 @@ const sessionBindingCommands = [
   "session.unshare",
   "session.undo",
   "session.redo",
+  "session.queued_prompts",
   "session.toggle.conceal",
   "session.toggle.timestamps",
   "session.toggle.thinking",
@@ -731,11 +734,24 @@ const resolveExportPath = (filename: string): string => {
           })
           return
         }
-        void sdk.client.session.summarize({
-          sessionID: route.sessionID,
-          modelID: selectedModel.modelID,
-          providerID: selectedModel.providerID,
-        })
+        const compact = useV2SessionPrompt()
+          ? sdk.client.v2.session.compact({ sessionID: route.sessionID }, { throwOnError: true })
+          : sdk.client.session.summarize({
+              sessionID: route.sessionID,
+              modelID: selectedModel.modelID,
+              providerID: selectedModel.providerID,
+            })
+        void Promise.resolve(compact)
+          .then(() => {
+            toast.show({ variant: "info", message: "Compacting session…", duration: 2500 })
+          })
+          .catch((error) => {
+            toast.show({
+              title: "Couldn’t compact",
+              message: errorMessage(error),
+              variant: "error",
+            })
+          })
         dialog.clear()
       },
     },
@@ -777,13 +793,28 @@ const resolveExportPath = (filename: string): string => {
         const revert = session()?.revert?.messageID
         const message = messages().findLast((x) => (!revert || x.id < revert) && x.role === "user")
         if (!message) return
-        void sdk.client.session
-          .revert({
-            sessionID: route.sessionID,
-            messageID: message.id,
-          })
+        const revertCall = useV2SessionPrompt()
+          ? sdk.client.v2.session.revert.stage(
+              {
+                sessionID: route.sessionID,
+                messageID: message.id,
+              },
+              { throwOnError: true },
+            )
+          : sdk.client.session.revert({
+              sessionID: route.sessionID,
+              messageID: message.id,
+            })
+        void Promise.resolve(revertCall)
           .then(() => {
             toBottom()
+          })
+          .catch((error) => {
+            toast.show({
+              title: "Couldn’t undo",
+              message: errorMessage(error),
+              variant: "error",
+            })
           })
         const parts = sync.data.part[message.id]
         prompt?.set(
@@ -815,16 +846,50 @@ const resolveExportPath = (filename: string): string => {
         if (!messageID) return
         const message = messages().find((x) => x.role === "user" && x.id > messageID)
         if (!message) {
-          void sdk.client.session.unrevert({
-            sessionID: route.sessionID,
-          })
-          prompt?.set({ input: "", parts: [] })
+          const clearCall = useV2SessionPrompt()
+            ? sdk.client.v2.session.revert.clear({ sessionID: route.sessionID }, { throwOnError: true })
+            : sdk.client.session.unrevert({ sessionID: route.sessionID })
+          void Promise.resolve(clearCall)
+            .then(() => {
+              prompt?.set({ input: "", parts: [] })
+            })
+            .catch((error) => {
+              toast.show({
+                title: "Couldn’t redo",
+                message: errorMessage(error),
+                variant: "error",
+              })
+            })
           return
         }
-        void sdk.client.session.revert({
-          sessionID: route.sessionID,
-          messageID: message.id,
+        const stageCall = useV2SessionPrompt()
+          ? sdk.client.v2.session.revert.stage(
+              {
+                sessionID: route.sessionID,
+                messageID: message.id,
+              },
+              { throwOnError: true },
+            )
+          : sdk.client.session.revert({
+              sessionID: route.sessionID,
+              messageID: message.id,
+            })
+        void Promise.resolve(stageCall).catch((error) => {
+          toast.show({
+            title: "Couldn’t redo",
+            message: errorMessage(error),
+            variant: "error",
+          })
         })
+      },
+    },
+    {
+      title: "Manage queued prompts",
+      value: "session.queued_prompts",
+      category: "Session",
+      enabled: Object.values(sync.data.prompt_delivery).some((delivery) => delivery === "queue"),
+      run: () => {
+        dialog.replace(() => <DialogQueuedPrompts sessionID={route.sessionID} />)
       },
     },
     {

@@ -124,6 +124,11 @@ export function SpinosaPromptChips(props: { suppressEnter?: boolean }) {
             "Re-run spinosa (or bun run dev) to catch up — protocol and agents are not hot-reloaded.",
           ].join("\n"),
         )
+        toast.show({
+          variant: "info",
+          message: "Exiting so you can re-run spinosa with the updated pack…",
+          duration: 4000,
+        })
         exit()
         return
       }
@@ -263,15 +268,20 @@ export function SpinosaPromptChips(props: { suppressEnter?: boolean }) {
         : []),
       ...(!connected()
         ? [{ key: "p", desc: "Select provider", group: "Home", cmd: () => dialog.replace(() => <DialogProvider />) }]
-        : [
-            { key: "n", desc: "New workspace", group: "Home", cmd: () => navigate({ type: "onboarding" }) },
-            { key: "a", desc: "Import files", group: "Home", cmd: () => navigate({ type: "add-files" }) },
-            { key: "w", desc: "Switch workspace", group: "Home", cmd: () => spinosa.showPicker() },
-            { key: "v", desc: "Visualizer", group: "Home", cmd: () => navigate({ type: "visualizer" }) },
-            ...(workspaceReady() && needsWorkspaceUpdate()
-              ? [{ key: "u", desc: "Update workspace files", group: "Home", cmd: () => void runWorkspaceUpdate() }]
-              : []),
-          ]),
+        : workspaceReady()
+          ? [
+              { key: "n", desc: "New workspace", group: "Home", cmd: () => navigate({ type: "onboarding" }) },
+              { key: "a", desc: "Import files", group: "Home", cmd: () => navigate({ type: "add-files" }) },
+              { key: "w", desc: "Switch workspace", group: "Home", cmd: () => spinosa.showPicker() },
+              { key: "v", desc: "Visualizer", group: "Home", cmd: () => navigate({ type: "visualizer" }) },
+              ...(needsWorkspaceUpdate()
+                ? [{ key: "u", desc: "Update workspace files", group: "Home", cmd: () => void runWorkspaceUpdate() }]
+                : []),
+            ]
+          : [
+              { key: "n", desc: "New workspace", group: "Home", cmd: () => navigate({ type: "onboarding" }) },
+              { key: "w", desc: "Pick a workspace", group: "Home", cmd: () => spinosa.showPicker() },
+            ]),
     ],
   }))
 

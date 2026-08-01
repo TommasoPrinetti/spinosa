@@ -48,6 +48,7 @@ import { DialogAgent } from "./component/dialog-agent"
 import { DialogSessionList } from "./component/dialog-session-list"
 import { DialogWorkspaceList } from "./component/dialog-workspace-list"
 import { DialogSpinosaMissingWorkspace } from "./component/dialog-spinosa-missing-workspace"
+import { DialogSpinosaWorkspacePicker } from "./component/dialog-spinosa-workspace-picker"
 import { DialogConsoleOrg } from "./component/dialog-console-org"
 import { ThemeProvider, useTheme } from "./context/theme"
 import { Home } from "./routes/home"
@@ -60,7 +61,7 @@ import { PromptStashProvider } from "./component/prompt/stash"
 import { Toast, ToastProvider, useToast } from "./ui/toast"
 import { DialogConfirm } from "./ui/dialog-confirm"
 import { formatOpenWorkspaceFailureMessage } from "./spinosa/home-visibility"
-import { isDefaultTitle } from "./util/session"
+import { isDefaultTitle, sessionIsBusy } from "./util/session"
 import { setToastError, tuiLog } from "./spinosa/log"
 import { KVProvider, useKV } from "./context/kv"
 import { KV } from "./constants/kv-keys"
@@ -706,6 +707,47 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       if (!failure.recoverable && recover) {
         spinosa.showPicker()
       }
+    })()
+  })
+
+  // Workspace picker overlay — stays on the current route (no silent abandon of mid-run sessions).
+  createEffect(() => {
+    if (!spinosa.pickerRequested) return
+    spinosa.clearPickerRequest()
+    if (!connected()) {
+      dialog.replace(() => <DialogProviderList />)
+      return
+    }
+    void (async () => {
+      const current = route.data
+      if (current.type === "workspace" && current.sessionID) {
+        const status = sync.data.session_status?.[current.sessionID]
+        if (sessionIsBusy(status, sync.session.status(current.sessionID))) {
+          const leave = await DialogConfirm.show(
+            dialog,
+            "Switch workspace?",
+            "A session is still running. Open the workspace picker anyway? The run continues in the background until you abort it.",
+            {
+              confirmLabel: "Open picker",
+              cancelLabel: "Stay",
+              defaultChoice: "cancel",
+            },
+          )
+          if (!leave) {
+            spinosa.restorePickerRoute()
+            return
+          }
+        }
+      }
+      const restore = () => spinosa.restorePickerRoute()
+      dialog.replace(
+        () => <DialogSpinosaWorkspacePicker onClose={restore} />,
+        undefined,
+        () => {
+          dialog.dismiss()
+          restore()
+        },
+      )
     })()
   })
 

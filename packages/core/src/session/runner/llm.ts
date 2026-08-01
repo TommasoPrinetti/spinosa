@@ -508,8 +508,36 @@ const layer = Layer.effect(
       }
     })
 
+    const compact = Effect.fn("SessionRunner.compact")(function* (sessionID: SessionSchema.ID) {
+      const session = yield* getSession(sessionID)
+      if (session.location.directory !== location.directory || session.location.workspaceID !== location.workspaceID)
+        return yield* Effect.interrupt
+      const agent = yield* agents.select(session.agent)
+      const system =
+        (yield* SessionContextEpoch.initialize(db, loadSystemContext(agent), session.id)) ??
+        (yield* SessionContextEpoch.prepare(db, events, loadSystemContext(agent), session.id))
+      const model = yield* models.resolve(session)
+      const entries = yield* SessionHistory.entriesForRunner(db, session.id, system.baselineSeq)
+      const request = LLM.request({
+        model,
+        messages: toLLMMessages(
+          entries.map((entry) => entry.message),
+          model,
+        ),
+        tools: [],
+      })
+      return yield* compaction.compactAfterOverflow({
+        sessionID: session.id,
+        entries,
+        model,
+        request,
+        reason: "manual",
+      })
+    })
+
     return Service.of({
       run,
+      compact,
     })
   }),
 )

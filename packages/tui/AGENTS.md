@@ -16,14 +16,18 @@ Subpath exports in `package.json` expose stable host/plugin surfaces: `./config`
 
 Entry stack (`spinosa/entry.ts`, `routes/spinosa/`):
 
-1. **workspace-picker** — registered workspaces, cwd, Spinosa-only, new workspace
-2. **onboarding** — `not_started` / add-files wizard via `SpinosaCliBridge`
-3. **startup-hub** — `cli_started` → begin indexing in Chat
-4. **workspace** — chat/session shell
+1. **global (Home)** — new-chat prompt, chips, recent workspaces
+2. **onboarding** — new / resume workspace wizard via `SpinosaCliBridge`
+3. **add-files** — import more files into an active workspace
+4. **workspace** — chat/session shell (`sessionID`)
+5. **visualizer** — workspace graph / timeline views
+6. **plugin** — plugin-owned full-screen routes
 
-Route model: `workspace-picker | onboarding | startup-hub | workspace | plugin`. Legacy `home`/`session` navigate inputs normalize to `workspace`.
+Dialogs (workspace picker, settings, agents, models, queued prompts, …) are overlays — not routes.
 
-`SpinosaWorkspaceProvider` holds `activePath` in KV (`spinosa_active_workspace_path`). `setup_status` from `.spinosa/workspace` drives routing.
+Route model: `global | workspace | onboarding | add-files | visualizer | plugin`. Legacy `home`/`session` navigate inputs normalize to `workspace` / `global` as appropriate.
+
+`SpinosaWorkspaceProvider` holds `activePath` in KV (`spinosa_active_workspace_path`). `setup_status` from `.spinosa/workspace` drives launch decisions (startup choice / open).
 
 **Workspace binding:** Chat sessions default to `spinosa.activePath` (not host cwd) via `HomeSessionDestinationProvider`. `SpinosaWorkspaceBinder` watches setup files and refreshes workspace state.
 
@@ -51,11 +55,11 @@ src/
   index.tsx               public exports
   spinosa/                service, bash, parse-goal, parse-corpus, artifact-watcher, types
   routes/
-    spinosa/              workspace-picker, startup-hub, onboarding
-    workspace/            shell
-    home.tsx              new-chat prompt (chat pane)
+    spinosa/              onboarding, add-files, visualizer
+    workspace/            home chips shell helpers
+    home.tsx              global Home (new-chat prompt)
     session/              main session view, dialogs, timeline
-  context/                Solid providers (SDK, sync, theme, permission, …)
+  context/                Solid providers (SDK, sync, theme, route, …)
   component/              dialogs, prompt, command palette, workspace chrome
   feature-plugins/        built-in sidebar/home plugins (builtins.ts)
   plugin/                 plugin slots, runtime, command-shim

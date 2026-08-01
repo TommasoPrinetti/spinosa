@@ -485,10 +485,8 @@ let nameInput: TextareaRenderable | undefined
   }
 
   const goHome = () => {
-    if (resumeWorkspacePath) {
-      spinosa.useGenericMode()
-      return
-    }
+    // Match add-files: Esc/Back returns to Home without clearing the active workspace
+    // into generic mode (resume onboarding previously surprise-cleared via useGenericMode).
     navigate({ type: "global" })
   }
   const navigateBackFrom = (from: WizardStep) => {

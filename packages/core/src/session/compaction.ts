@@ -74,6 +74,8 @@ type Input = {
   readonly entries: readonly Entry[]
   readonly model: Model
   readonly request: LLMRequest
+  /** Defaults to auto (overflow / threshold). Manual `/compact` passes `"manual"`. */
+  readonly reason?: "auto" | "manual"
 }
 
 const estimate = (value: unknown) => Token.estimate(JSON.stringify(value))
@@ -187,12 +189,13 @@ export const make = (dependencies: Dependencies) => {
     })
     const summaryOutput = Math.min(output || SUMMARY_OUTPUT_TOKENS, SUMMARY_OUTPUT_TOKENS)
     if (Token.estimate(summaryPrompt) > context - summaryOutput) return false
+    const reason = input.reason ?? "auto"
     const messageID = SessionMessage.ID.create()
     yield* dependencies.events.publish(SessionEvent.Compaction.Started, {
       sessionID: input.sessionID,
       messageID,
       timestamp: yield* DateTime.now,
-      reason: "auto",
+      reason,
     })
 
     const chunks: string[] = []
@@ -221,7 +224,7 @@ export const make = (dependencies: Dependencies) => {
       sessionID: input.sessionID,
       messageID,
       timestamp: yield* DateTime.now,
-      reason: "auto",
+      reason,
       text: summary,
       recent: selected.recent,
     })

@@ -12,12 +12,15 @@ import { DialogModel } from "./dialog-model"
 import { DialogProvider } from "./dialog-provider"
 import { MAIN_CONTENT_MAX_WIDTH } from "../util/layout"
 import { deleteWorkspace } from "../spinosa/service"
+import { SPINOSA_BASE_MODE, useBindings } from "../keymap"
+import { usePromptRef } from "../context/prompt"
 
 export function HomeFooter() {
   const { theme } = useTheme()
   const dialog = useDialog()
   const toast = useToast()
   const spinosa = useSpinosaWorkspace()
+  const promptRef = usePromptRef()
   const [hovered, setHovered] = createSignal<string | undefined>()
   const [deleting, setDeleting] = createSignal(false)
 
@@ -53,20 +56,26 @@ export function HomeFooter() {
     }
   }
 
-  type Shortcut = { id: string; label: string; action: () => void; danger?: boolean }
+  type Shortcut = { id: string; key: string; label: string; action: () => void; danger?: boolean }
   const buttons = createMemo<Shortcut[]>(() => {
     const items: Shortcut[] = [
-      { id: "S", label: "Settings", action: () => dialog.replace(() => <DialogSpinosaSettings />) },
-      { id: "A", label: "Agents", action: () => dialog.replace(() => <DialogAgent />) },
-      { id: "P", label: "Provider", action: () => dialog.replace(() => <DialogProvider />) },
-      { id: "M", label: "Models", action: () => dialog.replace(() => <DialogModel />) },
+      { id: "S", key: "shift+s", label: "Settings", action: () => dialog.replace(() => <DialogSpinosaSettings />) },
+      { id: "A", key: "shift+a", label: "Agents", action: () => dialog.replace(() => <DialogAgent />) },
+      { id: "P", key: "shift+p", label: "Provider", action: () => dialog.replace(() => <DialogProvider />) },
+      { id: "M", key: "shift+m", label: "Models", action: () => dialog.replace(() => <DialogModel />) },
     ]
     if (!spinosa.genericMode) {
-      items.splice(2, 0, { id: "K", label: "Sessions", action: () => dialog.replace(() => <DialogSessionList />) })
+      items.splice(2, 0, {
+        id: "K",
+        key: "shift+k",
+        label: "Sessions",
+        action: () => dialog.replace(() => <DialogSessionList />),
+      })
     }
     if (spinosa.activePath && !spinosa.genericMode) {
       items.push({
         id: "D",
+        key: "shift+d",
         label: deleting() ? "Deleting…" : "Delete workspace",
         action: () => void deleteActiveWorkspace(),
         danger: true,
@@ -74,6 +83,17 @@ export function HomeFooter() {
     }
     return items
   })
+
+  useBindings(() => ({
+    mode: SPINOSA_BASE_MODE,
+    enabled: () => !promptRef.current?.focused,
+    bindings: buttons().map((item) => ({
+      key: item.key,
+      desc: item.label,
+      group: "Home",
+      cmd: () => item.action(),
+    })),
+  }))
 
   return (
     <box width="100%" maxWidth={MAIN_CONTENT_MAX_WIDTH} flexDirection="row" justifyContent="center" gap={0}>

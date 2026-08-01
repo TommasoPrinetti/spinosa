@@ -23,6 +23,11 @@ export interface Interface {
     readonly sessionID: SessionSchema.ID
     readonly force: boolean
   }) => Effect.Effect<void, RunError>
+  /**
+   * Force one AI compaction for `/compact` (manual). Returns false when there is
+   * nothing useful to summarize (empty context / model limits).
+   */
+  readonly compact: (sessionID: SessionSchema.ID) => Effect.Effect<boolean, RunError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@spinosa/v2/SessionRunner") {}

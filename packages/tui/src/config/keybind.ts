@@ -45,7 +45,7 @@ const keybind = (value: Definition["default"], description: string): Definition 
 export const Definitions = {
   leader: keybind(LeaderDefault, "Leader key for keybind combinations"),
 
-  app_exit: keybind("ctrl+c,ctrl+d,<leader>q", "Exit the application"),
+  app_exit: keybind("ctrl+c,ctrl+d", "Exit the application"),
   app_debug: keybind("none", "Toggle debug panel"),
   app_console: keybind("none", "Toggle console"),
   app_heap_snapshot: keybind("none", "Write heap snapshot"),
@@ -150,7 +150,7 @@ export const Definitions = {
   display_thinking: keybind("none", "Toggle thinking blocks visibility"),
 
   prompt_submit: keybind("none", "Submit prompt"),
-  prompt_submit_queue: keybind("<leader>return", "Steer prompt into the current run"),
+  prompt_submit_queue: keybind("<leader>return", "Steer draft into the current run (break mid-run flow)"),
   prompt_editor_context_clear: keybind("none", "Clear editor context"),
   prompt_skills: keybind("none", "Open skill selector"),
   prompt_stash: keybind("none", "Stash prompt"),
@@ -222,7 +222,7 @@ export const Definitions = {
 
   terminal_suspend: keybind("ctrl+z", "Suspend terminal"),
   terminal_title_toggle: keybind("none", "Toggle terminal title"),
-  tips_toggle: keybind("<leader>h", "Toggle tips on home screen"),
+  tips_toggle: keybind("<leader>?", "Toggle tips on home screen"),
   plugin_manager: keybind("none", "Open plugin manager dialog"),
   plugin_install: keybind("none", "Install plugin"),
 

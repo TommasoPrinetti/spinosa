@@ -374,6 +374,41 @@ export const {
           break
         }
 
+        case "session.next.revert.staged": {
+          const result = search(store.session, event.properties.sessionID, (s) => s.id)
+          if (!result.found) break
+          setStore(
+            "session",
+            result.index,
+            produce((session) => {
+              session.revert = event.properties.revert as typeof session.revert
+              session.time.updated =
+                typeof event.properties.timestamp === "number"
+                  ? event.properties.timestamp
+                  : Date.parse(String(event.properties.timestamp ?? "")) || session.time.updated
+            }),
+          )
+          break
+        }
+
+        case "session.next.revert.cleared":
+        case "session.next.revert.committed": {
+          const result = search(store.session, event.properties.sessionID, (s) => s.id)
+          if (!result.found) break
+          setStore(
+            "session",
+            result.index,
+            produce((session) => {
+              session.revert = undefined
+              session.time.updated =
+                typeof event.properties.timestamp === "number"
+                  ? event.properties.timestamp
+                  : Date.parse(String(event.properties.timestamp ?? "")) || session.time.updated
+            }),
+          )
+          break
+        }
+
         case "session.status": {
           setStore("session_status", event.properties.sessionID, event.properties.status)
           break

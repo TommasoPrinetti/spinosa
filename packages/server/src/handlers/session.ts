@@ -213,6 +213,14 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                 }),
               ),
             ),
+            Effect.catch((error) =>
+              Effect.fail(
+                new ServiceUnavailableError({
+                  message: error instanceof Error ? error.message : "Session compact failed",
+                  service: "session.compact",
+                }),
+              ),
+            ),
           )
           return HttpApiSchema.NoContent.make()
         }),

@@ -167,7 +167,8 @@ export const { use: useSpinosaWorkspace, provider: SpinosaWorkspaceProvider } = 
     }
 
     const showPicker = () => {
-      // Save the current route before navigating away (so the dialog's onClose can restore it)
+      // Keep the current route; Home/app open the picker as an overlay.
+      // Previously this navigated to global and stranded mid-run sessions.
       const currentRoute = route.data
       if (currentRoute.type === "workspace" && currentRoute.sessionID) {
         kv.set(SPINOSA_LAST_SESSION_KV, currentRoute.sessionID)
@@ -176,7 +177,6 @@ export const { use: useSpinosaWorkspace, provider: SpinosaWorkspaceProvider } = 
         setPickerReturnSessionId(undefined)
       }
       setPickerRequested(true)
-      route.navigate({ type: "global" })
     }
 
     createEffect(() => {

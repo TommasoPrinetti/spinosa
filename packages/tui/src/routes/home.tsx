@@ -21,7 +21,6 @@ import { useSpinosaWorkspace } from "../context/spinosa-workspace"
 import { useTheme } from "../context/theme"
 import type { Theme } from "../context/theme"
 import { useDialog } from "../ui/dialog"
-import { DialogSpinosaWorkspacePicker } from "../component/dialog-spinosa-workspace-picker"
 import { DialogSpinosaStartupChoice } from "../component/dialog-spinosa-startup-choice"
 import { DialogSpinosaMissingWorkspace } from "../component/dialog-spinosa-missing-workspace"
 import { getWorkspaceLaunchDecision } from "../spinosa/workspace-launch"
@@ -372,24 +371,6 @@ export function Home() {
     if (r.current.input !== args.prompt) return
     sent = true
     r.submit()
-  })
-
-  createEffect(() => {
-    if (!spinosa.pickerRequested) return
-    spinosa.clearPickerRequest()
-    if (!providerConnected()) {
-      dialog.replace(() => <DialogProvider />)
-      return
-    }
-    const restore = () => spinosa.restorePickerRoute()
-    dialog.replace(
-      () => <DialogSpinosaWorkspacePicker onClose={restore} />,
-      undefined,
-      () => {
-        dialog.dismiss()
-        restore()
-      },
-    )
   })
 
   const launchRecentWorkspace = async (workspacePath: string) => {

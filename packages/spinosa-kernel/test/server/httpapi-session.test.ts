@@ -670,20 +670,22 @@ describe("session HttpApi", () => {
   )
 
   it.instance(
-    "returns v2 public unavailable errors for unfinished session mutations",
+    "runs v2 session compact without returning unavailable",
     () =>
       Effect.gen(function* () {
         const test = yield* TestInstance
         const headers = { "x-opencode-directory": test.directory }
-        const session = yield* createSession({ title: "v2 unavailable" })
+        const session = yield* createSession({ title: "v2 compact" })
 
         const compact = yield* request(`/api/session/${session.id}/compact`, { method: "POST", headers })
-        expect(compact.status).toBe(503)
-        expect(yield* responseJson(compact)).toEqual({
-          _tag: "ServiceUnavailableError",
-          message: "Session compact is not available yet",
-          service: "session.compact",
-        })
+        // Empty / no-model sessions may soft-fail as 503 with a concrete message,
+        // but must not claim the operation is stubbed as unavailable.
+        expect([204, 503]).toContain(compact.status)
+        if (compact.status === 503) {
+          const body = yield* responseJson(compact)
+          expect(body).toMatchObject({ _tag: "ServiceUnavailableError", service: "session.compact" })
+          expect(String((body as { message?: string }).message ?? "")).not.toContain("not available yet")
+        }
 
         const wait = yield* request(`/api/session/${session.id}/wait`, { method: "POST", headers })
         expect(wait.status).toBe(503)
