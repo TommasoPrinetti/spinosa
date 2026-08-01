@@ -68,7 +68,12 @@ import { useTuiConfig } from "../../config"
 import { usePromptWorkspace } from "./workspace"
 import { usePromptMove } from "./move"
 import { readLocalAttachment } from "./local-attachment"
-import { cancelSpinosaSubmit, executeSpinosaSubmit, prepareSpinosaSubmit } from "../../spinosa/orchestrator"
+import {
+  cancelSpinosaSubmit,
+  executeSpinosaSubmit,
+  prepareSpinosaSubmit,
+  shouldPrepareSpinosaSubmit,
+} from "../../spinosa/orchestrator"
 import { readStartupPrompt } from "../../spinosa/service"
 import { useSpinosaWorkspace } from "../../context/spinosa-workspace"
 
@@ -1213,9 +1218,9 @@ export function Prompt(props: PromptProps) {
     const admitAfterPrepare = async (targetSessionID: string) => {
     let outboundText = inputText
     let preparedSpinosa: Awaited<ReturnType<typeof prepareSpinosaSubmit>> | undefined
-    if (sessionDirectory && !store.prompt.forceAgent) {
+    if (shouldPrepareSpinosaSubmit({ sessionDirectory, forceAgent: store.prompt.forceAgent })) {
       try {
-        const prepared = await prepareSpinosaSubmit(sessionDirectory, inputText)
+        const prepared = await prepareSpinosaSubmit(sessionDirectory!, inputText)
         preparedSpinosa = prepared
         outboundText = prepared.text
       } catch (error) {

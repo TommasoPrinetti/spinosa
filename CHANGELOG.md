@@ -17,6 +17,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **Temporary:** TUI research auto-framing is disabled by default (`SPINOSA_SKIP_RESEARCH_PREP`, default on). Enter sends prompts directly to the orchestrator harness (V1/V2 `session.prompt`) instead of `prepareSpinosaSubmit` → Q1–Q5 classify → goal artifact → `executeSpinosaSubmit`. Set `SPINOSA_SKIP_RESEARCH_PREP=0` to restore the research prep layer.
 - Mid-run prompts now **queue by default** (Enter while busy). Queued user messages show a **Steer** control to promote that admission immediately; `<leader>return` / `prompt.submit_queue` also steers the draft. Mini-TUI queued-prompt menu: Return steers (abort active + run next).
 
 ### Fixed

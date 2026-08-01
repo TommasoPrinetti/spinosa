@@ -1,5 +1,6 @@
 import { ResearchRunService } from "@spinosa/core"
 import { SpinosaKernelHarness } from "@spinosa/harness"
+import { value as envValue } from "@spinosa/kernel-core/flag/flag"
 import { cancelRun, FileResearchRunRepository, type RouteClass } from "@spinosa/runtime"
 import { createImportJob, cancelSpinosaJob, type ImportJobHandle } from "./job-events"
 
@@ -14,6 +15,24 @@ export type PreparedSubmit = {
   goalPath?: string
   workspacePath?: string
   framed: boolean
+}
+
+/**
+ * Temporary default-on bypass of Q1–Q5 classify → goal artifact → executeSpinosaSubmit.
+ * Set `SPINOSA_SKIP_RESEARCH_PREP=0` to re-enable the research prep layer.
+ */
+export function skipResearchPrep(): boolean {
+  const entry = envValue("SPINOSA_SKIP_RESEARCH_PREP")
+  if (entry === undefined) return true
+  const normalized = entry.toLowerCase()
+  return normalized !== "0" && normalized !== "false"
+}
+
+export function shouldPrepareSpinosaSubmit(input: {
+  sessionDirectory?: string
+  forceAgent?: string
+}): boolean {
+  return Boolean(input.sessionDirectory && !input.forceAgent && !skipResearchPrep())
 }
 
 export async function prepareSpinosaSubmit(workspacePath: string, promptText: string): Promise<PreparedSubmit> {

@@ -6,6 +6,8 @@ import {
   cancelSpinosaSubmit,
   executeSpinosaSubmit,
   prepareSpinosaSubmit,
+  shouldPrepareSpinosaSubmit,
+  skipResearchPrep,
 } from "../../src/spinosa/orchestrator"
 import { tmpdir } from "../fixture/fixture"
 import { mkdir } from "node:fs/promises"
@@ -24,6 +26,32 @@ afterAll(() => {
     }
   }
   rmSync(path.join(fixture, ".spinosa", "runs"), { recursive: true, force: true })
+})
+
+describe("skipResearchPrep", () => {
+  const previous = process.env.SPINOSA_SKIP_RESEARCH_PREP
+
+  afterAll(() => {
+    if (previous === undefined) delete process.env.SPINOSA_SKIP_RESEARCH_PREP
+    else process.env.SPINOSA_SKIP_RESEARCH_PREP = previous
+  })
+
+  test("defaults to skipping research prep", () => {
+    delete process.env.SPINOSA_SKIP_RESEARCH_PREP
+    expect(skipResearchPrep()).toBe(true)
+    expect(shouldPrepareSpinosaSubmit({ sessionDirectory: fixture })).toBe(false)
+  })
+
+  test("SPINOSA_SKIP_RESEARCH_PREP=0 re-enables prepare", () => {
+    process.env.SPINOSA_SKIP_RESEARCH_PREP = "0"
+    expect(skipResearchPrep()).toBe(false)
+    expect(shouldPrepareSpinosaSubmit({ sessionDirectory: fixture })).toBe(true)
+  })
+
+  test("forceAgent still skips prepare even when research prep is enabled", () => {
+    process.env.SPINOSA_SKIP_RESEARCH_PREP = "0"
+    expect(shouldPrepareSpinosaSubmit({ sessionDirectory: fixture, forceAgent: "build" })).toBe(false)
+  })
 })
 
 describe("prepareSpinosaSubmit", () => {
