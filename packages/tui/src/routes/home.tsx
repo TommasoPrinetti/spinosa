@@ -38,6 +38,7 @@ import { DialogConfirm } from "../ui/dialog-confirm"
 import { join } from "node:path"
 import { statSync } from "node:fs"
 import { useConnected } from "../component/use-connected"
+import { ORCHESTRATOR_AGENT_ID } from "../util/agent"
 import { DialogProvider } from "../component/dialog-provider"
 import { inspectWorkspacePresence, isUsableWorkspaceStatus, workspacePresenceLabel } from "@spinosa/core/workspace/presence"
 import type { SpinosaWorkspacePresence } from "@spinosa/core/types"
@@ -317,6 +318,8 @@ export function Home() {
     const r = ref()
     const prompt = startupPrompt()
     if (!r || !prompt) return
+    // Queued / routed startup briefs always run as the orchestrator.
+    local.agent.set(ORCHESTRATOR_AGENT_ID)
     r.set(prompt)
 
     if (!prompt.autoSubmit && startupPromptIsQueued()) {

@@ -10,6 +10,8 @@ export type PromptInfo = {
   input: string
   mode?: "normal" | "shell"
   autoSubmit?: boolean
+  /** When set, submit selects this primary agent (startup briefs force `build`). */
+  forceAgent?: string
   parts: (
     | Omit<FilePart, "id" | "messageID" | "sessionID">
     | Omit<AgentPart, "id" | "messageID" | "sessionID">

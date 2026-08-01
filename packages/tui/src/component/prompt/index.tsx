@@ -39,7 +39,7 @@ import { type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import type { AssistantMessage, FilePart, UserMessage } from "@spinosa/sdk/v2"
 import { Locale } from "../../util/locale"
-import { agentDisplayName } from "../../util/agent"
+import { agentDisplayName, ORCHESTRATOR_AGENT_ID } from "../../util/agent"
 import { errorMessage } from "../../util/error"
 import { formatDuration } from "../../util/format"
 import { resolveSessionRuntimeStatus } from "../../util/session"
@@ -621,7 +621,11 @@ export function Prompt(props: PromptProps) {
           }
 
           const nextInput = (await readStartupPrompt(workspacePath).catch(() => undefined)) ?? STARTUP_PROMPT_FALLBACK
+          // Startup indexing must always run as the orchestrator — never a sticky
+          // last-used specialist (e.g. spinosa-overseer after Tab cycle).
+          local.agent.set(ORCHESTRATOR_AGENT_ID)
           replacePrompt(nextInput)
+          setStore("prompt", "forceAgent", ORCHESTRATOR_AGENT_ID)
           await submit()
         },
       },
@@ -1032,6 +1036,7 @@ export function Prompt(props: PromptProps) {
     if (workspace.creating() || move.creating()) return false
     if (auto()?.visible) return false
     if (!store.prompt.input) return false
+    if (store.prompt.forceAgent) local.agent.set(store.prompt.forceAgent)
     const agent = local.agent.current()
     if (!agent) return false
     const trimmed = store.prompt.input.trim()

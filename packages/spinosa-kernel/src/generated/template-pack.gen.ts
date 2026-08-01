@@ -205,7 +205,7 @@ import file_201 from "./template-blobs/ad2c95b1186aaea200375e61ed1053f7de4075470
 import file_202 from "./template-blobs/be7d4b08fb01b58d25dd55605ec0a37778bb486d354438c2924ff42615d84441.bin" with { type: "file" };
 import file_203 from "./template-blobs/d0cefe4938b99f347af05716efe8b031d7225c7077ef9ecd9c20ee867ec4adb9.bin" with { type: "file" };
 import file_204 from "./template-blobs/d4367d54def6d49919425f7112b37ce7518dd17f9c3199e3bd9c6191fad1eb2e.bin" with { type: "file" };
-import file_205 from "./template-blobs/ae0b28a11d63ebe7ef782ee4422e458c200645bf5ec859f9d1f79da8fcc64433.bin" with { type: "file" };
+import file_205 from "./template-blobs/d2f1fc96194087ae6b96c02ebd5ac7c0a5727cf0f8d7918ea0ee12c50026e05c.bin" with { type: "file" };
 import file_206 from "./template-blobs/cfd26e1f215a92ee32187ea322d50013e45cf4068bcceba6762ebb54fb9d3361.bin" with { type: "file" };
 import file_207 from "./template-blobs/9fa542c74d4aed363fda2d348d0d5139ab3d495ffce84b59b5b0215ea0fb3353.bin" with { type: "file" };
 import file_208 from "./template-blobs/b0730a2e8e01730e771acbe1859c0489331bf19cdc7aca4f89f613cea8e62976.bin" with { type: "file" };
@@ -283,7 +283,7 @@ import file_279 from "./template-blobs/a2e855a23f53ba682e6dee9d65019b4717b6330fd
 
 export const templatePack = {
   version: "1.0.3-beta.12",
-  packId: "c6fd3f6204382bdca61c3938f0fd4eb6ef3fb82e102577deb5ce5280b8c2541c",
+  packId: "2bbdc85bb8ef89fe0ebfbcae095d7004376f9b2da650fbc495be045c4c1e0fa2",
   files: [
   { path: ".agents/agents/spinosa-analyst.md", mode: 420, sha256: "1e4e006ad3037dfc523038747011ae9cb6604bd8a138be996f346e74297c0201", contentPath: file_0 },
   { path: ".agents/agents/spinosa-evaluator.md", mode: 420, sha256: "41572a3010fb44a18d59215e76070eecd6bd41ca124f4cb434242980a712754f", contentPath: file_1 },
@@ -490,7 +490,7 @@ export const templatePack = {
   { path: ".opencode/agents/spinosa-serendippo.md", mode: 420, sha256: "be7d4b08fb01b58d25dd55605ec0a37778bb486d354438c2924ff42615d84441", contentPath: file_202 },
   { path: ".opencode/agents/spinosa-verifier.md", mode: 420, sha256: "d0cefe4938b99f347af05716efe8b031d7225c7077ef9ecd9c20ee867ec4adb9", contentPath: file_203 },
   { path: ".opencode/agents/spinosa-visualizer.md", mode: 420, sha256: "d4367d54def6d49919425f7112b37ce7518dd17f9c3199e3bd9c6191fad1eb2e", contentPath: file_204 },
-  { path: ".opencode/agents/spinosa-writer.md", mode: 420, sha256: "ae0b28a11d63ebe7ef782ee4422e458c200645bf5ec859f9d1f79da8fcc64433", contentPath: file_205 },
+  { path: ".opencode/agents/spinosa-writer.md", mode: 420, sha256: "d2f1fc96194087ae6b96c02ebd5ac7c0a5727cf0f8d7918ea0ee12c50026e05c", contentPath: file_205 },
   { path: ".opencode/package-lock.json", mode: 420, sha256: "cfd26e1f215a92ee32187ea322d50013e45cf4068bcceba6762ebb54fb9d3361", contentPath: file_206 },
   { path: ".opencode/package.json", mode: 420, sha256: "9fa542c74d4aed363fda2d348d0d5139ab3d495ffce84b59b5b0215ea0fb3353", contentPath: file_207 },
   { path: ".opencode/references/analysis-questions.md", mode: 420, sha256: "b0730a2e8e01730e771acbe1859c0489331bf19cdc7aca4f89f613cea8e62976", contentPath: file_208 },

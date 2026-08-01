@@ -171,6 +171,7 @@ describe("spinosa add-files edge cases", () => {
       input: "startup prompt",
       parts: [],
       autoSubmit: false,
+      forceAgent: "build",
     })
   })
 })

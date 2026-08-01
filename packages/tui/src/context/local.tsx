@@ -13,6 +13,7 @@ import { useTheme } from "./theme"
 import { useToast } from "../ui/toast"
 import { useRoute } from "./route"
 import { usePermission } from "./permission"
+import { resolveDefaultPrimaryAgent } from "../util/agent"
 
 export type LocalTheme = {
   secondary: RGBA
@@ -94,7 +95,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           return agents()
         },
         current() {
-          return agents().find((x) => x.name === agentStore.current) ?? agents().at(0)
+          return resolveDefaultPrimaryAgent(agents(), agentStore.current)
         },
         set(name: string) {
           if (!agents().some((x) => x.name === name))

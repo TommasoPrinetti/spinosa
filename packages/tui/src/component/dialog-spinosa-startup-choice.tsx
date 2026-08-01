@@ -1,11 +1,13 @@
 import { TextAttributes } from "@opentui/core"
 import { createMemo, createSignal, For } from "solid-js"
 import { useTheme } from "../context/theme"
+import { useLocal } from "../context/local"
 import { useSpinosaWorkspace } from "../context/spinosa-workspace"
 import { buildStartupChatPrompt } from "@spinosa/core/commands/startup"
 import { useDialog } from "../ui/dialog"
 import { useBindings } from "../keymap"
 import { buttonBackground, buttonBorder, buttonText } from "../util/button"
+import { ORCHESTRATOR_AGENT_ID } from "../util/agent"
 
 export function DialogSpinosaStartupChoice(props: {
   workspacePath: string
@@ -14,6 +16,7 @@ export function DialogSpinosaStartupChoice(props: {
   onBack?: () => void
 }) {
   const { theme } = useTheme()
+  const local = useLocal()
   const spinosa = useSpinosaWorkspace()
   const dialog = useDialog()
   const [selected, setSelected] = createSignal(0)
@@ -22,6 +25,7 @@ export function DialogSpinosaStartupChoice(props: {
     // Clear the dialog first so Enter feels immediate; openWorkspace can take
     // a beat for registry/meta I/O.
     dialog.clear()
+    local.agent.set(ORCHESTRATOR_AGENT_ID)
     spinosa.queuePrompt(buildStartupChatPrompt(props.prompt), props.workspacePath)
     void spinosa.openWorkspace(props.workspacePath, { route: { type: "global" } })
   }

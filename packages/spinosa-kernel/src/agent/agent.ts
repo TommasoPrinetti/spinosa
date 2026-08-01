@@ -353,6 +353,8 @@ const layer = Layer.effect(
             if (agent.hidden === true) throw new Error(`default agent "${c.default_agent}" is hidden`)
             return agent
           }
+          const build = agents["build"]
+          if (build && build.mode !== "subagent" && build.hidden !== true) return build
           const visible = Object.values(agents).find((a) => a.mode !== "subagent" && a.hidden !== true)
           if (!visible) throw new Error("no primary visible agent found")
           return visible

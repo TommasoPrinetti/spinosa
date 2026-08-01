@@ -18,6 +18,8 @@ export function buildStartupChatPrompt(prompt: string) {
     input: prompt,
     parts: [] as [],
     autoSubmit: false as const,
+    /** Spinosa TUI honors this and selects Orchestrator-Editor (`build`). */
+    forceAgent: "build" as const,
   }
 }
 
