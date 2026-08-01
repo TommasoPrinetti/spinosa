@@ -49,9 +49,6 @@ import {
   useV2SessionPrompt,
   shouldNavigateBeforePrepare,
   shouldSeedSessionBeforeNavigate,
-  shouldNavigateBeforeCreate,
-  createPendingSessionID,
-  buildOptimisticSession,
 } from "../../util/session-prompt-v2"
 import { createColors, createFrames } from "../../ui/spinner"
 import { useDialog } from "../../ui/dialog"
@@ -1080,7 +1077,6 @@ export function Prompt(props: PromptProps) {
     let sessionID = props.sessionID
     let sessionDirectory = sessionID ? sync.session.get(sessionID)?.directory : undefined
     let finishMoveProgress = false
-    let navigatedBeforeCreate = false
 
     const inputText = expandTrackedPastedText(
       store.prompt.input,
@@ -1092,9 +1088,9 @@ export function Prompt(props: PromptProps) {
       }),
     )
 
-    // Snapshot prompt state before any clear / navigate. New-session Enter must
-    // seed sync + leave Home immediately — session.create, prepareSpinosaSubmit,
-    // and first-token / V2 admission must not gate the conversation route.
+    // Snapshot prompt state before any clear / navigate. New-session Enter keeps
+    // the boot overlay on Home until session.create returns a real ID — then
+    // seeds sync and navigates. Prepare / V2 admission stay async after that.
     const nonTextParts = store.prompt.parts.filter((part) => part.type !== "text")
     const currentMode = store.mode
     const promptSnapshot = {
@@ -1148,63 +1144,42 @@ export function Prompt(props: PromptProps) {
       finishMoveProgress = Boolean(move.progress())
       sessionDirectory = directory
 
-      if (shouldNavigateBeforeCreate(false) && directory) {
-        sessionID = createPendingSessionID()
-        sync.session.upsert(
-          buildOptimisticSession({
-            id: sessionID,
-            directory,
-            projectID: project.project(),
-            workspaceID,
-            title: store.prompt.input.trim().slice(0, 80),
-          }),
-        )
-        clearPromptUi()
-        if (editorParts.length > 0) editor.preserveSelectionFromNewSession()
-        route.navigate({
-          type: "workspace",
-          sessionID,
-          conversationBooting: true,
-        })
-        navigatedBeforeCreate = true
-      } else {
-        const res = await sdk.client.session.create({
-          directory,
-          workspace: workspaceID,
-          agent: agent.name,
-          model: {
-            providerID: selectedModel.providerID,
-            id: selectedModel.modelID,
-            variant,
-          },
+      const res = await sdk.client.session.create({
+        directory,
+        workspace: workspaceID,
+        agent: agent.name,
+        model: {
+          providerID: selectedModel.providerID,
+          id: selectedModel.modelID,
+          variant,
+        },
+      })
+
+      if (res.error) {
+        if (finishMoveProgress) move.finishSubmit()
+        route.finishConversationBoot()
+        console.log("Creating a session failed:", res.error)
+
+        toast.show({
+          title: "Couldn’t start a session",
+          message: errorMessage(res.error),
+          variant: "error",
+          duration: 10000,
         })
 
-        if (res.error) {
-          if (finishMoveProgress) move.finishSubmit()
-          route.finishConversationBoot()
-          console.log("Creating a session failed:", res.error)
+        return true
+      }
 
-          toast.show({
-            title: "Couldn’t start a session",
-            message: errorMessage(res.error),
-            variant: "error",
-            duration: 10000,
-          })
-
-          return true
-        }
-
-        sessionID = res.data.id
-        // Session UI gates transcript+prompt on sync.session.get — seed before navigate
-        // so conversation activates immediately (don't wait for SSE / sync.session.sync).
-        if (shouldSeedSessionBeforeNavigate(false) && res.data) {
-          sync.session.upsert(res.data)
-        }
+      sessionID = res.data.id
+      // Session UI gates transcript+prompt on sync.session.get — seed before navigate
+      // so conversation activates immediately (don't wait for SSE / sync.session.sync).
+      if (shouldSeedSessionBeforeNavigate(false) && res.data) {
+        sync.session.upsert(res.data)
       }
     }
 
     const isNewSession = shouldNavigateBeforePrepare(Boolean(props.sessionID))
-    if (isNewSession && !navigatedBeforeCreate) {
+    if (isNewSession) {
       if (!sessionID) return false
       clearPromptUi()
       if (editorParts.length > 0) editor.preserveSelectionFromNewSession()
@@ -1371,43 +1346,7 @@ export function Prompt(props: PromptProps) {
     }
     }
 
-    if (navigatedBeforeCreate && sessionID) {
-      const pendingSessionID = sessionID
-      const selectedWorkspace = workspace.selection()
-      const workspaceID = selectedWorkspace?.type === "existing" ? selectedWorkspace.workspaceID : undefined
-      const directory = sessionDirectory
-      if (finishMoveProgress) move.finishSubmit()
-      void (async () => {
-        const res = await sdk.client.session.create({
-          id: pendingSessionID,
-          directory,
-          workspace: workspaceID,
-          agent: agent.name,
-          model: {
-            providerID: selectedModel.providerID,
-            id: selectedModel.modelID,
-            variant,
-          },
-        })
-        if (res.error) {
-          console.log("Creating a session failed:", res.error)
-          toast.show({
-            title: "Couldn’t start a session",
-            message: errorMessage(res.error),
-            variant: "error",
-            duration: 10000,
-          })
-          route.navigate({ type: "global" })
-          route.finishConversationBoot()
-          return
-        }
-        if (res.data) sync.session.upsert(res.data)
-        await admitAfterPrepare(pendingSessionID)
-      })()
-      return true
-    }
-
-    // New-session: navigate already happened — prepare/admit must not block submit return.
+    // New-session: create + navigate already happened — prepare/admit must not block submit return.
     if (isNewSession) {
       if (!sessionID) return false
       if (finishMoveProgress) move.finishSubmit()

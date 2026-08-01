@@ -50,7 +50,7 @@ import { useDialog } from "../../ui/dialog"
 import { DialogAlert } from "../../ui/dialog-alert"
 import { TodoItem } from "../../component/todo-item"
 import { DialogMessage } from "./dialog-message"
-import { isConversationShellReady } from "./conversation-shell-ready"
+import { isConversationShellReady, shouldBounceMissingSession } from "./conversation-shell-ready"
 import type { PromptInfo } from "../../component/prompt/history"
 import { DialogConfirm } from "../../ui/dialog-confirm"
 import { DialogTimeline } from "./dialog-timeline"
@@ -462,6 +462,14 @@ const resolveExportPath = (filename: string): string => {
       const previousWorkspace = untrack(() => project.workspace.current())
       const result = await sdk.client.session.get({ sessionID }, { throwOnError: true })
       if (!result.data) {
+        if (
+          !shouldBounceMissingSession({
+            conversationBooting: conversationBooting(),
+            hasLocalSession: Boolean(sync.session.get(sessionID)),
+          })
+        ) {
+          return
+        }
         toast.show({
           message: `Session not found: ${sessionID}`,
           variant: "error",
@@ -487,6 +495,14 @@ const resolveExportPath = (filename: string): string => {
       if (route.sessionID === sessionID && scroll) scroll.scrollBy(100_000)
     })().catch((error) => {
       if (route.sessionID !== sessionID) return
+      if (
+        !shouldBounceMissingSession({
+          conversationBooting: conversationBooting(),
+          hasLocalSession: Boolean(sync.session.get(sessionID)),
+        })
+      ) {
+        return
+      }
       toast.show({
         message: errorMessage(error),
         variant: "error",

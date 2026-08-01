@@ -1,6 +1,6 @@
 import { createEffect, onCleanup, Show } from "solid-js"
 import { useTheme } from "../context/theme"
-import { Spinner } from "./spinner"
+import { WaveSpinner } from "./wave-spinner"
 
 export const CONVERSATION_BOOT_TIMEOUT_MS = 30_000
 
@@ -31,14 +31,9 @@ export function ConversationLoading(props: {
         alignItems="center"
         backgroundColor={theme.background}
       >
-        <box
-          backgroundColor={theme.backgroundPanel}
-          paddingLeft={2}
-          paddingRight={2}
-          paddingTop={1}
-          paddingBottom={1}
-        >
-          <Spinner color={theme.textMuted}>Loading conversation engine…</Spinner>
+        <box flexDirection="column" alignItems="center" gap={1}>
+          <WaveSpinner color={theme.primary} />
+          <text fg={theme.textMuted}>Loading conversation engine…</text>
         </box>
       </box>
     </Show>

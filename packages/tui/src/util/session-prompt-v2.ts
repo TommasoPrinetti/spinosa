@@ -64,15 +64,12 @@ export function useV2SessionPrompt(): boolean {
   return normalized === "1" || normalized === "true"
 }
 
-/**
- * Home / workspace-ready Enter must not wait on `session.create` (instance bootstrap
- * for a Spinosa workspace path can take seconds). Generate the id client-side, seed
- * sync, and navigate before the create request returns.
- */
+/** @deprecated Client-only IDs race Session's session.get and bounce Home. Prefer server create. */
 export function createPendingSessionID(): string {
   return `ses_${crypto.randomUUID().replace(/-/g, "").slice(0, 26)}`
 }
 
+/** @deprecated Optimistic seeds mark the shell ready before session.create finishes. */
 export function buildOptimisticSession(input: {
   id: string
   directory: string
@@ -97,28 +94,31 @@ export function buildOptimisticSession(input: {
 }
 
 /**
- * New-session Enter (Home → conversation) must:
- * 1. seed an optimistic session into the sync store (Session UI is gated on `session()`)
- * 2. navigate immediately — before `session.create` returns
- * Spinosa prepare / V2 admission / first token stay async after the route change.
+ * New-session Enter (Home → conversation) must navigate after the server
+ * creates the session, then run prepare / V2 admission without blocking return
+ * from that point. Navigating on a client-only ID makes Session's session.get
+ * 404 and bounce back to Home.
  */
 export function shouldNavigateBeforePrepare(hasExistingSessionID: boolean): boolean {
   return !hasExistingSessionID
 }
 
-/** Same gate as navigate: seed before route change on new sessions. */
+/** Seed the server-created session into sync before the route change. */
 export function shouldSeedSessionBeforeNavigate(hasExistingSessionID: boolean): boolean {
   return shouldNavigateBeforePrepare(hasExistingSessionID)
 }
 
-/** Navigate before awaiting `session.create` on new-session submits. */
-export function shouldNavigateBeforeCreate(hasExistingSessionID: boolean): boolean {
-  return shouldNavigateBeforePrepare(hasExistingSessionID)
+/**
+ * Never navigate before session.create — a pending client ID is not gettable yet
+ * and Session treats that as a fatal miss → Home.
+ */
+export function shouldNavigateBeforeCreate(_hasExistingSessionID: boolean): boolean {
+  return false
 }
 
 /** Contract order for Home Enter → conversation (regression lock). */
-export type NewSessionSubmitPhase = "seed" | "navigate" | "create" | "prepare" | "prompt"
+export type NewSessionSubmitPhase = "create" | "seed" | "navigate" | "prepare" | "prompt"
 
 export function newSessionSubmitPhases(): readonly NewSessionSubmitPhase[] {
-  return ["seed", "navigate", "create", "prepare", "prompt"] as const
+  return ["create", "seed", "navigate", "prepare", "prompt"] as const
 }

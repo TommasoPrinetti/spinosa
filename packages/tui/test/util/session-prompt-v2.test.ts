@@ -34,14 +34,14 @@ describe("session-prompt-v2", () => {
     expect(resolvePromptDelivery({ busy: true, requested: "steer" })).toBe("steer")
   })
 
-  test("navigates to conversation before Spinosa prepare on new sessions only", () => {
+  test("navigates after server create on new sessions only", () => {
     expect(shouldNavigateBeforePrepare(false)).toBe(true)
     expect(shouldNavigateBeforePrepare(true)).toBe(false)
     expect(shouldSeedSessionBeforeNavigate(false)).toBe(true)
     expect(shouldSeedSessionBeforeNavigate(true)).toBe(false)
-    expect(shouldNavigateBeforeCreate(false)).toBe(true)
+    expect(shouldNavigateBeforeCreate(false)).toBe(false)
     expect(shouldNavigateBeforeCreate(true)).toBe(false)
-    expect([...newSessionSubmitPhases()]).toEqual(["seed", "navigate", "create", "prepare", "prompt"])
+    expect([...newSessionSubmitPhases()]).toEqual(["create", "seed", "navigate", "prepare", "prompt"])
   })
 
   test("buildOptimisticSession seeds a conversation-ready session", () => {

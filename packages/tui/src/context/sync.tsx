@@ -54,6 +54,46 @@ function search<T>(items: T[], target: string, key: (item: T) => string) {
   return { found: false, index: left }
 }
 
+function eventTimestamp(value: unknown, fallback = Date.now()): number {
+  if (typeof value === "number") return value
+  return Date.parse(String(value ?? "")) || fallback
+}
+
+/** Project V2 tool content/result into the V1 ToolPart completed `output` string. */
+function toolOutputFromV2(content: unknown, result?: unknown): string {
+  if (Array.isArray(content)) {
+    const texts: string[] = []
+    for (const item of content) {
+      if (!item || typeof item !== "object") continue
+      const row = item as { type?: unknown; text?: unknown }
+      if (row.type === "text" && typeof row.text === "string") texts.push(row.text)
+    }
+    if (texts.length > 0) return texts.join("\n")
+  }
+  if (typeof result === "string") return result
+  if (result !== undefined && result !== null) {
+    try {
+      return JSON.stringify(result)
+    } catch {
+      return String(result)
+    }
+  }
+  return ""
+}
+
+function unknownErrorMessage(error: unknown): string {
+  if (typeof error === "string") return error
+  if (error && typeof error === "object") {
+    const message = (error as { message?: unknown }).message
+    if (typeof message === "string" && message.length > 0) return message
+  }
+  try {
+    return JSON.stringify(error)
+  } catch {
+    return String(error)
+  }
+}
+
 export const {
   context: SyncContext,
   use: useSync,
@@ -572,6 +612,356 @@ export const {
             produce((draft) => {
               const part = draft[result.index]
               if (part && part.type === "text") part.text = (part.text ?? "") + delta
+            }),
+          )
+          break
+        }
+
+        case "session.next.text.ended": {
+          const messageID = event.properties.assistantMessageID as string
+          const partID = event.properties.textID as string
+          const text = typeof event.properties.text === "string" ? event.properties.text : ""
+          const parts = store.part[messageID]
+          if (!parts) break
+          const result = search(parts, partID, (p) => p.id)
+          if (!result.found) break
+          touchPart(event.properties.sessionID, partID)
+          setStore(
+            "part",
+            messageID,
+            produce((draft) => {
+              const part = draft[result.index]
+              if (part && part.type === "text") {
+                part.text = text
+                if (part.time) part.time.end = eventTimestamp(event.properties.timestamp)
+              }
+            }),
+          )
+          break
+        }
+
+        case "session.next.reasoning.started": {
+          const sessionID = event.properties.sessionID as string
+          const messageID = event.properties.assistantMessageID as string
+          const partID = event.properties.reasoningID as string
+          const started = eventTimestamp(event.properties.timestamp)
+          const part = {
+            id: partID,
+            sessionID,
+            messageID,
+            type: "reasoning" as const,
+            text: "",
+            time: { start: started },
+            ...(event.properties.providerMetadata
+              ? { metadata: event.properties.providerMetadata as Record<string, unknown> }
+              : {}),
+          }
+          touchPart(sessionID, partID)
+          const parts = store.part[messageID]
+          if (!parts) setStore("part", messageID, [part])
+          else {
+            const result = search(parts, partID, (p) => p.id)
+            if (!result.found) {
+              setStore(
+                "part",
+                messageID,
+                produce((draft) => {
+                  draft.splice(result.index, 0, part)
+                }),
+              )
+            }
+          }
+          break
+        }
+
+        case "session.next.reasoning.delta": {
+          const messageID = event.properties.assistantMessageID as string
+          const partID = event.properties.reasoningID as string
+          const delta = typeof event.properties.delta === "string" ? event.properties.delta : ""
+          const parts = store.part[messageID]
+          if (!parts) break
+          const result = search(parts, partID, (p) => p.id)
+          if (!result.found) break
+          touchPart(event.properties.sessionID, partID)
+          setStore(
+            "part",
+            messageID,
+            produce((draft) => {
+              const part = draft[result.index]
+              if (part && part.type === "reasoning") part.text = (part.text ?? "") + delta
+            }),
+          )
+          break
+        }
+
+        case "session.next.reasoning.ended": {
+          const messageID = event.properties.assistantMessageID as string
+          const partID = event.properties.reasoningID as string
+          const text = typeof event.properties.text === "string" ? event.properties.text : ""
+          const ended = eventTimestamp(event.properties.timestamp)
+          const parts = store.part[messageID]
+          if (!parts) break
+          const result = search(parts, partID, (p) => p.id)
+          if (!result.found) break
+          touchPart(event.properties.sessionID, partID)
+          setStore(
+            "part",
+            messageID,
+            produce((draft) => {
+              const part = draft[result.index]
+              if (!part || part.type !== "reasoning") return
+              part.text = text
+              part.time = { start: part.time?.start ?? ended, end: ended }
+              if (event.properties.providerMetadata !== undefined) {
+                part.metadata = event.properties.providerMetadata as Record<string, unknown>
+              }
+            }),
+          )
+          break
+        }
+
+        case "session.next.tool.input.started": {
+          const sessionID = event.properties.sessionID as string
+          const messageID = event.properties.assistantMessageID as string
+          const callID = event.properties.callID as string
+          const tool =
+            typeof event.properties.name === "string" && event.properties.name.length > 0
+              ? event.properties.name
+              : "tool"
+          const part = {
+            id: callID,
+            sessionID,
+            messageID,
+            type: "tool" as const,
+            callID,
+            tool,
+            state: { status: "pending" as const, input: {}, raw: "" },
+          }
+          touchPart(sessionID, callID)
+          const parts = store.part[messageID]
+          if (!parts) setStore("part", messageID, [part])
+          else {
+            const result = search(parts, callID, (p) => p.id)
+            if (!result.found) {
+              setStore(
+                "part",
+                messageID,
+                produce((draft) => {
+                  draft.splice(result.index, 0, part)
+                }),
+              )
+            }
+          }
+          break
+        }
+
+        case "session.next.tool.input.delta": {
+          const messageID = event.properties.assistantMessageID as string
+          const callID = event.properties.callID as string
+          const delta = typeof event.properties.delta === "string" ? event.properties.delta : ""
+          const parts = store.part[messageID]
+          if (!parts) break
+          const result = search(parts, callID, (p) => p.id)
+          if (!result.found) break
+          touchPart(event.properties.sessionID, callID)
+          setStore(
+            "part",
+            messageID,
+            produce((draft) => {
+              const part = draft[result.index]
+              if (part?.type === "tool" && part.state.status === "pending") {
+                part.state.raw = (part.state.raw ?? "") + delta
+              }
+            }),
+          )
+          break
+        }
+
+        case "session.next.tool.input.ended": {
+          const messageID = event.properties.assistantMessageID as string
+          const callID = event.properties.callID as string
+          const text = typeof event.properties.text === "string" ? event.properties.text : ""
+          const parts = store.part[messageID]
+          if (!parts) break
+          const result = search(parts, callID, (p) => p.id)
+          if (!result.found) break
+          touchPart(event.properties.sessionID, callID)
+          setStore(
+            "part",
+            messageID,
+            produce((draft) => {
+              const part = draft[result.index]
+              if (part?.type === "tool" && part.state.status === "pending") {
+                part.state.raw = text
+              }
+            }),
+          )
+          break
+        }
+
+        case "session.next.tool.called": {
+          const sessionID = event.properties.sessionID as string
+          const messageID = event.properties.assistantMessageID as string
+          const callID = event.properties.callID as string
+          const tool =
+            typeof event.properties.tool === "string" && event.properties.tool.length > 0
+              ? event.properties.tool
+              : "tool"
+          const input =
+            event.properties.input && typeof event.properties.input === "object"
+              ? (event.properties.input as Record<string, unknown>)
+              : {}
+          const started = eventTimestamp(event.properties.timestamp)
+          const parts = store.part[messageID]
+          const existing = parts ? search(parts, callID, (p) => p.id) : { found: false, index: 0 }
+          touchPart(sessionID, callID)
+          if (!parts || !existing.found) {
+            const part = {
+              id: callID,
+              sessionID,
+              messageID,
+              type: "tool" as const,
+              callID,
+              tool,
+              state: {
+                status: "running" as const,
+                input,
+                time: { start: started },
+                ...(event.properties.provider?.executed ? { metadata: { providerExecuted: true } } : {}),
+              },
+            }
+            if (!parts) setStore("part", messageID, [part])
+            else {
+              setStore(
+                "part",
+                messageID,
+                produce((draft) => {
+                  draft.splice(existing.index, 0, part)
+                }),
+              )
+            }
+            break
+          }
+          setStore(
+            "part",
+            messageID,
+            produce((draft) => {
+              const part = draft[existing.index]
+              if (!part || part.type !== "tool") return
+              part.tool = tool
+              const providerExecuted =
+                event.properties.provider?.executed === true || part.metadata?.providerExecuted === true
+              part.state = {
+                status: "running",
+                input,
+                time: { start: started },
+                ...(providerExecuted ? { metadata: { providerExecuted: true } } : {}),
+              }
+            }),
+          )
+          break
+        }
+
+        case "session.next.tool.progress": {
+          const messageID = event.properties.assistantMessageID as string
+          const callID = event.properties.callID as string
+          const structured =
+            event.properties.structured && typeof event.properties.structured === "object"
+              ? (event.properties.structured as Record<string, unknown>)
+              : {}
+          const parts = store.part[messageID]
+          if (!parts) break
+          const result = search(parts, callID, (p) => p.id)
+          if (!result.found) break
+          touchPart(event.properties.sessionID, callID)
+          setStore(
+            "part",
+            messageID,
+            produce((draft) => {
+              const part = draft[result.index]
+              if (part?.type !== "tool" || part.state.status !== "running") return
+              part.state.metadata = { ...part.state.metadata, ...structured }
+              if (typeof structured.title === "string") part.state.title = structured.title
+            }),
+          )
+          break
+        }
+
+        case "session.next.tool.success": {
+          const messageID = event.properties.assistantMessageID as string
+          const callID = event.properties.callID as string
+          const structured =
+            event.properties.structured && typeof event.properties.structured === "object"
+              ? (event.properties.structured as Record<string, unknown>)
+              : {}
+          const ended = eventTimestamp(event.properties.timestamp)
+          const parts = store.part[messageID]
+          if (!parts) break
+          const result = search(parts, callID, (p) => p.id)
+          if (!result.found) break
+          touchPart(event.properties.sessionID, callID)
+          setStore(
+            "part",
+            messageID,
+            produce((draft) => {
+              const part = draft[result.index]
+              if (!part || part.type !== "tool") return
+              const input =
+                part.state.status === "pending"
+                  ? {}
+                  : ((part.state.input as Record<string, unknown> | undefined) ?? {})
+              const start =
+                part.state.status === "running" || part.state.status === "completed" || part.state.status === "error"
+                  ? (part.state.time?.start ?? ended)
+                  : ended
+              const title =
+                typeof structured.title === "string"
+                  ? structured.title
+                  : part.tool
+              part.state = {
+                status: "completed",
+                input,
+                output: toolOutputFromV2(event.properties.content, event.properties.result),
+                title,
+                metadata: {
+                  ...(part.state.status === "running" ? (part.state.metadata ?? {}) : {}),
+                  ...structured,
+                },
+                time: { start, end: ended },
+              }
+            }),
+          )
+          break
+        }
+
+        case "session.next.tool.failed": {
+          const messageID = event.properties.assistantMessageID as string
+          const callID = event.properties.callID as string
+          const ended = eventTimestamp(event.properties.timestamp)
+          const parts = store.part[messageID]
+          if (!parts) break
+          const result = search(parts, callID, (p) => p.id)
+          if (!result.found) break
+          touchPart(event.properties.sessionID, callID)
+          setStore(
+            "part",
+            messageID,
+            produce((draft) => {
+              const part = draft[result.index]
+              if (!part || part.type !== "tool") return
+              if (part.state.status !== "pending" && part.state.status !== "running") return
+              const input =
+                part.state.status === "pending"
+                  ? {}
+                  : ((part.state.input as Record<string, unknown> | undefined) ?? {})
+              const start = part.state.status === "running" ? (part.state.time?.start ?? ended) : ended
+              part.state = {
+                status: "error",
+                input,
+                error: unknownErrorMessage(event.properties.error),
+                metadata: part.state.status === "running" ? part.state.metadata : undefined,
+                time: { start, end: ended },
+              }
             }),
           )
           break

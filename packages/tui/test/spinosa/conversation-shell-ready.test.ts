@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test"
-import { isConversationShellReady } from "../../src/routes/session/conversation-shell-ready"
+import {
+  isConversationShellReady,
+  shouldBounceMissingSession,
+} from "../../src/routes/session/conversation-shell-ready"
 
 describe("isConversationShellReady", () => {
   test("waits for session sync", () => {
@@ -20,6 +23,23 @@ describe("isConversationShellReady", () => {
     ).toBe(false)
     expect(
       isConversationShellReady({ hasSession: true, promptVisible: true, promptMounted: true }),
+    ).toBe(true)
+  })
+})
+
+describe("shouldBounceMissingSession", () => {
+  test("does not bounce Home while booting with a local seed", () => {
+    expect(
+      shouldBounceMissingSession({ conversationBooting: true, hasLocalSession: true }),
+    ).toBe(false)
+  })
+
+  test("bounces when the session is missing after boot", () => {
+    expect(
+      shouldBounceMissingSession({ conversationBooting: false, hasLocalSession: false }),
+    ).toBe(true)
+    expect(
+      shouldBounceMissingSession({ conversationBooting: true, hasLocalSession: false }),
     ).toBe(true)
   })
 })
