@@ -116,6 +116,14 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                 }),
               ),
             ),
+            Effect.catchTag("SessionLoopControl.BusyRejection", (error) =>
+              Effect.fail(
+                new ServiceUnavailableError({
+                  message: error.message,
+                  service: "session.switchAgent",
+                }),
+              ),
+            ),
           )
           return HttpApiSchema.NoContent.make()
         }),
@@ -129,6 +137,14 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                 new SessionNotFoundError({
                   sessionID: error.sessionID,
                   message: `Session not found: ${error.sessionID}`,
+                }),
+              ),
+            ),
+            Effect.catchTag("SessionLoopControl.BusyRejection", (error) =>
+              Effect.fail(
+                new ServiceUnavailableError({
+                  message: error.message,
+                  service: "session.switchModel",
                 }),
               ),
             ),
@@ -186,6 +202,14 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                 new ServiceUnavailableError({
                   message: `Session ${error.operation} is not available yet`,
                   service: `session.${error.operation}`,
+                }),
+              ),
+            ),
+            Effect.catchTag("SessionLoopControl.BusyRejection", (error) =>
+              Effect.fail(
+                new ServiceUnavailableError({
+                  message: error.message,
+                  service: "session.compact",
                 }),
               ),
             ),

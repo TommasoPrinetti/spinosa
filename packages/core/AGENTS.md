@@ -57,9 +57,11 @@ Effect rules: `makeRuntime` for services, `InstanceState` for per-directory stat
 - One `llm.stream(request)` per provider turn (in runner, via `@spinosa/llm`)
 - Tool registry and permissions are Location-scoped
 - System context in `src/system-context`; context sources stay with observed domains
-- Turn snapshots freeze tools/system/model for the in-flight turn (`session/loop-control.ts`); mid-run setters apply next turn
+- Turn snapshots freeze tools/system/model for the in-flight turn; save points refresh after each successful turn (and before compaction) so mid-run setters apply next turn (`session/loop-control.ts`)
+- Runner hooks: `prepareNextTurn` (auto-compaction), `shouldStopAfterTurn` (terminate / max-steps), `beforeToolCall` (skip before Permission.ask)
+- Structural ops (switchModel / switchAgent / compact) reject with `BusyRejection` while execution is active
 - `SessionExecutionStatus` reports busy/idle for the public `session.status` contract (kernel bridges to `SessionStatus`)
-- Do not bridge through legacy `SessionPrompt.loop` for new features — TUI defaults to V2 prompt (`SPINOSA_SESSION_V2_PROMPT`, default on)
+- Do not bridge through legacy `SessionPrompt.loop` for new features — TUI defaults to V2 prompt (`SPINOSA_SESSION_V2_PROMPT`, default on); mid-run Enter steers, `prompt.submit_queue` queues
 
 Full spec: `specs/v2/session.md`, vocabulary: root `CONTEXT.md`.
 

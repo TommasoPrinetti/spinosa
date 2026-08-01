@@ -107,6 +107,8 @@ const layer = Layer.effect(
     const snapshots = yield* Snapshot.Service
     const db = (yield* Database.Service).db
     const compaction = SessionCompaction.make({ events, llm, config: yield* config.entries() })
+    // Default Pi-style turn hooks; keep the surface callable/overridable but minimal.
+    const hooks = SessionLoopControl.resolveTurnHooks()
     const getSession = Effect.fn("SessionRunner.getSession")(function* (sessionID: SessionSchema.ID) {
       const session = yield* store.get(sessionID)
       if (!session) return yield* Effect.die(`Session not found: ${sessionID}`)
@@ -166,10 +168,19 @@ const layer = Layer.effect(
         concurrency: "unbounded",
       }).pipe(Effect.map(SystemContext.combine))
 
+    type TurnResult = {
+      readonly needsContinuation: boolean
+      readonly terminated: boolean
+      readonly maxStepsReached: boolean
+      readonly step: number
+      readonly snapshot: SessionLoopControl.TurnSnapshot
+    }
+
     const runTurnAttempt = Effect.fn("SessionRunner.runTurn")(function* (
       sessionID: SessionSchema.ID,
       promotion: SessionInput.Delivery | undefined,
       step: number,
+      savePoints: Map<string, SessionLoopControl.SavePoint>,
       recoverOverflow?: typeof compaction.compactAfterOverflow,
     ) {
       const session = yield* getSession(sessionID)
@@ -200,7 +211,7 @@ const layer = Layer.effect(
       const systemParts = [agent.info?.system, system.baseline].filter(
         (part): part is string => part !== undefined && part.length > 0,
       )
-      // Freeze tools/system/model for this turn — mid-run setters affect the next turn only.
+      // Freeze tools/system/model for this turn — mid-run setters apply after save-point refresh.
       const turnSnapshot = SessionLoopControl.freezeTurn({
         sessionID: session.id,
         step: currentStep,
@@ -213,25 +224,45 @@ const layer = Layer.effect(
           ...(session.model?.variant === undefined ? {} : { variant: session.model.variant }),
         },
       })
-      void turnSnapshot
       const promptCacheKey = /^ses_[0-9a-f]{64}$/.test(session.id) ? session.id.slice(4) : session.id
       const request = LLM.request({
         model,
         providerOptions: { openai: { promptCacheKey } },
-        system: systemParts.map(SystemPart.make),
+        system: turnSnapshot.system.map(SystemPart.make),
         messages: [...toLLMMessages(context, model), ...(isLastStep ? [Message.assistant(MAX_STEPS_PROMPT)] : [])],
         tools: toolMaterialization?.definitions ?? [],
         toolChoice: isLastStep ? "none" : undefined,
       })
-      if (yield* compaction.compactIfNeeded({ sessionID: session.id, entries, model, request }))
+      // prepareNextTurn: auto-compaction / overflow decision before the provider call.
+      const wouldCompact = yield* compaction.compactIfNeeded({ sessionID: session.id, entries, model, request })
+      const prepare = hooks.prepareNextTurn({ snapshot: turnSnapshot, wouldCompact })
+      if (prepare.action === "stop") {
+        return {
+          needsContinuation: false,
+          terminated: true,
+          maxStepsReached: isLastStep,
+          step: currentStep,
+          snapshot: turnSnapshot,
+        } satisfies TurnResult
+      }
+      if (prepare.action === "compact") {
+        // Refresh save-point before compaction restart so the next turn sees live barriers.
+        savePoints.set(
+          session.id,
+          SessionLoopControl.refreshSavePoint({
+            snapshot: turnSnapshot,
+            previous: savePoints.get(session.id),
+          }),
+        )
         return yield* Effect.die(continueAfterCompaction(currentStep))
+      }
       const startSnapshot = yield* snapshots.capture()
       const publisher = createLLMEventPublisher(events, {
         sessionID: session.id,
         agent: agent.id,
         model: {
-          id: ModelV2.ID.make(model.id),
-          providerID: ProviderV2.ID.make(model.provider),
+          id: ModelV2.ID.make(turnSnapshot.model.id),
+          providerID: ProviderV2.ID.make(turnSnapshot.model.provider),
           ...(session.model?.variant === undefined ? {} : { variant: session.model.variant }),
         },
         snapshot: startSnapshot,
@@ -259,6 +290,21 @@ const layer = Layer.effect(
             }
             needsContinuation = true
             const assistantMessageID = yield* publisher.assistantMessageID(event.id)
+            // beforeToolCall gate: skip/deny without entering Permission.ask.
+            const gate = hooks.beforeToolCall({ toolName: event.name, callID: event.id })
+            if (gate.action === "skip") {
+              yield* publish(
+                LLMEvent.toolResult({
+                  id: event.id,
+                  name: event.name,
+                  result: {
+                    type: "error",
+                    value: gate.reason ?? `Tool call skipped: ${event.name}`,
+                  },
+                }),
+              )
+              return
+            }
             yield* Effect.uninterruptibleMask((restore) =>
               restore(
                 toolMaterialization.settle({
@@ -310,8 +356,16 @@ const layer = Layer.effect(
             !publisher.hasAssistantStarted() &&
             isContextOverflowFailure(overflowFailure ?? failure) &&
             (yield* restore(recoverOverflow({ sessionID: session.id, entries, model, request })))
-          )
+          ) {
+            savePoints.set(
+              session.id,
+              SessionLoopControl.refreshSavePoint({
+                snapshot: turnSnapshot,
+                previous: savePoints.get(session.id),
+              }),
+            )
             return yield* Effect.die(continueAfterOverflowCompaction(currentStep))
+          }
           if (overflowFailure) yield* publish(overflowFailure)
           const llmFailure = failure instanceof LLMError ? failure : undefined
           if (llmFailure && !publisher.hasProviderError()) {
@@ -368,10 +422,14 @@ const layer = Layer.effect(
           if (stream._tag === "Failure") return yield* Effect.failCause(stream.cause)
           if (settled._tag === "Failure" && Cause.hasInterrupts(settled.cause))
             return yield* Effect.failCause(settled.cause)
+          const continued = !terminateAfterTools && !publisher.hasProviderError() && needsContinuation
           return {
-            needsContinuation: !terminateAfterTools && !publisher.hasProviderError() && needsContinuation,
+            needsContinuation: continued,
+            terminated: terminateAfterTools,
+            maxStepsReached: isLastStep,
             step: currentStep,
-          }
+            snapshot: turnSnapshot,
+          } satisfies TurnResult
         }),
       )
     }, Effect.scoped)
@@ -379,31 +437,32 @@ const layer = Layer.effect(
       sessionID: SessionSchema.ID,
       promotion: SessionInput.Delivery | undefined,
       step: number,
-    ) => Effect.Effect<{ readonly needsContinuation: boolean; readonly step: number }, RunError>
+      savePoints: Map<string, SessionLoopControl.SavePoint>,
+    ) => Effect.Effect<TurnResult, RunError>
 
-    const runAfterOverflowCompaction: RunTurn = Effect.fnUntraced(function* (sessionID, promotion, step) {
-      return yield* runTurnAttempt(sessionID, promotion, step).pipe(
+    const runAfterOverflowCompaction: RunTurn = Effect.fnUntraced(function* (sessionID, promotion, step, savePoints) {
+      return yield* runTurnAttempt(sessionID, promotion, step, savePoints).pipe(
         Effect.catchDefect(
           Effect.fnUntraced(function* (defect) {
             if (!(defect instanceof TurnTransitionError)) return yield* Effect.die(defect)
             if (defect.transition._tag === "ContinueAfterOverflowCompaction")
               return yield* Effect.die("Post-compaction provider attempt cannot recover another overflow")
             yield* Effect.yieldNow
-            return yield* runAfterOverflowCompaction(sessionID, undefined, defect.transition.step)
+            return yield* runAfterOverflowCompaction(sessionID, undefined, defect.transition.step, savePoints)
           }),
         ),
       )
     })
 
-    const runTurn: RunTurn = Effect.fnUntraced(function* (sessionID, promotion, step) {
-      return yield* runTurnAttempt(sessionID, promotion, step, compaction.compactAfterOverflow).pipe(
+    const runTurn: RunTurn = Effect.fnUntraced(function* (sessionID, promotion, step, savePoints) {
+      return yield* runTurnAttempt(sessionID, promotion, step, savePoints, compaction.compactAfterOverflow).pipe(
         Effect.catchDefect(
           Effect.fnUntraced(function* (defect) {
             if (!(defect instanceof TurnTransitionError)) return yield* Effect.die(defect)
             yield* Effect.yieldNow
             if (defect.transition._tag === "ContinueAfterOverflowCompaction")
-              return yield* runAfterOverflowCompaction(sessionID, undefined, defect.transition.step)
-            return yield* runTurn(sessionID, undefined, defect.transition.step)
+              return yield* runAfterOverflowCompaction(sessionID, undefined, defect.transition.step, savePoints)
+            return yield* runTurn(sessionID, undefined, defect.transition.step, savePoints)
           }),
         ),
       )
@@ -419,12 +478,27 @@ const layer = Layer.effect(
       yield* failInterruptedTools(input.sessionID)
       let promotion: SessionInput.Delivery | undefined = hasSteer ? "steer" : hasQueue ? "queue" : undefined
       let shouldRun = input.force || hasSteer || hasQueue
+      const savePoints = new Map<string, SessionLoopControl.SavePoint>()
       while (shouldRun) {
         let needsContinuation = true
         let step = 1
         while (needsContinuation) {
-          const result = yield* runTurn(input.sessionID, promotion, step)
-          needsContinuation = result.needsContinuation
+          const result = yield* runTurn(input.sessionID, promotion, step, savePoints)
+          // After each successful turn, refresh the save-point so mid-run config
+          // mutations only apply on the next turn.
+          savePoints.set(
+            input.sessionID,
+            SessionLoopControl.refreshSavePoint({
+              snapshot: result.snapshot,
+              previous: savePoints.get(input.sessionID),
+            }),
+          )
+          const stop = hooks.shouldStopAfterTurn({
+            terminated: result.terminated,
+            maxStepsReached: result.maxStepsReached,
+            needsContinuation: result.needsContinuation,
+          })
+          needsContinuation = !stop
           step = result.step + 1
           promotion = "steer"
           if (!needsContinuation) needsContinuation = yield* SessionInput.hasPending(db, input.sessionID, "steer")

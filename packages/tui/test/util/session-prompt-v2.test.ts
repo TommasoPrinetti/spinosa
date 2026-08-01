@@ -20,5 +20,7 @@ describe("session-prompt-v2", () => {
   test("defaults mid-run delivery to steer", () => {
     expect(resolvePromptDelivery({ busy: true })).toBe("steer")
     expect(resolvePromptDelivery({ busy: true, preferQueue: true })).toBe("queue")
+    expect(resolvePromptDelivery({ busy: false, preferQueue: true })).toBe("steer")
+    expect(resolvePromptDelivery({ busy: true, requested: "queue" })).toBe("queue")
   })
 })

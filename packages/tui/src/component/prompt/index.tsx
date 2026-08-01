@@ -390,6 +390,19 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
+        title: "Queue prompt",
+        name: "prompt.submit_queue",
+        category: "Prompt",
+        // Intentional queue (Pi preferQueue): mid-run Enter steers; this path queues.
+        enabled: status().type !== "idle",
+        run: async () => {
+          if (!input.focused) return
+          const handled = await submit({ preferQueue: true })
+          if (!handled) return
+          dialog.clear()
+        },
+      },
+      {
         title: "Remove editor context",
         name: "prompt.editor_context.clear",
         category: "Prompt",
@@ -624,6 +637,7 @@ export function Prompt(props: PromptProps) {
     mode: SPINOSA_BASE_MODE,
     bindings: tuiConfig.keybinds.gather("prompt.palette", [
       "prompt.submit",
+      "prompt.submit_queue",
       "prompt.editor",
       "prompt.editor_context.clear",
       "prompt.stash",
@@ -986,7 +1000,7 @@ export function Prompt(props: PromptProps) {
   })
 
   let submitting = false
-  async function submit() {
+  async function submit(options?: { preferQueue?: boolean }) {
     // Prevent overlapping invocations (e.g. a double-pressed Enter, or the
     // input's native onSubmit racing another dispatch). Without this guard,
     // a second call slips past the empty-input check before the first call
@@ -996,13 +1010,13 @@ export function Prompt(props: PromptProps) {
     if (submitting) return false
     submitting = true
     try {
-      return await submitInner()
+      return await submitInner(options)
     } finally {
       submitting = false
     }
   }
 
-  async function submitInner() {
+  async function submitInner(options?: { preferQueue?: boolean }) {
     workspace.clearNotice()
 
     // IME: double-defer may fire before onContentChange flushes the last
@@ -1219,12 +1233,13 @@ export function Prompt(props: PromptProps) {
         ...nonTextParts,
       ]
       const busy = status().type !== "idle"
-      const delivery = resolvePromptDelivery({ busy })
+      const delivery = resolvePromptDelivery({ busy, preferQueue: options?.preferQueue === true })
       const submit = useV2SessionPrompt()
         ? (async () => {
             // Prefer V2 durable admission + steer/queue delivery as the live path.
             // Model/agent switches are best-effort so a missing V2 session row
-            // still allows prompt admission after V1 create.
+            // still allows prompt admission after V1 create. Mid-run switches
+            // reject busy (caught here) so turn barriers stay frozen.
             await sdk.client.v2.session
               .switchModel({
                 sessionID,

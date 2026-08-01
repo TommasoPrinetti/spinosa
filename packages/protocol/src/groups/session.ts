@@ -174,14 +174,15 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         params: { sessionID: Session.ID },
         payload: Schema.Struct({ agent: Agent.ID }),
         success: HttpApiSchema.NoContent,
-        error: SessionNotFoundError,
+        error: [SessionNotFoundError, ServiceUnavailableError],
       })
         .middleware(sessionLocationMiddleware)
         .annotateMerge(
           OpenApi.annotations({
             identifier: "v2.session.switchAgent",
             summary: "Switch session agent",
-            description: "Switch the agent used by subsequent provider turns.",
+            description:
+              "Switch the agent used by subsequent provider turns. Rejected while the session is busy.",
           }),
         ),
     )
@@ -190,14 +191,15 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         params: { sessionID: Session.ID },
         payload: Schema.Struct({ model: Model.Ref }),
         success: HttpApiSchema.NoContent,
-        error: SessionNotFoundError,
+        error: [SessionNotFoundError, ServiceUnavailableError],
       })
         .middleware(sessionLocationMiddleware)
         .annotateMerge(
           OpenApi.annotations({
             identifier: "v2.session.switchModel",
             summary: "Switch session model",
-            description: "Switch the model used by subsequent provider turns.",
+            description:
+              "Switch the model used by subsequent provider turns. Rejected while the session is busy.",
           }),
         ),
     )
