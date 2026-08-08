@@ -15,6 +15,12 @@ import {
 
 const require = createRequire(import.meta.url)
 
+/**
+ * Per-page budget for pdfjs getPage/getTextContent. One malformed/poisoned page
+ * must not stall whole-document extraction or classification forever.
+ */
+export const PDF_PAGE_TIMEOUT_MS = 15_000
+
 type NodeCanvasAndContext = {
   canvas: Canvas | null
   context: ReturnType<Canvas["getContext"]> | null
@@ -126,8 +132,8 @@ export async function pdfTextContent(pdfPath: string, page: number): Promise<str
 }
 
 export async function pdfDocumentTextContent(doc: PDFDocumentProxy, page: number): Promise<string> {
-  const pg = await doc.getPage(page)
-  const content = await pg.getTextContent()
+  const pg = await withTimeout(doc.getPage(page), PDF_PAGE_TIMEOUT_MS)
+  const content = await withTimeout(pg.getTextContent(), PDF_PAGE_TIMEOUT_MS)
   return content.items.map((item) => ("str" in item ? item.str : "")).join(" ")
 }
 export async function pdfPageHasExtractableText(pdfPath: string, page: number): Promise<boolean> {
@@ -190,10 +196,13 @@ export async function pdfRenderDocumentPageToPng(doc: PDFDocumentProxy, pageNumb
   if (!canvas || !context) throw new Error("pdfjs NodeCanvasFactory failed to create canvas")
   try {
     // pdfjs-dist@4 RenderParameters has no `canvas` field; context + viewport is enough.
-    await pg.render({
-      canvasContext: context as unknown as CanvasRenderingContext2D,
-      viewport,
-    }).promise
+    await withTimeout(
+      pg.render({
+        canvasContext: context as unknown as CanvasRenderingContext2D,
+        viewport,
+      }).promise,
+      PDF_PAGE_TIMEOUT_MS,
+    )
     const png = canvas.toBuffer("image/png")
     canvasDebugLog("pdfRenderDocumentPageToPng.ok", { pageNumber, pngBytes: png.byteLength })
     return png
@@ -237,8 +246,8 @@ export async function pdfExtractAllText(pdfPath: string): Promise<string> {
     const pages: string[] = []
     for (let i = 1; i <= doc.numPages; i++) {
       try {
-        const pg = await doc.getPage(i)
-        const content = await pg.getTextContent()
+        const pg = await withTimeout(doc.getPage(i), PDF_PAGE_TIMEOUT_MS)
+        const content = await withTimeout(pg.getTextContent(), PDF_PAGE_TIMEOUT_MS)
         pages.push(stripAnsi(content.items.map((item) => ("str" in item ? item.str : "")).join(" ")))
       } catch {
         continue
@@ -253,8 +262,8 @@ export async function pdfExtractPageTexts(pdfPath: string): Promise<{ page: numb
     const result: { page: number; text: string }[] = []
     for (let i = 1; i <= doc.numPages; i++) {
       try {
-        const pg = await doc.getPage(i)
-        const content = await pg.getTextContent()
+        const pg = await withTimeout(doc.getPage(i), PDF_PAGE_TIMEOUT_MS)
+        const content = await withTimeout(pg.getTextContent(), PDF_PAGE_TIMEOUT_MS)
         result.push({
           page: i,
           text: stripAnsi(content.items.map((item) => ("str" in item ? item.str : "")).join(" ")),

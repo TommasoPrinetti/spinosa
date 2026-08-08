@@ -11,6 +11,12 @@ import { writeTextAtomic, writeTextAtomicSafe } from "../utils/fs"
 // Bound a single OCR page so a pathological image/PDF cannot hang the whole
 // OCR phase (and the UI wave) indefinitely.
 const OCR_PAGE_TIMEOUT_MS = 60_000
+// Consecutive page-level timeout strikes indicate the native engine is wedged
+// (a poisoned page can leave the stack blocked past the JS timeout). Escalate
+// to a worker crash so the parent respawns a fresh child for the rest.
+const MAX_CONSECUTIVE_PAGE_TIMEOUTS = 3
+
+export class PpuOcrWorkerWedgedError extends Error {}
 function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const t = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)
@@ -326,17 +332,32 @@ async function ocrPdf(
   file: PpuOcrFile,
   onProgress?: (page: number, total: number) => void,
   shouldAbort?: () => boolean,
+  onLog?: (line: string) => void,
 ): Promise<boolean> {
   const pages = await withPdfDocument(file.src, async (doc) => {
     const output = new Map<number, string>()
+    let consecutiveTimeouts = 0
     for (let page = 1; page <= doc.numPages; page++) {
       throwIfSpinosaCancelled(shouldAbort)
       const pngBuffer = await pdfRenderDocumentPageToPng(doc, page, 180)
       throwIfSpinosaCancelled(shouldAbort)
       const buffer = bufferToOcrArrayBuffer(pngBuffer)
-      const result = await withTimeout(service.recognize(buffer), OCR_PAGE_TIMEOUT_MS, `OCR page ${page}`) as PaddleOcrResult
-      throwIfSpinosaCancelled(shouldAbort)
-      output.set(page, result.text)
+      try {
+        const result = await withTimeout(service.recognize(buffer), OCR_PAGE_TIMEOUT_MS, `OCR page ${page}`) as PaddleOcrResult
+        consecutiveTimeouts = 0
+        throwIfSpinosaCancelled(shouldAbort)
+        output.set(page, result.text)
+      } catch (err) {
+        if (isSpinosaCancellationError(err)) throw err
+        consecutiveTimeouts++
+        if (consecutiveTimeouts >= MAX_CONSECUTIVE_PAGE_TIMEOUTS) {
+          throw new PpuOcrWorkerWedgedError(
+            `OCR engine wedged after ${consecutiveTimeouts} consecutive page timeouts on ${file.rel} — abandoning worker for remaining files`,
+          )
+        }
+        output.set(page, "")
+        onLog?.(`  ${file.rel} page ${page} → OCR page timeout, continuing`)
+      }
       onProgress?.(page, doc.numPages)
     }
     return output
@@ -365,8 +386,9 @@ export async function runPpuOcrBatch(
   try {
     throwIfSpinosaCancelled(options?.shouldAbort)
     service = await ppuService(options?.onLog)
-  } catch (err) {
-    if (isSpinosaCancellationError(err)) throw err
+      } catch (err) {
+        if (err instanceof PpuOcrWorkerWedgedError) throw err
+        if (isSpinosaCancellationError(err)) throw err
     const msg = `PPU PaddleOCR engine initialization failed: ${err instanceof Error ? err.message : String(err)} — skipping all ${files.length} file(s)`
     options?.onLog?.(msg)
     errors.push(msg)
@@ -391,7 +413,7 @@ export async function runPpuOcrBatch(
       try {
         const ext = fileExt(file.src)
         const ok = ext === "pdf"
-          ? await ocrPdf(service, file, (page, pageTotal) => options?.onPageProgress?.(i + 1, total, file.rel, `${page}/${pageTotal}`), options?.shouldAbort)
+          ? await ocrPdf(service, file, (page, pageTotal) => options?.onPageProgress?.(i + 1, total, file.rel, `${page}/${pageTotal}`), options?.shouldAbort, options?.onLog)
           : await ocrImage(service, file, options?.shouldAbort)
         if (ok) {
           converted++

@@ -230,36 +230,52 @@ function splitExt(name: string): { stem: string; ext: string } {
   return { stem, ext }
 }
 
-// Preprocess a relative path so every component fits filesystem name limits
+// Preprocess relative paths so every component fits filesystem name limits
 // (macOS: 255 bytes/component). Applied at scan time so the same safe name is
 // reused by every import phase and a too-long name never reaches a copy/write.
-// Collision-safe: if two distinct names truncate to the same component, a short
-// disambiguator is appended so one source file never silently overwrites another.
-export function safeRelPath(relPath: string): string {
-  const parts = relPath.split("/")
-  const seen = new Set<string>()
-  const safe = parts.map((p) => {
-    let out = p
-    if (Buffer.byteLength(p, "utf8") > MAX_NAME_BYTES) {
-      const { stem, ext } = splitExt(p)
-      const budget = MAX_NAME_BYTES - ext.length
-      out = stem.slice(0, Math.max(1, budget)) + ext
-    }
-    // Disambiguate collisions within the same directory level.
-    if (seen.has(out)) {
-      let i = 1
-      let candidate = out
-      const { stem, ext } = splitExt(out)
-      const budget = MAX_NAME_BYTES - ext.length
-      while (seen.has(candidate) && i < 9999) {
-        const suffix = `_${i}`
-        candidate = stem.slice(0, Math.max(1, budget - suffix.length)) + suffix + ext
-        i++
+// Collision-safe across the whole set: exact duplicates AND case-insensitive
+// duplicates (default macOS/Windows volumes) within one directory get a short
+// disambiguator appended, so neither `Report.txt` silently overwrites
+// `report.txt` nor the reverse.
+export function safeRelPaths(relPaths: string[]): string[] {
+  const seenLevels = new Map<string, Set<string>>()
+  const seenInsensitiveLevels = new Map<string, Set<string>>()
+
+  return relPaths.map((relPath) => {
+    const parts = relPath.split("/")
+    const out: string[] = []
+    for (const raw of parts) {
+      let name = raw
+      if (Buffer.byteLength(raw, "utf8") > MAX_NAME_BYTES) {
+        const { stem, ext } = splitExt(raw)
+        name = stem.slice(0, Math.max(1, MAX_NAME_BYTES - ext.length)) + ext
       }
-      out = candidate
+      const dirKey = out.join("/")
+      const seen = seenLevels.get(dirKey) ?? new Set<string>()
+      const seenInsensitive = seenInsensitiveLevels.get(dirKey) ?? new Set<string>()
+      const collides = (candidate: string) => seen.has(candidate) || seenInsensitive.has(candidate.toLowerCase())
+      if (collides(name)) {
+        let i = 1
+        let candidate = name
+        const { stem, ext } = splitExt(name)
+        const budget = MAX_NAME_BYTES - ext.length
+        while (collides(candidate) && i < 9999) {
+          const suffix = `_${i}`
+          candidate = stem.slice(0, Math.max(1, budget - suffix.length)) + suffix + ext
+          i++
+        }
+        name = candidate
+      }
+      seen.add(name)
+      seenInsensitive.add(name.toLowerCase())
+      seenLevels.set(dirKey, seen)
+      seenInsensitiveLevels.set(dirKey, seenInsensitive)
+      out.push(name)
     }
-    seen.add(out)
-    return out
+    return out.join("/")
   })
-  return safe.join("/")
+}
+
+export function safeRelPath(relPath: string): string {
+  return safeRelPaths([relPath])[0]!
 }

@@ -4,6 +4,7 @@ import {
   type ClassifiedEntry,
   type PhaseResult,
 } from "./pipeline"
+import { decodeWorkerPayload } from "./worker-payload"
 
 export interface MarkitdownWorkerInput {
   files: ClassifiedEntry[]
@@ -67,7 +68,7 @@ export async function runMarkitdownWorkerMain(input: MarkitdownWorkerInput): Pro
 }
 
 async function main() {
-  const input = JSON.parse(process.argv[2] ?? "{}") as MarkitdownWorkerInput
+  const input = decodeWorkerPayload(process.argv[2]) as MarkitdownWorkerInput
   if (!Array.isArray(input.files) || typeof input.logsDir !== "string") {
     throw new Error("markitdown worker payload must include files[] and logsDir")
   }

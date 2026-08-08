@@ -147,4 +147,21 @@ describe("import progress UI helpers", () => {
     expect(importResultsListMaxHeight(40)).toBe(12)
     expect(importResultsListMaxHeight(8)).toBe(6)
   })
+
+  test("status updates match rows exactly, never by suffix substring", () => {
+    // Regression: `apple/notes.txt` must NOT be updated by a tick for
+    // `pineapple/notes.txt` (both share the same relative-path suffix).
+    const items = seedImportQueue(["apple/notes.txt", "pineapple/notes.txt", "zap/notes.txt"])
+    const updated = applyImportProgressStatus(items, "pineapple/notes.txt", "done")
+    const apple = updated.find((i) => i.rel === "apple/notes.txt")
+    const pineapple = updated.find((i) => i.rel === "pineapple/notes.txt")
+    expect(pineapple?.status).toBe("done")
+    expect(apple?.status).toBe("queued")
+  })
+
+  test("page-suffixed progress ticks still paint the owning file", () => {
+    const items = seedImportQueue(["memo.pdf"])
+    const updated = applyImportProgressStatus(items, "memo.pdf (page 2)", "processing")
+    expect(updated.find((i) => i.rel === "memo.pdf")?.status).toBe("processing")
+  })
 })

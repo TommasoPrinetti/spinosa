@@ -1,4 +1,6 @@
-import { closeSync, existsSync, openSync, readFileSync, readSync, rmSync, statSync, writeFileSync } from "node:fs"
+import { closeSync, existsSync, openSync, readFileSync, readSync, rmSync, statSync } from "node:fs"
+
+import { writeTextAtomic } from "../utils/fs"
 
 const COLD_SCAFFOLD_FIELDS = [
   "type",
@@ -23,7 +25,7 @@ export function injectColdFrontmatter(mdFile: string): void {
 
   if (lines.length > 0 && lines[0].trim() === "---") {
     const merged = mergeMissingFields(lines)
-    writeFileSync(mdFile, merged, "utf-8")
+    writeTextAtomic(mdFile, merged)
   } else {
     const date = todayUTC()
     const scaffold = [
@@ -33,7 +35,7 @@ export function injectColdFrontmatter(mdFile: string): void {
       "---",
       "",
     ]
-    writeFileSync(mdFile, [...scaffold, content].join("\n"), "utf-8")
+    writeTextAtomic(mdFile, [...scaffold, content].join("\n"))
   }
 }
 

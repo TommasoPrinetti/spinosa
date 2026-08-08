@@ -180,8 +180,11 @@ export function applyImportProgressStatus(
 ): ImportFileProgressItem[] {
   if (!relPath) return items
   // Strip page suffixes like "file.pdf (page 2)" for matching.
-  const key = relPath.replace(/\s+\(.*\)$/, "")
-  const idx = items.findIndex((i) => i.rel === key || i.rel === relPath || key.endsWith(i.rel) || i.rel.endsWith(key))
+  const key = relPath.replace(/\s+\(.*\)$/, "").trim()
+  // Exact rel match only. Suffix/substring matching conflates distinct rows
+  // (e.g. `apple/notes.txt` would also "end with" `pineapple/notes.txt`) and
+  // can paint the wrong file done/failed.
+  const idx = items.findIndex((i) => i.rel === key)
   if (idx >= 0) {
     const prev = items[idx]!
     // OCR worker progress ticks can arrive after onFile; never downgrade terminal rows.

@@ -1,5 +1,6 @@
 import { ocrUnsupportedReason } from "../tools/ocr-support"
 import { runPpuOcrBatch, type PpuOcrFile } from "./ppu-ocr"
+import { decodeWorkerPayload } from "./worker-payload"
 
 export interface OcrWorkerInput {
   files: PpuOcrFile[]
@@ -55,7 +56,7 @@ export async function runOcrWorkerMain(input: OcrWorkerInput): Promise<void> {
 }
 
 async function main() {
-  const input = JSON.parse(process.argv[2] ?? "{}") as OcrWorkerInput
+  const input = decodeWorkerPayload(process.argv[2]) as OcrWorkerInput
   if (!Array.isArray(input.files)) {
     throw new Error("ocr worker payload must include files: PpuOcrFile[]")
   }

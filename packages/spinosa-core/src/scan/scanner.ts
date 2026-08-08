@@ -72,7 +72,16 @@ export async function scanSource(
     }
 
     out.total++
-    const sz = statSync(fp).size
+    // File can vanish or be replaced between the directory walk and here
+    // (TOCTOU): a throw would abort the scan. Treat it like "unknown" instead.
+    let sz: number
+    try {
+      sz = statSync(fp).size
+    } catch {
+      out.total--
+      out.unknown++
+      continue
+    }
     const ext = fileExt(fp)
 
     switch (klass) {

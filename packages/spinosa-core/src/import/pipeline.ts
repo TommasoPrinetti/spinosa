@@ -14,6 +14,7 @@ import {
   markitdownOutputRelPath,
   ocrOutputRelPath,
   safeRelPath,
+  safeRelPaths,
   scanClassifySourceFile,
   importRouteForFile,
 } from "../extension/classifier"
@@ -28,6 +29,7 @@ import { ProgressEmitter } from "../progress/progress"
 import { ocrAvailable } from "../tools/detection"
 import { ocrUnsupportedReason } from "../tools/ocr-support"
 import { isCompiledBinaryDistribution } from "../distribution/bootstrap"
+import { decodeWorkerPayload, disposeWorkerPayload, encodeWorkerPayload } from "./worker-payload"
 import { terminateChild } from "../progress/child-kill"
 
 export interface CopyResult {
@@ -112,10 +114,18 @@ export async function scanAndClassifySource(
     if (shouldSkipSourceFile(fp)) continue
     let rel = fp.replace(sourcePath, "").replace(/^\//, "")
     if (subfolder) rel = path.join(subfolder, rel)
-    rel = safeRelPath(rel)
     const ext = fileExt(fp)
     entries.push({ filePath: fp, relPath: rel, ext, klass: await scanClassifySourceFile(fp) })
     throwIfSpinosaCancelled(shouldAbort)
+  }
+
+  // Disambiguate across the WHOLE set: `safeRelPath` on each rel individually
+  // cannot see its siblings, so `Report.txt`+`report.txt` (same dir, different
+  // case) and truncation twins would silently collide on case-insensitive
+  // volumes. Batch normalize with shared per-directory collision state.
+  {
+    const safeRels = safeRelPaths(entries.map((e) => e.relPath))
+    for (let i = 0; i < entries.length; i++) entries[i]!.relPath = safeRels[i]!
   }
 
   // Log each file's classification for diagnostics
@@ -582,12 +592,16 @@ export async function processOcr(
     // One child loads the model once and walks the remaining queue. If the native
     // stack segfaults, collect that file's failure and respawn for the rest.
     let remaining: ClassifiedEntry[] = [...toProcess]
+    // Per-batch rel -> entry index: onFile/onFileStart messages arrive for every
+    // file and a linear scan over the whole queue would make large imports O(n²).
+    const batchByRel = new Map(remaining.map((f) => [f.rel, f] as const))
     while (remaining.length > 0) {
       throwIfSpinosaCancelled(shouldAbort)
       const batch = remaining as PpuOcrFile[]
       const batchStart = Date.now()
       const finished = new Map<string, { ok: boolean; error?: string; duration_s: number }>()
       let crashedRel: string | undefined
+      const inBatch = (rel: string) => batchByRel.get(rel)
 
       const result = await runOcrWorker(batch, {
         onLog,
@@ -608,7 +622,7 @@ export async function processOcr(
           prog?.file("OCR", processed, total, relPath)
         },
         onFile: (fr) => {
-          const entry = remaining.find((f) => f.rel === fr.rel)
+          const entry = batchByRel.get(fr.rel)
           const ok = fr.ok && !!entry && convertedOutputExists(entry.dest)
           const error = !ok
             ? (fr.error
@@ -853,18 +867,18 @@ async function runOcrWorker(
 ): Promise<OcrWorkerRunResult> {
   throwIfSpinosaCancelled(options?.shouldAbort)
   const mode = resolveOcrWorkerMode()
-  const workerArgs = JSON.stringify({ files })
+  const workerPayload = encodeWorkerPayload({ files })
   const detached = options?.detached ?? true
   // Detached so a native segfault/kill does not take down the TUI parent.
   // Parent still tracks the PID and terminates the process group on cancel.
   const child =
     mode === "binary-cli"
-      ? spawn(productBinaryExecutable(), ["internal", "ocr-worker", workerArgs], {
+      ? spawn(productBinaryExecutable(), ["internal", "ocr-worker", workerPayload.arg], {
           stdio: ["ignore", "pipe", "pipe"],
           detached,
           env: process.env,
         })
-      : spawn(bunExecutableForWorker(), ["run", workerScriptPath(), workerArgs], {
+      : spawn(bunExecutableForWorker(), ["run", workerScriptPath(), workerPayload.arg], {
           stdio: ["ignore", "pipe", "pipe"],
           detached,
         })
@@ -894,7 +908,9 @@ async function runOcrWorker(
   })
   child.stderr?.on("data", (chunk: Buffer) => { stderrBuf += chunk.toString() })
 
-  const { code, signal, aborted } = await waitForOcrChild(child, options?.shouldAbort, options?.signal)
+  const { code, signal, aborted } = await waitForOcrChild(child, options?.shouldAbort, options?.signal).finally(() =>
+    disposeWorkerPayload(workerPayload.tempPath),
+  )
   if (stdoutCarry.trim()) consumeOcrWorkerNdjsonLine(stdoutCarry, state, options)
 
   // Only unref after we are done waiting so cancel keeps a live handle.
@@ -1020,15 +1036,15 @@ async function runMarkitdownViaChild(
 ): Promise<PhaseResult> {
   throwIfSpinosaCancelled(shouldAbort)
   const mode = resolveMarkitdownWorkerMode()
-  const workerArgs = JSON.stringify({ files, logsDir })
+  const workerPayload = encodeWorkerPayload({ files, logsDir })
   const child =
     mode === "binary-cli"
-      ? spawn(productBinaryExecutable(), ["internal", "markitdown-worker", workerArgs], {
+      ? spawn(productBinaryExecutable(), ["internal", "markitdown-worker", workerPayload.arg], {
           stdio: ["ignore", "pipe", "pipe"],
           detached: true,
           env: process.env,
         })
-      : spawn(bunExecutableForWorker(), ["run", markitdownWorkerScriptPath(), workerArgs], {
+      : spawn(bunExecutableForWorker(), ["run", markitdownWorkerScriptPath(), workerPayload.arg], {
           stdio: ["ignore", "pipe", "pipe"],
           detached: true,
         })
@@ -1066,7 +1082,9 @@ async function runMarkitdownViaChild(
     stderrBuf += chunk.toString()
   })
 
-  const { code, signal, aborted } = await waitForOcrChild(child, shouldAbort, hooks?.signal)
+  const { code, signal, aborted } = await waitForOcrChild(child, shouldAbort, hooks?.signal).finally(() =>
+    disposeWorkerPayload(workerPayload.tempPath),
+  )
   if (stdoutCarry.trim()) consumeMarkitdownWorkerNdjsonLine(stdoutCarry, state, { onLog, onProgress })
 
   try {

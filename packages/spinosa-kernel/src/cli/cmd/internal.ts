@@ -7,6 +7,7 @@ import {
   compiledTemplatePackId,
 } from "@spinosa/core/distribution/bootstrap"
 import { getFormat, emitResult } from "../output"
+import { decodeWorkerPayload } from "@spinosa/core/import/worker-payload"
 
 function printJson(payload: unknown): void {
   process.stdout.write(`${JSON.stringify(payload)}\n`)
@@ -84,7 +85,7 @@ export const InternalCommand = {
           }
           let input: { files?: unknown }
           try {
-            input = JSON.parse(raw) as { files?: unknown }
+            input = decodeWorkerPayload(raw) as { files?: unknown }
           } catch (err) {
             process.stdout.write(
               `${JSON.stringify({
@@ -139,7 +140,7 @@ export const InternalCommand = {
           }
           let input: { files?: unknown; logsDir?: unknown }
           try {
-            input = JSON.parse(raw) as { files?: unknown; logsDir?: unknown }
+            input = decodeWorkerPayload(raw) as { files?: unknown; logsDir?: unknown }
           } catch (err) {
             process.stdout.write(
               `${JSON.stringify({
