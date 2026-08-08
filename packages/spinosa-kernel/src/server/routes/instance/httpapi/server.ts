@@ -1,6 +1,6 @@
 import { Config as EffectConfig, Context, Effect, Layer } from "effect"
 import { HttpApiBuilder, OpenApi } from "effect/unstable/httpapi"
-import { HttpClient, HttpMiddleware, HttpRouter, HttpServer, HttpServerResponse } from "effect/unstable/http"
+import { HttpClient, HttpMiddleware, HttpRouter, HttpServer, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import * as Socket from "effect/unstable/socket/Socket"
 import { FSUtil } from "@spinosa/kernel-core/fs-util"
 import * as Observability from "@spinosa/kernel-core/observability"
@@ -69,7 +69,7 @@ import * as SessionExecutionLocal from "@spinosa/kernel-core/session/execution/l
 import { SessionExecutionStatus } from "@spinosa/kernel-core/session/execution-status"
 import { SessionExecutionStatusBridge } from "@/session/execution-status-bridge"
 import { lazy } from "@/util/lazy"
-import { CorsConfig, isAllowedCorsOrigin, type CorsOptions } from "@spinosa/server/cors"
+import { CorsConfig, isAllowedRequestOrigin, type CorsOptions } from "@spinosa/server/cors"
 import { ServerAuth as SharedServerAuth } from "@spinosa/server/auth"
 import { serveUIEffect } from "@/server/shared/ui"
 import { ServerAuth } from "@/server/auth"
@@ -123,10 +123,18 @@ export const context = Context.makeUnsafe<unknown>(new Map())
 
 const cors = (corsOptions?: CorsOptions) =>
   HttpRouter.middleware(
-    HttpMiddleware.cors({
-      allowedOrigins: (origin) => isAllowedCorsOrigin(origin, corsOptions),
-      maxAge: 86_400,
-    }),
+    (httpApp) =>
+      Effect.gen(function* () {
+        const request = yield* HttpServerRequest.HttpServerRequest
+        const host = request.headers.host
+        return yield* HttpMiddleware.cors({
+          // Same-origin requests (origin host === Host header) are reflected so
+          // the bundled web UI keeps working; every other origin must pass the
+          // narrowed allowlist (oc://renderer, tauri, explicit opts.cors).
+          allowedOrigins: (origin) => isAllowedRequestOrigin(origin, host, corsOptions),
+          maxAge: 86_400,
+        })(httpApp)
+      }),
     { global: true },
   )
 

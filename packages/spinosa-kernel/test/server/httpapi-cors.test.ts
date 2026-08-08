@@ -43,7 +43,7 @@ const it = testEffect(
 )
 
 describe("HttpApi CORS", () => {
-  it.live("allows browser preflight requests without credentials", () =>
+  it.live("denies preflight from foreign localhost origins", () =>
     Effect.gen(function* () {
       const response = yield* HttpClientRequest.options(InstancePaths.path).pipe(
         HttpClientRequest.setHeaders({
@@ -54,9 +54,11 @@ describe("HttpApi CORS", () => {
         HttpClient.execute,
       )
 
+      // a page served from localhost:3000 must NOT get CORS access to this
+      // server; only same-origin, native-shell, and explicit allowlist origins
+      // get an allow-origin echo
       expect(response.status).toBe(204)
-      expect(response.headers["access-control-allow-origin"]).toBe("http://localhost:3000")
-      expect(response.headers["access-control-allow-headers"]).toBe("authorization")
+      expect(response.headers["access-control-allow-origin"]).toBeUndefined()
     }),
   )
 

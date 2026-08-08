@@ -18,6 +18,10 @@ const PREFLIGHT_HEADERS = {
   "access-control-request-headers": "content-type, x-opencode-directory",
 }
 
+function preflight(options: RequestInit) {
+  return app().request("/global/config", { ...options, method: "OPTIONS" })
+}
+
 // effect-smol's HttpMiddleware.cors overwrites `Vary: Origin` with
 // `Vary: Access-Control-Request-Headers` on OPTIONS preflight responses
 // (the two share the same record key during the spread). With dynamic
@@ -25,32 +29,31 @@ const PREFLIGHT_HEADERS = {
 // cached for one origin against a different origin. corsVaryFixLayer
 // restores the merged form.
 describe("CORS preflight Vary header", () => {
-  test("HTTP API backend preflight Vary contains Origin", async () => {
-    const response = await app().request("/global/config", {
-      method: "OPTIONS",
-      headers: PREFLIGHT_HEADERS,
+  test("denies preflight from foreign localhost origin", async () => {
+    const response = await preflight({ headers: PREFLIGHT_HEADERS })
+
+    expect([200, 204]).toContain(response.status)
+    // a page served from localhost:3000 must NOT get CORS access to this
+    // server (arbitrary localhost pages are the attack surface this locks down)
+    expect(response.headers.get("access-control-allow-origin")).toBeNull()
+  })
+
+  test("allows same-origin preflight and keeps Vary: Origin + Access-Control-Request-Headers", async () => {
+    const response = await preflight({
+      // origin host matches the request Host header -> allowed
+      headers: { ...PREFLIGHT_HEADERS, host: "localhost:3000" },
     })
 
     expect([200, 204]).toContain(response.status)
     expect(response.headers.get("access-control-allow-origin")).toBe("http://localhost:3000")
-    expect((response.headers.get("vary") ?? "").toLowerCase()).toContain("origin")
-  })
-
-  test("HTTP API backend preflight Vary still preserves Access-Control-Request-Headers", async () => {
-    const response = await app().request("/global/config", {
-      method: "OPTIONS",
-      headers: PREFLIGHT_HEADERS,
-    })
-
     const vary = (response.headers.get("vary") ?? "").toLowerCase()
     expect(vary).toContain("origin")
     expect(vary).toContain("access-control-request-headers")
   })
 
-  test("HTTP API backend does not duplicate Origin in Vary", async () => {
-    const response = await app().request("/global/config", {
-      method: "OPTIONS",
-      headers: PREFLIGHT_HEADERS,
+  test("does not duplicate Origin in Vary", async () => {
+    const response = await preflight({
+      headers: { ...PREFLIGHT_HEADERS, host: "localhost:3000" },
     })
 
     const vary = response.headers.get("vary") ?? ""

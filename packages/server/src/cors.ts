@@ -8,8 +8,11 @@ export const CorsConfig = Context.Reference<CorsOptions | undefined>("@opencode/
 
 export function isAllowedCorsOrigin(input: string | undefined, opts?: CorsOptions) {
   if (!input) return true
-  if (input.startsWith("http://localhost:")) return true
-  if (input.startsWith("http://127.0.0.1:")) return true
+  // Same-origin requests are allowed in `isAllowedRequestOrigin` via the host
+  // match. For foreign cross-origin browser requests we deliberately do NOT
+  // echo arbitrary `http://localhost:*` origins: any page running on localhost
+  // (dev server, packaged app, malicious widget) would otherwise get CORS
+  // access to this server's data (including workspace file reads).
   if (input.startsWith("oc://renderer")) return true
   if (input === "tauri://localhost" || input === "http://tauri.localhost" || input === "https://tauri.localhost")
     return true

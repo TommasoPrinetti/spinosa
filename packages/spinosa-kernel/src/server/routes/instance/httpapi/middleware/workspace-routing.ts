@@ -31,7 +31,8 @@ type RemoteTarget = Extract<Target, { type: "remote" }>
 type RequestPlan = Data.TaggedEnum<{
   InvalidWorkspace: {}
   MissingWorkspace: { readonly workspaceID: WorkspaceV2.ID }
-  Local: { readonly directory: string; readonly workspaceID?: WorkspaceV2.ID }
+  MissingDirectory: {}
+  Local: { readonly directory?: string; readonly workspaceID?: WorkspaceV2.ID }
   Remote: {
     readonly request: HttpServerRequest.HttpServerRequest
     readonly workspace: Workspace.Info
@@ -104,11 +105,15 @@ function decodeDirectory(value: string): string {
   }
 }
 
-function defaultDirectory(request: HttpServerRequest.HttpServerRequest, url: URL): string {
+// The workspace root for instance-routed requests comes exclusively from the
+// routed session (server-derived) or an explicit `directory` query/header.
+// There is deliberately NO `process.cwd()` fallback: an unauthenticated
+// request must never get a filesystem root it did not explicitly claim.
+function defaultDirectory(request: HttpServerRequest.HttpServerRequest, url: URL): string | undefined {
   const query = url.searchParams.get("directory")
-  if (query) return query
+  if (query) return decodeDirectory(query)
   const header = request.headers["x-spinosa-directory"] || request.headers["x-opencode-directory"]
-  return header ? decodeDirectory(header) : process.cwd()
+  return header ? decodeDirectory(header) : undefined
 }
 
 function shouldStayOnControlPlane(request: HttpServerRequest.HttpServerRequest, url: URL): boolean {
@@ -125,7 +130,7 @@ function resolveWorkspace(
 
 function missingWorkspaceResponse(id: WorkspaceV2.ID): HttpServerResponse.HttpServerResponse {
   return HttpServerResponse.text(`Workspace not found: ${id}`, {
-    status: 500,
+    status: 404,
     contentType: "text/plain; charset=utf-8",
   })
 }
@@ -202,8 +207,11 @@ function planRequest(
       return yield* planWorkspaceRequest(request, url, workspace)
     }
 
+    const directory = session?.directory || defaultDirectory(request, url)
+    if (!directory) return RequestPlan.MissingDirectory()
+
     return RequestPlan.Local({
-      directory: session?.directory || defaultDirectory(request, url),
+      directory,
       workspaceID: envWorkspaceID ?? workspaceID,
     })
   })
@@ -227,9 +235,25 @@ function routeWorkspace<E>(
         ),
       ),
     MissingWorkspace: ({ workspaceID }) => Effect.succeed(missingWorkspaceResponse(workspaceID)),
+    MissingDirectory: () =>
+      Effect.succeed(
+        HttpServerResponse.jsonUnsafe(
+          new InvalidRequestError({
+            message: "Missing workspace directory: provide ?directory= or x-spinosa-directory (or a routed session)",
+            kind: "Query",
+            field: "directory",
+          }),
+          { status: 400 },
+        ),
+      ),
     Remote: ({ request, workspace, target, url }) => proxyRemote(client, request, workspace, target, url),
     Local: ({ directory, workspaceID }) =>
-      effect.pipe(Effect.provideService(WorkspaceRouteContext, WorkspaceRouteContext.of({ directory, workspaceID }))),
+      effect.pipe(
+        Effect.provideService(
+          WorkspaceRouteContext,
+          WorkspaceRouteContext.of({ directory: directory ?? "", workspaceID }),
+        ),
+      ),
   })
 }
 
