@@ -65,6 +65,36 @@ describe("release channel config", () => {
     expect(spinosaBetaToggleChannel("1")).toBe("beta")
     expect(spinosaBetaToggleChannel("0")).toBe("stable")
   })
+
+  test("an invalid beta toggle falls back to stable instead of throwing", async () => {
+    resetTestHome()
+    writeFileSync(path.join(testHome, "metadata", "config.yaml"), "beta: sometimes\n")
+    expect(await spinosaReleaseChannel()).toBe("stable")
+  })
+
+  test("an invalid release_channel falls back to stable instead of throwing", async () => {
+    resetTestHome()
+    writeFileSync(path.join(testHome, "metadata", "config.yaml"), "release_channel: canary\n")
+    expect(await spinosaReleaseChannel()).toBe("stable")
+  })
+
+  test("an invalid SPINOSA_RELEASE_CHANNEL falls back to stable", async () => {
+    resetTestHome()
+    process.env.SPINOSA_RELEASE_CHANNEL = "bleeding"
+    expect(await spinosaReleaseChannel()).toBe("stable")
+  })
+
+  test("a corrupt config file falls back to stable instead of throwing", async () => {
+    resetTestHome()
+    writeFileSync(path.join(testHome, "metadata", "config.yaml"), "beta: true\nbeta: false\n")
+    expect(await spinosaReleaseChannel()).toBe("stable")
+  })
+
+  test("a corrupt config file does not disable auto-upgrade checks", async () => {
+    resetTestHome()
+    writeFileSync(path.join(testHome, "metadata", "config.yaml"), "auto_upgrade: true\nauto_upgrade: no\n")
+    expect(await readAutoUpgrade()).toBe(true)
+  })
 })
 
 describe("auto_upgrade config", () => {

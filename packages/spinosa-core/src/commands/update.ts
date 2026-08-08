@@ -3,6 +3,7 @@ import {
   mkdirSync,
   readFileSync,
   writeFileSync,
+  readdirSync,
   statSync,
   rmSync,
   cpSync,
@@ -15,6 +16,7 @@ import { writeWorkspaceFrameworkVersion } from "../workspace/meta"
 import { inspectWorkspacePresence, isUsableWorkspacePresence } from "../workspace/presence"
 import { loadRegistry } from "../workspace/registry"
 import { readFrameworkVersionFromRoot, resolveTemplateRootFromFrameworkRoot } from "../framework/discovery"
+import { acquireWorkspaceUpdateLock } from "../system/update-lock"
 import {
   FRAMEWORK_CHECKSUMS_RELPATH,
   filesMatch,
@@ -493,6 +495,7 @@ async function updateWorkspaceUnlocked(options: UpdateOptions): Promise<UpdateRe
 type UpdateSnapshot = {
   root: string
   relativePaths: string[]
+  topLevelEntries: string[]
 }
 
 function createUpdateSnapshot(options: UpdateOptions): UpdateSnapshot | undefined {
@@ -502,6 +505,15 @@ function createUpdateSnapshot(options: UpdateOptions): UpdateSnapshot | undefine
   const frameworkManifest = path.join(sourceTemplateRoot, ".spinosa", "workspace-files.tsv")
   const workspaceManifest = path.join(options.workspacePath, ".spinosa", "manifest.tsv")
   if (!existsSync(frameworkManifest)) return
+
+  // Record the top-level workspace layout before any write so rollback can
+  // also remove paths this update created (e.g. a newly added template dir).
+  let topLevelEntries: string[] = []
+  try {
+    topLevelEntries = readdirSync(options.workspacePath).map((name) => name)
+  } catch {
+    topLevelEntries = []
+  }
 
   const fwEntries = readFrameworkFilesTsv(frameworkManifest)
   const managedNested: string[] = []
@@ -535,7 +547,7 @@ function createUpdateSnapshot(options: UpdateOptions): UpdateSnapshot | undefine
     mkdirSync(path.dirname(backup), { recursive: true })
     cpSync(source, backup, { recursive: true, force: true })
   }
-  return { root, relativePaths: unique }
+  return { root, relativePaths: unique, topLevelEntries }
 }
 
 function restoreUpdateSnapshot(workspacePath: string, snapshot: UpdateSnapshot): void {
@@ -549,6 +561,21 @@ function restoreUpdateSnapshot(workspacePath: string, snapshot: UpdateSnapshot):
     const target = resolvePathWithinRoot(workspacePath, relative, "workspace snapshot path")
     mkdirSync(path.dirname(target), { recursive: true })
     cpSync(backup, target, { recursive: true, force: true })
+  }
+  // Remove top-level entries the update created so the workspace returns to
+  // exactly its pre-update layout. Snapshot bookkeeping lives under
+  // `.spinosa/`, which is part of the original listing, so it is never touched.
+  let currentTopLevel: string[] = []
+  try {
+    currentTopLevel = readdirSync(workspacePath)
+  } catch {
+    return
+  }
+  const original = new Set(snapshot.topLevelEntries)
+  for (const name of currentTopLevel) {
+    if (original.has(name)) continue
+    const target = resolvePathWithinRoot(workspacePath, name, "workspace snapshot path")
+    rmSync(target, { recursive: true, force: true })
   }
 }
 
@@ -565,44 +592,18 @@ export async function updateWorkspace(options: UpdateOptions): Promise<UpdateRes
     }
   }
 
-  const lockPath = path.join(options.workspacePath, ".spinosa", "update.lock")
-  const deadline = Date.now() + (options.lockTimeoutMs ?? 10_000)
-  while (true) {
-    try {
-      mkdirSync(lockPath)
-      break
-    } catch (error) {
-      if (error && typeof error === "object" && "code" in error && error.code === "EEXIST") {
-        try {
-          const lockStat = statSync(lockPath)
-          let ownerAlive = false
-          try {
-            const pidText = readFileSync(path.join(lockPath, "pid"), "utf-8").trim()
-            const pid = Number(pidText)
-            if (pid > 0) { process.kill(pid, 0); ownerAlive = true }
-          } catch {}
-          if (!ownerAlive && Date.now() - lockStat.mtimeMs > 30_000) {
-            rmSync(lockPath, { recursive: true, force: true })
-            continue
-          }
-        } catch {
-          continue
-        }
-        if (Date.now() >= deadline) {
-          return {
-            success: false,
-            added: 0,
-            updated: 0,
-            removed: 0,
-            skipped: 0,
-            changes: false,
-            error: "Another update is already in progress for this workspace",
-          }
-        }
-        await Bun.sleep(100)
-        continue
-      }
-      throw error
+  let lock: ReturnType<typeof acquireWorkspaceUpdateLock>
+  try {
+    lock = acquireWorkspaceUpdateLock(options.workspacePath, { timeoutMs: options.lockTimeoutMs ?? 10_000 })
+  } catch (error) {
+    return {
+      success: false,
+      added: 0,
+      updated: 0,
+      removed: 0,
+      skipped: 0,
+      changes: false,
+      error: error instanceof Error ? error.message : "Another update is already in progress for this workspace",
     }
   }
 
@@ -617,6 +618,6 @@ export async function updateWorkspace(options: UpdateOptions): Promise<UpdateRes
     throw error
   } finally {
     if (snapshot) rmSync(snapshot.root, { recursive: true, force: true })
-    rmSync(lockPath, { recursive: true, force: true })
+    lock.release()
   }
 }

@@ -16,6 +16,7 @@ import { discoverInstalledFramework, installedReleaseVersion, resolveFrameworkRo
 import { compareFrameworkVersions, isDowngrade } from "../utils/version"
 import { ensureGlobalMetadata, discoverRegisteredWorkspaces } from "../workspace/registry"
 import { readWorkspaceMeta } from "../workspace/meta"
+import { writeTextAtomic } from "../utils/fs"
 import { spinosaLogInfo } from "../utils/log"
 
 const FETCH_TIMEOUT_MS = 15_000
@@ -199,7 +200,9 @@ export function writeVersionCache(
   const cachePath = versionCachePath(channel)
   mkdirSync(path.dirname(cachePath), { recursive: true })
   const now = Math.floor(Date.now() / 1000)
-  writeFileSync(cachePath, `${now}\n${version}\n`)
+  // Atomic write: a concurrent preflight reader must never observe a torn
+  // (half-written) cache file.
+  writeTextAtomic(cachePath, `${now}\n${version}\n`)
 }
 
 export async function upgradeFramework(
@@ -222,7 +225,11 @@ export async function upgradeFramework(
     options.onPhase?.("resolve", `Resolving latest ${channel} version`)
     const latest = await resolveReleaseVersionForChannel(channel)
     if (!latest) {
-      const error = `Failed to resolve latest version for channel ${channel}`
+      const hint =
+        channel === "stable"
+          ? "No stable release has been published yet — use --channel beta"
+          : `No release found for channel ${channel}`
+      const error = `Failed to resolve latest version for channel ${channel}. ${hint}`
       spinosaLogInfo("upgrade", error)
       return { success: false, workspaceUpgradesNeeded: [], error }
     }

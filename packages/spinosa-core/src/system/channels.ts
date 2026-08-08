@@ -3,6 +3,7 @@ import path from "node:path"
 import { mkdirSync } from "node:fs"
 import { parseInstallPinnedVersion } from "../utils/version"
 import { readYamlScalar, writeYamlConfig } from "../utils/yaml-config"
+import { spinosaLogWarn } from "../utils/log"
 
 export type ReleaseChannel = "stable" | "beta"
 
@@ -48,20 +49,27 @@ export async function readConfigValue(configPath: string, key: string): Promise<
 }
 
 export async function spinosaReleaseChannel(): Promise<ReleaseChannel> {
-  const envChannel = process.env.SPINOSA_RELEASE_CHANNEL
-  if (envChannel) {
-    return normalizeChannel(envChannel)
-  }
+  try {
+    const envChannel = process.env.SPINOSA_RELEASE_CHANNEL
+    if (envChannel) {
+      return normalizeChannel(envChannel)
+    }
 
-  const configPath = spinosaConfigFile()
-  const betaToggle = await readConfigValue(configPath, "beta")
-  if (betaToggle) {
-    return spinosaBetaToggleChannel(betaToggle)
-  }
+    const configPath = spinosaConfigFile()
+    const betaToggle = await readConfigValue(configPath, "beta")
+    if (betaToggle) {
+      return spinosaBetaToggleChannel(betaToggle)
+    }
 
-  // Legacy fallback — installers now write `beta: true|false` instead.
-  const releaseChannel = await readConfigValue(configPath, "release_channel")
-  return normalizeChannel(releaseChannel ?? "stable")
+    // Legacy fallback — installers now write `beta: true|false` instead.
+    const releaseChannel = await readConfigValue(configPath, "release_channel")
+    return normalizeChannel(releaseChannel ?? "stable")
+  } catch (error) {
+    // A corrupt/invalid channel config must never block launching or the
+    // upgrade check — degrade to the conservative stable channel.
+    spinosaLogWarn("channels", `Invalid release channel configuration (${String(error)}); using stable`)
+    return "stable"
+  }
 }
 
 function normalizeChannel(ch: string): ReleaseChannel {
@@ -105,8 +113,13 @@ export async function setReleaseChannel(channel: ReleaseChannel): Promise<void> 
 
 /** `auto_upgrade: false` disables launch checks; anything else / missing = enabled. */
 export async function readAutoUpgrade(): Promise<boolean> {
-  const value = await readConfigValue(spinosaConfigFile(), "auto_upgrade")
-  return value !== "false"
+  try {
+    const value = await readConfigValue(spinosaConfigFile(), "auto_upgrade")
+    return value !== "false"
+  } catch (error) {
+    spinosaLogWarn("channels", `Could not read auto_upgrade setting (${String(error)}); defaulting to enabled`)
+    return true
+  }
 }
 
 export async function setAutoUpgrade(enabled: boolean): Promise<void> {

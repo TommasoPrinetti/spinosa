@@ -19,7 +19,11 @@ export const UpgradeCommand = {
   builder: (yargs: Argv) =>
     yargs
       .positional("target", {
-        describe: "target version",
+        describe: "target version (alias: --version)",
+        type: "string",
+      })
+      .option("version", {
+        describe: "target version to install (alias of the positional target)",
         type: "string",
       })
       .option("channel", {
@@ -45,6 +49,7 @@ export const UpgradeCommand = {
       }),
   handler: async (args: {
     target?: string
+    version?: string
     channel?: "stable" | "beta"
     yes?: boolean
     reinstall?: boolean
@@ -64,7 +69,7 @@ export const UpgradeCommand = {
     }
 
     const result = await upgradeFramework({
-      version: args.target,
+      version: args.version ?? args.target,
       channel: args.channel as ReleaseChannel | undefined,
       yes: args.yes,
       reinstall: args.reinstall,

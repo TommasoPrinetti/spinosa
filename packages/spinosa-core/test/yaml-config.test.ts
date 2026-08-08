@@ -49,4 +49,22 @@ describe("yaml-config", () => {
     expect(updated).toContain("beta: false")
     expect(updated).not.toContain("release_channel:")
   })
+
+  test("duplicate keys fail loudly on read instead of silently returning a value", async () => {
+    resetDir()
+    const file = path.join(testDir, "config.yaml")
+    await Bun.write(file, "beta: true\nbeta: false\n")
+    await expect(readYamlScalar(file, "beta")).rejects.toThrow(/Invalid YAML in .*unique/i)
+  })
+
+  test("duplicate keys fail loudly on write instead of throwing at stringify time", async () => {
+    resetDir()
+    const file = path.join(testDir, "config.yaml")
+    await Bun.write(file, "beta: true\nbeta: false\n")
+    await expect(
+      writeYamlConfig(file, (document) => {
+        document.set("auto_upgrade", true)
+      }),
+    ).rejects.toThrow(/Invalid YAML/)
+  })
 })

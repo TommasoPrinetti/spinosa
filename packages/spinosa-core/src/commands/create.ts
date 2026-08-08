@@ -60,6 +60,28 @@ export function resolveWorkspacePath(corpusPath: string, workspaceName?: string)
   return workspacePath
 }
 
+const MAX_WORKSPACE_NAME_LENGTH = 120
+
+/**
+ * Reject names that could escape the intended workspace parent (path
+ * components, absolute paths) or that filesystems cannot represent safely.
+ */
+export function assertSafeWorkspaceName(name: string): void {
+  const trimmed = name.trim()
+  if (!trimmed) {
+    throw new Error("Workspace name must not be empty")
+  }
+  if (trimmed === "." || trimmed === "..") {
+    throw new Error(`Invalid workspace name ${JSON.stringify(name)}`)
+  }
+  if (trimmed.includes("/") || trimmed.includes("\\") || trimmed.includes("\0")) {
+    throw new Error(`Invalid workspace name ${JSON.stringify(name)}: must not contain path separators`)
+  }
+  if (trimmed.length > MAX_WORKSPACE_NAME_LENGTH) {
+    throw new Error(`Workspace name must be at most ${MAX_WORKSPACE_NAME_LENGTH} characters`)
+  }
+}
+
 function reserveWorkspacePath(corpusPath: string, workspaceName?: string, resumeWorkspacePath?: string): { path: string; resumed: boolean } {
   const resolvedCorpus = path.resolve(corpusPath)
   if (resumeWorkspacePath) {
@@ -71,6 +93,7 @@ function reserveWorkspacePath(corpusPath: string, workspaceName?: string, resume
   }
   const corpusName = path.basename(resolvedCorpus)
   const parentDir = path.dirname(resolvedCorpus)
+  if (workspaceName) assertSafeWorkspaceName(workspaceName)
   const baseName = workspaceName?.trim() || `${corpusName}-spinosa`
 
   let n = 1
