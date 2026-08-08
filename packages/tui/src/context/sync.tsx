@@ -279,6 +279,24 @@ export const {
     }
 
     event.subscribe((event, { directory, workspace }) => {
+      // Emitted by the SDK stream loop whenever the global event connection
+      // re-establishes after a drop. Events missed while offline are not
+      // replayed, so re-fetch the volatile state instead of waiting for the
+      // next live event (stale "busy" session rows, missing sessions).
+      if ((event as { type: string }).type === "connection.reconnected") {
+        void Promise.all([
+          listSessions().then((sessions) => setStore("session", reconcile(sessions))),
+          sdk.client.session
+            .status({ workspace })
+            .then((x) => setStore("session_status", reconcile(x.data ?? {})))
+            .catch(() => {}),
+          sdk.client.vcs
+            .get({ workspace })
+            .then((x) => setStore("vcs", reconcile(x.data)))
+            .catch(() => {}),
+        ])
+        return
+      }
       // SDK gen can lag schema for newer session.next.* types; handle those first.
       if ((event as { type: string }).type === "session.next.prompt.delivery.changed") {
         const properties = (event as { properties: { messageID?: string; delivery?: string } }).properties

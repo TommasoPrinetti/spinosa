@@ -778,11 +778,9 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         slashName: "sessions",
         slashAliases: ["session", "resume", "continue"],
         run: async () => {
-          const cur = route.data
-          if (cur.type === "workspace" && cur.sessionID) {
-            const st = sync.data.session_status?.[cur.sessionID]
-            if (st?.type !== "idle") await sdk.client.session.abort({ sessionID: cur.sessionID }).catch(() => {})
-          }
+          // No abort here: opening the switcher must not kill the running
+          // session. If the user commits to a different session, the picker
+          // aborts the old one at selection time.
           dialog.replace(() => <DialogSessionList />)
         },
       },

@@ -117,6 +117,13 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
           attempt += 1
           if (abort.signal.aborted || ctrl.signal.aborted) break
 
+          // A drop followed by a successful stream close means the connection
+          // came back but events emitted while offline were lost. Tell the
+          // sync layer to re-fetch volatile state instead of staying stale.
+          if (attempt >= 1) {
+            emitter.emit("event", { type: "connection.reconnected" } as unknown as Parameters<typeof emitter.emit>[1])
+          }
+
           // Exponential backoff
           const backoff = Math.min(retryDelay * 2 ** (attempt - 1), maxRetryDelay)
           await new Promise((resolve) => setTimeout(resolve, backoff))

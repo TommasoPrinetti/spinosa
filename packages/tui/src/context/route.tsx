@@ -80,7 +80,11 @@ export const { use: useRoute, provider: RouteProvider } = createSimpleContext({
           setStore(reconcile(next))
         }
       },
-      navigate(route: RouteNavigateInput) {
+navigate(route: RouteNavigateInput) {
+        // A route change always ends any conversation-boot wait: leaving the
+        // session shell (or the create failing elsewhere) must not leave the
+        // "Loading conversation engine…" overlay stuck over the whole TUI.
+        setConversationBootingPending(false)
         // Replace the route object wholesale so stale workspace keys do not linger across screen changes.
         // createStore's setStore(object) shallow-merges; reconcile is required to drop keys
         // (e.g. onboarding workspacePath after Resume → Home → New workspace).

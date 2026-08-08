@@ -345,12 +345,19 @@ export function DialogSessionList() {
         setToDelete(undefined)
       }}
       onSelect={(option) => {
-        route.navigate({
-          type: "workspace",
-          sessionID: option.value,
-        })
-        dialog.clear()
-      }}
+          // Only abandon the currently-running session when the user actually
+          // commits to a different one — browsing the list must not kill it.
+          const cur = currentSessionID()
+          if (cur && cur !== option.value) {
+            const st = sync.data.session_status?.[cur]
+            if (st?.type !== "idle") void sdk.client.session.abort({ sessionID: cur }).catch(() => {})
+          }
+          route.navigate({
+            type: "workspace",
+            sessionID: option.value,
+          })
+          dialog.clear()
+        }}
       actions={[
         {
           command: "session.pin.toggle",
