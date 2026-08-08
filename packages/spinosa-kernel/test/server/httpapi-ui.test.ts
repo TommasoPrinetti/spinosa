@@ -374,9 +374,14 @@ describe("HttpApi UI fallback", () => {
 
   it.live("allows web UI preflight without auth", () =>
     Effect.gen(function* () {
-      const response = yield* app({ password: "secret", username: "opencode" }).request("/", {
+      // Same-origin preflight: the web UI serves from http://localhost:3000
+      // so its Host header matches the Origin (Bun's Request only sets Host
+      // on real fetches; tests must supply it explicitly). Cross-origin
+      // origins (Host mismatch / not allowlisted) must NOT get CORS headers.
+      const response = yield* app({ password: "secret", username: "opencode" }).request("http://localhost:3000/", {
         method: "OPTIONS",
         headers: {
+          host: "localhost:3000",
           origin: "http://localhost:3000",
           "access-control-request-method": "GET",
         },

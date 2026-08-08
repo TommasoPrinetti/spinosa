@@ -1220,7 +1220,16 @@ const layer = Layer.effect(
 
           const outcome: "break" | "continue" = yield* Effect.gen(function* () {
             const lastUserMsg = msgs.findLast((m) => m.info.role === "user")
-            const bypassAgentCheck = lastUserMsg?.parts.some((p) => p.type === "agent") ?? false
+            // An `agent` part only counts for permission bypass when it names
+            // the agent that is actually running this turn (i.e. the one the
+            // message itself selected and the server vetted via agents.get).
+            // Raw SDK prompts can carry arbitrary `agent` parts; without this
+            // check a crafted part for some other agent would skip the task
+            // tool's permission gate for free.
+            const agentPartNames = (lastUserMsg?.parts ?? [])
+              .filter((p) => p.type === "agent" && "name" in p)
+              .map((p) => (p as { name: string }).name)
+            const bypassAgentCheck = agentPartNames.includes(agent.name)
             const promptOps = yield* ops()
 
             const tools = yield* SessionTools.resolve({

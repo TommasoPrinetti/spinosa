@@ -377,7 +377,10 @@ const layer = Layer.effect(
             yield* result.get(input.sessionID)
             const prompt = resolvePrompt(input.prompt)
             const messageID = input.id ?? SessionMessage.ID.create()
-            const delivery = input.delivery ?? "steer"
+            // Default delivery is "queue": a caller that does not explicitly ask to
+            // steer should never interrupt a running turn. Steering is an opt-in
+            // ("Enter mid-run queues, Steer on the queued message").
+            const delivery = input.delivery ?? "queue"
             const expected = { sessionID: input.sessionID, messageID, prompt, delivery }
             const admitted = yield* SessionInput.admit(db, events, {
               id: messageID,

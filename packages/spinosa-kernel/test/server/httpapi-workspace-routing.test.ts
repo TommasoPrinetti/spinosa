@@ -451,7 +451,7 @@ describe("HttpApi workspace routing middleware", () => {
 
       const response = yield* HttpClient.get(`/probe?workspace=${workspaceID}`)
 
-      expect(response.status).toBe(500)
+      expect(response.status).toBe(404)
       expect(yield* response.text).toBe(`Workspace not found: ${workspaceID}`)
     }),
   )
@@ -472,16 +472,26 @@ describe("HttpApi workspace routing middleware", () => {
       // process and should not be redirected into the selected workspace target.
       yield* serveProbe
 
-      const response = yield* HttpClient.get(`/session?workspace=${workspace.id}`)
-      const headerResponse = yield* HttpClientRequest.get("/session").pipe(
-        HttpClientRequest.setHeader("x-spinosa-workspace", workspace.id),
-        HttpClient.execute,
-      )
+      // Without a directory claim the control–plane route must 400 — there is
+      // deliberately no process.cwd() fallback for unauthenticated requests.
+      const bare = yield* HttpClient.get(`/session?workspace=${workspace.id}`)
+      expect(bare.status).toBe(400)
+      expect(yield* bare.json).toMatchObject({
+        _tag: "InvalidRequestError",
+        field: "directory",
+        kind: "Query",
+        message: "Missing workspace directory: provide ?directory= or x-spinosa-directory (or a routed session)",
+      })
 
-      expect(response.status).toBe(200)
-      expect(yield* response.json).toEqual({ directory: process.cwd(), workspaceID: workspace.id })
-      expect(headerResponse.status).toBe(200)
-      expect(yield* headerResponse.json).toEqual({ directory: process.cwd(), workspaceID: workspace.id })
+      // An explicit directory claim keeps the handler local and echo it back.
+      const claimed = yield* HttpClientRequest.get("/session")
+        .pipe(
+          HttpClientRequest.setHeader("x-spinosa-workspace", workspace.id),
+          HttpClientRequest.setHeader("x-spinosa-directory", workspaceDir),
+          HttpClient.execute,
+        )
+      expect(claimed.status).toBe(200)
+      expect(yield* claimed.json).toEqual({ directory: workspaceDir, workspaceID: workspace.id })
     }),
   )
 
@@ -501,10 +511,15 @@ describe("HttpApi workspace routing middleware", () => {
       // swap the route context to the workspace target directory.
       yield* serveProbe
 
-      const response = yield* HttpClient.get(`${WorkspacePaths.list}?workspace=${workspace.id}`)
+      // No directory claim -> explicit 400 (never a cwd fallback).
+      const bare = yield* HttpClient.get(`${WorkspacePaths.list}?workspace=${workspace.id}`)
+      expect(bare.status).toBe(400)
 
-      expect(response.status).toBe(200)
-      expect(yield* response.json).toEqual({ directory: process.cwd(), workspaceID: workspace.id })
+      const claimed = yield* HttpClient.get(
+        `${WorkspacePaths.list}?workspace=${workspace.id}&directory=${encodeURIComponent(workspaceDir)}`,
+      )
+      expect(claimed.status).toBe(200)
+      expect(yield* claimed.json).toEqual({ directory: workspaceDir, workspaceID: workspace.id })
     }),
   )
 

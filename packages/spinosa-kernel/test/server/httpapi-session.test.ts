@@ -617,7 +617,7 @@ describe("session HttpApi", () => {
         expect(retried.status).toBe(200)
         expect(retriedBody).toEqual(firstBody)
         expect(firstBody).toMatchObject({
-          data: { id: "msg_http_prompt", prompt: { text: "hello" }, delivery: "steer" },
+          data: { id: "msg_http_prompt", prompt: { text: "hello" }, delivery: "queue" },
         })
 
         const messages = yield* requestJson<{ data: PromptBody[] }>(`/api/session/${session.id}/message`, {
@@ -635,7 +635,7 @@ describe("session HttpApi", () => {
         expect(admitted).toMatchObject({
           id: "msg_http_prompt",
           session_id: session.id,
-          delivery: "steer",
+          delivery: "queue",
           promoted_seq: null,
         })
         const conflict = yield* request(`/api/session/${session.id}/prompt`, {
@@ -654,7 +654,7 @@ describe("session HttpApi", () => {
         const wake = yield* request(`/api/session/${session.id}/prompt`, {
           method: "POST",
           headers: { ...headers, "content-type": "application/json" },
-          body: JSON.stringify({ id: wakeID, prompt: { text: "hello again" } }),
+          body: JSON.stringify({ id: wakeID, prompt: { text: "hello again" }, delivery: "steer" }),
         })
         expect(wake.status).toBe(200)
         const message = yield* pollWithTimeout(
