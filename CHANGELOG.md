@@ -8,6 +8,25 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.1.0-beta.1] — 2026-08-08
+
+### Added
+
+- Update lockfile: concurrent installs/upgrades no longer race over `~/.spinosa` version trees (`update-lock.ts`; applies to `update`, `upgrade`, and source installs).
+- Workspace create validates folder names (reserved/duplicate names rejected) before scaffolding.
+- Import worker payloads are size-capped and batched (E2BIG-safe); OCR conversion runs one image per worker with cleanup.
+- Tests for the above (channels, update-lock, worker-payload, classifier rel paths, workspace names, yaml-config).
+
+### Fixed
+
+- **Security:** CORS `allowed-origins` mismatch let hostile local pages bypass the host check (`Vary: Origin` now tracked per request); server sync/directory routes no longer expose hosts outside the sandbox.
+- **Security:** internal task-routing bypass (`bypassAgentCheck`) no longer skips agent identity validation except for the matching agent.
+- Session prompts default to **queue** delivery (Enter while busy queues instead of dropping); queued prompts get a Steer control.
+- TUI no longer kills a running session when switching workspaces; boot overlay can't wedge behind the prompt; SSE rehydration keeps the live session in sync after navigation.
+- OCR wedges on multi-page scanned PDFs are retried and skipped individually instead of failing the whole import; classifier and frontmatter handle case-safe relative paths.
+- Kernel release channel handling: `beta` install URL and stable channel fallbacks verified live before cut.
+- Docs: install instructions point at the live beta channel (stable not yet cut); removed unimplemented `SPINOSA_NO_EMOJI`; agent count corrected to 11; website `/install` redirects to beta.
+
 ## [1.0.3-beta.13] — 2026-08-01
 
 ### Added
