@@ -28,7 +28,7 @@ your-workspace/
 | `system/` | Your workspace settings. `context.md` stores project scope and research vocabulary. `configuration.md` stores operating settings. `dictionary.md` is the master vocabulary list. |
 | `agent_reports/` | All agent output. Numbered files like `00_startup-report.md` are final results. Session-scoped files like `evidence_packet_{session_id}.md` are intermediate work files the evaluator moves to `.trash/` after the route closes. |
 | `.logs/` | Hidden operational traces: `onboarding.log`, conversion NDJSON. Pre-memory-migration session records may remain here or in `.spinosa/archive/`. Current session memory is at `.spinosa/memory/`. |
-| `.agents/agents/` | Definitions of the 10 agents. Each is a `.md` file with permissions, workflow, and output format. |
+| `.agents/agents/` | Definitions of the 11 agents. Each is a `.md` file with permissions, workflow, and output format. |
 | `.agents/skills/` | Fallback instructions for each agent, used when native dispatch isn't available. |
 | `.bin/` | CLI scripts and conversion engines. |
 | `.trash/` | Archived process files — moved here automatically as reports are finalized. |

@@ -212,4 +212,3 @@ PDFs are automatically classified as text-based (routed to MarkItDown) or image-
 | `SPINOSA_HOME` | Override the installation directory (default: `~/.spinosa`) |
 | `SPINOSA_BIN_DIR` | Override the shim directory on PATH (default: `~/.local/bin`) |
 | `SPINOSA_NO_UPGRADE_CHECK=1` | Skip launch-time upgrade checks |
-| `SPINOSA_NO_EMOJI=1` | Disable emoji in output |
