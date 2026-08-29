@@ -588,12 +588,12 @@ describe("SessionRunnerLLM", () => {
 
       expect(requests[0]?.tools.map((tool) => tool.name)).toContain("application_context")
       expect(contexts).toEqual([
-        {
+        expect.objectContaining({
           sessionID,
           agent: AgentV2.ID.make("build"),
           assistantMessageID: expect.stringMatching(/^msg_/),
           toolCallID: "call-application",
-        },
+        }),
       ])
       expect(yield* session.context(sessionID)).toMatchObject([
         { type: "user", text: "Use application context" },

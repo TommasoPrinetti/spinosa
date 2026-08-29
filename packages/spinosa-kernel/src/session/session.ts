@@ -108,7 +108,8 @@ export function fromRow(row: SessionRow): Info {
     share,
     metadata: row.metadata ?? undefined,
     revert,
-    permission: row.permission ? [...row.permission] : undefined,
+    // Session permission may be V1 or V2 shape — keep as stored, kernel handles both
+    permission: row.permission ? ([...row.permission] as any) : undefined,
     time: {
       created: row.time_created,
       updated: row.time_updated,

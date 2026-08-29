@@ -1795,12 +1795,14 @@ export function Prompt(props: PromptProps) {
                     })()}
                   </box>
                 </box>
-                <text fg={store.interrupt > 0 ? theme.primary : theme.text} wrapMode="none">
-                  esc{" "}
-                  <span style={{ fg: store.interrupt > 0 ? theme.primary : theme.textMuted }}>
-                    {store.interrupt > 0 ? "again to interrupt" : "interrupt"}
-                  </span>
-                </text>
+                <box paddingRight={2}>
+                  <text fg={store.interrupt > 0 ? theme.primary : theme.text} wrapMode="none">
+                    esc{" "}
+                    <span style={{ fg: store.interrupt > 0 ? theme.primary : theme.textMuted }}>
+                      {store.interrupt > 0 ? "again to interrupt" : "interrupt"}
+                    </span>
+                  </text>
+                </box>
               </box>
             </Match>
             <Match when={workspace.notice()}>
