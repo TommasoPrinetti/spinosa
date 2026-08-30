@@ -133,7 +133,8 @@ const cli = yargs(args)
   .usage("")
   .completion("completion", "generate shell completion script")
   // --- Curated Spinosa help: keep core workflow visible, hide advanced, eliminate opencode fork internals ---
-  // Visible (14): new/add/update/status/list/doctor/providers/models/agent/upgrade/uninstall/web/stats/version + default TUI
+  // Visible (15): TUI default + new/add/update/status/list/doctor/providers/models/agent/upgrade/uninstall/web/stats/version
+  .command(TuiThreadCommand)
   .command(WorkspaceNewCommand)
   .command(WorkspaceAddCommand)
   .command(WorkspaceUpdateCommand)
