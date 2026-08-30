@@ -1,5 +1,5 @@
 import { TextAttributes } from "@opentui/core"
-import { createEffect, createMemo, createSignal, For, Show } from "solid-js"
+import { createMemo, createSignal, For, Show } from "solid-js"
 import { useTheme } from "../context/theme"
 import { useDialog } from "../ui/dialog"
 import { useToast } from "../ui/toast"
@@ -90,17 +90,12 @@ export function HomeFooter() {
   const isHomePicker = createMemo(() => !spinosa.activePath || spinosa.genericMode)
   const [footerSelected, setFooterSelected] = createSignal(0)
 
-  // Keep selection in bounds when button count changes
-  createEffect(() => {
-    const len = buttons().length
-    if (footerSelected() >= len) setFooterSelected(Math.max(0, len - 1))
-  })
-
   const moveFooter = (offset: number) => {
     const len = buttons().length
     if (len === 0) return
     setFooterSelected((v) => {
-      const next = (v + offset + len) % len
+      const clamped = Math.min(v, Math.max(0, len - 1))
+      const next = (clamped + offset + len) % len
       setHovered(buttons()[next]?.id)
       return next
     })
