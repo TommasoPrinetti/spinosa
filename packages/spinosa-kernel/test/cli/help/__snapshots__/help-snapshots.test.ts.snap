@@ -3,8 +3,6 @@
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode mcp --help 1`] = `
 "spinosa mcp
 
-manage MCP (Model Context Protocol) servers
-
 Commands:
   spinosa mcp add [name]     add an MCP server
   spinosa mcp list           list MCP servers and their status                         [aliases: ls]
@@ -23,8 +21,6 @@ Options:
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode attach --help 1`] = `
 "spinosa attach <url>
-
-attach to a running spinosa server
 
 Positionals:
   url  http://localhost:4096                                                     [string] [required]
@@ -50,8 +46,6 @@ Options:
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode run --help 1`] = `
 "spinosa run [message..]
-
-run spinosa with a message
 
 Positionals:
   message  message to send                                                     [array] [default: []]
@@ -90,8 +84,6 @@ Options:
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode debug --help 1`] = `
 "spinosa debug
-
-debugging and troubleshooting tools
 
 Commands:
   spinosa debug config        show resolved configuration
@@ -160,11 +152,11 @@ exports[`opencode CLI help-text snapshots every documented command emits stable 
 check for and install Spinosa updates
 
 Positionals:
-  target  target version                                                                    [string]
+  target  target version (alias: --version)                                                 [string]
 
 Options:
   -h, --help             show help                                                         [boolean]
-  -v, --version          show version number                                               [boolean]
+  -v, --version          target version to install (alias of the positional target)         [string]
       --print-logs       print logs to stderr                                              [boolean]
       --log-level        log level              [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
       --verbose          print boot diagnostics to stderr                                  [boolean]
@@ -197,45 +189,60 @@ Options:
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode serve --help 1`] = `
-"spinosa serve
+"███████╗██████╗ ██╗███╗   ██╗ ██████╗ ███████╗ █████╗ 
+██╔════╝██╔══██╗██║████╗  ██║██╔═══██╗██╔════╝██╔══██╗
+███████╗██████╔╝██║██╔██╗ ██║██║   ██║███████╗███████║
+╚════██║██╔═══╝ ██║██║╚██╗██║██║   ██║╚════██║██╔══██║
+███████║██║     ██║██║ ╚████║╚██████╔╝███████║██║  ██║
+╚══════╝╚═╝     ╚═╝╚═╝  ╚═══╝ ╚═════╝ ╚══════╝╚═╝  ╚═╝
 
-starts a headless spinosa server
+Commands:
+  spinosa completion          generate shell completion script
+  spinosa [project]           start the Spinosa TUI                                        [default]
+  spinosa new <source>        Create a new Spinosa workspace from a source directory
+                                                                                   [aliases: create]
+  spinosa add [source]        Add files or directories to a Spinosa workspace
+  spinosa update [workspace]  Update a workspace snapshot
+  spinosa status [workspace]  Show workspace and framework status
+  spinosa list                List all Spinosa workspaces
+  spinosa doctor              Diagnose Spinosa framework and workspace health
+  spinosa providers           manage AI providers and credentials                    [aliases: auth]
+  spinosa agent               manage agents
+  spinosa upgrade [target]    check for and install Spinosa updates
+  spinosa uninstall           remove the Spinosa framework runtime and selected application data
+  spinosa models [provider]   list all available models
+  spinosa stats               show token usage and cost statistics
+  spinosa version             Show the installed Spinosa version
+
+Positionals:
+  project  path to start Spinosa in                                                         [string]
 
 Options:
-  -h, --help         show help                                                             [boolean]
-  -v, --version      show version number                                                   [boolean]
-      --print-logs   print logs to stderr                                                  [boolean]
-      --log-level    log level                  [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --verbose      print boot diagnostics to stderr                                      [boolean]
-      --pure         run without external plugins                                          [boolean]
-      --port         port to listen on                                         [number] [default: 0]
-      --hostname     hostname to listen on                           [string] [default: "127.0.0.1"]
-      --mdns         enable mDNS service discovery (defaults hostname to 0.0.0.0)
+  -h, --help          show help                                                            [boolean]
+  -v, --version       show version number                                                  [boolean]
+      --print-logs    print logs to stderr                                                 [boolean]
+      --log-level     log level                 [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
+      --verbose       print boot diagnostics to stderr                                     [boolean]
+      --pure          run without external plugins                                         [boolean]
+      --port          port to listen on                                        [number] [default: 0]
+      --hostname      hostname to listen on                          [string] [default: "127.0.0.1"]
+      --mdns          enable mDNS service discovery (defaults hostname to 0.0.0.0)
                                                                           [boolean] [default: false]
-      --mdns-domain  custom domain name for mDNS service (default: spinosa.local)
+      --mdns-domain   custom domain name for mDNS service (default: spinosa.local)
                                                                  [string] [default: "spinosa.local"]
-      --cors         additional domains to allow for CORS                      [array] [default: []]"
-`;
-
-exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode web --help 1`] = `
-"spinosa web
-
-start spinosa server and open web interface
-
-Options:
-  -h, --help         show help                                                             [boolean]
-  -v, --version      show version number                                                   [boolean]
-      --print-logs   print logs to stderr                                                  [boolean]
-      --log-level    log level                  [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --verbose      print boot diagnostics to stderr                                      [boolean]
-      --pure         run without external plugins                                          [boolean]
-      --port         port to listen on                                         [number] [default: 0]
-      --hostname     hostname to listen on                           [string] [default: "127.0.0.1"]
-      --mdns         enable mDNS service discovery (defaults hostname to 0.0.0.0)
+      --cors          additional domains to allow for CORS                     [array] [default: []]
+  -m, --model         model to use in the format of provider/model                          [string]
+  -c, --continue      continue the last session                                            [boolean]
+  -s, --session       session id to continue                                                [string]
+      --fork          fork the session when continuing (use with --continue or --session)  [boolean]
+      --prompt        prompt to use                                                         [string]
+      --agent         agent to use                                                          [string]
+      --auto          auto-approve permissions that are not explicitly denied (dangerous!)
                                                                           [boolean] [default: false]
-      --mdns-domain  custom domain name for mDNS service (default: spinosa.local)
-                                                                 [string] [default: "spinosa.local"]
-      --cors         additional domains to allow for CORS                      [array] [default: []]"
+      --mini          start the minimal interactive interface             [boolean] [default: false]
+      --no-replay     disable mini session history replay on resume and after resize       [boolean]
+      --replay-limit  cap visible mini replay to the newest N messages                      [number]
+"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode models --help 1`] = `
@@ -276,98 +283,292 @@ Options:
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode export --help 1`] = `
-"spinosa export [sessionID]
+"███████╗██████╗ ██╗███╗   ██╗ ██████╗ ███████╗ █████╗ 
+██╔════╝██╔══██╗██║████╗  ██║██╔═══██╗██╔════╝██╔══██╗
+███████╗██████╔╝██║██╔██╗ ██║██║   ██║███████╗███████║
+╚════██║██╔═══╝ ██║██║╚██╗██║██║   ██║╚════██║██╔══██║
+███████║██║     ██║██║ ╚████║╚██████╔╝███████║██║  ██║
+╚══════╝╚═╝     ╚═╝╚═╝  ╚═══╝ ╚═════╝ ╚══════╝╚═╝  ╚═╝
 
-export session data as JSON
+Commands:
+  spinosa completion          generate shell completion script
+  spinosa [project]           start the Spinosa TUI                                        [default]
+  spinosa new <source>        Create a new Spinosa workspace from a source directory
+                                                                                   [aliases: create]
+  spinosa add [source]        Add files or directories to a Spinosa workspace
+  spinosa update [workspace]  Update a workspace snapshot
+  spinosa status [workspace]  Show workspace and framework status
+  spinosa list                List all Spinosa workspaces
+  spinosa doctor              Diagnose Spinosa framework and workspace health
+  spinosa providers           manage AI providers and credentials                    [aliases: auth]
+  spinosa agent               manage agents
+  spinosa upgrade [target]    check for and install Spinosa updates
+  spinosa uninstall           remove the Spinosa framework runtime and selected application data
+  spinosa models [provider]   list all available models
+  spinosa stats               show token usage and cost statistics
+  spinosa version             Show the installed Spinosa version
 
 Positionals:
-  sessionID  session id to export                                                           [string]
+  project  path to start Spinosa in                                                         [string]
 
 Options:
-  -h, --help        show help                                                              [boolean]
-  -v, --version     show version number                                                    [boolean]
-      --print-logs  print logs to stderr                                                   [boolean]
-      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --verbose     print boot diagnostics to stderr                                       [boolean]
-      --pure        run without external plugins                                           [boolean]
-      --sanitize    redact sensitive transcript and file data                              [boolean]"
+  -h, --help          show help                                                            [boolean]
+  -v, --version       show version number                                                  [boolean]
+      --print-logs    print logs to stderr                                                 [boolean]
+      --log-level     log level                 [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
+      --verbose       print boot diagnostics to stderr                                     [boolean]
+      --pure          run without external plugins                                         [boolean]
+      --port          port to listen on                                        [number] [default: 0]
+      --hostname      hostname to listen on                          [string] [default: "127.0.0.1"]
+      --mdns          enable mDNS service discovery (defaults hostname to 0.0.0.0)
+                                                                          [boolean] [default: false]
+      --mdns-domain   custom domain name for mDNS service (default: spinosa.local)
+                                                                 [string] [default: "spinosa.local"]
+      --cors          additional domains to allow for CORS                     [array] [default: []]
+  -m, --model         model to use in the format of provider/model                          [string]
+  -c, --continue      continue the last session                                            [boolean]
+  -s, --session       session id to continue                                                [string]
+      --fork          fork the session when continuing (use with --continue or --session)  [boolean]
+      --prompt        prompt to use                                                         [string]
+      --agent         agent to use                                                          [string]
+      --auto          auto-approve permissions that are not explicitly denied (dangerous!)
+                                                                          [boolean] [default: false]
+      --mini          start the minimal interactive interface             [boolean] [default: false]
+      --no-replay     disable mini session history replay on resume and after resize       [boolean]
+      --replay-limit  cap visible mini replay to the newest N messages                      [number]
+"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode import --help 1`] = `
-"spinosa import <file>
+"███████╗██████╗ ██╗███╗   ██╗ ██████╗ ███████╗ █████╗ 
+██╔════╝██╔══██╗██║████╗  ██║██╔═══██╗██╔════╝██╔══██╗
+███████╗██████╔╝██║██╔██╗ ██║██║   ██║███████╗███████║
+╚════██║██╔═══╝ ██║██║╚██╗██║██║   ██║╚════██║██╔══██║
+███████║██║     ██║██║ ╚████║╚██████╔╝███████║██║  ██║
+╚══════╝╚═╝     ╚═╝╚═╝  ╚═══╝ ╚═════╝ ╚══════╝╚═╝  ╚═╝
 
-import session data from JSON file or URL
+Commands:
+  spinosa completion          generate shell completion script
+  spinosa [project]           start the Spinosa TUI                                        [default]
+  spinosa new <source>        Create a new Spinosa workspace from a source directory
+                                                                                   [aliases: create]
+  spinosa add [source]        Add files or directories to a Spinosa workspace
+  spinosa update [workspace]  Update a workspace snapshot
+  spinosa status [workspace]  Show workspace and framework status
+  spinosa list                List all Spinosa workspaces
+  spinosa doctor              Diagnose Spinosa framework and workspace health
+  spinosa providers           manage AI providers and credentials                    [aliases: auth]
+  spinosa agent               manage agents
+  spinosa upgrade [target]    check for and install Spinosa updates
+  spinosa uninstall           remove the Spinosa framework runtime and selected application data
+  spinosa models [provider]   list all available models
+  spinosa stats               show token usage and cost statistics
+  spinosa version             Show the installed Spinosa version
 
 Positionals:
-  file  path to JSON file or share URL                                           [string] [required]
+  project  path to start Spinosa in                                                         [string]
 
 Options:
-  -h, --help        show help                                                              [boolean]
-  -v, --version     show version number                                                    [boolean]
-      --print-logs  print logs to stderr                                                   [boolean]
-      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --verbose     print boot diagnostics to stderr                                       [boolean]
-      --pure        run without external plugins                                           [boolean]"
+  -h, --help          show help                                                            [boolean]
+  -v, --version       show version number                                                  [boolean]
+      --print-logs    print logs to stderr                                                 [boolean]
+      --log-level     log level                 [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
+      --verbose       print boot diagnostics to stderr                                     [boolean]
+      --pure          run without external plugins                                         [boolean]
+      --port          port to listen on                                        [number] [default: 0]
+      --hostname      hostname to listen on                          [string] [default: "127.0.0.1"]
+      --mdns          enable mDNS service discovery (defaults hostname to 0.0.0.0)
+                                                                          [boolean] [default: false]
+      --mdns-domain   custom domain name for mDNS service (default: spinosa.local)
+                                                                 [string] [default: "spinosa.local"]
+      --cors          additional domains to allow for CORS                     [array] [default: []]
+  -m, --model         model to use in the format of provider/model                          [string]
+  -c, --continue      continue the last session                                            [boolean]
+  -s, --session       session id to continue                                                [string]
+      --fork          fork the session when continuing (use with --continue or --session)  [boolean]
+      --prompt        prompt to use                                                         [string]
+      --agent         agent to use                                                          [string]
+      --auto          auto-approve permissions that are not explicitly denied (dangerous!)
+                                                                          [boolean] [default: false]
+      --mini          start the minimal interactive interface             [boolean] [default: false]
+      --no-replay     disable mini session history replay on resume and after resize       [boolean]
+      --replay-limit  cap visible mini replay to the newest N messages                      [number]
+"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode pr --help 1`] = `
-"spinosa pr <number>
+"███████╗██████╗ ██╗███╗   ██╗ ██████╗ ███████╗ █████╗ 
+██╔════╝██╔══██╗██║████╗  ██║██╔═══██╗██╔════╝██╔══██╗
+███████╗██████╔╝██║██╔██╗ ██║██║   ██║███████╗███████║
+╚════██║██╔═══╝ ██║██║╚██╗██║██║   ██║╚════██║██╔══██║
+███████║██║     ██║██║ ╚████║╚██████╔╝███████║██║  ██║
+╚══════╝╚═╝     ╚═╝╚═╝  ╚═══╝ ╚═════╝ ╚══════╝╚═╝  ╚═╝
 
-fetch and checkout a GitHub PR branch, then run spinosa
+Commands:
+  spinosa completion          generate shell completion script
+  spinosa [project]           start the Spinosa TUI                                        [default]
+  spinosa new <source>        Create a new Spinosa workspace from a source directory
+                                                                                   [aliases: create]
+  spinosa add [source]        Add files or directories to a Spinosa workspace
+  spinosa update [workspace]  Update a workspace snapshot
+  spinosa status [workspace]  Show workspace and framework status
+  spinosa list                List all Spinosa workspaces
+  spinosa doctor              Diagnose Spinosa framework and workspace health
+  spinosa providers           manage AI providers and credentials                    [aliases: auth]
+  spinosa agent               manage agents
+  spinosa upgrade [target]    check for and install Spinosa updates
+  spinosa uninstall           remove the Spinosa framework runtime and selected application data
+  spinosa models [provider]   list all available models
+  spinosa stats               show token usage and cost statistics
+  spinosa version             Show the installed Spinosa version
 
 Positionals:
-  number  PR number to checkout                                                  [number] [required]
+  project  path to start Spinosa in                                                         [string]
 
 Options:
-  -h, --help        show help                                                              [boolean]
-  -v, --version     show version number                                                    [boolean]
-      --print-logs  print logs to stderr                                                   [boolean]
-      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --verbose     print boot diagnostics to stderr                                       [boolean]
-      --pure        run without external plugins                                           [boolean]"
+  -h, --help          show help                                                            [boolean]
+  -v, --version       show version number                                                  [boolean]
+      --print-logs    print logs to stderr                                                 [boolean]
+      --log-level     log level                 [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
+      --verbose       print boot diagnostics to stderr                                     [boolean]
+      --pure          run without external plugins                                         [boolean]
+      --port          port to listen on                                        [number] [default: 0]
+      --hostname      hostname to listen on                          [string] [default: "127.0.0.1"]
+      --mdns          enable mDNS service discovery (defaults hostname to 0.0.0.0)
+                                                                          [boolean] [default: false]
+      --mdns-domain   custom domain name for mDNS service (default: spinosa.local)
+                                                                 [string] [default: "spinosa.local"]
+      --cors          additional domains to allow for CORS                     [array] [default: []]
+  -m, --model         model to use in the format of provider/model                          [string]
+  -c, --continue      continue the last session                                            [boolean]
+  -s, --session       session id to continue                                                [string]
+      --fork          fork the session when continuing (use with --continue or --session)  [boolean]
+      --prompt        prompt to use                                                         [string]
+      --agent         agent to use                                                          [string]
+      --auto          auto-approve permissions that are not explicitly denied (dangerous!)
+                                                                          [boolean] [default: false]
+      --mini          start the minimal interactive interface             [boolean] [default: false]
+      --no-replay     disable mini session history replay on resume and after resize       [boolean]
+      --replay-limit  cap visible mini replay to the newest N messages                      [number]
+"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode session --help 1`] = `
-"spinosa session
-
-manage sessions
+"███████╗██████╗ ██╗███╗   ██╗ ██████╗ ███████╗ █████╗ 
+██╔════╝██╔══██╗██║████╗  ██║██╔═══██╗██╔════╝██╔══██╗
+███████╗██████╔╝██║██╔██╗ ██║██║   ██║███████╗███████║
+╚════██║██╔═══╝ ██║██║╚██╗██║██║   ██║╚════██║██╔══██║
+███████║██║     ██║██║ ╚████║╚██████╔╝███████║██║  ██║
+╚══════╝╚═╝     ╚═╝╚═╝  ╚═══╝ ╚═════╝ ╚══════╝╚═╝  ╚═╝
 
 Commands:
-  spinosa session list                list sessions
-  spinosa session delete <sessionID>  delete a session
+  spinosa completion          generate shell completion script
+  spinosa [project]           start the Spinosa TUI                                        [default]
+  spinosa new <source>        Create a new Spinosa workspace from a source directory
+                                                                                   [aliases: create]
+  spinosa add [source]        Add files or directories to a Spinosa workspace
+  spinosa update [workspace]  Update a workspace snapshot
+  spinosa status [workspace]  Show workspace and framework status
+  spinosa list                List all Spinosa workspaces
+  spinosa doctor              Diagnose Spinosa framework and workspace health
+  spinosa providers           manage AI providers and credentials                    [aliases: auth]
+  spinosa agent               manage agents
+  spinosa upgrade [target]    check for and install Spinosa updates
+  spinosa uninstall           remove the Spinosa framework runtime and selected application data
+  spinosa models [provider]   list all available models
+  spinosa stats               show token usage and cost statistics
+  spinosa version             Show the installed Spinosa version
+
+Positionals:
+  project  path to start Spinosa in                                                         [string]
 
 Options:
-  -h, --help        show help                                                              [boolean]
-  -v, --version     show version number                                                    [boolean]
-      --print-logs  print logs to stderr                                                   [boolean]
-      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --verbose     print boot diagnostics to stderr                                       [boolean]
-      --pure        run without external plugins                                           [boolean]"
+  -h, --help          show help                                                            [boolean]
+  -v, --version       show version number                                                  [boolean]
+      --print-logs    print logs to stderr                                                 [boolean]
+      --log-level     log level                 [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
+      --verbose       print boot diagnostics to stderr                                     [boolean]
+      --pure          run without external plugins                                         [boolean]
+      --port          port to listen on                                        [number] [default: 0]
+      --hostname      hostname to listen on                          [string] [default: "127.0.0.1"]
+      --mdns          enable mDNS service discovery (defaults hostname to 0.0.0.0)
+                                                                          [boolean] [default: false]
+      --mdns-domain   custom domain name for mDNS service (default: spinosa.local)
+                                                                 [string] [default: "spinosa.local"]
+      --cors          additional domains to allow for CORS                     [array] [default: []]
+  -m, --model         model to use in the format of provider/model                          [string]
+  -c, --continue      continue the last session                                            [boolean]
+  -s, --session       session id to continue                                                [string]
+      --fork          fork the session when continuing (use with --continue or --session)  [boolean]
+      --prompt        prompt to use                                                         [string]
+      --agent         agent to use                                                          [string]
+      --auto          auto-approve permissions that are not explicitly denied (dangerous!)
+                                                                          [boolean] [default: false]
+      --mini          start the minimal interactive interface             [boolean] [default: false]
+      --no-replay     disable mini session history replay on resume and after resize       [boolean]
+      --replay-limit  cap visible mini replay to the newest N messages                      [number]
+"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode plugin --help 1`] = `
-"spinosa plugin <module>
+"███████╗██████╗ ██╗███╗   ██╗ ██████╗ ███████╗ █████╗ 
+██╔════╝██╔══██╗██║████╗  ██║██╔═══██╗██╔════╝██╔══██╗
+███████╗██████╔╝██║██╔██╗ ██║██║   ██║███████╗███████║
+╚════██║██╔═══╝ ██║██║╚██╗██║██║   ██║╚════██║██╔══██║
+███████║██║     ██║██║ ╚████║╚██████╔╝███████║██║  ██║
+╚══════╝╚═╝     ╚═╝╚═╝  ╚═══╝ ╚═════╝ ╚══════╝╚═╝  ╚═╝
 
-install plugin and update config
+Commands:
+  spinosa completion          generate shell completion script
+  spinosa [project]           start the Spinosa TUI                                        [default]
+  spinosa new <source>        Create a new Spinosa workspace from a source directory
+                                                                                   [aliases: create]
+  spinosa add [source]        Add files or directories to a Spinosa workspace
+  spinosa update [workspace]  Update a workspace snapshot
+  spinosa status [workspace]  Show workspace and framework status
+  spinosa list                List all Spinosa workspaces
+  spinosa doctor              Diagnose Spinosa framework and workspace health
+  spinosa providers           manage AI providers and credentials                    [aliases: auth]
+  spinosa agent               manage agents
+  spinosa upgrade [target]    check for and install Spinosa updates
+  spinosa uninstall           remove the Spinosa framework runtime and selected application data
+  spinosa models [provider]   list all available models
+  spinosa stats               show token usage and cost statistics
+  spinosa version             Show the installed Spinosa version
 
 Positionals:
-  module  npm module name                                                        [string] [required]
+  project  path to start Spinosa in                                                         [string]
 
 Options:
-  -h, --help        show help                                                              [boolean]
-  -v, --version     show version number                                                    [boolean]
-      --print-logs  print logs to stderr                                                   [boolean]
-      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --verbose     print boot diagnostics to stderr                                       [boolean]
-      --pure        run without external plugins                                           [boolean]
-  -g, --global      install in global config                              [boolean] [default: false]
-  -f, --force       replace existing plugin version                       [boolean] [default: false]"
+  -h, --help          show help                                                            [boolean]
+  -v, --version       show version number                                                  [boolean]
+      --print-logs    print logs to stderr                                                 [boolean]
+      --log-level     log level                 [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
+      --verbose       print boot diagnostics to stderr                                     [boolean]
+      --pure          run without external plugins                                         [boolean]
+      --port          port to listen on                                        [number] [default: 0]
+      --hostname      hostname to listen on                          [string] [default: "127.0.0.1"]
+      --mdns          enable mDNS service discovery (defaults hostname to 0.0.0.0)
+                                                                          [boolean] [default: false]
+      --mdns-domain   custom domain name for mDNS service (default: spinosa.local)
+                                                                 [string] [default: "spinosa.local"]
+      --cors          additional domains to allow for CORS                     [array] [default: []]
+  -m, --model         model to use in the format of provider/model                          [string]
+  -c, --continue      continue the last session                                            [boolean]
+  -s, --session       session id to continue                                                [string]
+      --fork          fork the session when continuing (use with --continue or --session)  [boolean]
+      --prompt        prompt to use                                                         [string]
+      --agent         agent to use                                                          [string]
+      --auto          auto-approve permissions that are not explicitly denied (dangerous!)
+                                                                          [boolean] [default: false]
+      --mini          start the minimal interactive interface             [boolean] [default: false]
+      --no-replay     disable mini session history replay on resume and after resize       [boolean]
+      --replay-limit  cap visible mini replay to the newest N messages                      [number]
+"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode db --help 1`] = `
 "spinosa db
-
-database tools
 
 Commands:
   spinosa db [query]     open an interactive sqlite3 shell or run a query                  [default]
@@ -543,36 +744,117 @@ Options:
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode session list --help 1`] = `
-"spinosa session list
+"███████╗██████╗ ██╗███╗   ██╗ ██████╗ ███████╗ █████╗ 
+██╔════╝██╔══██╗██║████╗  ██║██╔═══██╗██╔════╝██╔══██╗
+███████╗██████╔╝██║██╔██╗ ██║██║   ██║███████╗███████║
+╚════██║██╔═══╝ ██║██║╚██╗██║██║   ██║╚════██║██╔══██║
+███████║██║     ██║██║ ╚████║╚██████╔╝███████║██║  ██║
+╚══════╝╚═╝     ╚═╝╚═╝  ╚═══╝ ╚═════╝ ╚══════╝╚═╝  ╚═╝
 
-list sessions
+Commands:
+  spinosa completion          generate shell completion script
+  spinosa [project]           start the Spinosa TUI                                        [default]
+  spinosa new <source>        Create a new Spinosa workspace from a source directory
+                                                                                   [aliases: create]
+  spinosa add [source]        Add files or directories to a Spinosa workspace
+  spinosa update [workspace]  Update a workspace snapshot
+  spinosa status [workspace]  Show workspace and framework status
+  spinosa list                List all Spinosa workspaces
+  spinosa doctor              Diagnose Spinosa framework and workspace health
+  spinosa providers           manage AI providers and credentials                    [aliases: auth]
+  spinosa agent               manage agents
+  spinosa upgrade [target]    check for and install Spinosa updates
+  spinosa uninstall           remove the Spinosa framework runtime and selected application data
+  spinosa models [provider]   list all available models
+  spinosa stats               show token usage and cost statistics
+  spinosa version             Show the installed Spinosa version
+
+Positionals:
+  project  path to start Spinosa in                                                         [string]
 
 Options:
-  -h, --help        show help                                                              [boolean]
-  -v, --version     show version number                                                    [boolean]
-      --print-logs  print logs to stderr                                                   [boolean]
-      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --verbose     print boot diagnostics to stderr                                       [boolean]
-      --pure        run without external plugins                                           [boolean]
-  -n, --max-count   limit to N most recent sessions                                         [number]
-      --format      output format             [string] [choices: "table", "json"] [default: "table"]"
+  -h, --help          show help                                                            [boolean]
+  -v, --version       show version number                                                  [boolean]
+      --print-logs    print logs to stderr                                                 [boolean]
+      --log-level     log level                 [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
+      --verbose       print boot diagnostics to stderr                                     [boolean]
+      --pure          run without external plugins                                         [boolean]
+      --port          port to listen on                                        [number] [default: 0]
+      --hostname      hostname to listen on                          [string] [default: "127.0.0.1"]
+      --mdns          enable mDNS service discovery (defaults hostname to 0.0.0.0)
+                                                                          [boolean] [default: false]
+      --mdns-domain   custom domain name for mDNS service (default: spinosa.local)
+                                                                 [string] [default: "spinosa.local"]
+      --cors          additional domains to allow for CORS                     [array] [default: []]
+  -m, --model         model to use in the format of provider/model                          [string]
+  -c, --continue      continue the last session                                            [boolean]
+  -s, --session       session id to continue                                                [string]
+      --fork          fork the session when continuing (use with --continue or --session)  [boolean]
+      --prompt        prompt to use                                                         [string]
+      --agent         agent to use                                                          [string]
+      --auto          auto-approve permissions that are not explicitly denied (dangerous!)
+                                                                          [boolean] [default: false]
+      --mini          start the minimal interactive interface             [boolean] [default: false]
+      --no-replay     disable mini session history replay on resume and after resize       [boolean]
+      --replay-limit  cap visible mini replay to the newest N messages                      [number]
+"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode session delete --help 1`] = `
-"spinosa session delete <sessionID>
+"███████╗██████╗ ██╗███╗   ██╗ ██████╗ ███████╗ █████╗ 
+██╔════╝██╔══██╗██║████╗  ██║██╔═══██╗██╔════╝██╔══██╗
+███████╗██████╔╝██║██╔██╗ ██║██║   ██║███████╗███████║
+╚════██║██╔═══╝ ██║██║╚██╗██║██║   ██║╚════██║██╔══██║
+███████║██║     ██║██║ ╚████║╚██████╔╝███████║██║  ██║
+╚══════╝╚═╝     ╚═╝╚═╝  ╚═══╝ ╚═════╝ ╚══════╝╚═╝  ╚═╝
 
-delete a session
+Commands:
+  spinosa completion          generate shell completion script
+  spinosa [project]           start the Spinosa TUI                                        [default]
+  spinosa new <source>        Create a new Spinosa workspace from a source directory
+                                                                                   [aliases: create]
+  spinosa add [source]        Add files or directories to a Spinosa workspace
+  spinosa update [workspace]  Update a workspace snapshot
+  spinosa status [workspace]  Show workspace and framework status
+  spinosa list                List all Spinosa workspaces
+  spinosa doctor              Diagnose Spinosa framework and workspace health
+  spinosa providers           manage AI providers and credentials                    [aliases: auth]
+  spinosa agent               manage agents
+  spinosa upgrade [target]    check for and install Spinosa updates
+  spinosa uninstall           remove the Spinosa framework runtime and selected application data
+  spinosa models [provider]   list all available models
+  spinosa stats               show token usage and cost statistics
+  spinosa version             Show the installed Spinosa version
 
 Positionals:
-  sessionID  session ID to delete                                                [string] [required]
+  project  path to start Spinosa in                                                         [string]
 
 Options:
-  -h, --help        show help                                                              [boolean]
-  -v, --version     show version number                                                    [boolean]
-      --print-logs  print logs to stderr                                                   [boolean]
-      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
-      --verbose     print boot diagnostics to stderr                                       [boolean]
-      --pure        run without external plugins                                           [boolean]"
+  -h, --help          show help                                                            [boolean]
+  -v, --version       show version number                                                  [boolean]
+      --print-logs    print logs to stderr                                                 [boolean]
+      --log-level     log level                 [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
+      --verbose       print boot diagnostics to stderr                                     [boolean]
+      --pure          run without external plugins                                         [boolean]
+      --port          port to listen on                                        [number] [default: 0]
+      --hostname      hostname to listen on                          [string] [default: "127.0.0.1"]
+      --mdns          enable mDNS service discovery (defaults hostname to 0.0.0.0)
+                                                                          [boolean] [default: false]
+      --mdns-domain   custom domain name for mDNS service (default: spinosa.local)
+                                                                 [string] [default: "spinosa.local"]
+      --cors          additional domains to allow for CORS                     [array] [default: []]
+  -m, --model         model to use in the format of provider/model                          [string]
+  -c, --continue      continue the last session                                            [boolean]
+  -s, --session       session id to continue                                                [string]
+      --fork          fork the session when continuing (use with --continue or --session)  [boolean]
+      --prompt        prompt to use                                                         [string]
+      --agent         agent to use                                                          [string]
+      --auto          auto-approve permissions that are not explicitly denied (dangerous!)
+                                                                          [boolean] [default: false]
+      --mini          start the minimal interactive interface             [boolean] [default: false]
+      --no-replay     disable mini session history replay on resume and after resize       [boolean]
+      --replay-limit  cap visible mini replay to the newest N messages                      [number]
+"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode db path --help 1`] = `

@@ -18,7 +18,7 @@ import { win32InstallCtrlCGuard } from "@spinosa/tui/terminal-win32"
 import { bootLog } from "@spinosa/kernel-core/observability/boot-log"
 import { Flag } from "@spinosa/kernel-core/flag/flag"
 import {
-  printLaunchingTui,
+  printLaunchingTuiWithDelay,
   runLaunchPreflight,
 } from "@spinosa/core/commands/preflight"
 import { isSpinosaWorkspace } from "@spinosa/core/workspace/meta"
@@ -287,7 +287,7 @@ export const TuiThreadCommand = cmd({
 
       const prompt = await input(args.prompt)
 
-      printLaunchingTui()
+      await printLaunchingTuiWithDelay()
 
       const config = await TuiConfig.get()
 

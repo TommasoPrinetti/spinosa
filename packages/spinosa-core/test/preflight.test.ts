@@ -43,6 +43,7 @@ function dependencies(overrides: Partial<PreflightDependencies> = {}) {
     listPackCheckCandidates: async () => [],
     canPrompt: () => false,
     out: (message) => output.push(message),
+    sleep: async () => {},
     ...overrides,
   }
   return { deps, output, updated }

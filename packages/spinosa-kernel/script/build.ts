@@ -42,7 +42,6 @@ export type BuildSpinosaBinariesOptions = {
   /** When set, write flat product assets: <outdir>/spinosa-<os>-<arch> */
   flatOutDir?: string
   skipInstall?: boolean
-  skipEmbedWebUi?: boolean
   sourcemaps?: boolean
   /** Smoke host-matching binary with --version */
   smokeHost?: boolean
@@ -93,36 +92,6 @@ export async function buildSpinosaBinaries(options: BuildSpinosaBinariesOptions)
   const distribution = options.distribution ?? "binary"
   const templatePackId = options.templatePackId ?? ""
   const templatePackVersion = options.templatePackVersion ?? options.version
-
-  const createEmbeddedWebUIBundle = async () => {
-    console.log(`Building Web UI to embed in the binary`)
-    const appDir = path.join(cwd, "../app")
-    const dist = path.join(appDir, "dist")
-    if (!fs.existsSync(appDir)) {
-      console.warn(`Web UI app directory missing at ${appDir} — skipping embed`)
-      return null
-    }
-    await $`SPINOSA_CHANNEL=${options.channel} bun run --cwd ${appDir} build`
-    const files = (await Array.fromAsync(new Bun.Glob("**/*").scan({ cwd: dist })))
-      .map((file) => file.replaceAll("\\", "/"))
-      .filter((file) => !file.endsWith(".map"))
-      .sort()
-    const imports = files.map((file, i) => {
-      const spec = path.relative(cwd, path.join(dist, file)).replaceAll("\\", "/")
-      return `import file_${i} from ${JSON.stringify(spec.startsWith(".") ? spec : `./${spec}`)} with { type: "file" };`
-    })
-    const entries = files.map((file, i) => `  ${JSON.stringify(file)}: file_${i},`)
-    return [
-      `// Import all files as file_$i with type: "file"`,
-      ...imports,
-      `// Export with original mappings`,
-      `export default {`,
-      ...entries,
-      `}`,
-    ].join("\n")
-  }
-
-  const embeddedFileMap = options.skipEmbedWebUi ? null : await createEmbeddedWebUIBundle()
 
   if (!options.flatOutDir) {
     await $`rm -rf dist`.cwd(cwd)
@@ -185,7 +154,6 @@ export async function buildSpinosaBinaries(options: BuildSpinosaBinariesOptions)
     const workerRelativePath = path.relative(cwd, parserWorker).replaceAll("\\", "/")
 
     const files: Record<string, string> = {}
-    if (embeddedFileMap) files["opencode-web-ui.gen.ts"] = embeddedFileMap
     if (options.templatePackModule) {
       files["src/generated/template-pack.gen.ts"] = options.templatePackModule
     }
@@ -255,12 +223,7 @@ export async function buildSpinosaBinaries(options: BuildSpinosaBinariesOptions)
         windows: {},
       },
       files,
-      entrypoints: [
-        "./src/index.ts",
-        parserWorker,
-        workerPath,
-        ...(embeddedFileMap ? ["opencode-web-ui.gen.ts"] : []),
-      ],
+      entrypoints: ["./src/index.ts", parserWorker, workerPath],
       define: {
         FFF_LIBC: JSON.stringify(item.abi === "musl" ? "musl" : "gnu"),
         SPINOSA_VERSION: `'${options.version}'`,
@@ -411,8 +374,6 @@ if (import.meta.main) {
   const baselineFlag = process.argv.includes("--baseline")
   const skipInstall = process.argv.includes("--skip-install")
   const sourcemapsFlag = process.argv.includes("--sourcemaps")
-  const skipEmbedWebUi = process.argv.includes("--skip-embed-web-ui")
-
   const { Script } = await import("@spinosa/script")
 
   const allTargets: BinaryTarget[] = [
@@ -445,7 +406,6 @@ if (import.meta.main) {
     channel: Script.channel,
     distribution: "binary",
     skipInstall,
-    skipEmbedWebUi,
     sourcemaps: sourcemapsFlag,
   })
 }

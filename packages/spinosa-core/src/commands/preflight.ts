@@ -47,6 +47,9 @@ export const LAUNCH_STATUS_LAUNCHING = "launching TUI..."
 /** User-facing line printed after a successful launch-time upgrade. */
 export const LAUNCH_STATUS_UPGRADE_DONE = "upgrade complete — run spinosa again to launch"
 
+/** Minimum time each status line stays visible (ms). */
+export const MIN_STATUS_MS = 1000
+
 export type StaleTemplatePackWorkspace = {
   path: string
   name: string
@@ -81,6 +84,8 @@ export interface PreflightDependencies extends WorkspaceUpgradeOfferDeps {
   inspectPack?(workspacePath: string, frameworkRoot: string): TemplatePackFreshness | Promise<TemplatePackFreshness>
   /** When false, skip interactive pack prompts (CI / no TTY). */
   canPrompt?(): boolean
+  /** Delay helper (injected for tests to avoid real sleep). */
+  sleep?(ms: number): Promise<void>
 }
 
 export interface LaunchPreflightOptions {
@@ -124,6 +129,18 @@ function defaultCanPrompt(): boolean {
   return true
 }
 
+async function defaultSleep(ms: number): Promise<void> {
+  await new Promise<void>((resolve) => setTimeout(resolve, ms))
+}
+
+async function ensureMinVisibleSince(start: number, minMs: number, deps: PreflightDependencies): Promise<void> {
+  if (process.env.SPINOSA_DISABLE_PREFLIGHT_DELAY === "1") return
+  const elapsed = Date.now() - start
+  if (elapsed >= minMs) return
+  const sleep = deps.sleep ?? defaultSleep
+  await sleep(minMs - elapsed)
+}
+
 export async function defaultListPackCheckCandidates(targetWorkspace?: string): Promise<string[]> {
   if (targetWorkspace) {
     const resolved = path.resolve(targetWorkspace)
@@ -152,6 +169,7 @@ const defaults: PreflightDependencies = {
   listPackCheckCandidates: defaultListPackCheckCandidates,
   canPrompt: defaultCanPrompt,
   out: (message) => process.stdout.write(`${message}\n`),
+  sleep: defaultSleep,
 }
 
 async function inspectPackFreshness(
@@ -173,6 +191,16 @@ async function inspectPackFreshness(
 /** Print the final launch line before the TUI worker starts. */
 export function printLaunchingTui(out: (message: string) => void = defaults.out): void {
   out(LAUNCH_STATUS_LAUNCHING)
+}
+
+/** Same as printLaunchingTui but ensures the line stays visible at least MIN_STATUS_MS. */
+export async function printLaunchingTuiWithDelay(
+  out: (message: string) => void = defaults.out,
+  sleep: (ms: number) => Promise<void> = defaults.sleep ?? defaultSleep,
+): Promise<void> {
+  out(LAUNCH_STATUS_LAUNCHING)
+  if (process.env.SPINOSA_DISABLE_PREFLIGHT_DELAY === "1") return
+  await sleep(MIN_STATUS_MS)
 }
 
 /**
@@ -322,13 +350,19 @@ export async function runLaunchPreflight(
   const resolved = deps ?? defaults
   spinosaLogInfo("preflight", `preflight check started (pid=${process.pid})`)
   resolved.out(LAUNCH_STATUS_CHECKING)
+  const tChecking = Date.now()
 
   const available = await resolved.checkUpgradeAvailable()
   spinosaLogInfo("preflight", `upgrade check: available=${available.available} latest=${available.latestVersion ?? "none"}`)
 
+  // Ensure "checking..." is visible at least MIN_STATUS_MS (unless network already took longer)
+  await ensureMinVisibleSince(tChecking, MIN_STATUS_MS, resolved)
+
   if (!available.available || !available.latestVersion) {
     resolved.out(LAUNCH_STATUS_NO_UPDATES)
+    const tNoUpdates = Date.now()
     spinosaLogInfo("preflight", "no upgrade needed, continuing")
+    await ensureMinVisibleSince(tNoUpdates, MIN_STATUS_MS, resolved)
     await offerStaleTemplatePackUpdates(resolved, options)
     return "continue"
   }

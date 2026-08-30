@@ -4,7 +4,7 @@
  *
  * Flags (used by script/release/stages.ts):
  *   --out-dir <dir> --version <ver> --channel <beta|stable> [--template-pack-id <id>]
- *   --host-only  --skip-embed-web-ui  --skip-install
+ *   --host-only  --skip-install
  */
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs"
 import path from "node:path"
@@ -32,7 +32,7 @@ function argValue(flag: string): string | undefined {
 if (process.argv.includes("--help") || process.argv.includes("-h")) {
   console.log(`Usage:
   bun script/build-release-binaries.ts --out-dir <dir> --version <ver> --channel <stable|beta>
-  [--host-only] [--only linux-x64[,darwin-arm64,...]] [--skip-embed-web-ui] [--skip-install]`)
+  [--host-only] [--only linux-x64[,darwin-arm64,...]] [--skip-install]`)
   process.exit(0)
 }
 
@@ -48,7 +48,6 @@ const outDir = path.resolve(
   argValue("--out-dir") ?? argValue("--out") ?? path.join(root, `dist/v${version}`),
 )
 const hostOnly = process.argv.includes("--host-only")
-const skipEmbedWebUi = process.argv.includes("--skip-embed-web-ui")
 const skipInstall = process.argv.includes("--skip-install")
 const onlyRaw = argValue("--only")
 const onlyTargets = onlyRaw
@@ -113,7 +112,6 @@ const { assets } = await buildSpinosaBinaries({
   templatePackId,
   templatePackVersion: packMeta.version,
   flatOutDir: outDir,
-  skipEmbedWebUi,
   skipInstall,
   templatePackModule,
   smokeHost: true,

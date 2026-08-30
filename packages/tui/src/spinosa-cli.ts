@@ -55,7 +55,6 @@ function helpText(): string {
     "  spinosa startup-autoclean [--dry-run]",
     "  spinosa version",
     "  spinosa uninstall [--yes]",
-    "  spinosa web [--port PORT] [--api-port PORT]",
     "",
     "Global flags:",
     "  --json       Machine-readable JSON output",
@@ -184,39 +183,6 @@ async function runDoctor(parsed: ParsedArgs, io: SpinosaCliIo): Promise<number> 
   return healthy ? 0 : 1
 }
 
-async function runWeb(parsed: ParsedArgs, io: SpinosaCliIo): Promise<number> {
-  const webDir = path.join(import.meta.dirname, "..", "..", "spinosa-web")
-  const hasSpa = existsSync(webDir)
-
-  if (!hasSpa) {
-    io.error("packages/spinosa-web not found. Create it first: bun create packages/spinosa-web")
-    return 1
-  }
-
-  io.out("Starting Spinosa web app...")
-
-  const { default: open } = await import("open")
-  const webPort = parsed.values.get("port") ?? "3002"
-
-  const proc = Bun.spawn(["bun", "run", "dev:full"], {
-    cwd: webDir,
-    stdio: ["ignore", "inherit", "inherit"],
-    env: { ...process.env, PORT: webPort },
-  })
-
-  await new Promise((r) => setTimeout(r, 3000))
-
-  const webUrl = `http://127.0.0.1:${webPort}`
-  io.out(`\n  Spinosa Web: ${webUrl}\n`)
-  open(webUrl).catch(() => {})
-
-  return await new Promise<number>((resolve) => {
-    const onSignal = () => { proc.kill(); resolve(0) }
-    process.on("SIGINT", onSignal)
-    process.on("SIGTERM", onSignal)
-  })
-}
-
 export async function runSpinosaCli(args: string[], io?: SpinosaCliIo): Promise<number> {
   bootLog("spinosa-cli.run", "spinosa-cli invoked", { args: args.join(" "), pid: process.pid })
   const { command, rest } = splitSpinosaCliCommand(args)
@@ -251,8 +217,6 @@ export async function runSpinosaCli(args: string[], io?: SpinosaCliIo): Promise<
       case "preflight":
         await runLaunchPreflight()
         return 0
-      case "web":
-        return await runWeb(parsed, resolvedIo)
       case "version":
       case "--version":
         return runVersion(resolvedIo)

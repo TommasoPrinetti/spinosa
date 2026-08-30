@@ -40,7 +40,7 @@ await step("installer bats", async () => {
 
 await step("host product binary build", async () => {
   const result =
-    await $`bun script/build-release-binaries.ts --out-dir ${outDir} --version ${version} --channel ${channel} --host-only --skip-embed-web-ui`
+    await $`bun script/build-release-binaries.ts --out-dir ${outDir} --version ${version} --channel ${channel} --host-only`
       .cwd(root)
       .nothrow()
   if (result.exitCode !== 0) throw new Error("host binary build failed")

@@ -27,7 +27,6 @@ import { ImportCommand } from "./cli/cmd/import"
 import { AttachCommand } from "./cli/cmd/attach"
 import { TuiThreadCommand } from "./cli/cmd/tui"
 import { EOL } from "os"
-import { WebCommand } from "./cli/cmd/web"
 import { PrCommand } from "./cli/cmd/pr"
 import { SessionCommand } from "./cli/cmd/session"
 import { DbCommand } from "./cli/cmd/db"
@@ -133,7 +132,7 @@ const cli = yargs(args)
   .usage("")
   .completion("completion", "generate shell completion script")
   // --- Curated Spinosa help: keep core workflow visible, hide advanced, eliminate opencode fork internals ---
-  // Visible (15): TUI default + new/add/update/status/list/doctor/providers/models/agent/upgrade/uninstall/web/stats/version
+  // Visible (14): TUI default + new/add/update/status/list/doctor/providers/models/agent/upgrade/uninstall/stats/version
   .command(TuiThreadCommand)
   .command(WorkspaceNewCommand)
   .command(WorkspaceAddCommand)
@@ -145,7 +144,6 @@ const cli = yargs(args)
   .command(AgentCommand)
   .command(UpgradeCommand)
   .command(UninstallCommand)
-  .command(WebCommand)
   .command(ModelsCommand)
   .command(StatsCommand)
   .command(VersionCommand)

@@ -38,7 +38,6 @@ Upgrade logic lives in `@spinosa/core/commands/upgrade`. Do not duplicate it in 
 | Trigger | File | Flow |
 | ------- | ---- | ---- |
 | `spinosa attach` | `cmd/attach.ts` | Full TUI unless `--mini` |
-| `spinosa web` | `cmd/web.ts` | Server + browser |
 | `spinosa --mini` | `cmd/run.ts` | Lightweight split-footer mode |
 | `spinosa run` | `cmd/run.ts` | Batch or mini interactive |
 | `spinosa serve` | `cmd/serve.ts` | Headless API server |

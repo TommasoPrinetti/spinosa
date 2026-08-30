@@ -34,7 +34,6 @@ DIST="dist/v${VERSION}"
 
 SPINOSA_BINARY_SMOKE_STRICT=1 bun run build:binaries \
   -- --out-dir "$DIST" --version "$VERSION" --channel "$CHANNEL"
-# optional faster iteration: add --skip-embed-web-ui
 ```
 
 Then stage installer + checksums (release pipeline does this; soak helper can too):

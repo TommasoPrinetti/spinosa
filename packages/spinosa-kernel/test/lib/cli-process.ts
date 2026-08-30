@@ -73,6 +73,7 @@ function isolatedEnv(home: string, configJson: string): Record<string, string> {
     SPINOSA_DISABLE_AUTOUPDATE: "1",
     SPINOSA_DISABLE_AUTOCOMPACT: "1",
     SPINOSA_DISABLE_MODELS_FETCH: "1",
+    SPINOSA_DISABLE_PREFLIGHT_DELAY: "1",
     SPINOSA_AUTH_CONTENT: "{}",
   }
 }

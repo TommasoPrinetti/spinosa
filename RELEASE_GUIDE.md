@@ -95,7 +95,7 @@ Stable requires:
 - Source→binary migration from a real `1.0.3-beta.9` home (metadata + workspaces preserved; managed launchers migrated)
 - Binary→binary upgrade + rollback fault injection
 - Workspace create/update from embedded templates
-- Feature smoke: TUI, PDF, OCR, MarkItDown, watcher, web UI
+- Feature smoke: TUI, PDF, OCR, MarkItDown, watcher
 - Immutable remote assets match local checksums/manifest; rolling channel points at the verified version
 - At least one beta soak cycle with no open release-blocking distribution defects
 
