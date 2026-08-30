@@ -753,9 +753,14 @@ function Option(props: {
     return theme.text
   })
 
-  return (
+    return (
     <>
-      <Show when={props.current && !props.gutter}>
+      <Show when={props.active && !props.muted && !props.gutter}>
+        <text flexShrink={0} fg={text()} marginRight={1}>
+          ›
+        </text>
+      </Show>
+      <Show when={props.current && !props.gutter && !(props.active && !props.muted)}>
         <text flexShrink={0} fg={text()} marginRight={1}>
           ●
         </text>

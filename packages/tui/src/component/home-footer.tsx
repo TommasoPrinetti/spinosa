@@ -1,5 +1,5 @@
 import { TextAttributes } from "@opentui/core"
-import { createMemo, createSignal, For, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, For, Show } from "solid-js"
 import { useTheme } from "../context/theme"
 import { useDialog } from "../ui/dialog"
 import { useToast } from "../ui/toast"
@@ -84,45 +84,92 @@ export function HomeFooter() {
     return items
   })
 
+  // Shortcuts only on Home picker (no active workspace). In chat the prompt is focused
+  // and typing "s" should insert "s" — user will use "/command" or mouse. Keep footer
+  // as plain hint in workspace to avoid shortcut confusion.
+  const isHomePicker = createMemo(() => !spinosa.activePath || spinosa.genericMode)
+  const [footerSelected, setFooterSelected] = createSignal(0)
+
+  // Keep selection in bounds when button count changes
+  createEffect(() => {
+    const len = buttons().length
+    if (footerSelected() >= len) setFooterSelected(Math.max(0, len - 1))
+  })
+
+  const moveFooter = (offset: number) => {
+    const len = buttons().length
+    if (len === 0) return
+    setFooterSelected((v) => {
+      const next = (v + offset + len) % len
+      setHovered(buttons()[next]?.id)
+      return next
+    })
+  }
+
   useBindings(() => ({
     mode: SPINOSA_BASE_MODE,
-    enabled: () => !promptRef.current?.focused,
-    bindings: buttons().map((item) => ({
-      key: item.key,
-      desc: item.label,
-      group: "Home",
-      cmd: () => item.action(),
-    })),
+    enabled: () => isHomePicker() && !promptRef.current?.focused && dialog.stack.length === 0,
+    bindings: [
+      ...buttons().map((item) => ({
+        key: item.key,
+        desc: item.label,
+        group: "Home",
+        cmd: () => item.action(),
+      })),
+      { key: "left", desc: "Previous footer action", group: "Home", cmd: () => moveFooter(-1) },
+      { key: "right", desc: "Next footer action", group: "Home", cmd: () => moveFooter(1) },
+      { key: "tab", desc: "Next footer action", group: "Home", cmd: () => moveFooter(1) },
+      {
+        key: "shift+tab",
+        desc: "Previous footer action",
+        group: "Home",
+        cmd: () => moveFooter(-1),
+      },
+    ],
   }))
+
+  // Footer Enter is intentionally not bound — recent list's Enter takes precedence
+  // when both are visible. Footer actions are mouse-only on Home; in chat use /commands.
 
   return (
     <box width="100%" maxWidth={MAIN_CONTENT_MAX_WIDTH} flexDirection="row" justifyContent="center" gap={0}>
-      <For each={buttons()}>
-        {(item, i) => (
-          <>
-            <Show when={i() > 0}>
-              <text fg={theme.textMuted}>{" · "}</text>
-            </Show>
-            <box
-              paddingX={1}
-              onMouseOver={() => setHovered(item.id)}
-              onMouseOut={() => setHovered(undefined)}
-              onMouseUp={item.action}
-            >
-              <text
-                fg={
-                  hovered() === item.id
-                    ? (item.danger ? theme.error : theme.text)
-                    : (item.danger ? theme.error : theme.textMuted)
-                }
-                attributes={hovered() === item.id ? TextAttributes.BOLD : undefined}
+      <Show
+        when={isHomePicker()}
+        fallback={
+          <text fg={theme.textMuted}>Type / for commands · tab agents · ctrl+p palette</text>
+        }
+      >
+        <For each={buttons()}>
+          {(item, i) => (
+            <>
+              <Show when={i() > 0}>
+                <text fg={theme.textMuted}>{" · "}</text>
+              </Show>
+              <box
+                paddingX={1}
+                onMouseOver={() => {
+                  setHovered(item.id)
+                  const idx = buttons().findIndex((b) => b.id === item.id)
+                  if (idx >= 0) setFooterSelected(idx)
+                }}
+                onMouseOut={() => setHovered(undefined)}
+                onMouseUp={item.action}
               >
-                {item.label}
-              </text>
-            </box>
-          </>
-        )}
-      </For>
+                <text
+                  fg={
+                    hovered() === item.id
+                      ? (item.danger ? theme.error : theme.text)
+                      : (item.danger ? theme.error : theme.textMuted)
+                  }
+                  attributes={hovered() === item.id ? TextAttributes.BOLD : undefined}
+                >
+                  {item.label}
+                </text>
+              </box>
+            </>
+          )}
+        </For>
+      </Show>
     </box>
   )
 }

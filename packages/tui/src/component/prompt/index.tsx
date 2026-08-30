@@ -59,6 +59,11 @@ import { useKV } from "../../context/kv"
 import { createFadeIn } from "../../util/signal"
 import { DialogSkill } from "../dialog-skill"
 import { DialogWorkspaceUnavailable } from "../dialog-workspace-unavailable"
+import { DialogSpinosaSettings } from "../dialog-spinosa-settings"
+import { DialogAgent } from "../dialog-agent"
+import { DialogSessionList } from "../dialog-session-list"
+import { DialogProvider } from "../dialog-provider"
+import { DialogModel } from "../dialog-model"
 import { useArgs } from "../../context/args"
 import { SPINOSA_BASE_MODE, useBindings, useCommandShortcut, useLeaderActive, useOpencodeKeymap } from "../../keymap"
 import { useTuiConfig } from "../../config"
@@ -632,6 +637,61 @@ export function Prompt(props: PromptProps) {
           replacePrompt(nextInput)
           setStore("prompt", "forceAgent", ORCHESTRATOR_AGENT_ID)
           await submit()
+        },
+      },
+      {
+        title: "Settings",
+        desc: "Open workspace and app settings",
+        name: "spinosa.settings",
+        category: "Workspace",
+        slashName: "settings",
+        run: () => {
+          dialog.clear()
+          dialog.replace(() => <DialogSpinosaSettings />)
+        },
+      },
+      {
+        title: "Agents",
+        desc: "Switch or configure agents",
+        name: "spinosa.agents",
+        category: "Workspace",
+        slashName: "agents",
+        run: () => {
+          dialog.clear()
+          dialog.replace(() => <DialogAgent />)
+        },
+      },
+      {
+        title: "Sessions",
+        desc: "Browse and switch sessions",
+        name: "spinosa.sessions",
+        category: "Workspace",
+        slashName: "sessions",
+        run: () => {
+          dialog.clear()
+          dialog.replace(() => <DialogSessionList />)
+        },
+      },
+      {
+        title: "Provider",
+        desc: "Configure AI provider and credentials",
+        name: "spinosa.provider",
+        category: "Workspace",
+        slashName: "provider",
+        run: () => {
+          dialog.clear()
+          dialog.replace(() => <DialogProvider />)
+        },
+      },
+      {
+        title: "Models",
+        desc: "Select model and variant",
+        name: "spinosa.models",
+        category: "Workspace",
+        slashName: "models",
+        run: () => {
+          dialog.clear()
+          dialog.replace(() => <DialogModel />)
         },
       },
     ].map((entry) => ({
