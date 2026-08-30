@@ -8,6 +8,22 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.1.0-beta.2] — 2026-08-30
+
+### Removed
+
+- Embedded web UI and `spinosa web` command (opencode legacy, `packages/app` never shipped, server fallback and build embedding removed).
+
+### Changed
+
+- Curated CLI help: only core workflow visible (TUI default + new/add/update/status/list/doctor/providers/models/agent/upgrade/uninstall/stats/version, 14 commands), advanced/debug hidden but still callable via `spinosa <cmd> --help`.
+- Large Spinosa ASCII wordmark in CLI help.
+
+### Fixed
+
+- Launch preflight status lines now visible at least 1s each (`checking for updates...` → `no updates available` → `launching TUI...`) before TUI clears screen (was ~20ms).
+- Tool-calling compliance + interrupt padding and TUI default/footer Enter vs recent list fixes from `fix/tool-calling-compliance`.
+
 ## [1.1.0-beta.1] — 2026-08-08
 
 ### Added
