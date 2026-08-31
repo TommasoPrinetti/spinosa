@@ -16,10 +16,15 @@ import { bootLog } from "@spinosa/kernel-core/observability/boot-log"
 Heap.start()
 bootLog("worker.init", "TUI background worker started", { pid: process.pid })
 
-// Heartbeat to prove event loop is alive
-setInterval(() => {
-  bootLog("worker.alive", "worker event loop running", { rss: process.memoryUsage().rss })
-}, 2000)
+// Heartbeat to prove event loop is alive - gated behind verbose boot to avoid disk fill
+const heartbeatInterval = process.env.SPINOSA_VERBOSE_BOOT === "1"
+  ? setInterval(() => {
+      bootLog("worker.alive", "worker event loop running", { rss: process.memoryUsage().rss })
+    }, 2000)
+  : undefined
+const globalBusHandler = (event: unknown) => {
+  Rpc.emit("global.event", event)
+}
 
 let fatal = false
 
@@ -52,9 +57,7 @@ process.on("unhandledRejection", onUnhandledRejection)
 process.on("uncaughtException", onUncaughtException)
 
 // Subscribe to global events and forward them via RPC
-GlobalBus.on("event", (event) => {
-  Rpc.emit("global.event", event)
-})
+GlobalBus.on("event", globalBusHandler)
 
 let server: Awaited<ReturnType<typeof Server.listen>> | undefined
 
@@ -115,6 +118,8 @@ export const rpc = {
   },
   async shutdown() {
     bootLog("worker.shutdown", "shutting down worker")
+    if (heartbeatInterval) clearInterval(heartbeatInterval)
+    GlobalBus.off("event", globalBusHandler)
     await InstanceRuntime.disposeAllInstances()
     if (server) await server.stop(true)
     process.off("unhandledRejection", onUnhandledRejection)
