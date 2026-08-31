@@ -712,6 +712,8 @@ export function replace(content: string, oldString: string, newString: string, r
         )
       }
       if (replaceAll) {
+        // For replaceAll, only allow exact oldString to avoid trimmed variant hitting unintended locations
+        if (search !== oldString) continue
         return content.replaceAll(search, newString)
       }
       const lastIndex = content.lastIndexOf(search)

@@ -288,7 +288,10 @@ const layer = Layer.effect(
         if ("directory" in input) conditions.push(eq(SessionTable.directory, input.directory))
         if (input.workspaceID) conditions.push(eq(SessionTable.workspace_id, input.workspaceID))
         if ("project" in input) conditions.push(eq(SessionTable.project_id, input.project))
-        if (input.search) conditions.push(like(SessionTable.title, `%${input.search}%`))
+        if (input.search) {
+          const escaped = input.search.replace(/[\\%_]/g, "\\$&")
+          conditions.push(like(SessionTable.title, `%${escaped}%`))
+        }
         if (input.anchor) {
           conditions.push(
             order === "asc"
