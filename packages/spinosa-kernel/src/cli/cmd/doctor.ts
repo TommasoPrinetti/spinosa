@@ -126,6 +126,8 @@ export const DoctorCommand = {
       ])
       log(fmt, `Document converter: ${markitdown ? "available" : "missing"}`)
       log(fmt, `PDF engine: ${pdf ? "available" : "missing"}`)
+      log(fmt, `Gateway: free tier idle 60-90s → use paid model for >100k batches (docs/reference/gateway-limits.md)`)
+      log(fmt, `Channel: check ~/.spinosa/metadata/config.yaml (beta:true = beta channel, auto_upgrade:false = cached checks, network skipped when cache fresh)`)
       if (ocr.unsupported) {
         log(fmt, `OCR engine: unsupported`)
         if (ocr.error) log(fmt, `OCR: ${ocr.error}`)

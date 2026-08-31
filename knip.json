@@ -5,6 +5,7 @@
     "packages/spinosa-kernel/src/index.ts",
     "packages/tui/src/spinosa-cli.ts",
     "script/compare-versions.ts",
+    "script/pack-workspace-template.ts",
     "script/patch-local-install-metadata.ts",
     "script/set-version.ts",
     "script/typecheck-all.ts",
@@ -123,6 +124,7 @@
     "exports": "off",
     "files": "error",
     "types": "off",
-    "unlisted": "off"
+    "unlisted": "off",
+    "unresolved": "off"
   }
 }

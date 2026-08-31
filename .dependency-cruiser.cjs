@@ -38,6 +38,12 @@ module.exports = {
         pathNot: [
           "^packages/spinosa-core/src/utils/version",
           "^packages/spinosa-core/src/utils/yaml-config",
+          "^packages/spinosa-core/src/distribution/contract",
+          "^packages/spinosa-core/src/distribution/workspace-launcher",
+          "^packages/spinosa-core/src/framework/template-pack",
+          "^packages/spinosa-core/src/system/bun-launch",
+          "^packages/spinosa-kernel/src/cli/cmd/tui",
+          "^packages/spinosa-kernel/script/build",
         ],
       },
     },
