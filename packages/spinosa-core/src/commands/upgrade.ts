@@ -58,7 +58,11 @@ export function verifyInstallerChecksum(installerScript: string, checksums: stri
   const expected = checksums
     .split(/\r?\n/)
     .map((line) => line.trim().split(/\s+/, 2))
-    .find((parts) => parts.length === 2 && path.basename(parts[1]!) === "install.sh")?.[0]
+    .find((parts) => {
+      if (parts.length !== 2) return false
+      const raw = parts[1]!.trim().replace(/^\*+/, "")
+      return path.basename(raw) === "install.sh"
+    })?.[0]
   if (!expected || !/^[a-f0-9]{64}$/i.test(expected)) return false
   const actual = createHash("sha256").update(installerScript).digest("hex")
   return actual.toLowerCase() === expected.toLowerCase()

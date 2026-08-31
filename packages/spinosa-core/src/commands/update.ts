@@ -588,7 +588,7 @@ export async function updateWorkspace(options: UpdateOptions): Promise<UpdateRes
   if (presence && !isUsableWorkspacePresence(presence)) {
     if (registered || presence.status !== "invalid") {
       spinosaLogWarn("update", `Skipping ${options.workspacePath}: workspace is ${presence.status}`)
-      return { success: true, added: 0, updated: 0, removed: 0, skipped: 1, changes: false, presence: presence.status }
+      return { success: false, added: 0, updated: 0, removed: 0, skipped: 0, changes: false, presence: presence.status, error: `Workspace is ${presence.status}` }
     }
   }
 
