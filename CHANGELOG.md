@@ -8,6 +8,19 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.1.0-beta.3] — 2026-09-02
+
+### Changed
+
+- Prompt queue now keeps ordinary prompts editable while a turn runs; explicit steer remains available for interruption.
+- Provider, session, stream, TUI, SDK, and tool-runtime paths were split into smaller typed helpers.
+- Added release quality, coverage, mutation, generated-data, and binary smoke gates.
+
+### Fixed
+
+- Tool-runtime validation now rejects malformed successful tool output.
+- Prompt close and abort paths stop active work cleanly.
+
 ## [1.1.0-beta.2] — 2026-08-30
 
 ### Removed

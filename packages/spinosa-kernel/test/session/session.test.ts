@@ -2,7 +2,7 @@ import { describe, expect } from "bun:test"
 import { SessionV1 } from "@spinosa/kernel-core/v1/session"
 import { EventV2 } from "@spinosa/kernel-core/event"
 import { SessionProjector } from "@spinosa/kernel-core/session/projector"
-import { Deferred, Effect, Exit, Layer } from "effect"
+import { Deferred, Effect, Exit, Layer, Option } from "effect"
 import { Session as SessionNs } from "@/session/session"
 import { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, type SessionID } from "../../src/session/schema"
@@ -43,6 +43,19 @@ const awaitDeferred = <T>(deferred: Deferred.Deferred<T>, message: string) =>
   )
 
 const remove = (id: SessionID) => SessionNs.use.remove(id)
+
+describe("session.diff", () => {
+  it.instance("reports the unavailable legacy diff explicitly", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionNs.Service
+      const info = yield* session.create({})
+
+      expect(Option.isNone(yield* session.diff(info.id))).toBe(true)
+
+      yield* session.remove(info.id)
+    }),
+  )
+})
 
 describe("session.created event", () => {
   it.instance("should emit session.created event when session is created", () =>

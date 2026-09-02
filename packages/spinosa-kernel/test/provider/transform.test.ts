@@ -2103,6 +2103,41 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
     expect(result[1].content[0]).toEqual({ type: "text", text: "Answer" })
   })
 
+  test("keeps empty Bedrock reasoning blocks with signed metadata", () => {
+    const bedrockModel = {
+      ...anthropicModel,
+      providerID: "amazon-bedrock",
+      api: {
+        ...anthropicModel.api,
+        id: "anthropic.claude-opus-4-6",
+        npm: "@ai-sdk/amazon-bedrock",
+      },
+    }
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "reasoning",
+            text: "",
+            providerOptions: { bedrock: { signature: "signed" } },
+          },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, bedrockModel, {})
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toEqual([
+      {
+        type: "reasoning",
+        text: "",
+        providerOptions: { bedrock: { signature: "signed" } },
+      },
+    ])
+  })
+
   test("does not filter for non-anthropic providers", () => {
     const openaiModel = {
       ...anthropicModel,

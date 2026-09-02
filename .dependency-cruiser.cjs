@@ -10,6 +10,20 @@ module.exports = {
       },
     },
     {
+      name: "no-circular-product-packages",
+      severity: "error",
+      from: {
+        path: "^packages/(spinosa-core|spinosa-runtime|spinosa-harness|spinosa-cli)/src/",
+      },
+      to: { circular: true },
+    },
+    {
+      name: "core-not-product-hosts",
+      severity: "error",
+      from: { path: "^packages/core/" },
+      to: { path: "^packages/(spinosa-kernel|tui|spinosa-cli)/" },
+    },
+    {
       name: "kernel-core-not-executable-kernel",
       severity: "error",
       from: { path: "^packages/core/" },

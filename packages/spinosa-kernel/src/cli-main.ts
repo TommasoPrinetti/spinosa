@@ -152,11 +152,12 @@ const cli = yargs(args)
   .command({ ...AttachCommand, describe: false } as any)
   .command({ ...RunCommand, describe: false } as any)
   .command({ ...DebugCommand, describe: false } as any)
+  .command({ ...GenerateCommand, describe: false } as any)
   .command({ ...DbCommand, describe: false } as any)
   .command({ ...PreflightCommand, describe: false } as any)
   .command({ ...StartupAutocleanCommand, describe: false } as any)
   .command({ ...InternalCommand, describe: false } as any)
-  // Eliminated: TuiThreadCommand, GenerateCommand, ConsoleCommand, ServeCommand (duplicate of web), ExportCommand, ImportCommand, PrCommand, SessionCommand, PluginCommand — not registered
+  // Eliminated: TuiThreadCommand, ConsoleCommand, ServeCommand (duplicate of web), ExportCommand, ImportCommand, PrCommand, SessionCommand, PluginCommand — not registered
   .fail((msg, err) => {
     if (
       msg?.startsWith("Unknown argument") ||

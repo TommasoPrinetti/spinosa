@@ -23,6 +23,7 @@ import {
 
 const kernelDir = path.resolve(import.meta.dir, "..")
 const coreDir = path.resolve(kernelDir, "../spinosa-core")
+const workspaceNodeModules = path.resolve(coreDir, "../..", "node_modules")
 
 const PRODUCT_TARGETS: OnnxNativeTarget[] = [
   { os: "darwin", arch: "arm64" },
@@ -34,8 +35,7 @@ const PRODUCT_TARGETS: OnnxNativeTarget[] = [
 describe("onnx-native packaging", () => {
   test("resolves workspace onnxruntime-node (not a home global install)", () => {
     const root = resolveOnnxRuntimeNodeRoot(coreDir)
-    expect(root.includes(`${path.sep}.bun${path.sep}`) || root.includes("node_modules")).toBe(true)
-    expect(root.includes("/Users/tommasoprinetti/node_modules/onnxruntime-node")).toBe(false)
+    expect(root.startsWith(`${workspaceNodeModules}${path.sep}`)).toBe(true)
     expect(fs.existsSync(path.join(root, "package.json"))).toBe(true)
   })
 

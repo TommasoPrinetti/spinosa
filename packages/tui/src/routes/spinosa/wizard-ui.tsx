@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js"
 import { ScrollBoxRenderable, TextAttributes } from "@opentui/core"
 import type { Theme } from "../../context/theme"
 import { SplitBorder } from "../../ui/border"
@@ -237,7 +237,7 @@ export function generateScanLines(preview: NewWorkspacePreview | ImportScanPrevi
   return lines
 }
 
-export function WizardPanel(props: { theme: Theme; accent?: boolean; children: any }) {
+export function WizardPanel(props: { theme: Theme; accent?: boolean; children: JSX.Element }) {
   return (
     <box
       flexDirection="column"
@@ -256,7 +256,7 @@ export function WizardPanel(props: { theme: Theme; accent?: boolean; children: a
   )
 }
 
-export function WizardActionRow(props: { children: any }) {
+export function WizardActionRow(props: { children: JSX.Element }) {
   return (
     <box flexDirection="row" gap={1} flexWrap="wrap">
       {props.children}

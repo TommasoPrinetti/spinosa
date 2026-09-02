@@ -127,7 +127,11 @@ function DiffViewer(props: { api: TuiPluginApi }) {
       { directory: input.directory, mode: input.mode, context: VCS_DIFF_CONTEXT_LINES },
       { throwOnError: true },
     )
-    return normalizeDiffs(result.data ?? [])
+    if (!result.data) return []
+    if (result.data._tag === "unavailable") {
+      throw new Error(`VCS diff unavailable: ${result.data.reason}`)
+    }
+    return normalizeDiffs(result.data.files)
   })
   // Never call diff() while errored — Solid rethrows and can hard-abort the TUI.
   const files = createMemo(() => safeResourceValue(diff) ?? [])

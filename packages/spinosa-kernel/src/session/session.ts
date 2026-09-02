@@ -57,6 +57,20 @@ export function isDefaultTitle(title: string) {
 
 type SessionRow = typeof SessionTable.$inferSelect
 
+function normalizePermission(value: NonNullable<SessionRow["permission"]>): Array<PermissionV1.Ruleset[number]> {
+  const rules: Array<PermissionV1.Ruleset[number]> = []
+  for (const rule of value) {
+    if ("permission" in rule && "pattern" in rule) {
+      rules.push({ permission: rule.permission, pattern: rule.pattern, action: rule.action })
+      continue
+    }
+    if ("resource" in rule && "effect" in rule) {
+      rules.push({ permission: rule.action, pattern: rule.resource, action: rule.effect })
+    }
+  }
+  return rules
+}
+
 export function fromRow(row: SessionRow): Info {
   const summary =
     row.summary_additions !== null || row.summary_deletions !== null || row.summary_files !== null
@@ -109,7 +123,7 @@ export function fromRow(row: SessionRow): Info {
     metadata: row.metadata ?? undefined,
     revert,
     // Session permission may be V1 or V2 shape — keep as stored, kernel handles both
-    permission: row.permission ? ([...row.permission] as any) : undefined,
+    permission: row.permission ? normalizePermission(row.permission) : undefined,
     time: {
       created: row.time_created,
       updated: row.time_updated,
@@ -338,17 +352,18 @@ export function plan(input: { slug: string; time: { created: number } }, instanc
   return path.join(base, [input.time.created, input.slug].join("-") + ".md")
 }
 
-export const getUsage = (input: { model: Provider.Model; usage: Usage; metadata?: ProviderMetadata }) => {
-  const safe = (value: number) => {
-    if (!Number.isFinite(value)) return 0
-    return Math.max(0, value)
-  }
-  const inputTokens = safe(input.usage.inputTokens ?? 0)
-  const outputTokens = safe(input.usage.outputTokens ?? 0)
-  const reasoningTokens = safe(input.usage.reasoningTokens ?? 0)
+const safeTokenCount = (value: number) => {
+  if (!Number.isFinite(value)) return 0
+  return Math.max(0, value)
+}
 
-  const cacheReadInputTokens = safe(input.usage.cacheReadInputTokens ?? 0)
-  const cacheWriteInputTokens = safe(
+export const getUsage = (input: { model: Provider.Model; usage: Usage; metadata?: ProviderMetadata }) => {
+  const inputTokens = safeTokenCount(input.usage.inputTokens ?? 0)
+  const outputTokens = safeTokenCount(input.usage.outputTokens ?? 0)
+  const reasoningTokens = safeTokenCount(input.usage.reasoningTokens ?? 0)
+
+  const cacheReadInputTokens = safeTokenCount(input.usage.cacheReadInputTokens ?? 0)
+  const cacheWriteInputTokens = safeTokenCount(
     Number(
       input.usage.cacheWriteInputTokens ??
         input.metadata?.["anthropic"]?.["cacheCreationInputTokens"] ??
@@ -366,14 +381,14 @@ export const getUsage = (input: { model: Provider.Model; usage: Usage; metadata?
   // AI SDK v6 normalized inputTokens to include cached tokens across all providers
   // (including Anthropic/Bedrock which previously excluded them). Always subtract cache
   // tokens to get the non-cached input count for separate cost calculation.
-  const adjustedInputTokens = safe(inputTokens - cacheReadInputTokens - cacheWriteInputTokens)
+  const adjustedInputTokens = safeTokenCount(inputTokens - cacheReadInputTokens - cacheWriteInputTokens)
 
   const total = input.usage.totalTokens
 
   const tokens = {
     total,
     input: adjustedInputTokens,
-    output: safe(outputTokens - reasoningTokens),
+    output: safeTokenCount(outputTokens - reasoningTokens),
     reasoning: reasoningTokens,
     cache: {
       write: cacheWriteInputTokens,
@@ -394,13 +409,13 @@ export const getUsage = (input: { model: Provider.Model; usage: Usage; metadata?
     cost:
       typeof totalNanoAiu === "number" && Number.isFinite(totalNanoAiu) && totalNanoAiu >= 0
         ? new Decimal(totalNanoAiu).div(100_000_000_000).toNumber()
-        : safe(
+        : safeTokenCount(
             new Decimal(0)
               .add(new Decimal(tokens.input).mul(costInfo?.input ?? 0).div(1_000_000))
               .add(new Decimal(tokens.output).mul(costInfo?.output ?? 0).div(1_000_000))
               .add(new Decimal(tokens.cache.read).mul(costInfo?.cache?.read ?? 0).div(1_000_000))
               .add(new Decimal(tokens.cache.write).mul(costInfo?.cache?.write ?? 0).div(1_000_000))
-              // TODO: update models.dev to have better pricing model, for now:
+              // models.dev has no reasoning-token price yet; charge reasoning at the output-token rate.
               // charge reasoning tokens at the same rate as output tokens
               .add(new Decimal(tokens.reasoning).mul(costInfo?.output ?? 0).div(1_000_000))
               .toNumber(),
@@ -449,7 +464,7 @@ export interface Interface {
   readonly setSummary: (input: { sessionID: SessionID; summary: Info["summary"] }) => Effect.Effect<void>
   readonly setShare: (input: { sessionID: SessionID; share: Info["share"] }) => Effect.Effect<void>
   readonly setWorkspace: (input: { sessionID: SessionID; workspaceID: Info["workspaceID"] }) => Effect.Effect<void>
-  readonly diff: (sessionID: SessionID) => Effect.Effect<Snapshot.FileDiff[]>
+  readonly diff: (sessionID: SessionID) => Effect.Effect<Option.Option<Snapshot.FileDiff[]>>
   readonly messages: (input: { sessionID: SessionID; limit?: number }) => Effect.Effect<SessionV1.WithParts[], NotFound>
   readonly children: (parentID: SessionID) => Effect.Effect<Info[]>
   readonly remove: (sessionID: SessionID) => Effect.Effect<void, NotFound>
@@ -839,8 +854,7 @@ const layer: Layer.Layer<
     })
 
     const diff = Effect.fn("Session.diff")(function* (sessionID: SessionID) {
-      void sessionID
-      return [] as Snapshot.FileDiff[]
+  return Option.none<Snapshot.FileDiff[]>()
     })
 
     const messages: Interface["messages"] = Effect.fn("Session.messages")(function* (input) {

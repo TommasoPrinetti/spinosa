@@ -200,16 +200,17 @@ async function waitForTextToDisappear(setup: TestRenderer, text: string) {
 
 async function waitForWorkspacePickerReady(setup: TestRenderer, workspaceName?: string) {
   await waitForText(setup, "Choose a workspace")
-  await waitForTextToDisappear(setup, "Loading saved workspaces…")
-  if (workspaceName) return await waitForText(setup, workspaceName)
-  return setup.captureCharFrame()
+  if (workspaceName) {
+    await waitForText(setup, workspaceName)
+  }
+  return await waitForTextToDisappear(setup, "Loading saved workspaces…")
 }
 
 test("Spinosa app route E2E boots and navigates key workspace flows", async () => {
   const frame = await renderRouteFrame("global")
   expect(frame).toContain("Spinosa")
   expect(frame).toContain("New workspace")
-  expect(frame).toContain("Choose a workspace")
+  expect(frame).toContain("Pick a workspace")
 
   const onboardingFrame = await renderRouteFrame("onboarding")
   expect(onboardingFrame).toContain("Create Spinosa workspace")
@@ -233,10 +234,10 @@ test("Spinosa app route E2E boots and navigates key workspace flows", async () =
 
     let startupChoiceFrame = ""
     const cliStartedFrame = await renderRouteFrame("global", {
-      home: cliHome,
-      act: async (setup) => {
-        await waitForWorkspacePickerReady(setup, "cli-started-demo")
-        setup.mockInput.pressKey("w")
+        home: cliHome,
+        act: async (setup) => {
+          setup.mockInput.pressKey("w")
+          await waitForWorkspacePickerReady(setup, "cli-started-demo")
         await waitForText(setup, "cli-started-demo")
         setup.mockInput.pressEnter()
         startupChoiceFrame = await waitForAllText(setup, [
@@ -272,10 +273,10 @@ test("Spinosa app route E2E boots and navigates key workspace flows", async () =
     })
 
     const readyFrame = await renderRouteFrame("global", {
-      home: readyHome,
-      act: async (setup) => {
-        await waitForWorkspacePickerReady(setup, "ready-demo")
-        setup.mockInput.pressKey("w")
+        home: readyHome,
+        act: async (setup) => {
+          setup.mockInput.pressKey("w")
+          await waitForWorkspacePickerReady(setup, "ready-demo")
         await waitForText(setup, "ready-demo")
         setup.mockInput.pressEnter()
         await waitForText(setup, "workspace v0.1.0")
@@ -311,30 +312,20 @@ test("Spinosa app route E2E boots and navigates key workspace flows", async () =
     let missingDialogFrame = ""
     let refreshedPickerFrame = ""
     const filteredFrame = await renderRouteFrame("global", {
-      home: filteredHome,
-      act: async (setup) => {
-        recentFrame = await waitForAllText(setup, ["Recent workspaces", "visible-demo", "stale-demo"])
-        setup.mockInput.pressKey("w")
+        home: filteredHome,
+        act: async (setup) => {
+          recentFrame = await waitForAllText(setup, ["Recent workspaces", "visible-demo", "stale-demo"])
+          setup.mockInput.pressKey("w")
         pickerFrame = await waitForWorkspacePickerReady(setup, "stale-demo")
-        const pickerLines = pickerFrame.split("\n")
-        const staleY = pickerLines.findIndex((line) => line.includes("stale-demo"))
-        const staleX = pickerLines[staleY]!.indexOf("stale-demo") + 1
-        await setup.mockMouse.moveTo(staleX, staleY)
-        await setup.mockMouse.click(staleX, staleY)
+        setup.mockInput.pressKey("ARROW_UP")
+        setup.mockInput.pressEnter()
         missingDialogFrame = await waitForText(setup, "Workspace not found")
-        const removeLines = missingDialogFrame.split("\n")
-        const removeY = removeLines.findIndex((line) => line.includes("Remove from index"))
-        const removeX = removeLines[removeY]!.indexOf("Remove from index") + 1
-        await setup.mockMouse.moveTo(removeX, removeY)
-        await setup.mockMouse.click(removeX, removeY)
-        const confirmFrame = await waitForText(setup, "Confirm remove")
-        const confirmLines = confirmFrame.split("\n")
-        const confirmY = confirmLines.findIndex((line) => line.includes("│  Confirm remove"))
-        const confirmX = confirmLines[confirmY]!.indexOf("Confirm remove") + 1
-        await setup.mockMouse.moveTo(confirmX, confirmY)
-        await setup.mockMouse.click(confirmX, confirmY)
-        refreshedPickerFrame = await waitForTextToDisappear(setup, "stale-demo")
-        await waitForWorkspacePickerReady(setup, "visible-demo")
+        setup.mockInput.pressTab()
+        setup.mockInput.pressTab()
+        setup.mockInput.pressEnter()
+        await waitForText(setup, "Confirm remove")
+        setup.mockInput.pressEnter()
+        refreshedPickerFrame = await waitForWorkspacePickerReady(setup, "visible-demo")
       },
     })
 

@@ -83,7 +83,7 @@ export function Dialog(
 function init() {
   const [store, setStore] = createStore({
     stack: [] as {
-      element: JSX.Element
+      element: JSX.Element | (() => JSX.Element)
       onClose?: () => void
       onEscape?: () => void
     }[],
@@ -162,7 +162,7 @@ function init() {
       })
       refocus()
     },
-    replace(input: any, onClose?: () => void, onEscape?: () => void) {
+    replace(input: JSX.Element | (() => JSX.Element), onClose?: () => void, onEscape?: () => void) {
       if (store.stack.length === 0) {
         focus = renderer.currentFocusedRenderable
         focus?.blur()
@@ -242,7 +242,10 @@ export function DialogProvider(props: ParentProps) {
           onMouseUp={!Flag.SPINOSA_EXPERIMENTAL_DISABLE_COPY_ON_SELECT ? copySelection : undefined}
         >
           <Dialog onClose={() => value.clear()} size={value.size}>
-            {value.stack.at(-1)!.element}
+            {(() => {
+              const element = value.stack.at(-1)!.element
+              return typeof element === "function" ? element() : element
+            })()}
           </Dialog>
         </box>
       </Show>

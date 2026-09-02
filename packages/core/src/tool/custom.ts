@@ -12,10 +12,32 @@ import { ToolRegistry } from "./registry"
 import { Tool } from "./tool"
 import { Tools } from "./tools"
 
+type DynamicSchema = Schema.Codec<unknown, unknown, never, never>
+
+type JsonSchemaObject = Readonly<Record<string, unknown>>
+type JsonSchemaDefinition = boolean | JsonSchemaObject
+
+type ZodDefinition = Readonly<Record<string, unknown>> & {
+  readonly type: string
+}
+type ZodLike = {
+  readonly _zod: {
+    readonly def: ZodDefinition
+  }
+  readonly description?: string
+}
+
 type PluginToolDefinition = {
-  readonly description: string
+  readonly description?: string
   readonly args?: unknown
-  readonly execute: (args: unknown, context: PluginToolContext) => Promise<unknown>
+  readonly execute: (args: Readonly<Record<string, unknown>>, context: PluginToolContext) => Promise<unknown>
+}
+
+type PluginToolAskInput = {
+  readonly permission: string
+  readonly patterns: ReadonlyArray<string>
+  readonly always: ReadonlyArray<string>
+  readonly metadata: Record<string, unknown>
 }
 
 type PluginToolContext = {
@@ -26,34 +48,40 @@ type PluginToolContext = {
   readonly worktree: string
   readonly abort: AbortSignal
   readonly metadata: (input: { title?: string; metadata?: Record<string, unknown> }) => void
-  readonly ask: (input: unknown) => Promise<void>
+  readonly ask: (input: PluginToolAskInput) => Promise<void>
 }
 
-function isZodType(value: unknown): boolean {
-  return typeof value === "object" && value !== null && "_zod" in (value as Record<string, unknown>)
+const MAX_ZOD_SCHEMA_DEPTH = 32
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+function isZodType(value: unknown): value is ZodLike {
+  if (!isRecord(value) || !isRecord(value._zod) || !isRecord(value._zod.def)) return false
+  if (typeof value._zod.def.type !== "string") return false
+  return !("description" in value && value.description !== undefined && typeof value.description !== "string")
 }
 
 function isPluginTool(value: unknown): value is PluginToolDefinition {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "description" in (value as Record<string, unknown>) &&
-    "execute" in (value as Record<string, unknown>) &&
-    typeof (value as Record<string, unknown>).execute === "function"
-  )
+  if (!isRecord(value)) return false
+  return (!("description" in value) || typeof value.description === "string") && typeof value.execute === "function"
 }
 
-function isJsonSchemaDefinition(value: unknown): boolean {
-  return typeof value === "boolean" || (typeof value === "object" && value !== null && !Array.isArray(value))
+function isJsonSchemaDefinition(value: unknown): value is JsonSchemaDefinition {
+  return typeof value === "boolean" || isRecord(value)
 }
 
-function jsonSchemaToEffectSchema(def: unknown): any {
-  if (typeof def !== "object" || def === null) return Schema.Unknown
-  const obj = def as Record<string, unknown>
-  const type = obj.type as string | undefined
-  const description = typeof obj.description === "string" ? obj.description : undefined
-  let schema: any
-  switch (type) {
+function annotateDescription(schema: DynamicSchema, description: unknown): DynamicSchema {
+  if (typeof description !== "string" || schema.ast.annotations?.description !== undefined) return schema
+  return schema.annotate({ description })
+}
+
+function jsonSchemaToEffectSchema(def: JsonSchemaDefinition): DynamicSchema {
+  if (!isRecord(def)) return Schema.Unknown
+
+  let schema: DynamicSchema
+  switch (typeof def.type === "string" ? def.type : undefined) {
     case "string":
       schema = Schema.String
       break
@@ -68,128 +96,122 @@ function jsonSchemaToEffectSchema(def: unknown): any {
       schema = Schema.Array(Schema.Unknown)
       break
     case "object":
-      schema = Schema.Unknown
-      break
     default:
       schema = Schema.Unknown
       break
   }
-  return description ? (schema as any).annotate({ description }) : schema
+
+  return annotateDescription(schema, def.description)
 }
 
-function unwrapZod(value: unknown): { readonly inner: unknown; readonly optional: boolean } {
+function unwrapZod(value: unknown): {
+  readonly inner: unknown
+  readonly optional: boolean
+} {
   let current: unknown = value
   let optional = false
-  while (isZodType(current)) {
-    const def = (current as { _zod: { def: { type: string; innerType?: unknown } } })._zod.def
-    const type = def.type
+  const seen = new WeakSet<object>()
+
+  for (let depth = 0; depth < MAX_ZOD_SCHEMA_DEPTH; depth++) {
+    if (!isZodType(current)) return { inner: current, optional }
+    if (seen.has(current)) return { inner: undefined, optional }
+    seen.add(current)
+
+    const type = current._zod.def.type
     if (type === "optional" || type === "nullable") {
       optional = true
-      current = def.innerType as unknown
+      current = current._zod.def.innerType
     } else if (type === "default") {
-      current = def.innerType as unknown
+      current = current._zod.def.innerType
     } else {
-      break
+      return { inner: current, optional }
     }
   }
-  return { inner: current, optional }
+
+  return { inner: undefined, optional }
 }
 
-function zodToEffectSchema(value: unknown): any {
+function isLiteralValue(value: unknown): value is string | number | boolean | bigint {
+  return (
+    typeof value === "string" || typeof value === "number" || typeof value === "boolean" || typeof value === "bigint"
+  )
+}
+
+function literalValuesToSchema(values: ReadonlyArray<unknown>): DynamicSchema {
+  if (values.length === 0 || !values.every(isLiteralValue)) return Schema.Unknown
+  if (values.length === 1) return Schema.Literal(values[0])
+  return Schema.Union(values.map((value) => Schema.Literal(value)))
+}
+
+function zodEnumToEffectSchema(entries: unknown): DynamicSchema {
+  if (entries === undefined) return Schema.String
+  if (!isRecord(entries)) return Schema.Unknown
+  const values = Object.values(entries)
+  if (values.length === 0) return Schema.String
+  return literalValuesToSchema(values)
+}
+
+type ZodTraversalState = {
+  readonly active: WeakSet<object>
+  readonly depth: number
+}
+
+function zodToEffectSchema(
+  value: unknown,
+  state: ZodTraversalState = { active: new WeakSet<object>(), depth: 0 },
+): DynamicSchema {
   if (!isZodType(value)) return Schema.Unknown
-  const raw = value as { _zod: { def: Record<string, unknown> }; description?: string }
-  const def = raw._zod.def as Record<string, unknown>
-  const type = def.type as string
-  const description = typeof raw.description === "string" ? raw.description : undefined
-  let schema: any
-  switch (type) {
-    case "string":
-      schema = Schema.String
-      break
-    case "number":
-      schema = Schema.Number
-      break
-    case "boolean":
-      schema = Schema.Boolean
-      break
-    case "array": {
-      const element = def.element as unknown
-      const elementSchema = element ? zodToEffectSchema(element) : Schema.Unknown
-      schema = Schema.Array(elementSchema)
-      break
-    }
-    case "enum": {
-      const entries = def.entries as Record<string, string> | undefined
-      if (entries) {
-        const values = Object.values(entries)
-        if (values.length === 0) schema = Schema.String
-        else if (values.length === 1) schema = Schema.Literal(values[0])
-        else {
-          const literals = values.map((v) => Schema.Literal(v)) as [any, ...any[]]
-          schema = Schema.Union(...literals)
-        }
-      } else {
+  if (state.depth >= MAX_ZOD_SCHEMA_DEPTH || state.active.has(value)) return Schema.Unknown
+
+  state.active.add(value)
+  try {
+    const def = value._zod.def
+    let schema: DynamicSchema
+    switch (def.type) {
+      case "string":
         schema = Schema.String
-      }
-      break
-    }
-    case "literal": {
-      const values = def.values as unknown[] | undefined
-      if (values && values.length === 1) schema = Schema.Literal(values[0] as string)
-      else if (values && values.length > 1) {
-        const lits = values.map((v) => Schema.Literal(v as string)) as [any, ...any[]]
-        schema = Schema.Union(...lits)
-      } else {
+        break
+      case "number":
+        schema = Schema.Number
+        break
+      case "boolean":
+        schema = Schema.Boolean
+        break
+      case "array":
+        schema = Schema.Array(
+          zodToEffectSchema(def.element, {
+            active: state.active,
+            depth: state.depth + 1,
+          }),
+        )
+        break
+      case "enum":
+        schema = zodEnumToEffectSchema(def.entries)
+        break
+      case "literal":
+        schema = literalValuesToSchema(Array.isArray(def.values) ? def.values : [])
+        break
+      case "object":
+      case "union":
+      default:
         schema = Schema.Unknown
-      }
-      break
+        break
     }
-    case "object":
-      schema = Schema.Unknown
-      break
-    case "union":
-      schema = Schema.Unknown
-      break
-    default:
-      schema = Schema.Unknown
-      break
+    return annotateDescription(schema, value.description)
+  } finally {
+    state.active.delete(value)
   }
-  return description ? (schema as any).annotate({ description }) : schema
 }
 
-function argsToInputSchema(args: unknown): any {
-  if (args == null || typeof args !== "object") return Schema.Struct({})
-  const entries = Object.entries(args as Record<string, unknown>)
+function argsToInputSchema(args: unknown): DynamicSchema {
+  if (!isRecord(args)) return Schema.Struct({})
+  const entries = Object.entries(args)
   if (entries.length === 0) return Schema.Struct({})
-  const allZod = entries.every(([, v]) => isZodType(v))
-  if (allZod) {
-    const fields: Record<string, any> = {}
-    for (const [key, value] of entries) {
-      const { inner, optional } = unwrapZod(value)
-      let schema = zodToEffectSchema(inner)
-      const outerDesc = (value as { description?: string }).description
-      if (outerDesc && typeof outerDesc === "string") {
-        const hasDesc =
-          (schema as unknown as { ast?: { annotations?: Record<string, unknown> } })?.ast?.annotations?.description !==
-          undefined
-        if (!hasDesc) schema = (schema as any).annotate({ description: outerDesc })
-      }
-      fields[key] = optional ? Schema.optional(schema) : schema
-    }
-    return Schema.Struct(fields as never)
-  }
-  const fields: Record<string, any> = {}
+  const fields: Record<string, DynamicSchema> = {}
   for (const [key, def] of entries) {
     if (isZodType(def)) {
       const { inner, optional } = unwrapZod(def)
-      let schema = zodToEffectSchema(inner)
-      const outerDesc = (def as { description?: string }).description
-      if (outerDesc && typeof outerDesc === "string") {
-        const hasDesc =
-          (schema as unknown as { ast?: { annotations?: Record<string, unknown> } })?.ast?.annotations?.description !==
-          undefined
-        if (!hasDesc) schema = (schema as any).annotate({ description: outerDesc })
-      }
+      const schema = annotateDescription(zodToEffectSchema(inner), def.description)
       fields[key] = optional ? Schema.optional(schema) : schema
     } else if (isJsonSchemaDefinition(def)) {
       fields[key] = jsonSchemaToEffectSchema(def)
@@ -197,17 +219,12 @@ function argsToInputSchema(args: unknown): any {
       fields[key] = Schema.Unknown
     }
   }
-  return Schema.Struct(fields as never)
+  return Schema.Struct(fields)
 }
 
-function makeCoreTool(
-  _name: string,
-  def: PluginToolDefinition,
-  locationDir: string,
-  worktree: string,
-): Tool.AnyTool {
-  const inputSchema: any = argsToInputSchema(def.args)
-  const outputSchema: any = Schema.String
+function makeCoreTool(def: PluginToolDefinition, locationDir: string, worktree: string): Tool.AnyTool {
+  const inputSchema: DynamicSchema = argsToInputSchema(def.args)
+  const outputSchema = Schema.String
 
   return Tool.make({
     description: def.description ?? "",
@@ -226,13 +243,15 @@ function makeCoreTool(
           ask: async () => {},
         }
         const result = yield* Effect.tryPromise({
-          try: () => def.execute(input as unknown, pluginCtx),
+          try: () => def.execute(isRecord(input) ? input : {}, pluginCtx),
           catch: (cause) =>
-            new ToolFailure({ message: cause instanceof Error ? cause.message : String(cause) }),
+            new ToolFailure({
+              message: cause instanceof Error ? cause.message : String(cause),
+            }),
         })
         if (typeof result === "string") return result
-        if (result && typeof result === "object" && "output" in (result as Record<string, unknown>)) {
-          const output = (result as Record<string, unknown>).output
+        if (isRecord(result) && "output" in result) {
+          const output = result.output
           if (typeof output === "string") return output
           if (output != null) return String(output)
         }
@@ -243,7 +262,7 @@ function makeCoreTool(
           error instanceof ToolFailure ? error : new ToolFailure({ message: String(error) }),
         ),
       ),
-  } as any)
+  })
 }
 
 const layer = Layer.effectDiscard(
@@ -290,7 +309,7 @@ const layer = Layer.effectDiscard(
         try: () => import(pathToFileURL(match).href),
         catch: (cause) => cause,
       }).pipe(
-        Effect.map((mod) => ({ ok: true as const, mod: mod as Record<string, unknown> })),
+        Effect.map((mod) => (isRecord(mod) ? { ok: true as const, mod } : { ok: false as const })),
         Effect.catch(() => Effect.succeed({ ok: false as const })),
       )
       if (!loaded.ok) {
@@ -307,7 +326,7 @@ const layer = Layer.effectDiscard(
           continue
         }
         try {
-          const coreTool = makeCoreTool(toolName, def, locationDir, worktree)
+          const coreTool = makeCoreTool(def, locationDir, worktree)
           registrations[toolName] = coreTool
         } catch (cause) {
           yield* Effect.logWarning(`Failed to convert custom tool ${toolName} from ${match}: ${String(cause)}`)

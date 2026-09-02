@@ -15,7 +15,7 @@ export const { use: useKV, provider: KVProvider } = createSimpleContext({
     const file = path.join(paths.state, "kv.json")
     const lock = `tui-kv:${file}`
     const [ready, setReady] = createSignal(false)
-    const [store, setStore] = createStore<Record<string, any>>()
+  const [store, setStore] = createStore<Record<string, unknown>>()
     // Queue same-process writes so rapid updates persist in order.
     let write = Promise.resolve()
 
@@ -41,17 +41,18 @@ export const { use: useKV, provider: KVProvider } = createSimpleContext({
         if (store[name] === undefined) setStore(name, defaultValue)
         return [
           function () {
-            return result.get(name)
+          return result.get<T>(name) ?? defaultValue
           },
           function setter(next: Setter<T>) {
             result.set(name, next)
           },
         ] as const
       },
-      get(key: string, defaultValue?: any) {
-        return store[key] ?? defaultValue
-      },
-      set(key: string, value: any) {
+    get<T = unknown>(key: string, defaultValue?: T): T | undefined {
+      const value = store[key]
+      return (value === undefined ? defaultValue : value) as T | undefined
+    },
+    set<T>(key: string, value: T) {
         setStore(key, value)
         const snapshot = structuredClone(unwrap(store))
         write = write

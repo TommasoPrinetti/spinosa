@@ -2,7 +2,7 @@ import { Server } from "@/server/server"
 import { InstanceRuntime } from "@/project/instance-runtime"
 import { Rpc } from "@/util/rpc"
 import { Config } from "@/config/config"
-import { GlobalBus } from "@/bus/global"
+import { GlobalBus, type GlobalEvent } from "@/bus/global"
 import { publishJobEvent } from "@/job/bus"
 import type { JobEvent } from "@spinosa/core/progress/job-event"
 import { ServerAuth } from "@/server/auth"
@@ -16,10 +16,12 @@ import { bootLog } from "@spinosa/kernel-core/observability/boot-log"
 Heap.start()
 bootLog("worker.init", "TUI background worker started", { pid: process.pid })
 
-// Heartbeat to prove event loop is alive
-setInterval(() => {
-  bootLog("worker.alive", "worker event loop running", { rss: process.memoryUsage().rss })
-}, 2000)
+const heartbeat =
+  process.env.SPINOSA_VERBOSE_BOOT === "1"
+    ? setInterval(() => {
+        bootLog("worker.alive", "worker event loop running", { rss: process.memoryUsage().rss })
+      }, 2000)
+    : undefined
 
 let fatal = false
 
@@ -52,9 +54,10 @@ process.on("unhandledRejection", onUnhandledRejection)
 process.on("uncaughtException", onUncaughtException)
 
 // Subscribe to global events and forward them via RPC
-GlobalBus.on("event", (event) => {
+const onGlobalEvent = (event: GlobalEvent) => {
   Rpc.emit("global.event", event)
-})
+}
+GlobalBus.on("event", onGlobalEvent)
 
 let server: Awaited<ReturnType<typeof Server.listen>> | undefined
 
@@ -117,6 +120,8 @@ export const rpc = {
     bootLog("worker.shutdown", "shutting down worker")
     await InstanceRuntime.disposeAllInstances()
     if (server) await server.stop(true)
+    if (heartbeat) clearInterval(heartbeat)
+    GlobalBus.off("event", onGlobalEvent)
     process.off("unhandledRejection", onUnhandledRejection)
     process.off("uncaughtException", onUncaughtException)
     bootLog("worker.shutdown.done", "worker shutdown complete")

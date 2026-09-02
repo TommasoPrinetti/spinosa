@@ -336,10 +336,13 @@ test("scans and imports files from the dedicated add-files screen", async () => 
     const importY = scanLines.findIndex((line) => line.includes("Continue"))
     const importX = scanLines[importY]!.indexOf("Continue") + 1
     await app.mockMouse.click(importX, importY)
-
-    await new Promise((resolve) => setTimeout(resolve, 1_200))
-    await app.renderOnce()
-    const doneFrame = app.captureCharFrame()
+    let doneFrame = ""
+    for (let attempt = 0; attempt < 50; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, 100))
+      await app.renderOnce()
+      doneFrame = app.captureCharFrame()
+      if (doneFrame.includes("● Import complete")) break
+    }
     expect(doneFrame).toContain("● Import complete")
     expect(doneFrame).toContain("notes.md")
     expect(existsSync(path.join(workspace, "raw", "notes.md"))).toBe(true)

@@ -1,10 +1,38 @@
-type Definition = {
-  [method: string]: (input: any) => any
+type Definition = Record<string, (input: never) => void>
+
+type MethodName<T extends Definition> = Extract<keyof T, string>
+
+type RpcRequest<T extends Definition> = {
+  type: "rpc.request"
+  method: MethodName<T>
+  input: never
+  id: number
 }
 
-export function listen(rpc: Definition) {
-  onmessage = async (evt) => {
-    const parsed = JSON.parse(evt.data)
+type RpcResult = {
+  type: "rpc.result"
+  result: never
+  id: number
+}
+
+type RpcEvent = {
+  type: "rpc.event"
+  event: string
+  data: never
+}
+
+type RpcResponse = RpcResult | RpcEvent
+
+type RpcTarget = {
+  postMessage: (data: string) => void | null
+  onmessage:
+    | ((this: Worker, ev: MessageEvent<string>) => void | Promise<void>)
+    | null
+}
+
+export function listen<T extends Definition>(rpc: T) {
+  onmessage = async (evt: MessageEvent<string>) => {
+    const parsed = JSON.parse(evt.data) as RpcRequest<T>
     if (parsed.type === "rpc.request") {
       const result = await rpc[parsed.method](parsed.input)
       postMessage(JSON.stringify({ type: "rpc.result", result, id: parsed.id }))
@@ -12,19 +40,16 @@ export function listen(rpc: Definition) {
   }
 }
 
-export function emit(event: string, data: unknown) {
+export function emit<Data>(event: string, data: Data) {
   postMessage(JSON.stringify({ type: "rpc.event", event, data }))
 }
 
-export function client<T extends Definition>(target: {
-  postMessage: (data: string) => void | null
-  onmessage: ((this: Worker, ev: MessageEvent<any>) => any) | null
-}) {
-  const pending = new Map<number, (result: any) => void>()
-  const listeners = new Map<string, Set<(data: any) => void>>()
+export function client<T extends Definition>(target: RpcTarget) {
+  const pending = new Map<number, (result: never) => void>()
+  const listeners = new Map<string, Set<(data: never) => void>>()
   let id = 0
-  target.onmessage = async (evt) => {
-    const parsed = JSON.parse(evt.data)
+  target.onmessage = async (evt: MessageEvent<string>) => {
+    const parsed = JSON.parse(evt.data) as RpcResponse
     if (parsed.type === "rpc.result") {
       const resolve = pending.get(parsed.id)
       if (resolve) {
@@ -42,12 +67,18 @@ export function client<T extends Definition>(target: {
     }
   }
   return {
-    call<Method extends keyof T>(method: Method, input: Parameters<T[Method]>[0]): Promise<ReturnType<T[Method]>> {
-      const { promise, resolve, reject } = Promise.withResolvers<ReturnType<T[Method]>>()
+    call<Method extends MethodName<T>>(
+      method: Method,
+      input: Parameters<T[Method]>[0],
+    ): Promise<ReturnType<T[Method]>> {
+      const { promise, resolve, reject } =
+        Promise.withResolvers<ReturnType<T[Method]>>()
       const requestId = id++
       pending.set(requestId, resolve)
       try {
-        target.postMessage(JSON.stringify({ type: "rpc.request", method, input, id: requestId }))
+        target.postMessage(
+          JSON.stringify({ type: "rpc.request", method, input, id: requestId }),
+        )
       } catch (err) {
         pending.delete(requestId)
         reject(err)

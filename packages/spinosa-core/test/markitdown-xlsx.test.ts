@@ -7,10 +7,10 @@ import { MarkItDown } from "markitdown-ts"
 import { ensureSheetJsFs } from "../src/import/sheetjs-fs"
 import { markitdownConvertFile } from "../src/import/markitdown-convert"
 
-const FIXTURES = [
-  "/Users/tommasoprinetti/Downloads/spinosa-markitdown-test/GESTION_DE_L_ENVIRONNEMENT.xlsx",
-  "/Users/tommasoprinetti/Downloads/spinosa-markitdown-test/vivatech_subset.xlsx",
-]
+const fixtureRoot = process.env.SPINOSA_MARKITDOWN_FIXTURE_DIR?.trim()
+const FIXTURES = fixtureRoot
+  ? ["GESTION_DE_L_ENVIRONNEMENT.xlsx", "vivatech_subset.xlsx"].map((name) => path.join(fixtureRoot, name))
+  : []
 
 function writeMinimalXlsx(file: string): void {
   ensureSheetJsFs()

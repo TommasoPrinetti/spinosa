@@ -64,7 +64,7 @@ async function runJob(label: string, fn: () => Promise<void>): Promise<JobResult
 }
 
 async function bunTest(cwd: string, files: readonly string[], timeoutMs: number): Promise<void> {
-  const result = await $`bun test --timeout ${timeoutMs} --only-failures ${files}`
+  const result = await $`bun test --timeout ${timeoutMs} ${files}`
     .cwd(cwd)
     .nothrow()
   if (result.exitCode !== 0) {
@@ -133,7 +133,7 @@ const wave2 = await wave("wave 2: launch / workspace regressions", [
     bunTest(path.join(root, "packages/spinosa-kernel"), ["test/cli/tui/thread.test.ts"], 30_000),
   ),
   runJob("tui release-critical", async () => {
-    const result = await $`bun test --isolate --timeout 60000 --only-failures ${TUI_RELEASE_TESTS}`
+    const result = await $`bun test --isolate --timeout 60000 ${TUI_RELEASE_TESTS}`
       .cwd(path.join(root, "packages/tui"))
       .nothrow()
     if (result.exitCode !== 0) throw new Error("tui release-critical failed")

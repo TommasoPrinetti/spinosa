@@ -1,34 +1,53 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "entry": [
-    "packages/spinosa-cli/src/index.ts",
-    "packages/spinosa-kernel/src/index.ts",
-    "packages/tui/src/spinosa-cli.ts",
-    "script/compare-versions.ts",
-    "script/pack-workspace-template.ts",
-    "script/patch-local-install-metadata.ts",
-    "script/set-version.ts",
-    "script/typecheck-all.ts",
-    "script/release/index.ts",
-    "script/release/stages.ts",
-    "script/release/state.ts",
-    "script/release/bump.ts",
-    "script/release/github.ts",
-    "script/release/lib.ts",
-    "script/release/reporter.ts",
-    "script/generate-patches-md.ts",
-    "workspace-template/.bin/spinosa"
-  ],
-  "project": [
-    "packages/**/*.{ts,tsx}",
-    "script/**/*.ts"
-  ],
+  "workspaces": {
+    ".": {
+      "entry": [
+        "packages/spinosa-cli/src/index.ts",
+        "packages/spinosa-kernel/src/index.ts",
+        "packages/tui/src/spinosa-cli.ts",
+        "script/compare-versions.ts",
+        "script/pack-workspace-template.ts",
+        "script/patch-local-install-metadata.ts",
+        "script/set-version.ts",
+        "script/typecheck-all.ts",
+        "script/release/index.ts",
+        "script/release/stages.ts",
+        "script/release/state.ts",
+        "script/release/bump.ts",
+        "script/release/github.ts",
+        "script/release/lib.ts",
+        "script/release/reporter.ts",
+        "script/check-generated.ts",
+        "script/generate-patches-md.ts",
+        "workspace-template/.bin/spinosa"
+      ],
+      "project": [
+        "packages/**/*.{ts,tsx}",
+        "script/**/*.ts"
+      ]
+    },
+    "packages/llm": {
+      "entry": ["script/recording-cost-report.ts"]
+    },
+    "packages/spinosa-kernel": {
+      "entry": [
+        "script/bench-search.ts",
+        "script/postinstall.mjs",
+        "script/schema.ts",
+        "script/time.ts",
+        "script/trace-imports.ts"
+      ]
+    },
+    "packages/ui": {
+      "entry": ["script/pack.ts"]
+    }
+  },
   "ignore": [
     "packages/**/test/**",
     "packages/**/dist/**",
     "packages/**/examples/**",
     "packages/**/example/**",
-    "packages/**/script/**",
     "script/orphan/**",
     "packages/spinosa-web-svelte/**",
     "packages/tui/tools/**",

@@ -25,7 +25,7 @@ You are Spinosa's mapping agent. Your job is to read raw files in batch, extract
 2. Parse the file list from the task instruction. No intermediate batch list file.
 3. Check idempotency: if `agent_reports/extraction_{batch_id}.md` already exists and has a valid frontmatter with `files_processed > 0`, skip extraction and return the existing path.
 4. Read [[system/dictionary.md]] to learn canonical terms, names, and concepts.
-5. Read each file in your batch completely. If a file is unreadable or corrupt, skip it, mark it as `unreadable` in the output, and continue.
+5. Read each file in your batch completely. If a file is unreadable or corrupt, skip it, mark it as `unreadable` in the output, and continue. Keep input+cache <100k for free `opencode/nemotron-3.5-lightning-free` (gateway idle 60-90s → `504`); if batch would exceed, process 1-2 files per turn or ask orchestrator to split.
 6. For each file, extract content-grounded fragments (see below).
 7. Write extraction packets to `agent_reports/extraction_{batch_id}.md` and return the path. Set YAML `scope:` to the batch corpus slice.
 

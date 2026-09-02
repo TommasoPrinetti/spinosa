@@ -94,10 +94,9 @@ describe("pdfjs canvas globals (Linux createRequire bypass)", () => {
 })
 
 describe("pdfjs CanvasFactory render (Bun)", () => {
-  const fixture = "/Users/tommasoprinetti/Downloads/I_tuoi_biglietti.pdf"
+  const fixture = process.env.SPINOSA_OCR_FIXTURE_PDF?.trim()
   test("renders fixture PDF page to PNG without segfault", async () => {
-    const { existsSync } = await import("node:fs")
-    if (!existsSync(fixture)) return
+    if (!fixture || !(await Bun.file(fixture).exists())) return
     const png = await pdfRenderPageToPng(fixture, 1, 72)
     expect(Buffer.isBuffer(png)).toBe(true)
     expect(png.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))).toBe(true)

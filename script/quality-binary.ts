@@ -27,7 +27,7 @@ async function step(label: string, fn: () => Promise<void>): Promise<void> {
 }
 
 await step("distribution + release unit tests", async () => {
-  const result = await $`bun test --timeout 30000 --only-failures test/distribution.test.ts test/uninstall.test.ts ../../script/release/lib.test.ts ../../script/release/bump.test.ts ../../script/set-version.test.ts`
+  const result = await $`bun test --timeout 30000 test/distribution.test.ts test/uninstall.test.ts ../../script/release/lib.test.ts ../../script/release/bump.test.ts ../../script/set-version.test.ts`
     .cwd(path.join(root, "packages/spinosa-core"))
     .nothrow()
   if (result.exitCode !== 0) throw new Error("binary unit tests failed")
